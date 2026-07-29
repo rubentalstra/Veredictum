@@ -1,19 +1,21 @@
-<!-- ADOPTED VERBATIM from the vendored CNF data set
-     docs/specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
-     compositions/TDD/persistent_minimal.en.v1__full.xml, except for the root
-     `uid` (see below). A Template Data Document: the SM `import_tdd` `tdd:
-     String` parameter (i_tdd_service.adoc), concretely a template-namespaced
-     XML instance conforming to the template-derived TDS ("a kind of XSD" -
-     AM OPT2 master02-overview.adoc SS Purpose of the OPT). It names
-     `persistent_minimal.en.v1`, the operational template the case provisions
-     through `requires.templates: [cnf.opt.minimal_persistent]`.
+<!-- DERIVED 2026-07-29 (#659) from tdd.v1.xml (itself the vendored CNF
+     compositions/TDD/persistent_minimal.en.v1__full.xml) by renaming the ONE
+     content node `Minimal` to a name the operational template does not define.
+     The envelope is intact — the templates namespace and a template_id the
+     server holds — and the XML is well-formed, so the ONE defect exercised is
+     that the BODY does not conform to the template it names.
 
-     The vendored instance's root `uid` is REMOVED: a version identifier is
-     minted by the committing system (RM common master06 SS Version
-     Identification - `creating_system_id` is the committer's), so carrying
-     the source system's `7e5efcce-...::ehrdb::1` into a fresh CDR would make
-     the fixture uncommittable more than once and would assert a foreign
-     system's identity as this server's. Nothing else is changed. -->
+     A TDD carries no archetype-node-ids or RM structural attribute names: its
+     structural nodes are the TEMPLATE's node names, and the operational
+     template is what supplies the missing RM skeleton (AM OPT2
+     master02-overview.adoc SS Purpose of the OPT). A node name the template
+     does not define therefore cannot be resolved at all, which is a
+     precondition of the conversion.
+
+     The vendored corpus's own `..__invalid_wrong_structure.xml` is NOT used
+     here: its very first character is missing, so it is refused as
+     not-a-Template-Data-Document before any structural check runs - a
+     different behaviour, and one the tdd.invalid.xml fixture already owns. -->
 <Persistent_minimal xmlns="http://schemas.oceanehr.com/templates" xmlns:rm="http://schemas.openehr.org/v1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" template_id="persistent_minimal.en.v1">
   <name>
     <value>Persistent minimal</value>
@@ -150,7 +152,7 @@
       </rm:mode>
     </participations>
   </context>
-  <Minimal>
+  <Not_a_template_node>
     <name>
       <value>Minimal</value>
     </name>
@@ -240,5 +242,5 @@
         </data>
       </Cualquier_evento_as_Point_Event>
     </data>
-  </Minimal>
+  </Not_a_template_node>
 </Persistent_minimal>

@@ -11,29 +11,29 @@
 # instead of resolving excused. It gates the CAPABILITY verdicts named below
 # only; no openEHR profile tier and no ITS-REST wire-conformance claim rests
 # on it.
-id: I_EHR_EXTRACT_SERVICE.export_ehr_extracts-by_spec
+id: I_EHR_EXTRACT_SERVICE.export_ehr_extracts-unresolvable_entity
 kind: functional
 component: MESSAGING
 sm_operation: I_EHR_EXTRACT_SERVICE.export_ehr_extracts
 capabilities: [EhrExtract]
 profiles: [OPTIONS]
-test_purpose: "Exporting by an EXTRACT_SPEC whose manifest names an existing EHR yields one EXTRACT for it."
-description: "Export an EXTRACT by EXTRACT_SPEC"
+test_purpose: "A manifest entity carrying no identifier the receiver can locate it by is rejected as a precondition violation."
+description: "Export an EXTRACT_SPEC naming an unlocatable entity"
 spec_refs:
   - "SM openehr_platform §I_EHR_EXTRACT_SERVICE.export_ehr_extracts"
-  - "RM ehr_extract master04-common_package §EXTRACT_SPEC"
   - "RM ehr_extract master04-common_package §EXTRACT_ENTITY_MANIFEST"
   - "CNF platform_test_schedule master13 §export_ehr_extracts (chapter: export_ehr_extract)"
 applies: { rm: ">=1.0.2" }
 guards:
   - "EXTENSION ROUTE — no openEHR spec governs the /message/* routes; our own design/extension, declared in vocab/wire_surface.yaml served_extensions (family message-extract) and adjudicated by register AMB-34. The row gates the CAPABILITY verdicts only, never ITS-REST wire conformance"
-# The EXTRACT_SPEC is built INLINE rather than taken from the corpus because
-# its whole point here is the manifest ENTITY, and the entity must name the EHR
-# the runner minted for this case (`${ehr_id}`). A corpus entry is static bytes
-# with no reference substitution, so a corpus-borne spec could only ever name
-# an EHR that exists on no server — which is what made the previous documentary
-# fixture unexecutable.
-requires: { ehr: { commits: any } }        # mints ${ehr_id}
+# extract_entity_manifest.adoc: "Various identifiers may be provided for the
+# entity; these are to be used by the receiver system to locate the entity" —
+# `extract_id_key` is only "the identifier that will be used throughout the
+# Extract for this entity" and may be "something else, including a simple
+# integer", so an entity carrying it ALONE gives the receiver nothing to locate
+# by. Locating is a precondition of exporting the entity, hence
+# `precondition_violation`.
+requires: { server: any }
 flow:
   - step: 1
     call: export_ehr_extracts
@@ -55,9 +55,6 @@ flow:
           _type: EXTRACT_MANIFEST
           entities:
             - _type: EXTRACT_ENTITY_MANIFEST
-              extract_id_key: "${ehr_id}"
-              ehr_id: "${ehr_id}"
-              other_ids: []
-              item_list: []
-    expect: ok
+              extract_id_key: "1"
+    expect: bad_request
 ambiguities: [AMB-34]
