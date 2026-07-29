@@ -11,53 +11,35 @@
 # instead of resolving excused. It gates the CAPABILITY verdicts named below
 # only; no openEHR profile tier and no ITS-REST wire-conformance claim rests
 # on it.
-id: I_EHR_EXTRACT_SERVICE.export_ehr_extracts-by_spec
+id: I_EHR_EXTRACT_SERVICE.export_ehr_extracts-empty_manifest
 kind: functional
 component: MESSAGING
 sm_operation: I_EHR_EXTRACT_SERVICE.export_ehr_extracts
 capabilities: [EhrExtract]
 profiles: [OPTIONS]
-test_purpose: "Exporting by an EXTRACT_SPEC whose manifest names an existing EHR yields one EXTRACT for it."
-description: "Export an EXTRACT by EXTRACT_SPEC"
+test_purpose: "An EXTRACT_SPEC whose manifest names no entity is fulfilled and yields no EXTRACT."
+description: "Export an EXTRACT_SPEC with an empty manifest"
 spec_refs:
   - "SM openehr_platform §I_EHR_EXTRACT_SERVICE.export_ehr_extracts"
-  - "RM ehr_extract master04-common_package §EXTRACT_SPEC"
-  - "RM ehr_extract master04-common_package §EXTRACT_ENTITY_MANIFEST"
+  - "RM ehr_extract master04-common_package §EXTRACT_MANIFEST"
   - "CNF platform_test_schedule master13 §export_ehr_extracts (chapter: export_ehr_extract)"
 applies: { rm: ">=1.0.2" }
 guards:
   - "EXTENSION ROUTE — no openEHR spec governs the /message/* routes; our own design/extension, declared in vocab/wire_surface.yaml served_extensions (family message-extract) and adjudicated by register AMB-34. The row gates the CAPABILITY verdicts only, never ITS-REST wire conformance"
-# The EXTRACT_SPEC is built INLINE rather than taken from the corpus because
-# its whole point here is the manifest ENTITY, and the entity must name the EHR
-# the runner minted for this case (`${ehr_id}`). A corpus entry is static bytes
-# with no reference substitution, so a corpus-borne spec could only ever name
-# an EHR that exists on no server — which is what made the previous documentary
-# fixture unexecutable.
-requires: { ehr: { commits: any } }        # mints ${ehr_id}
+# RE-GROUNDED 2026-07-29 (#659). The case was `-empty_result`, "an
+# EXTRACT_SPEC matching no EHRs on an empty system", carried by a documentary
+# fixture whose single entity named neither `ehr_id` nor `subject_id` — a
+# manifest entity the receiver cannot locate at all, which is a
+# `precondition_violation`, not an empty result (that branch is now the
+# `-unresolvable_entity` sibling). The behaviour that IS an empty result is
+# derivable from extract_manifest.adoc: the manifest is the "List of entity
+# manifests ... included in the Extract" and the operation yields one EXTRACT
+# per entity, so a manifest with no entity is fulfilled with no content.
+requires: { server: any }
+data_sets: [cnf.messaging.extract_spec.empty_manifest]
 flow:
   - step: 1
     call: export_ehr_extracts
-    with:
-      extract_spec:
-        _type: EXTRACT_SPEC
-        extract_type:
-          _type: DV_CODED_TEXT
-          value: openehr-ehr
-          defining_code:
-            _type: CODE_PHRASE
-            terminology_id: { _type: TERMINOLOGY_ID, value: openehr }
-            code_string: openehr-ehr
-        include_multimedia: false
-        priority: 0
-        link_depth: 0
-        criteria: []
-        manifest:
-          _type: EXTRACT_MANIFEST
-          entities:
-            - _type: EXTRACT_ENTITY_MANIFEST
-              extract_id_key: "${ehr_id}"
-              ehr_id: "${ehr_id}"
-              other_ids: []
-              item_list: []
-    expect: ok
+    with: { extract_spec: "${ds:cnf.messaging.extract_spec.empty_manifest}" }
+    expect: ok_empty
 ambiguities: [AMB-34]
