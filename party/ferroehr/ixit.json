@@ -1,7 +1,7 @@
 {
   "instances": {
     "sut": {
-      "base_url": "http://localhost:8080/ehrbase/rest/openehr/v1",
+      "base_url": "http://localhost:8080/ferroehr/rest/openehr/v1",
       "auth": {
         "mode": "bearer_mint",
         "subject": "cnf-user",
@@ -15,7 +15,7 @@
       }
     },
     "admin": {
-      "base_url": "http://localhost:8080/ehrbase/rest/openehr/v1",
+      "base_url": "http://localhost:8080/ferroehr/rest/openehr/v1",
       "auth": {
         "mode": "bearer_mint",
         "subject": "cnf-admin",
@@ -30,7 +30,7 @@
       }
     },
     "readonly": {
-      "base_url": "http://localhost:8080/ehrbase/rest/openehr/v1",
+      "base_url": "http://localhost:8080/ferroehr/rest/openehr/v1",
       "auth": {
         "mode": "bearer_mint",
         "subject": "cnf-readonly",
@@ -44,25 +44,25 @@
       }
     },
     "unauthenticated": {
-      "base_url": "http://localhost:8080/ehrbase/rest/openehr/v1",
+      "base_url": "http://localhost:8080/ferroehr/rest/openehr/v1",
       "auth": {
         "mode": "none"
       }
     },
     "smart_app": {
-      "base_url": "http://localhost:8080/ehrbase/rest/openehr/v1",
+      "base_url": "http://localhost:8080/ferroehr/rest/openehr/v1",
       "auth": {
         "mode": "bearer_mint"
       }
     },
     "smart_platform": {
-      "base_url": "http://localhost:8080/ehrbase/rest",
+      "base_url": "http://localhost:8080/ferroehr/rest",
       "auth": {
         "mode": "none"
       }
     },
     "sut_pgp": {
-      "base_url": "http://localhost:8081/ehrbase/rest/openehr/v1",
+      "base_url": "http://localhost:8081/ferroehr/rest/openehr/v1",
       "auth": {
         "mode": "bearer_mint",
         "subject": "cnf-user",
@@ -113,10 +113,10 @@
     }
   },
   "containers": {
-    "sut": "ehrbase-rs-cnf-ehrbase-1",
-    "db": "ehrbase-rs-cnf-ehrbase-postgres-1"
+    "sut": "ferroehr-cnf-ferroehr-1",
+    "db": "ferroehr-cnf-ferroehr-postgres-1"
   },
-  "system_id": "ehrbase-rs.local",
+  "system_id": "ferroehr.local",
   "dump_location": "/tmp/openehr-cnf/dump",
   "signing": {
     "mode": "digest",
@@ -160,7 +160,7 @@
     "cores": 8,
     "memory_gb": 16,
     "storage_class": "nvme",
-    "topology": "single-node docker compose (8-CPU/8GB Docker VM) on Apple M2, the SMART resource-server posture (docker/sut-smart.yml overlays the base stack) with the external-terminology profile composed beside it (a seeded HAPI FHIR R4 server, docker compose --profile terminology + docker/sut-terminology.yml, fail-open); alongside it a second deployment of the same image in the openPGP version-signing posture (project ehrbase-rs-cnf-pgp, docker/sut-signing-pgp.yml + docker/sut-terminology-failclosed.yml + docker/sut-pgp-parallel.yml, host port 8081) declared as the sut_pgp instance, which carries the fail-closed terminology posture \u2014 the measured-performance stage drives the primary deployment alone"
+    "topology": "single-node docker compose (8-CPU/8GB Docker VM) on Apple M2, the SMART resource-server posture (docker/sut-smart.yml overlays the base stack) with the external-terminology profile composed beside it (a seeded HAPI FHIR R4 server, docker compose --profile terminology + docker/sut-terminology.yml, fail-open); alongside it a second deployment of the same image in the openPGP version-signing posture (project ferroehr-cnf-pgp, docker/sut-signing-pgp.yml + docker/sut-terminology-failclosed.yml + docker/sut-pgp-parallel.yml, host port 8081) declared as the sut_pgp instance, which carries the fail-closed terminology posture \u2014 the measured-performance stage drives the primary deployment alone"
   },
   "smart": {
     "platform_instance": "smart_platform",
