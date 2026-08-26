@@ -167,21 +167,37 @@ XML_EXPORTS=$(grep -cE '^(OK|BAD|FAIL) ' "$WORK/xml.log" || true)
   echo
   echo "## Exercised, with adjudicated refusals"
   echo
-  echo "NOT YET, and this record says so rather than repeat a claim this repository"
-  echo "cannot make. The pack's exerciser was an ADL-engine parse gate in the"
-  echo "mono-repo this instrument was split out of; that engine did not travel, and"
-  echo "nothing here reads the pack. Whether it is driven through the DEFINITION API"
-  echo "as ADL 1.4 upload material or dropped is issue #8. Never delete a refused"
-  echo "file to make a future gate pass: that drops a negative case"
-  echo "(\`.claude/rules/testing.md\`)."
+  echo "\`tests/it/corpus_packs.rs\`, on every \`cargo nextest run\`. Every"
+  echo "vendored ADL 1.4 export is decoded as UTF-8, required to open with an"
+  echo "\`archetype (…)\` header declaring \`adl_version=1.4\`, and required to"
+  echo "declare the archetype id its file name carries. Every AM 1.4 XML twin is"
+  echo "read to end of input, required to root at \`archetype\` in"
+  echo "\`http://schemas.openehr.org/v1\`, and checked for that same identity."
+  echo "Both counts are pinned against the inventory below, so a re-vendor that"
+  echo "returns fewer files, a 404 body, or a different dialect fails instead of"
+  echo "shrinking the pack in silence."
+  echo
+  echo "The exercise is deliberately at the BYTE level: this repository has no"
+  echo "ADL parser and never claims one. The pack is reserve material for wire"
+  echo "batteries the catalogue has not authored yet (owner ruling 2026-08-26,"
+  echo "issue #8), and the gate is what keeps it whole until then."
+  echo
+  echo "The adjudicated refusal is the unreachable CKM resource recorded below."
+  echo "Never delete a refused file to make a future gate pass: that drops a"
+  echo "negative case (\`.claude/rules/testing.md\`)."
   echo
   echo "## Licensing"
   echo
   echo "CKM publishes no repository-level license; each archetype carries its"
-  echo "own \`description\` > \`licence\` metadata (predominantly CC-BY-SA 3.0"
-  echo "where stated — see the individual file). Vendored verbatim, so the"
-  echo "authorship and licence metadata ride along in every file; root"
-  echo "reference copy: \`LICENSE-CC-BY-SA-3.0\`."
+  echo "own \`description\` > \`licence\` metadata, and the corpus is **mixed**:"
+  echo "a count over this directory on 2026-08-26 found **1266 files under"
+  echo "CC-BY-SA 4.0 and 546 under CC-BY-SA 3.0**, with 76 naming no version."
+  echo "No single version is a true statement about the tree. Read the"
+  echo "individual file; its own metadata is the authority. Vendored verbatim,"
+  echo "so the authorship and licence metadata ride along in every file; root"
+  echo "reference copies: \`LICENSE-CC-BY-SA-3.0\` and \`LICENSE-CC-BY-SA-4.0\`"
+  echo "(\`LICENSES/CC-BY-SA-3.0.txt\`, \`LICENSES/CC-BY-SA-4.0.txt\`), and"
+  echo "\`REUSE.toml\` declares this tree as \`CC-BY-SA-3.0 AND CC-BY-SA-4.0\`."
   echo
   echo "## Inventory"
   echo
