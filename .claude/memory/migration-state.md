@@ -33,6 +33,12 @@ Added 2026-08-26: the starter CI (`.github/workflows/ci.yml` — the `guards` an
 the two guards those lanes needed
 (`scripts/checks/changelog-structure.sh`, `scripts/checks/ci-conclusion-complete.sh`),
 and `.claude/rules/ai-code-review.md` as the law over the machine reviewer.
+Also 2026-08-26: the tracker machinery — `scripts/gh/rel.sh` (verified live on
+this repository: id resolution, the parent write, both `tree` read directions,
+the blocked-by write, both inverses, and the two fail-loud paths) with
+`.claude/rules/issue-relationships.md`, the completed label taxonomy, the
+`v0.0.1` and `v0.1.0` milestones, and the `/phase-status`, `/next-task` and
+`/phase-done` skills trimmed to what exists.
 
 **What has not:** the runner source, the catalogue artifacts, the vendored spec
 text, the corpora and their PROVENANCE trees, the ambiguity register, the party

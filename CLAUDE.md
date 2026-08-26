@@ -233,9 +233,24 @@ alone.
    issue it decomposes or as a real `blocked-by` dependency. A prose "see also"
    is not a link, and an edge lives in its native panel, never in the body.
 
+**Relationships are native metadata, set through one command.** `gh` has no
+subcommand for sub-issues or dependencies, and the write endpoints take an
+issue's database id rather than its number, so every edge is set with
+`scripts/gh/rel.sh` (`parent`, `unparent`, `blocked-by`, `unblock`, `blocking`,
+`unblocking`, `tree`, `id`) and never with a hand-typed `gh api`. Sub-issues
+express decomposition, `blocked-by` expresses real in-repository sequencing, and
+neither is ever restated in an issue body — the panel is canonical and a body
+copy rots on the first change. Full policy: `.claude/rules/issue-relationships.md`.
+
 **Labels.** Exactly one type label per issue, mapped to the conventional-commit
 types: `bug` for fix, `enhancement` for feat, `documentation` for docs, plus
-`chore`, `refactor`, `perf`, `ci`. Priority is `P0` through `P3`. An outbound
+`chore`, `refactor`, `perf`, `ci`. Priority is `P0` through `P3`. The component
+an issue adjudicates against carries a `spec:` label (`spec:RM`, `spec:BASE`,
+`spec:AM`, `spec:QUERY`, `spec:TERM`, `spec:ITS`, `spec:SM`, `spec:CNF`).
+`question` routes a question, `on-hold` marks work parked by owner decision, and
+`no-changelog` is the escape hatch the changelog guard reads — a guard label that
+does not exist fails silently at apply time, so the label exists before the guard
+that reads it. An outbound
 report of a defect, contradiction, or silence in a released openEHR
 specification is an issue labeled `upstream-report`, and that issue **is** the
 report: a plain summary, then `## What the released spec says` with citations,
@@ -247,7 +262,17 @@ as refuted, its register entry is removed or re-grounded, and the affected case
 becomes gating.
 
 **Milestones are releases.** A milestone is a delivery promise, so an issue
-waiting on something upstream carries no milestone.
+waiting on something upstream carries `blocked-upstream` and no milestone. A
+release is cut when its milestone reaches zero open issues; the next milestone
+always exists, so triage always has a target. Open today: `v0.0.1` (the
+repository standing on its own — identity, discipline, CI, tracker machinery)
+and `v0.1.0` (the code migration, FerroEHR#2789, deliberately without a due
+date because the date follows the extraction).
+
+**Skills.** `/phase-status` orients, `/next-task` turns an issue into a plan,
+`/phase-done` closes one. Each is trimmed to the machinery that exists here and
+names what it deliberately does not check, because a verification step pointing
+at absent machinery reports green.
 
 ## Build and test
 
@@ -307,6 +332,8 @@ subagents.
 - `.claude/rules/writing-style.md` — prose style
 - `.claude/rules/ai-code-review.md` — machine review is a second opinion, never
   authority; the SonarQube Cloud setup facts
+- `.claude/rules/issue-relationships.md` — the four native issue edges, the one
+  sanctioned write path, and the no-duplication law
 - `README.md` — the product identity and the origin of the name
 - [FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) — the
   migration contract

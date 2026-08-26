@@ -39,6 +39,22 @@ completes; releases before that carry the repository skeleton and identity.
 - Two ported guard scripts: `scripts/checks/changelog-structure.sh` (Keep a
   Changelog structure) and `scripts/checks/ci-conclusion-complete.sh` (no CI job
   runs without gating the merge).
+- The tracker machinery. `scripts/gh/rel.sh` is the one sanctioned write path
+  for GitHub's four native issue edges — sub-issue, blocked-by and their
+  inverses — resolving an issue number to the database id the write endpoints
+  actually want and failing loud on a bad one, with
+  `.claude/rules/issue-relationships.md` as its policy. The label taxonomy is
+  complete against the scheme `CLAUDE.md` defines: `blocked-upstream`,
+  `on-hold`, `no-changelog`, and the eight `spec:` component labels join the
+  type and priority sets. Two milestones open the release spine, `v0.0.1` and
+  `v0.1.0`. `/phase-status`, `/next-task` and `/phase-done` are ported and
+  trimmed to the machinery that exists, each naming what it deliberately does
+  not check.
+
+### Removed
+
+- The `accessibility` label. Nothing referenced it and it is not part of the
+  taxonomy `CLAUDE.md` defines.
 
 ### Fixed
 
