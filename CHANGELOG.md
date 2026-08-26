@@ -18,6 +18,8 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-08-26
+
 ### Fixed
 
 - The image vulnerability gate refused to tag the `0.1.0-alpha.2` image, so that
@@ -57,6 +59,7 @@ version on.
   plus the evidence base and the ISO/IEC 9646 and CASCO grounding the scheme is
   built in. Names and paths were adapted to this tree; the substance is
   unchanged.
+- The GHCR image-pulls badge in the README, now that the package exists.
 - A Dependabot `ignore` for `rand` major bumps. The dev-dependency exists to hand
   `pgp`'s signing call an RNG, and `pgp 0.20` is on `rand_core 0.6`, so a major
   bump does not compile. Patch and minor bumps within the pin are still proposed,
@@ -260,6 +263,7 @@ version on.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.2...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.3]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/rubentalstra/Veredictum/compare/v0.0.1-alpha.1...v0.1.0-alpha.2
 [0.0.1-alpha.1]: https://github.com/rubentalstra/Veredictum/releases/tag/v0.0.1-alpha.1
