@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="600" height="600" viewBox="0 0 200 200" role="img" aria-label="Veredictum conformance seal">
+  <!-- The Veredictum SEAL (direction A, "Signal" - owner decision 2026-08-26):
+     the full certification mark with ring wording, in the openEHR community
+     palette (teal #258BB0, signal orange #FF861C - tokens.css). The wording
+     names openEHR descriptively (what is being tested); the mark is NOT an
+     openEHR Foundation endorsement. Tracking is baked into the glyph string
+     (thin/hair spaces): CSS letter-spacing on a textPath anchors
+     inconsistently across renderers and skews the arc centering. -->
+  <defs><path id="arc-top" d="M 32,100 A 68,68 0 0 1 168,100"/><path id="arc-bottom" d="M 24,100 A 76,76 0 0 0 176,100"/></defs>
+  <circle cx="100" cy="100" r="98" fill="#1B6E92"/>
+  <circle cx="100" cy="100" r="95" fill="none" stroke="#FF861C" stroke-width="1.6" stroke-dasharray="2.2 3.1" opacity="0.95"/>
+  <circle cx="100" cy="100" r="88" fill="none" stroke="#F6DECD" stroke-width="1.1" opacity="0.65"/>
+  <circle cx="100" cy="100" r="58" fill="#14566F" stroke="#F6DECD" stroke-width="1.1"/>
+  <text font-family="Georgia, 'Times New Roman', serif" font-size="14.5" font-weight="bold" fill="#FFFFFF"><textPath href="#arc-top" xlink:href="#arc-top" startOffset="50%" text-anchor="middle">V E R E D I C T U M</textPath></text>
+  <text font-family="Georgia, 'Times New Roman', serif" font-size="9.2" fill="#F6DECD"><textPath href="#arc-bottom" xlink:href="#arc-bottom" startOffset="50%" text-anchor="middle">o p e n E H R   C O N F O R M A N C E</textPath></text>
+  <text x="27" y="105" font-family="Georgia, serif" font-size="11" fill="#FF861C" text-anchor="middle">&#10022;</text>
+  <text x="173" y="105" font-family="Georgia, serif" font-size="11" fill="#FF861C" text-anchor="middle">&#10022;</text>
+  <path d="M 74,96 L 94,127 L 128,72" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 74,96 L 94,127 L 128,72" fill="none" stroke="#FF861C" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <text x="100" y="146" font-family="Georgia, 'Times New Roman', serif" font-size="7.2" font-style="italic" letter-spacing="1.4" fill="#F6DECD" text-anchor="middle">vere dictum</text>
+</svg>

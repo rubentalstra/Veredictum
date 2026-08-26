@@ -3,6 +3,7 @@
 # Veredictum
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-46215C)](LICENSE)
+[![DOI](https://zenodo.org/badge/1347360549.svg)](https://doi.org/10.5281/zenodo.22113258)
 [![Split from FerroEHR](https://img.shields.io/badge/split_from-FerroEHR-B7431B)](https://github.com/rubentalstra/FerroEHR/issues/2789)
 
 

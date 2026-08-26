@@ -142,6 +142,7 @@ finding.
 | Private vulnerability reporting | enabled | **disabled** | the reporting route this document points at |
 | Dependabot security updates | enabled | **disabled** | advisory-driven bumps, exempt from the update cooldowns in [`.github/dependabot.yml`](.github/dependabot.yml) |
 | Ruleset on `main` | active: no deletion, no force-push, signed commits, pull request required | **not created** | every commit in the history is signed today by practice; the ruleset is what makes it enforced rather than habitual |
+| Immutable releases | enabled: published assets and tags frozen; a bad cut is repaired by a new version, never a retag | **not enabled** (Settings → General; no API exposes it) | the v0.0.1-alpha.1 release predates the toggle; enable before the first non-alpha cut |
 | Ruleset on `refs/tags/v*` | active: no tag deletion, no non-fast-forward update, signatures required | **not created** | a release lane will publish off a raw tag push, so the window in which a tag drives a build needs protecting |
 
 Six of those rows do not match yet. They are listed with their real state rather

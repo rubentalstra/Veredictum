@@ -18,3 +18,4 @@ apply" part so a future session can act on it without re-deriving it.
 - [Contents API commits are unsigned](contents-api-commits-unsigned.md) —
   learned 2026-08-26: never write to the repository through the GitHub contents
   API; local signed commits or the Git Data API in workflows
+- [Release conventions](release-conventions.md) — bare-version titles; immutable releases toggle before the first real cut; the Zenodo concept DOI

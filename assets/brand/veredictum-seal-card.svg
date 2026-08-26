@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The Veredictum SEAL CARD (direction A) - the certificate a verified
+   deployment displays, and the 1280x640 social-preview master. The verdict
+   pipeline fills the three dotted slots; this file ships them empty.
+   Not an openEHR Foundation endorsement. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg">
+<defs><path id="cat" d="M 124,320 A 196,196 0 0 1 516,320"/><path id="cab" d="M 101,320 A 219,219 0 0 0 539,320"/></defs>
+<rect width="1280" height="640" fill="#FFF9F2"/><rect x="18" y="18" width="1244" height="604" fill="none" stroke="#258BB0" stroke-width="3"/><rect x="26" y="26" width="1228" height="588" fill="none" stroke="#FF861C" stroke-width="1.4" stroke-dasharray="4 5"/>
+<circle cx="320" cy="320" r="282" fill="#1B6E92"/><circle cx="320" cy="320" r="273" fill="none" stroke="#FF861C" stroke-width="4.6" stroke-dasharray="6.4 8.9"/><circle cx="320" cy="320" r="253" fill="none" stroke="#F6DECD" stroke-width="3.2" opacity=".65"/><circle cx="320" cy="320" r="167" fill="#14566F" stroke="#F6DECD" stroke-width="3.2"/>
+<text font-family="Georgia,serif" font-size="42" font-weight="bold" fill="#FFF"><textPath href="#cat" startOffset="50%" text-anchor="middle">V E R E D I C T U M</textPath></text>
+<text font-family="Georgia,serif" font-size="26.5" fill="#F6DECD"><textPath href="#cab" startOffset="50%" text-anchor="middle">o p e n E H R   C O N F O R M A N C E</textPath></text>
+<text x="110" y="334" font-size="32" fill="#FF861C" text-anchor="middle">&#10022;</text><text x="530" y="334" font-size="32" fill="#FF861C" text-anchor="middle">&#10022;</text>
+<path d="M 245,308 L 303,398 L 401,240" fill="none" stroke="#FFF" stroke-width="29" stroke-linecap="round" stroke-linejoin="round"/><path d="M 245,308 L 303,398 L 401,240" fill="none" stroke="#FF861C" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+<text x="320" y="452" font-family="Georgia,serif" font-size="21" font-style="italic" letter-spacing="4" fill="#F6DECD" text-anchor="middle">vere dictum</text>
+<g font-family="Georgia,serif" fill="#363636">
+<text x="660" y="176" font-size="64" font-weight="bold" letter-spacing="6" fill="#14566F">VEREDICTUM</text>
+<text x="660" y="224" font-size="23">The independent openEHR conformance instrument</text>
+<line x1="660" y1="252" x2="806" y2="252" stroke="#FF861C" stroke-width="3"/>
+<text x="660" y="356" font-size="19" letter-spacing="2.6" fill="#1B6E92">PRODUCT UNDER TEST</text><line x1="660" y1="382" x2="1180" y2="382" stroke="#258BB0" stroke-width="1.6" stroke-dasharray="2 4"/>
+<text x="660" y="432" font-size="19" letter-spacing="2.6" fill="#1B6E92">CONFORMANCE PROFILE</text><line x1="660" y1="458" x2="1180" y2="458" stroke="#258BB0" stroke-width="1.6" stroke-dasharray="2 4"/>
+<text x="660" y="508" font-size="19" letter-spacing="2.6" fill="#1B6E92">VERDICT SPOKEN ON</text><line x1="660" y1="534" x2="1180" y2="534" stroke="#258BB0" stroke-width="1.6" stroke-dasharray="2 4"/>
+<text x="660" y="580" font-size="16" fill="#8a8a8a">Every verdict re-derives from the recorded wire exchanges</text><text x="660" y="602" font-size="16" fill="#8a8a8a">and the released openEHR specifications.</text>
+</g></svg>

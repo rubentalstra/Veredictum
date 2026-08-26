@@ -1,12 +1,15 @@
 /* SPDX-FileCopyrightText: Veredictum contributors
    SPDX-License-Identifier: Apache-2.0 */
-/* The Veredictum palette — "Tyrian & Parchment": the imperial verdict purple,
-   the parchment the verdict is written on, and the assay-gold seal edge.
-   The single source for brand colours. */
+/* The Veredictum palette - the openEHR community's colours, worn by the
+   instrument that serves it (teal + signal orange read off openehr.org
+   2026-08-26), on the parchment a verdict is written on. The single source
+   for brand colours. Not an openEHR Foundation endorsement. */
 :root {
-  --ver-tyrian: #46215C;      /* ground: deep verdict purple */
-  --ver-tyrian-deep: #331745; /* hover/pressed ground */
-  --ver-parchment: #F4EDE1;   /* foreground on tyrian; light-theme page ground */
-  --ver-gold: #D8B04A;        /* the seal edge; accents, never body text */
-  --ver-ink: #241A2E;         /* body text on parchment */
+  --ver-teal: #258BB0;        /* the openEHR community teal - links, accents */
+  --ver-teal-deep: #1B6E92;   /* the seal ground */
+  --ver-teal-field: #14566F;  /* the seal's inner field; pressed/hover ground */
+  --ver-orange: #FF861C;      /* the signal orange - the seal edge, never body text */
+  --ver-parchment: #F6DECD;   /* seal ring text; warm surface tint */
+  --ver-paper: #FFF9F2;       /* light-theme page ground */
+  --ver-ink: #363636;         /* body text on paper */
 }
