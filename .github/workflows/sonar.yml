@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# SonarQube Cloud analysis — a deterministic machine opinion beside the guard
+# tier in ci.yml, under the standing law of `.claude/rules/ai-code-review.md`:
+# findings are advisory, never outrank the released openEHR specification text,
+# the hard rules, or the local gates, and gate no merge.
+#
+# WHAT IT ACTUALLY READS TODAY, stated plainly because the honest answer is
+# "less than it will": there is no first-party source code in this repository
+# yet. The analyzer's real material is the workflow YAML (Sonar ships GitHub
+# Actions rules), the brand study's HTML and CSS, and secret detection across
+# the tree. Sonar has no Shell analyzer, so `scripts/checks/*.sh` are covered by
+# secret detection alone — shellcheck inside actionlint is what reads those.
+# When the runner arrives, Rust is analyzed first-party (the analyzer runs Clippy
+# itself from the workspace manifest), and this lane grows the instrumented run
+# that feeds coverage.
+#
+# CI-based analysis rather than Automatic Analysis, and that is a decision:
+# Automatic Analysis would serve a YAML-and-HTML tree with no workflow at all,
+# but it cannot analyze Rust, and the two modes are mutually exclusive per
+# project. Standing this lane up now means the code migration does not also have
+# to flip the project's analysis mode
+# (https://docs.sonarsource.com/sonarqube-cloud/getting-started/github/).
+#
+# SONAR_HOST_URL is not set: it is not needed for SonarQube Cloud
+# (SonarSource/sonarqube-scan-action README).
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  scan:
+    name: analyze
+    # Analysis authenticates with SONAR_TOKEN, which a fork's pull request
+    # cannot read. A run from a fork would fail on a missing secret rather than
+    # report anything, so it is skipped and the guard tier in ci.yml — which
+    # needs no secret — is what gates a fork's contribution.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read # pull-request decoration reads the PR metadata
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history and tags: Sonar assigns issues and new-code status by
+          # blame, and the version step below reads the latest release tag.
+          fetch-depth: 0
+          persist-credentials: false
+
+      # `sonar.projectVersion` anchors the "Previous version" New Code window
+      # (https://docs.sonarsource.com/sonarqube-cloud/standards/about-new-code),
+      # so "new code" means "since the last release" — the same window the
+      # changelog section describes. FerroEHR reads that version from its
+      # workspace manifest; there is no manifest here yet, so the release tag is
+      # the source, and it is read at scan time rather than copied into a second
+      # place that can drift. It is appended to the properties file the scanner
+      # reads, so no context value reaches a shell or an action argument.
+      - name: Derive sonar.projectVersion from the latest release tag
+        run: |
+          set -euo pipefail
+          tag="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)"
+          echo "sonar.projectVersion=${tag#v}" >> sonar-project.properties
+          echo "projectVersion=${tag#v}"
+
+      - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

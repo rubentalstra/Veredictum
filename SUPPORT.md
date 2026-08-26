@@ -19,9 +19,12 @@ the conformance-methodology chapter arrives with the code migration
 
 ## I have a question
 
-[Open an issue](https://github.com/rubentalstra/Veredictum/issues/new/choose)
-with the `question` label. GitHub Discussions is not enabled on this repository,
-so the tracker is the one place.
+[GitHub Discussions](https://github.com/rubentalstra/Veredictum/discussions) is
+enabled, and its Q&A category is the right place for a question that is not yet
+a defect or a request. If the answer turns out to be work, it becomes an issue
+from there. A question you would rather file directly is
+[an issue](https://github.com/rubentalstra/Veredictum/issues/new/choose) with
+the `question` label.
 
 There is no commercial support offering, no service-level agreement, and no paid
 tier. Answers come when the maintainer is at a keyboard, and

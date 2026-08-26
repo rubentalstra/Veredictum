@@ -1,0 +1,84 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# OpenSSF Scorecard — an INDEPENDENT score of this repository's security
+# posture.
+#
+# It is here for the same reason this project's conformance numbers are computed
+# by a runner rather than written down: a claim about a system should be earned
+# by something that can disagree with the person making it. An instrument whose
+# whole premise is that no server grades its own homework does not get to grade
+# its own supply chain either.
+#
+# Scorecard checks the properties the workflows here actually spend work on —
+# pinned action digests, minimal token permissions, no dangerous `run:`
+# interpolation, dependency update automation, branch protection, signed
+# releases — and publishes a number this project does not control.
+#
+# TWO CHECKS SCORE LOW AND WILL FOR A WHILE, recorded here so the next reader
+# does not re-investigate:
+#
+#   * `Maintained` — the API's reason is "project was created within the last
+#     90 days". This repository was created 2026-08-26. A new-repository
+#     caution, not a judgement about activity, and it expires by itself.
+#   * `Code-Review` — wants a second human to approve pull requests. With one
+#     maintainer the only ways to move it are to add a reviewer or to fake one.
+#     GOVERNANCE.md and MAINTAINERS.md are honest about the bus factor instead.
+#
+# Several other checks measure lanes that arrive with the code migration
+# (https://github.com/rubentalstra/FerroEHR/issues/2789): Packaging,
+# Signed-Releases, Fuzzing, SAST, CII-Best-Practices, Pinned-Dependencies over
+# a Cargo manifest. Their low scores today are accurate — the lanes do not exist
+# yet — and the first score is the baseline they are measured against.
+#
+# The score is an outcome, never the target. A check that cannot be satisfied
+# honestly stays low with its reason written down.
+#
+# Docs: https://github.com/ossf/scorecard-action
+name: Scorecard
+
+on:
+  # Weekly, because most checks measure repository CONFIGURATION rather than a
+  # commit: branch protection, code scanning, the update bot. A per-push run
+  # would re-measure unchanged settings.
+  schedule:
+    - cron: '37 5 * * 1'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Upload the SARIF into code scanning.
+      security-events: write
+      # Publish to the OpenSSF API (the badge's source) over OIDC — no token.
+      id-token: write
+      contents: read
+      # Read branch-protection settings, which Scorecard cannot check otherwise.
+      actions: read
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          # Publishing is what makes the badge possible, and it is a deliberate
+          # choice rather than a default: the score becomes public, including
+          # when it drops.
+          publish_results: true
+
+      - name: Upload the SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
+        with:
+          sarif_file: results.sarif

@@ -1,0 +1,259 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/workflows/ci.yml
+#
+# THERE ARE NO RUST JOBS HERE YET, and that is not an omission. The runner still
+# lives in FerroEHR `tools/cnf-runner`; this repository carries the identity, the
+# discipline and the tracker until the extraction lands
+# (https://github.com/rubentalstra/FerroEHR/issues/2789). `cargo fmt`, `clippy`,
+# `nextest`, `deny` and the codegen-drift check arrive in the pull request that
+# brings the code, together with the workspace manifests they need. The full
+# inventory of what is deliberately still absent, and why each item would be
+# inert without the code it configures, is `.claude/memory/migration-state.md`
+# § Arrives with the code migration.
+#
+# What DOES run today are the checks that read prose, licensing metadata,
+# commit messages and the workflows themselves — every one of which has real
+# content in this tree to judge. Where a guard would pass on an empty set it
+# says so at the step, rather than reporting green as if it had checked
+# something (the comment-style guard prints `no files to check`).
+name: CI
+
+on:
+  # The types are spelled out rather than left to the default
+  # `[opened, synchronize, reopened]`: a guard that reads an escape-hatch label
+  # from `github.event.pull_request.labels` only sees the label if a run is
+  # raised after it is applied. Adding `labeled`/`unlabeled` makes applying a
+  # label produce a fresh event carrying the current label set
+  # (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request).
+  # No such label exists in this repository yet; the trigger is here so the
+  # first one that lands works on the run it triggers.
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
+  # Declared before any merge queue exists, because a queue reports its required
+  # checks on this event alone: "you need to update the workflows to include the
+  # merge_group event as an additional trigger. Otherwise, status checks will not
+  # be triggered when you add a pull request to a merge queue"
+  # (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#merge_group).
+  # Turning a queue on is then a repository-settings change, not a workflow one.
+  merge_group:
+
+concurrency:
+  # Pull-request runs supersede within their own pull request; every other event
+  # gets a group keyed by its own COMMIT.
+  #
+  # The per-commit key is not cosmetic. Pending cancellation is not governed by
+  # `cancel-in-progress`: "By default, any existing pending job or workflow in
+  # the same concurrency group will be canceled and the new queued job or
+  # workflow will take its place"
+  # (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#concurrency).
+  # With one group per branch, a push that queued behind a running one is
+  # cancelled by the next push and never reports at all — so a commit can land
+  # with no guard having run. A per-SHA group makes that unrepresentable.
+  #
+  # `case(pred, value, default)` is the documented conditional-value function —
+  # "Evaluates predicates in order and returns the value corresponding to the
+  # first predicate that evaluates to true. If no predicate matches, it returns
+  # the last argument as the default value"
+  # (https://docs.github.com/en/actions/reference/workflows-and-actions/expressions).
+  group: ci-${{ case(github.event_name == 'pull_request', github.ref, github.sha) }}
+  # Cancel a superseded pull-request run, never a run on `main`.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# No permissions by default; each job grants itself the minimum it needs
+# (job-level permissions override workflow-level ones —
+# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#permissions).
+# A job added without a `permissions:` block therefore gets a token that can do
+# nothing, and fails loudly at its checkout instead of running over-privileged.
+permissions: {}
+
+jobs:
+  # ── The guard tier: prose, licensing, commit messages, changelog structure ──
+  guards:
+    name: guards
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The attribution scan below walks a commit range.
+          fetch-depth: 0
+
+      # `.claude/rules/comments.md` (RFC 505 / RFC 1574): line comments only,
+      # `TODO(#NNNN):` form, the sanctioned marker vocabulary, the NOTE and
+      # comment-run budgets. It reads hand-written `.rs` files, of which this
+      # tree has none today — the step prints `no files to check — OK.` and that
+      # is the honest report, not a silent pass. It becomes load-bearing on the
+      # first Rust file that lands, which is exactly why it is wired now.
+      - name: Comment style
+        run: bash scripts/checks/comment-style.sh --all
+
+      # Keep a Changelog 1.1.0 structure: no duplicated `### <Type>` inside one
+      # release section, no subsection header outside the canonical type set.
+      # A duplicated header ships the same release notes twice.
+      #
+      # Only the STRUCTURE half of FerroEHR's changelog guard is ported. The
+      # other half requires a changelog entry when a user-visible surface
+      # changes, and it decides that by matching changed paths against the
+      # source and deployment directories — none of which exist here yet, so it
+      # would pass on every pull request while looking like a control. It
+      # arrives with the code.
+      - name: Changelog structure
+        run: bash scripts/checks/changelog-structure.sh
+
+      # The no-attribution hard rule, enforced on what was actually committed.
+      # The local `.githooks/commit-msg` hook strips attribution before a commit
+      # is recorded, but a hook is opt-in per clone (`scripts/install-hooks.sh`),
+      # so this is the check that cannot be skipped.
+      - name: No AI or tool attribution in commit messages
+        shell: bash
+        # Context reaches the shell through `env:`, never `${{ }}` inline: an
+        # inline expression is substituted into the script BEFORE bash parses
+        # it, which makes a branch or title into executable text. zizmor's
+        # template-injection rule is the machine check for this.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$PR_BASE..$PR_HEAD"
+            base="$PR_BASE"
+          elif [ "$EVENT_NAME" = "merge_group" ]; then
+            # `github.event.before` does not exist on this event. Falling
+            # through to the push branch would build the range `..<sha>`, which
+            # git reads as `HEAD..<sha>` — nothing — and the guard would pass
+            # vacuously on every queued pull request.
+            range="$QUEUE_BASE..$PUSH_SHA"
+            base="$QUEUE_BASE"
+          else
+            range="$PUSH_BEFORE..$PUSH_SHA"
+            base="$PUSH_BEFORE"
+          fi
+          # First push to a branch, or a shallow clone: fall back to the tip.
+          git rev-parse "${base:-HEAD~1}" >/dev/null 2>&1 || range="HEAD"
+          echo "Scanning range: $range"
+          if git log --format='%B' "$range" 2>/dev/null | grep -iEn \
+             'co-authored-by:.*(claude|anthropic|\[bot\])|generated[[:space:]]+(with|by)[[:space:]]+.*claude|claude[[:space:]]+code|assisted-by:.*claude|🤖'; then
+            echo "::error::A commit message carries AI or tool attribution. Remove it (CLAUDE.md hard rule 8)."
+            exit 1
+          fi
+          echo "OK: no attribution found."
+
+      # REUSE 3.3: every file in the tree has machine-readable licensing that
+      # SURVIVES the file being copied out of it. That is the expected case for
+      # an instrument built to be forked and re-run, and `REUSE.toml` is the
+      # declaration that makes it true without touching a vendored file.
+      - name: reuse lint
+        # The OFFICIAL image, digest-pinned — the same construction FerroEHR
+        # uses and for the same reason: `reuse` is distributed as a Python
+        # package, this repository installs no Python toolchain
+        # (.claude/rules/ forbids Python as a tooling language), and the
+        # published container is the one distribution that needs neither that
+        # nor an unpinned installer script.
+        run: |
+          docker run --rm \
+            -v "$PWD:/data" --workdir /data \
+            fsfe/reuse:6.2.0@sha256:85462a75c0f8efda09ddd190b92816b70e7662577c8427429e11e1b9f25a992e \
+            lint
+
+  # ── The workflows audit themselves ──────────────────────────────────────────
+  # Two tools, two questions. zizmor asks whether the workflow is SAFE: every
+  # `uses:` pinned to a commit, no checkout persisting credentials, no context
+  # value spliced into a shell. actionlint asks whether it is CORRECT at all:
+  # expressions that cannot evaluate, `needs:` naming a job that does not exist,
+  # unknown runner labels, and shellcheck over every embedded `run:` block.
+  #
+  # This tier is the one guard family that has full-weight material to judge in
+  # this repository today, which is why the CI arrives with it rather than after
+  # the code.
+  workflow-audit:
+    name: workflow-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: zizmor@1.29.0
+
+      - name: zizmor
+        # GH_TOKEN enables the ONLINE audits, which is the point of running this
+        # beside SHA pinning: impostor-commit verifies that a pinned commit
+        # really belongs to the repository named in front of it, and it cannot
+        # do that offline. `--min-severity=low` gates every actionable tier
+        # (artipacked is Low) and leaves the informational tier advisory.
+        #
+        # Only `.github/workflows/` is passed: there are no composite actions
+        # under `.github/actions/` in this repository, and naming a path that
+        # does not exist is an error, not a no-op. Add the directory to this
+        # invocation in the same change that adds the first composite action.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --min-severity=low .github/workflows/
+
+      - name: actionlint
+        # The OFFICIAL image, digest-pinned. actionlint is a Go binary, so
+        # `taiki-e/install-action` does not carry it, and the upstream
+        # alternative is a `curl | bash` off `main` — the unpinned fetch the
+        # pinning rule exists to forbid. The image is also the only
+        # distribution that BUNDLES shellcheck, which half of actionlint's
+        # value depends on: "The image contains actionlint executable and all
+        # dependencies (shellcheck and pyflakes)"
+        # (https://github.com/rhysd/actionlint/blob/main/docs/usage.md).
+        #
+        # SC2016 ("expressions don't expand in single quotes") is excluded, and
+        # only it: every occurrence here is a `git log --format='%B'` or a `jq`
+        # filter, where single quotes are the correct idiom precisely because
+        # the shell must not expand the format directive.
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" --workdir /repo \
+            -e SHELLCHECK_OPTS='-e SC2016' \
+            rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 \
+            -color
+
+      # actionlint validates each job in isolation and cannot know that branch
+      # protection here routes through a single `conclusion` check, which makes
+      # a job missing from its `needs` list run without gating anything.
+      - name: Every CI job gates the merge
+        run: bash scripts/checks/ci-conclusion-complete.sh
+
+  # ── The single required check ───────────────────────────────────────────────
+  # Branch protection points at `conclusion` alone, which is what lets jobs be
+  # added, renamed or path-gated without editing repository settings. The cost
+  # of that design is that a job absent from `needs` still runs, still goes red,
+  # and stops gating anything — so `ci-conclusion-complete.sh` above compares
+  # this list against the jobs that exist, in both directions.
+  conclusion:
+    name: conclusion
+    if: always()
+    needs:
+      - guards
+      - workflow-audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every needed job succeeded or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[] | .result; . == "success" or . == "skipped")' >/dev/null

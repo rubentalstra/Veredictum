@@ -4,7 +4,20 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-46215C)](LICENSE)
 [![DOI](https://zenodo.org/badge/1347360549.svg)](https://doi.org/10.5281/zenodo.22113258)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14252/badge)](https://www.bestpractices.dev/projects/14252)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/rubentalstra/Veredictum/badge)](https://scorecard.dev/viewer/?uri=github.com/rubentalstra/Veredictum)
 [![Split from FerroEHR](https://img.shields.io/badge/split_from-FerroEHR-B7431B)](https://github.com/rubentalstra/FerroEHR/issues/2789)
+
+<!--
+The two OpenSSF badges are live scores, not claims: the Best Practices entry is
+project 14252 and reads whatever percentage of the criteria is actually
+recorded, and the Scorecard badge is published by the weekly analysis lane in
+.github/workflows/scorecard.yml. Both will read low until the code migration
+lands, because most of what they measure is a build, a test suite and a release
+pipeline that are still in FerroEHR. That is the honest number, and it is the
+baseline the next one is measured against. The criteria adjudication itself is
+deferred (FerroEHR#2789).
+-->
 
 
 The independent conformance instrument for openEHR clinical data repositories:

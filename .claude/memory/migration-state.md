@@ -27,12 +27,19 @@ github-actions ecosystem only), the licensing declaration (`REUSE.toml`,
 (`.githooks/commit-msg`, `scripts/install-hooks.sh`), and the Rust `.gitignore`
 set.
 
+Added 2026-08-26: the starter CI (`.github/workflows/ci.yml` — the `guards` and
+`workflow-audit` tiers behind one required `conclusion` check —,
+`scorecard.yml`, `sonar.yml` with `sonar-project.properties` and `.mcp.json`),
+the two guards those lanes needed
+(`scripts/checks/changelog-structure.sh`, `scripts/checks/ci-conclusion-complete.sh`),
+and `.claude/rules/ai-code-review.md` as the law over the machine reviewer.
+
 **What has not:** the runner source, the catalogue artifacts, the vendored spec
 text, the corpora and their PROVENANCE trees, the ambiguity register, the party
 statements and IXIT examples, the workspace scaffolding
 (`Cargo.toml`, `rust-toolchain.toml`, `clippy.toml`, `deny.toml`,
-`rustfmt.toml`), every CI lane, and the container image. The checklist below is
-the full inventory.
+`rustfmt.toml`), the Rust CI lanes, the release pipeline, and the container
+image. The checklist below is the full inventory.
 
 **How to apply:**
 - A change to runner behaviour lands in FerroEHR until the extraction
@@ -67,12 +74,19 @@ copied. Nothing here is forgotten work: this list is the record.
       target CDR to point at, so it is authored fresh, not copied.
 - [ ] `.dockerignore`, `.hadolint.yaml`, `.trivyignore.yaml` — arrive with the
       container image (the distroless multi-arch GHCR image of #2789).
-- [ ] `.github/workflows/` + `.github/actions/` — the PR lane, the one release
-      pipeline, the image build and scan-before-tag lanes, the scheduled
-      published-image scan, latest-deps and Scorecard lanes. Instantiate the
-      pattern small; do not copy 23 files.
-- [ ] `.github/actionlint.yaml` — the runner-label allowlist; inert until a
-      workflow exists.
+- [x] `.github/workflows/` — the starter lanes landed 2026-08-26, small on
+      purpose: `ci.yml` (a `guards` tier, a `workflow-audit` tier, one required
+      `conclusion` gate), `scorecard.yml`, `sonar.yml`. Still to come, each with
+      the thing it builds: the release pipeline, the image build and
+      scan-before-tag lanes, the published-image scan, latest-deps, and the
+      watcher engine. `.github/actions/` stays absent until a step is repeated
+      often enough to be a composite action — the zizmor invocation names only
+      `.github/workflows/`, so adding the directory means extending that
+      invocation in the same change.
+- [ ] `.github/actionlint.yaml` — the runner-label allowlist. Still not needed:
+      every job runs on `ubuntu-latest`, and this file exists only to teach
+      actionlint about labels its built-in roster lags. It lands with the first
+      job that needs a non-default runner.
 - [ ] `.github/dependabot.yml` — extend with the `cargo` entry (and `docker`
       when a Dockerfile lands). The `github-actions` entry is already live.
 - [ ] `.fossa.yml`, `.fossabot.yml` — both scan the Cargo graph; meaningless
@@ -81,21 +95,36 @@ copied. Nothing here is forgotten work: this list is the record.
       this repository will have its own.
 - [ ] `.mdbook-lint.toml` — arrives with the docs-site decision (#2789 lists it
       as open: mdBook on GitHub Pages or a domain).
-- [ ] `.mcp.json` — FerroEHR's declares one MCP server, SonarQube Cloud, keyed
-      to `rubentalstra_FerroEHR`. Not portable: no Sonar project exists for this
-      repository, and a config naming a project that does not exist is worse
-      than none. Land it if and when the analysis lane is set up.
+- [x] `.mcp.json` — landed 2026-08-26 with the analysis lane, keyed to
+      `rubentalstra_Veredictum` (the owner created the Sonar project that day),
+      reading a `SONARQUBE_TOKEN` from the local environment.
 - [ ] `scripts/checks/` — the remaining guards: the spec-citation resolver, the
-      default-value style check, the typed-status check, the SPDX header check,
-      the changelog structure check. Each with the rule text that justifies it.
+      default-value style check, the typed-style check, and the SPDX header
+      check. The changelog structure check landed 2026-08-26, together with
+      `ci-conclusion-complete.sh` (no CI job runs without gating the merge).
 - [ ] `security/vex/` — OpenVEX documents for inherited container-layer
       findings; arrives with the image scan lane.
-- [ ] The OpenSSF Best Practices badge entry and the Scorecard workflow (#2789
-      names both; FerroEHR's answers are the template).
+- [x] The Scorecard workflow landed 2026-08-26 and publishes its score to the
+      OpenSSF API; both OpenSSF badges are in the README.
+- [ ] The OpenSSF Best Practices criteria adjudication. The project entry exists
+      (14252, created by the owner 2026-08-26) and its badge is in the README,
+      so the score is already public and honest. Filling the criteria in is
+      DEFERRED by owner decision 2026-08-26 — do not propose statuses until the
+      owner picks it up. What the deferral is waiting on is mostly the code:
+      six MUST criteria are about producing and testing software (basic and
+      interface documentation, a build system, a test suite, evidence that tests
+      were added, compiler warning flags), and all six discharge with the
+      migration rather than by argument.
 
 Not applicable, checked and recorded so they are not re-surveyed: `.editorconfig`
-(does not exist in FerroEHR), `sonar-project.properties`, `vercel.json`,
-`Dockerfile.vercel`, `docker-compose*.yml`, `deploy/`, `website/`, `fuzz/`,
-`docs/` — all FerroEHR's CDR, sandbox, or documentation-site surfaces with no
-counterpart here. A Veredictum compose file for a target CDR, if one is ever
-wanted, is new work rather than a port.
+(does not exist in FerroEHR), `vercel.json`, `Dockerfile.vercel`,
+`docker-compose*.yml`, `deploy/`, `website/`, `fuzz/`, `docs/` — all FerroEHR's
+CDR, sandbox, or documentation-site surfaces with no counterpart here. A
+Veredictum compose file for a target CDR, if one is ever wanted, is new work
+rather than a port.
+
+`sonar-project.properties` was on that list until 2026-08-26 and is now live:
+the owner created the SonarQube Cloud project that day, which is what made a
+scan scope meaningful. Its exclusion tables are deliberately empty — a
+`sonar.exclusions` line naming a vendored or generated path that does not exist
+would be a scope claim about nothing.

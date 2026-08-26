@@ -38,11 +38,11 @@ Planned layout after the split, named here so the rules can point at it:
 
 | Path | Contents | State |
 |---|---|---|
-| `src/**` | the runner machinery: driver, provisioning, resolver, outcome classification, comparator, verdict pipeline, the perf/stress/probe instruments | arrives with #2789 |
-| `artifacts/**` | the catalogue: `schedule/` case cores, `bindings/` per-ITS operation bindings, `vocab/`, `corpus/`, `registers/ambiguities.yaml` | arrives with #2789 |
-| `party/**` | per-party statement + IXIT declarations | arrives with #2789 |
-| `schemas/**` | the published JSON Schemas for every artifact family (emitted, drift-guarded) | arrives with #2789 |
-| `specs/openehr/**` | the vendored released openEHR spec text: the oracle | arrives with #2789 (the vendoring decision is a checklist item on it) |
+| `src/**` | the runner machinery: driver, provisioning, resolver, outcome classification, comparator, verdict pipeline, the perf/stress/probe instruments | arrives with FerroEHR#2789 |
+| `artifacts/**` | the catalogue: `schedule/` case cores, `bindings/` per-ITS operation bindings, `vocab/`, `corpus/`, `registers/ambiguities.yaml` | arrives with FerroEHR#2789 |
+| `party/**` | per-party statement + IXIT declarations | arrives with FerroEHR#2789 |
+| `schemas/**` | the published JSON Schemas for every artifact family (emitted, drift-guarded) | arrives with FerroEHR#2789 |
+| `specs/openehr/**` | the vendored released openEHR spec text: the oracle | arrives with FerroEHR#2789 (the vendoring decision is a checklist item on it) |
 | `scripts/checks/**` | the repo guard scripts | `comment-style.sh` is here now |
 | `.claude/**` | rules, hooks, agents, memory | here now |
 
@@ -137,7 +137,9 @@ is a settled decision as a citation plus one sentence, at most 3 lines.
 A plain `//` run is at most 8 lines. Adjudication essays and change narration
 belong on the PR or the issue. No other marker vocabulary exists. Full guide:
 `.claude/rules/comments.md`, enforced by `scripts/checks/comment-style.sh`
-through the edit hook, and by a CI job once the CI lanes land (#2789).
+through the edit hook and by the `guards` job in CI. The guard reads
+hand-written `.rs` files, of which this tree has none yet, so it currently
+prints `no files to check` — which is the report, not a silent pass.
 
 ### 6. Reliability rules pair with a failing check
 
@@ -181,10 +183,15 @@ Data API pattern, never `git commit` and push, and never the contents API.
 changes adds an entry under `## [Unreleased]` in the same PR. User-visible here
 means the CLI surface, the catalogue's published schemas, verdict semantics,
 the container image, or anything a party's published record depends on.
-Releases are cut from the changelog: rename `[Unreleased]` to the version with
-its date, re-add an empty `[Unreleased]`, update the link references, then tag.
+Releases are cut from the changelog: rename the Unreleased heading to the
+version with its date, re-add an empty one, update the link references, then
+tag. Rewrite the HEADING, not the first textual match — the v0.0.1-alpha.1 cut
+rewrote a mention inside a paragraph and left the release with no section.
 Milestones are releases, and a release is cut when its milestone reaches zero
-open issues. The changelog guard arrives with the CI lanes (#2789).
+open issues. `scripts/checks/changelog-structure.sh` runs in CI on every change;
+the guard that REQUIRES an entry when a user-visible surface changes arrives
+with the code, because it decides "user-visible" by matching paths that do not
+exist here yet (FerroEHR#2789).
 
 ### 11. Cite only durable references
 
@@ -244,8 +251,21 @@ waiting on something upstream carries no milestone.
 
 ## Build and test
 
-The gates below are the ones the runner brings with it (#2789). Until then
-there is no Rust code in this repository to build.
+What runs today, on every pull request, every push to `main` and every
+merge-queue entry (`.github/workflows/ci.yml`, the `guards` and
+`workflow-audit` jobs behind one required `conclusion` check):
+
+```bash
+bash scripts/checks/comment-style.sh --all        # comment form and budgets
+bash scripts/checks/changelog-structure.sh        # Keep a Changelog structure
+bash scripts/checks/ci-conclusion-complete.sh     # no CI job runs ungated
+zizmor --min-severity=low .github/workflows/      # workflow security posture
+actionlint                                        # workflow correctness + shellcheck
+reuse lint                                        # REUSE 3.3 licensing
+```
+
+The Rust gates below arrive with the runner (FerroEHR#2789); until then there
+is no Rust code in this repository to build.
 
 ```bash
 cargo build
@@ -253,7 +273,6 @@ cargo nextest run                       # never cargo test
 cargo clippy --all-targets -- -D warnings
 cargo fmt
 cargo deny check
-bash scripts/checks/comment-style.sh --all
 ```
 
 Once the runner lands, its own canonical CLI table (validate, run, verdicts,
@@ -286,6 +305,8 @@ subagents.
 - `.claude/rules/comments.md` — RFC 505 / RFC 1574 with budgets
 - `.claude/rules/reliability.md` — the safety rules and their enforcement
 - `.claude/rules/writing-style.md` — prose style
+- `.claude/rules/ai-code-review.md` — machine review is a second opinion, never
+  authority; the SonarQube Cloud setup facts
 - `README.md` — the product identity and the origin of the name
 - [FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) — the
   migration contract
