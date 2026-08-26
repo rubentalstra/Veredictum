@@ -8,10 +8,13 @@
 #
 # WHAT IT ACTUALLY READS TODAY, stated plainly because the honest answer is
 # "less than it will": there is no first-party source code in this repository
-# yet. The analyzer's real material is the workflow YAML (Sonar ships GitHub
-# Actions rules), the brand study's HTML and CSS, and secret detection across
-# the tree. Sonar has no Shell analyzer, so `scripts/checks/*.sh` are covered by
-# secret detection alone — shellcheck inside actionlint is what reads those.
+# yet. The analyzer's real material is the shell — `scripts/**` and
+# `.claude/hooks/**`, under Sonar's own Shell rules, which is where its first 11
+# findings landed — plus the workflow YAML (it ships GitHub Actions rules), the
+# brand study's HTML and CSS, and secret detection across the tree. That shell
+# coverage is a second opinion beside the shellcheck bundled in the actionlint
+# image, not a replacement for it: shellcheck reads the shell embedded in
+# workflow `run:` blocks, which is a set of files Sonar never sees as shell.
 # When the runner arrives, Rust is analyzed first-party (the analyzer runs Clippy
 # itself from the workspace manifest), and this lane grows the instrumented run
 # that feeds coverage.

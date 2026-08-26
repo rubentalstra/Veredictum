@@ -3,8 +3,9 @@
 Every pull request and every push to `main` is analysed by SonarQube Cloud
 (`.github/workflows/sonar.yml`; scope in `sonar-project.properties`). It exists
 because the guard tier catches what a guard can catch, review is one person,
-and a deterministic sweep also reads trees no other check here reads: workflow
-YAML, HTML and CSS, and secret detection across the whole repository.
+and a deterministic sweep also reads trees no other check here reads: the shell
+under `scripts/**` and `.claude/hooks/**`, workflow YAML, HTML and CSS, and
+secret detection across the whole repository.
 
 It is a **second opinion**. It is not authority, and it gates no merge.
 
@@ -28,10 +29,19 @@ never edit a corpus fixture because a finding suggested it.
 There is no first-party source code in this repository yet: the runner still
 lives in FerroEHR `tools/cnf-runner` until the extraction lands
 ([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789)). So the
-analyzer's material is the workflow YAML, the brand study's HTML and CSS, and
-secret detection. Sonar ships no Shell analyzer, so `scripts/checks/*.sh` are
-read by secret detection alone — shellcheck, bundled inside the actionlint
-image, is what lints them.
+analyzer's material is the shell under `scripts/**` and `.claude/hooks/**`, the
+workflow YAML, the brand study's HTML and CSS, and secret detection.
+
+The shell coverage was verified rather than assumed, and the assumption it
+replaced was wrong: the first scan produced 11 findings, all `shelldre:S7688`
+(`[` versus `[[`) in the ported hooks, which is a Shell rule. It is a second
+opinion beside the shellcheck bundled in the actionlint image, not a
+replacement — shellcheck reads the shell embedded in workflow `run:` blocks,
+which Sonar never sees as shell, so the two cover different files.
+
+Those 11 findings sit on hooks ported verbatim from FerroEHR, and a style
+rewrite here would silently fork them from their upstream originals. Under the
+precedence above that is a finding to record, not one to act on reflexively.
 
 Rust is analysed first-party once the code arrives (the analyzer runs Clippy
 itself from the workspace manifest, as a second and deliberately independent
