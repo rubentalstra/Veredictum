@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: Task
+description: A general work item (maintenance, research, tooling, migration step)
+labels: ["chore"]
+body:
+  - type: textarea
+    id: contract
+    attributes:
+      label: Contract
+      description: The goal of this task and what changes once it is done.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: The checklist that defines done.
+      value: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: further-information
+    attributes:
+      label: Further information
+      description: >
+        Links, and whether this is a step of the migration out of FerroEHR
+        (FerroEHR#2789).
+    validations:
+      required: false

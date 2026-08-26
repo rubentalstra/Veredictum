@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# Dependabot configuration.
+# Options reference:
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
+#
+# ONE ecosystem today: `github-actions`. The cargo and docker ecosystems arrive
+# with the code migration (FerroEHR#2789) — there is no Cargo manifest and no
+# Dockerfile in this repository yet, and Dependabot resolves a manifest at the
+# directory it is given, so an entry pointing at nothing is inert configuration
+# that looks like a control. Each one lands in the pull request that adds the
+# thing it updates, with its own cooldown reasoned from what a compromised
+# release in that ecosystem could reach.
+#
+# The github-actions entry is live from the start rather than waiting for the
+# lanes, so the first workflow that lands is already covered: an unpinned or
+# stale action is the cheapest supply-chain foothold in a repository whose
+# release lane will eventually sign artifacts.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # A delay between a release being published and this bot proposing it, so a
+    # compromised release has a window to be caught before it reaches a pull
+    # request (the OWASP CI/CD Security Cheat Sheet's third-party-code control).
+    # Three days: an action runs in CI but does not ship in a published
+    # artifact, and actions here are digest-pinned, so a bump is a reviewed
+    # change of digest.
+    #
+    # SECURITY updates are exempt by design — Dependabot applies no cooldown to
+    # advisory-driven bumps, so an advisory still arrives immediately. That is
+    # what makes a cooldown safe rather than a delay on getting fixes.
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    groups:
+      # One weekly pull request for every action bump. A single codeql-action
+      # release otherwise opens three, one per sub-action, and a queue nobody
+      # reads is not review. A breaking action major fails the lanes on that one
+      # pull request, visibly.
+      actions-all:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci" # plain conventional prefix; no attribution

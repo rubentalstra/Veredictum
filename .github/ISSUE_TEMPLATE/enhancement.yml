@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: Enhancement Request
+description: Request new or extended functionality in Veredictum
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: contract
+    attributes:
+      label: Contract
+      description: >
+        What should exist and why: the context, the benefit, and the governing
+        openEHR specification sections. If nothing in the specifications governs
+        it, say so explicitly ("no openEHR spec governs this") rather than
+        leaving it implied.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Catalogue coverage (a behaviour with no case)
+        - Runner machinery
+        - CLI surface
+        - Verdicts, reports, or published artifacts
+        - Performance or stress instruments
+        - Schemas and integrator interfaces
+        - Packaging, container image, or release
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: >
+        The checklist that defines done: observable, verifiable outcomes. For a
+        coverage request, name the behaviour and the section that defines it.
+      value: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+  - type: textarea
+    id: further-information
+    attributes:
+      label: Further information
+      description: Prior art, related issues, links.
+    validations:
+      required: false

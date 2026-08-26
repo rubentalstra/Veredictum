@@ -1,0 +1,124 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: Bug Report
+description: Report a defect in Veredictum (a mis-judged case, a wrong expectation, a crash)
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        A vulnerability goes through
+        [SECURITY.md](https://github.com/rubentalstra/Veredictum/blob/main/SECURITY.md)
+        instead, privately. A vulnerability this instrument found in a CDR under
+        test belongs to that vendor's disclosure process, not here.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before reporting
+      options:
+        - label: I have searched existing issues
+          required: true
+        - label: >
+            I understand the runner code still lives in FerroEHR
+            `tools/cnf-runner` until the migration (FerroEHR#2789) completes, so
+            a fix may land there
+          required: true
+  - type: dropdown
+    id: suspect
+    attributes:
+      label: Which part looks wrong
+      description: >
+        The three suspects of the attribution law. Pick the one your evidence
+        points at; getting it wrong is fine, the attribution is redone from the
+        evidence anyway.
+      options:
+        - The runner machinery misdrove the case or misjudged the response
+        - A catalogue expectation is wrong against the specification
+        - The CLI, the schemas, or the published artifacts
+        - I cannot tell yet
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >
+        The release tag or image digest, or the FerroEHR commit if you ran the
+        runner from source.
+      placeholder: v0.1.0, or ghcr.io/rubentalstra/veredictum@sha256:..., or FerroEHR e058f9d
+    validations:
+      required: true
+  - type: input
+    id: case-id
+    attributes:
+      label: Case id
+      description: The case the failure appeared on, if it is one case.
+      placeholder: EHR-CREATE-201-location
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - How the runner was invoked (subcommand and flags):
+        - The system under test (product and version):
+        - Operating system:
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: exchange
+    attributes:
+      label: The recorded exchange
+      description: >
+        The request the runner sent and the response the server returned,
+        verbatim: method, path, headers, bodies. This is the evidence the
+        attribution is made from.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What the specification requires
+      description: >
+        The openEHR component, document, and section heading, with the sentence
+        you are relying on quoted. An expectation is refuted by a better reading
+        of the released specification text and by nothing else, so a report
+        without a citation cannot settle anything. If the defect is not
+        specification-facing (a crash, a broken flag), say so here instead.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What Veredictum did
+      description: The verdict, the finding, or the error, as it was reported.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: >
+        Runner output around the failure, or the run artifacts if you can attach
+        them. Automatically formatted, no backticks needed.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: further-information
+    attributes:
+      label: Further information
+    validations:
+      required: false
