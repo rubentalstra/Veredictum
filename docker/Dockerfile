@@ -72,7 +72,7 @@ RUN --mount=type=cache,target=/app/target,sharing=locked \
 # base-nossl does not ship it, so the image would fail at load with
 # "libgcc_s.so.1: cannot open shared object file". Both final targets inherit
 # this stage's user, entrypoint and labels, so they differ by exactly one layer.
-FROM gcr.io/distroless/cc-debian13:nonroot@sha256:d97bc0a941b8d4be647dc0ee75b264ddbb772f1ac5ba690a4309c00723b23775 AS runtime-base
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:a77defd6fedbb3392b175ba8ea3d1c22be963c1597c248c3ba987ddd80bfb512 AS runtime-base
 # The `:nonroot` tag already runs as uid 65532, but a scanner reading this file
 # cannot see a base image, and neither can a reader. Stating it makes the posture
 # a property of this file rather than of a tag someone could change (OWASP Docker
