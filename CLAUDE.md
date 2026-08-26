@@ -394,6 +394,14 @@ subagents.
 
 ## References
 
+- `ARCHITECTURE.md` — **the architecture record**, and the design authority for
+  the machinery: the artifact set and the case-core field definitions, the
+  operation bindings, the outcome taxonomy and the ambiguity register, the
+  assertion vocabulary, the verdict computation, and §8.14's
+  population-anchored performance-class model with its journey decomposition.
+  Read it before changing how the instrument judges or measures anything. It
+  moved here from the FerroEHR mono-repo at the split and is still being worked
+  on: adapt names and paths when the tree moves, never reword the content
 - `.claude/rules/cnf-triage.md` — the attribution law and the register lifecycle
 - `.claude/rules/testing.md` — test discipline and the coverage mandate
 - `.claude/rules/comments.md` — RFC 505 / RFC 1574 with budgets
