@@ -11,6 +11,13 @@
 //! Schedule (case cores, operation bindings, vocabularies incl. the
 //! capability matrix, corpus manifest, ambiguity register). Every closed
 //! vocabulary is a Rust enum/newtype so illegal states are unrepresentable.
+//!
+//! [`pipeline`] is the entry point for driving the instrument: one seam per
+//! whole operation — validate a catalogue, run it against a system under
+//! test, judge the recorded outcomes, render the published assets, measure a
+//! class — each returning typed facts rather than console text. The bundled
+//! `veredictum` binary is a command-line layer over exactly those seams, so
+//! a second consumer drives the same engine and renders its own views.
 
 // Doctests are copy-paste templates: they must use `?`, never unwrap
 // (C-QUESTION-MARK, https://rust-lang.github.io/api-guidelines/documentation.html#c-question-mark).
@@ -28,6 +35,7 @@ pub mod party;
 pub mod perf;
 pub mod perf_assets;
 pub mod perf_run;
+pub mod pipeline;
 pub mod probe;
 pub mod refgrammar;
 pub mod render;

@@ -20,6 +20,20 @@ version on.
 
 ### Added
 
+- A deliberate library API, `veredictum::pipeline`, so the engine is
+  consumable by something other than the command line. It carries one seam per
+  whole operation — `catalogue` validates an artifact tree, `conformance`
+  drives it against a running system under test, `judgement` computes the
+  verdicts and renders the submission set, `assets` renders the published
+  visuals and the schema set, and `measured` runs the class window, the stress
+  ladder and the AQL probe. Every seam returns typed values: a validation
+  carries its findings and the tree it loaded, a run carries the results
+  record and its outcome tally, a judgement carries the verdict report and its
+  documents as named bodies, and the measured window reports its progress as
+  typed events. Nothing returns console text, so a consumer renders its own
+  views over the same facts the command line prints. The `veredictum` binary
+  is now a clap front end over exactly those seams; its behaviour, its output
+  and its exit codes are unchanged.
 - A documentation website at <https://veredictum.eu>, built from `website/` and
   deployed to GitHub Pages by a new `Docs` workflow. The root serves a
   hand-written landing page in the project's own brand palette, and `/docs/`
