@@ -1,0 +1,7 @@
+title: DV_MULTIMEDIA
+type: object
+allOf:
+  - $ref: ../data_types/DvMultimedia.yaml
+required:
+  - _type
+x-discriminator-value: DV_MULTIMEDIA

@@ -1,0 +1,85 @@
+openapi: 3.0.3
+info:
+  title: Query API
+  version: latest
+  x-status: STABLE
+  x-spec: query
+  contact:
+    name: Specifications Editorial Committee openEHR
+    url: 'https://specifications.openehr.org/'
+    email: info@openehr.org
+  license:
+    name: Creative Commons Attribution-NoDerivs 3.0 Unported
+    url: 'https://creativecommons.org/licenses/by-nd/3.0/'
+  description:
+    $ref: ./docs/query/Description.md
+security: []
+servers:
+  - url: 'https://{baseUrl}/v1'
+    description: An example openEHR server URL.
+    variables:
+      baseUrl:
+        default: openEHRSys.example.com
+        description: The (example) server base URL prefix providing openEHR services. This may contain server name, port and base path prefix.
+paths:
+  '/query/aql':
+    get:
+      $ref: ./operations/query_execute_adhoc_query.yaml
+    post:
+      $ref: ./operations/query_execute_adhoc_query_body.yaml
+  '/query/{qualified_query_name}':
+    get:
+      $ref: ./operations/query_execute_stored_query.yaml
+    post:
+      $ref: ./operations/query_execute_stored_query_body.yaml
+  '/query/{qualified_query_name}/{version}':
+    get:
+      $ref: ./operations/query_execute_stored_query_version.yaml
+    post:
+      $ref: ./operations/query_execute_stored_query_version_body.yaml
+tags:
+  - name: Query_types
+    x-displayName: Query types
+    description:
+      $ref: ./docs/query/Query_types.md
+  - name: Qualified_query_name
+    x-displayName: Qualified query name
+    description:
+      $ref: ./docs/query/Qualified_query_name.md
+  - name: Request
+    x-displayName: Request details
+    description:
+      $ref: ./docs/query/Request.md
+  - name: Response
+    x-displayName: Response details
+    description:
+      $ref: ./docs/query/Response.md
+  - name: Query
+    x-displayName: Execute Query
+    description: |
+      Execution of [AQL queries](https://specifications.openehr.org/releases/QUERY/latest/AQL.html).
+      
+      Endpoints support ad-hoc and stored query execution, parameterisation, and retrieval of results.
+  - name: Query_schema
+    x-displayName: Query Execute
+    description:
+      $ref: ./tags/Query_schema.md
+  - name: RESULT_SET_schema
+    x-displayName: RESULT_SET
+    description: |
+      Structured result of query execution, typically tabular data with column metadata and row values produced by evaluating an AQL statement.
+      <SchemaDefinition schemaRef="#/components/schemas/ResultSet" />
+x-tagGroups:
+  - name: Docs
+    tags:
+      - Query_types
+      - Qualified_query_name
+      - Request
+      - Response
+  - name: Resource endpoints
+    tags:
+      - Query
+  - name: Resources
+    tags:
+      - Query_schema
+      - RESULT_SET_schema

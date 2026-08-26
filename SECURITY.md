@@ -27,12 +27,11 @@ behaviour once the vendor's disclosure is out.
 
 ## Supported versions
 
-**No release has been cut yet.** The runner still lives in FerroEHR
-`tools/cnf-runner` until the migration
-([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789))
-completes, so there is nothing published from this repository to support. A
-vulnerability in the runner as it exists today is reported through
-[FerroEHR's security policy](https://github.com/rubentalstra/FerroEHR/security/policy).
+**No release has been cut yet.** The code lives here, but nothing is published
+from this repository — no binary, no crate, no container image — so there is no
+released version to support. Report against `main`: state the commit you
+reproduced on, and the fix lands there. Once the release pipeline (#12) exists,
+this section will name the supported versions instead.
 
 Once releases exist, the policy is the one this project can actually keep:
 **only the most recent release is supported.** No maintenance branches, no

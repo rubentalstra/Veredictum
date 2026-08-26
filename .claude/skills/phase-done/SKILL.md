@@ -83,12 +83,18 @@ exist is worse than no step, because it reports green.
 It does not run the gates for you to "check" the criteria. Those must already
 have been run and genuinely passed.
 
-## Gates that arrive with the code, and are therefore not steps here
+## Gates this skill expects to have been run
 
-Named so their absence is a record rather than an omission
-([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789)): the
-Rust gates (`cargo fmt`, `clippy`, `nextest`, `deny`), the catalogue's own
-`validate` gate, the conformance zero-drift comparison against a committed
-baseline, the documentation-site page requirement, and the plan-file
-delete-on-implementation step. Each becomes a step in the pull request that
+The Rust tier (`cargo fmt --all --check`, `cargo clippy --all-targets -- -D
+warnings`, `cargo nextest run`, `cargo deny check`) and
+`cargo run -- validate --root artifacts --specs specs/openehr` at zero findings.
+Report what you actually saw; never claim a green you did not run.
+
+## Gates that are not steps here, because the machinery does not exist yet
+
+Named so their absence is a record rather than an omission: the conformance
+zero-drift comparison against a committed baseline (this repository publishes no
+baseline of its own — a party's record lives with the party), the
+documentation-site page requirement (no site yet), and the release verification
+of a published artifact (#12). Each becomes a step in the pull request that
 brings the machinery it checks.

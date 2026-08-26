@@ -1,0 +1,7 @@
+title: DV_TIME
+type: object
+allOf:
+  - $ref: ../data_types/DvTime.yaml
+required:
+  - _type
+x-discriminator-value: DV_TIME

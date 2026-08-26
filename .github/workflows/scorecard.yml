@@ -25,11 +25,23 @@
 #     maintainer the only ways to move it are to add a reviewer or to fake one.
 #     GOVERNANCE.md and MAINTAINERS.md are honest about the bus factor instead.
 #
-# Several other checks measure lanes that arrive with the code migration
-# (https://github.com/rubentalstra/FerroEHR/issues/2789): Packaging,
-# Signed-Releases, Fuzzing, SAST, CII-Best-Practices, Pinned-Dependencies over
-# a Cargo manifest. Their low scores today are accurate — the lanes do not exist
-# yet — and the first score is the baseline they are measured against.
+# WHAT THE CODE MIGRATION SETTLED, and what it did not. The instrument itself is
+# here now, so each remaining low check has a named owner rather than a blanket
+# "arrives later":
+#
+#   * `SAST` — SATISFIED. `codeql.yml` analyzes `rust` and `actions`, and
+#     `sonar.yml` runs a second, independent analyzer over the same tree.
+#   * `Pinned-Dependencies` — SATISFIED. `Cargo.lock` is committed (this
+#     repository ships a binary), every Rust gate in `ci.yml` runs `--locked`,
+#     every `uses:` is digest-pinned and every container is pulled by digest.
+#   * `Packaging` and `Signed-Releases` — issue #12. There is no release
+#     pipeline yet, so the instrument is consumable only by `cargo run` from a
+#     checkout, and both scores are honestly zero until that tag lane exists.
+#   * `Fuzzing` — issue #11. The readers worth fuzzing are identified; no
+#     harness exists yet.
+#   * `CII-Best-Practices` — the OpenSSF Best Practices entry is project 14252
+#     and reads whatever fraction of the criteria is actually recorded.
+#     Adjudicating those criteria is its own work, not a badge to claim early.
 #
 # The score is an outcome, never the target. A check that cannot be satisfied
 # honestly stays low with its reason written down.

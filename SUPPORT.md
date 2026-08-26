@@ -13,9 +13,10 @@ difference between an answer and a thread nobody is paged for.
 - [`.claude/rules/cnf-triage.md`](.claude/rules/cnf-triage.md): how a failing
   row is attributed, and what each attribution obliges.
 
-A documentation site with the CLI reference, the catalogue-authoring guide, and
-the conformance-methodology chapter arrives with the code migration
-([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789)).
+A documentation site with the CLI reference, the catalogue-authoring guide and
+the conformance-methodology chapter is not written yet. Until it is, the
+canonical CLI table in [`CLAUDE.md`](CLAUDE.md) is the authority on how to
+invoke the instrument, and `cargo run -- --help` lists every subcommand.
 
 ## I have a question
 

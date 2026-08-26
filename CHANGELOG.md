@@ -12,28 +12,81 @@ in prose rather than quoted verbatim on purpose: a release cut rewrites the firs
 literal occurrence of it, and quoting it here is what turned this paragraph into
 a stray release heading at the v0.0.1-alpha.1 cut.
 
-The runner itself still lives in FerroEHR `tools/cnf-runner` until the
-migration ([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789))
-completes; releases before that carry the repository skeleton and identity.
+Releases before `0.1.0-alpha.1` carried the repository's identity and its
+discipline; the instrument itself builds and runs from this repository from that
+version on.
 
 ## [Unreleased]
 
 ### Added
 
+- **Published on crates.io** as `veredictum`, both a binary and a library:
+  `cargo install veredictum --version 0.1.0-alpha.1` puts the command on your
+  `PATH`, and the library target lets an integrator consume the typed artifact
+  model and the published JSON Schemas rather than reimplementing the format.
+  The package carries the code and the legal set; the catalogue and the vendored
+  specification oracle are 347 MB of data no registry accepts, and every root is
+  a path passed at run time, so both come from the repository.
+- `publish-crates.yml`: the release lane for the crate, authenticating through
+  crates.io Trusted Publishing so no long-lived registry token exists in this
+  repository. Manual dispatch, dry run by default, the upload built from the
+  checkout with no cache restored, and the registry read back before the lane
+  reports success.
+- **The instrument itself builds and runs from this repository:** the runner,
+  the catalogue with its 1107 case cores and 247 operation bindings, the
+  corpora, the ambiguity register, the party declarations, and the vendored
+  openEHR specification text that is its oracle.
+- The command is `veredictum`. The package, the binary and the library carry the
+  product's name, and so does the debug switch, now
+  `VEREDICTUM_DEBUG_EXCHANGES`. Every subcommand keeps its name and its flags:
+  `validate`, `run`, `verdicts`, `perf`, `stress`, `aql-probe`,
+  `stress-compare`, `perf-assets`, `conformance-assets`, `emit-schemas`. Two
+  paths move with the tree — an artifact root is now `artifacts` and a spec root
+  is now `specs/openehr`.
+- The standalone workspace: one package at the root, its own SemVer line from
+  `0.1.0-alpha.1`, edition 2024, Apache-2.0, with the deny-tier lint tables,
+  `rust-toolchain.toml`, `rustfmt.toml`, `clippy.toml`, `deny.toml` and
+  `.config/nextest.toml` carried over and adapted to what this tree actually
+  contains. `Cargo.lock` is committed, because this repository ships a binary.
+- Three released machine-readable bundles beside the specification text, so a
+  citation that can only resolve against a schema resolves here rather than
+  nowhere: `specs/its-xml-schemas/` (the two XSD lineages),
+  `specs/its-json-schemas/` (the ITS-JSON validation oracle) and
+  `specs/rest-oas/` (the 21 released ITS-REST OpenAPI bundles).
+- The corpus vendoring scripts, so every vendored tree can still be refreshed
+  the only sanctioned way, by re-running its script:
+  `scripts/vendor/ckm-templates.sh`, `scripts/vendor/ckm-archetypes.sh`,
+  `scripts/vendor/adl2-archetypes.sh` and `scripts/generate-ckm-examples.sh`.
+- The Rust CI tier, gated on whether a change touches anything it reads:
+  `rustfmt`, `clippy --all-targets` at `-D warnings`, build plus `nextest` plus
+  the instrument's own `validate` self-check, the rustdoc gate, the declared
+  MSRV verified with `cargo hack check --rust-version`, `cargo deny check`, and
+  `cargo machete` for dependencies nothing imports. All seven join the single
+  required `conclusion` check.
+- CodeQL analyzes `rust` beside `actions`, and the SonarQube scope covers `src/`
+  and `tests/` with the vendored trees excluded.
 - Continuous integration. `ci.yml` runs on every pull request, every push to
   `main` and every merge-queue entry: a guard tier (comment style, changelog
   structure, the no-attribution scan over the pushed commits, REUSE 3.3
   licensing), a workflow audit (zizmor for the security posture, actionlint with
   bundled shellcheck for correctness, and a check that every job actually gates
-  the merge), and a single required `conclusion` check. The Rust gates arrive
-  with the code migration; the header of the workflow says so rather than
-  leaving the absence to be inferred.
+  the merge), and a single required `conclusion` check.
 - `scorecard.yml`: the weekly OpenSSF Scorecard analysis, publishing its score
   to the OpenSSF API and its findings into code scanning.
-- `sonar.yml` and `sonar-project.properties`: SonarQube Cloud analysis of the
-  whole tree on every pull request and every push to `main`, advisory under
+- `sonar.yml` and `sonar-project.properties`: SonarQube Cloud analysis on every
+  pull request and every push to `main`, advisory under
   `.claude/rules/ai-code-review.md`, with the New Code window anchored to the
-  latest release tag.
+  package version so "new code" means "since the last release".
+- Test coverage, measured and published. The Sonar lane runs the suite under
+  `cargo-llvm-cov` and imports the merged lcov; the denominator excludes the
+  test tree, the CLI entry point and the two asset renderers, each with its
+  reason recorded, because a coverage percentage is only useful if every file
+  counted could in principle be covered by a test. The README carries the
+  coverage and quality-gate badges beside the CI, CodeQL, reliability, security,
+  maintainability and duplication readings.
+- Dependabot covers the `cargo` ecosystem, with a seven-day cooldown against
+  the actions entry's three: a crate compiles into the published binary, so a
+  compromised release reaches every downstream run rather than one CI job.
 - The OpenSSF Best Practices and OpenSSF Scorecard badges in the README, both
   reading live scores rather than asserting a posture.
 - Two ported guard scripts: `scripts/checks/changelog-structure.sh` (Keep a

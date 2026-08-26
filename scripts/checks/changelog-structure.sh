@@ -18,10 +18,10 @@
 # A duplicated header is not cosmetic: the release lane publishes the section
 # verbatim, so the same release notes ship twice.
 #
-# Wired into the CI `guards` job, unconditionally. The other half of FerroEHR's
-# changelog guard — requiring an entry when a user-visible surface changes —
-# arrives with the code, because it decides "user-visible" by matching changed
-# paths against source and deployment trees that do not exist here yet.
+# Wired into the CI `guards` job, unconditionally. The other half — requiring an
+# entry when a user-visible surface changes — is issue #10: it decides
+# "user-visible" by matching changed paths, and those paths exist now that the
+# code is here.
 set -euo pipefail
 
 file="${1:-CHANGELOG.md}"

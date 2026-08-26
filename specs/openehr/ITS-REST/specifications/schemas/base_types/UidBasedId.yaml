@@ -1,0 +1,5 @@
+title: UID_BASED_ID
+type: object
+allOf:
+  - $ref: ../base_types/ObjectId.yaml
+x-discriminator-value: UID_BASED_ID

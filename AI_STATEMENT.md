@@ -27,11 +27,9 @@ Part 2 defines them: requirement, recommendation, permission.
 
 This document covers the use of AI tools in developing everything in this
 repository: the runner machinery, the conformance catalogue, the schemas, the
-tests, the infrastructure, the documentation, and this document itself. It also
-covers the same work while it is still happening in FerroEHR
-`tools/cnf-runner`, which is where the code lives until the migration
-([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789))
-completes.
+tests, the infrastructure, the documentation, and this document itself. It
+covers the whole history in this repository, including the years of work that
+predate its first public commit.
 
 It does not cover an AI system in the product, because there is none.
 **Veredictum ships no AI.** No model is trained, embedded, or called at run
@@ -153,10 +151,10 @@ the maintainer's cooperation.**
   ([`.claude/rules/testing.md`](.claude/rules/testing.md)).
 - **Static and supply-chain gates.** No `unsafe`, deny-tier lints on panicking
   shortcuts, typed errors, machine-checked comment style, `cargo deny` policy,
-  workflow security audits, and signed release artifacts. **These arrive with
-  the code migration (FerroEHR#2789)**; today they run in FerroEHR against the same
-  code, and this row is written as pending rather than as a control this
-  repository already has.
+  and workflow security audits — all running in this repository's CI. Signed
+  release artifacts are the one part still pending: there is no release pipeline
+  yet (#12), and this row says so rather than claiming a control that has not
+  landed.
 
 What these controls do **not** prove is stated in §12.
 
@@ -241,9 +239,9 @@ This section exists because a disclosure without one is marketing.
   The honest claim is that the maintainer understands and can explain every
   merged change. "Every expectation was independently re-derived by a second
   reader" would not be.
-- **The static and supply-chain gates are pending in this repository.** They run
-  today against the same code in FerroEHR, and §7 says so rather than implying
-  a control that has not landed.
+- **Release-artifact signing is not in place.** The static and supply-chain
+  gates run here; the signing half waits on a release pipeline (#12), and §7
+  says so rather than implying a control that has not landed.
 - **Retroactivity.** Commits predating this statement carry no disclosure
   markers. This document describes the practice, not a per-commit audit trail,
   and no such trail is claimed.
@@ -264,8 +262,8 @@ off-cycle when any of these fires: the tooling changes materially, a tool
 vendor's terms change in a way §8 or §9 relies on, a binding rule emerges (EU AI
 Act guidance touching this use, a foundation policy this project follows, a
 court decision on AI output and copyright), or a claim in this document stops
-being true. The migration completing (FerroEHR#2789) is itself a trigger, because §7's
-pending rows become real then. The maintainer owns the review; the change lands
+being true. The release pipeline landing (#12) is itself a trigger, because §7's
+one pending row becomes real then. The maintainer owns the review; the change lands
 as a pull request like everything else, and the version and change log update in
 the same one.
 
@@ -282,8 +280,7 @@ tracker, and never silently absorbed.
 
 **Normative for this project**, the documents that bind the practice described
 here: the [Apache-2.0 licence](LICENSE); the released openEHR specifications
-(vendored with the code migration, read in a FerroEHR checkout at
-`docs/specs/openehr/` until then); this repository's rule set
+(vendored in this repository at `specs/openehr/`); this repository's rule set
 ([`.claude/rules/`](.claude/rules/), in particular `cnf-triage.md`,
 `testing.md`, `reliability.md`, `comments.md`, `writing-style.md`);
 [GOVERNANCE.md](GOVERNANCE.md), [MAINTAINERS.md](MAINTAINERS.md),
@@ -298,14 +295,14 @@ Linux kernel, LLVM, Kubernetes, NumPy, Mozilla, QEMU, curl, and Gentoo
 positions; the OpenSSF security guidance for AI code assistants; NIST AI RMF and
 ISO/IEC 42001 as vocabulary; EU AI Act Articles 2, 3, and 50 with the European
 Commission's Article 50 FAQ. The survey behind this structure was performed for
-FerroEHR's statement of 2026-08-24 and is recorded on that project's tracker;
-this document inherits it and states its own positions.
+a sibling project's statement of 2026-08-24 and is recorded on its tracker;
+this document draws on it and states its own positions.
 
 ## Annex A. Change log
 
 | Version | Date | Change |
 |---|---|---|
-| 1.0.0 | 2026-08-26 | First issue, at the split from FerroEHR. |
+| 1.0.0 | 2026-08-26 | First issue. |
 
 ## Annex B. Machine-readable summary
 

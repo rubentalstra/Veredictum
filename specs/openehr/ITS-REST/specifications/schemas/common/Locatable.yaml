@@ -1,0 +1,24 @@
+title: LOCATABLE
+type: object
+allOf:
+  - $ref: ../common/Pathable.yaml
+required:
+  - name
+  - archetype_node_id
+properties:
+  name:
+    $ref: ../data_types/UDvText.yaml
+  archetype_node_id:
+    type: string
+    xml:
+      attribute: true
+  uid:
+    $ref: ../base_types/UUidBasedId.yaml
+  links:
+    type: array
+    items:
+      $ref: ../common/Link.yaml
+  archetype_details:
+    $ref: ../common/Archetyped.yaml
+  feeder_audit:
+    $ref: ../common/FeederAudit.yaml

@@ -1,0 +1,9 @@
+name: fetch
+in: query
+description: |
+  Number of rows to fetch (the default depends on the implementation).
+style: form
+explode: true
+schema:
+  type: integer
+  example: 10

@@ -17,39 +17,39 @@ and in the code.
 ## Migration state (read this before anything else)
 
 Veredictum was built inside [FerroEHR](https://github.com/rubentalstra/FerroEHR)
-as `tools/cnf-runner`, and **that is still where the living code is.** This
-repository holds the product identity and, from now on, the tracker for
-product work. The split is the migration contract
-[FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789): the
-`git filter-repo` extraction of the runner with its history, the catalogue
-artifacts, the vendored spec text, the corpora, the ambiguity register, the
-workspace scaffolding, the CI lanes, and the container image.
+as a workspace member, and **the code lives here now.** The extraction carried
+the runner, the catalogue, the corpora, the ambiguity register, the party
+declarations and the vendored spec oracle, re-rooted at this repository's root.
+A change to instrument behaviour lands here.
 
-Two consequences for anyone working here today:
+What is still open on the migration contract
+[FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) is the
+CONSUMER side: FerroEHR carries its own copy until this one is published and its
+conformance pipeline pins the published version instead. Until that switch the
+two trees exist side by side, and this one is the source of truth. Publication —
+the crates.io posture, the release pipeline, the container image — is tracked
+here as #5 and #6.
 
-- **Do not re-implement the runner here.** A change to runner behaviour lands
-  in FerroEHR until the extraction completes, then moves with it.
-- **A rule below that names a path or a gate the extraction has not delivered
-  yet says so explicitly.** Nothing in this file pretends machinery exists.
-  The agent discipline is set up first on purpose: it is part of what the
-  product is claiming, so it cannot arrive after the code.
+Layout:
 
-Planned layout after the split, named here so the rules can point at it:
+| Path | Contents |
+|---|---|
+| `src/**` | the runner machinery: driver, provisioning, resolver, outcome classification, comparator, verdict pipeline, the perf/stress/probe instruments |
+| `src/bin/veredictum.rs` | the one binary; every instrument is a subcommand of it |
+| `tests/**` | the integration suite: artifact gates, seeded-defect rejection, schema drift, claim completeness, the verification pack, the perf driver |
+| `artifacts/**` | the catalogue: `schedule/` case cores, `bindings/` per-ITS operation bindings, `vocab/`, `corpus/`, `registers/ambiguities.yaml` |
+| `party/**` | per-party statement + IXIT declarations |
+| `schemas/**` | the published JSON Schemas for every artifact family (emitted, drift-guarded) |
+| `verification-pack/**` | the recorded transcript proving the verdict pipeline reproduces its adjudicated verdicts |
+| `specs/openehr/**` | the vendored released openEHR spec text: the oracle |
+| `specs/its-xml-schemas/**`, `specs/its-json-schemas/**`, `specs/rest-oas/**` | the released machine-readable bundles, the second root a citation resolves against where the docs tree carries only prose |
+| `scripts/vendor/**` | one script per vendored tree — the only way any of them is refreshed |
+| `scripts/checks/**` | the repository guard scripts |
+| `.claude/**` | rules, hooks, agents, memory |
 
-| Path | Contents | State |
-|---|---|---|
-| `src/**` | the runner machinery: driver, provisioning, resolver, outcome classification, comparator, verdict pipeline, the perf/stress/probe instruments | arrives with FerroEHR#2789 |
-| `artifacts/**` | the catalogue: `schedule/` case cores, `bindings/` per-ITS operation bindings, `vocab/`, `corpus/`, `registers/ambiguities.yaml` | arrives with FerroEHR#2789 |
-| `party/**` | per-party statement + IXIT declarations | arrives with FerroEHR#2789 |
-| `schemas/**` | the published JSON Schemas for every artifact family (emitted, drift-guarded) | arrives with FerroEHR#2789 |
-| `specs/openehr/**` | the vendored released openEHR spec text: the oracle | arrives with FerroEHR#2789 (the vendoring decision is a checklist item on it) |
-| `scripts/checks/**` | the repo guard scripts | `comment-style.sh` is here now |
-| `.claude/**` | rules, hooks, agents, memory | here now |
-
-Until `specs/openehr/**` lands, the oracle is not present in this repository.
-Read it first-hand in a FerroEHR checkout at `docs/specs/openehr/`. Never
-answer a spec question from memory, from a vendor's documentation, or from what
-a server did.
+The oracle is `specs/openehr/`, and it is in this repository. Read the governing
+section there first-hand. Never answer a spec question from memory, from a
+vendor's documentation, or from what a server did.
 
 ## The instrument's hard rules
 
@@ -137,9 +137,8 @@ is a settled decision as a citation plus one sentence, at most 3 lines.
 A plain `//` run is at most 8 lines. Adjudication essays and change narration
 belong on the PR or the issue. No other marker vocabulary exists. Full guide:
 `.claude/rules/comments.md`, enforced by `scripts/checks/comment-style.sh`
-through the edit hook and by the `guards` job in CI. The guard reads
-hand-written `.rs` files, of which this tree has none yet, so it currently
-prints `no files to check` — which is the report, not a silent pass.
+through the edit hook and by the `guards` job in CI, over every hand-written
+`.rs` file in the tree.
 
 ### 6. Reliability rules pair with a failing check
 
@@ -189,9 +188,9 @@ tag. Rewrite the HEADING, not the first textual match — the v0.0.1-alpha.1 cut
 rewrote a mention inside a paragraph and left the release with no section.
 Milestones are releases, and a release is cut when its milestone reaches zero
 open issues. `scripts/checks/changelog-structure.sh` runs in CI on every change;
-the guard that REQUIRES an entry when a user-visible surface changes arrives
-with the code, because it decides "user-visible" by matching paths that do not
-exist here yet (FerroEHR#2789).
+the guard that REQUIRES an entry when a user-visible surface changes is issue
+#10 — those paths exist now that the code is here, so it is tracked rather than
+assumed.
 
 ### 11. Cite only durable references
 
@@ -276,9 +275,12 @@ at absent machinery reports green.
 
 ## Build and test
 
-What runs today, on every pull request, every push to `main` and every
-merge-queue entry (`.github/workflows/ci.yml`, the `guards` and
-`workflow-audit` jobs behind one required `conclusion` check):
+Every gate below runs on every pull request, every push to `main` and every
+merge-queue entry, behind one required `conclusion` check
+(`.github/workflows/ci.yml`; `scripts/checks/ci-conclusion-complete.sh` refuses
+a job that runs without gating the merge).
+
+The guard tier, ungated because its inputs exist on every change:
 
 ```bash
 bash scripts/checks/comment-style.sh --all        # comment form and budgets
@@ -289,21 +291,34 @@ actionlint                                        # workflow correctness + shell
 reuse lint                                        # REUSE 3.3 licensing
 ```
 
-The Rust gates below arrive with the runner (FerroEHR#2789); until then there
-is no Rust code in this repository to build.
+The Rust tier. Run these before every commit; CI gates them on whether the
+change touched anything they read:
 
 ```bash
-cargo build
+cargo build --all-targets
 cargo nextest run                       # never cargo test
 cargo clippy --all-targets -- -D warnings
-cargo fmt
+cargo fmt --all --check
 cargo deny check
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
+cargo hack check --rust-version --all-targets    # the declared MSRV, verified
+cargo machete                                    # no dependency nothing imports
 ```
 
-Once the runner lands, its own canonical CLI table (validate, run, verdicts,
-perf, stress, aql-probe, emit-schemas) becomes the authority on how to invoke
-it, and `validate` is the gate that must be clean before any SUT is composed:
-it is every machine check over the artifact tree, and zero findings is green.
+**`validate` is the gate the catalogue lives or dies by**, and it is clean
+before any SUT is composed:
+
+```bash
+cargo run -- validate --root artifacts --specs specs/openehr
+```
+
+It is every machine check over the artifact tree — id uniqueness, citation
+resolution against the vendored specs, binding completeness, coverage of the
+enumerated wire surface, claim completeness against the committed party
+statements — and **zero findings is the only passing result.** The instrument's
+own canonical CLI table (`validate`, `run`, `verdicts`, `perf`, `stress`,
+`aql-probe`, `emit-schemas`) is the authority on how to invoke everything else;
+never improvise a flag.
 
 ## Model orchestration
 

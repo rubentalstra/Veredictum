@@ -20,9 +20,8 @@ body:
         - label: I have searched existing issues
           required: true
         - label: >
-            I understand the runner code still lives in FerroEHR
-            `tools/cnf-runner` until the migration (FerroEHR#2789) completes, so
-            a fix may land there
+            I have stated the commit or tag I reproduced on. Nothing is published
+            from this repository yet, so `main` is the only version there is
           required: true
   - type: dropdown
     id: suspect
@@ -44,9 +43,9 @@ body:
     attributes:
       label: Version
       description: >
-        The release tag or image digest, or the FerroEHR commit if you ran the
+        The release tag or image digest, or the commit if you ran the
         runner from source.
-      placeholder: v0.1.0, or ghcr.io/rubentalstra/veredictum@sha256:..., or FerroEHR e058f9d
+      placeholder: v0.1.0, or ghcr.io/rubentalstra/veredictum@sha256:..., or commit 4aa7923
     validations:
       required: true
   - type: input

@@ -1,25 +1,36 @@
 # SPDX-FileCopyrightText: Veredictum contributors
 # SPDX-License-Identifier: Apache-2.0
 
-# CodeQL — the security scanner over what this repository executes: today
-# that is its workflows (the `actions` language). The `rust` matrix leg joins
-# when the runner migrates in (FerroEHR#2789); until then a Rust leg would
-# analyze nothing and report success doing it.
+# CodeQL — the security scanner over everything this repository executes: the
+# instrument itself (`rust`) and the workflows that build it (`actions`).
 #
-# The shape is FerroEHR's hardened lane, not GitHub's starter template: every
-# action pinned to a digest, per-job minimum permissions, concurrency, a
-# timeout. Not a required check, so a skip can never block a merge.
+# `build-mode: none` on both legs. For Rust that is CodeQL's own recommendation
+# for a cargo project — the extractor reads the sources directly rather than
+# observing a build, so the lane needs no toolchain, no target cache, and no
+# second compile of a tree `ci.yml` already compiles four times.
+#
+# The shape is a hardened lane, not GitHub's starter template: every action
+# pinned to a digest, per-job minimum permissions, concurrency, a timeout. Not a
+# required check, so a skip can never block a merge.
 name: CodeQL
 
 on:
   push:
     branches: [main]
     paths:
+      - "src/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/**"
       - ".github/actions/**"
   pull_request:
     branches: [main]
     paths:
+      - "src/**"
+      - "tests/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/**"
       - ".github/actions/**"
   schedule:
@@ -44,6 +55,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - language: rust
+            build-mode: none
           - language: actions
             build-mode: none
     steps:

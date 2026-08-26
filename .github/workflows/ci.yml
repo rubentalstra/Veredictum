@@ -3,21 +3,23 @@
 
 # .github/workflows/ci.yml
 #
-# THERE ARE NO RUST JOBS HERE YET, and that is not an omission. The runner still
-# lives in FerroEHR `tools/cnf-runner`; this repository carries the identity, the
-# discipline and the tracker until the extraction lands
-# (https://github.com/rubentalstra/FerroEHR/issues/2789). `cargo fmt`, `clippy`,
-# `nextest`, `deny` and the codegen-drift check arrive in the pull request that
-# brings the code, together with the workspace manifests they need. The full
-# inventory of what is deliberately still absent, and why each item would be
-# inert without the code it configures, is `.claude/memory/migration-state.md`
-# § Arrives with the code migration.
+# Two tiers, one required check.
 #
-# What DOES run today are the checks that read prose, licensing metadata,
-# commit messages and the workflows themselves — every one of which has real
-# content in this tree to judge. Where a guard would pass on an empty set it
-# says so at the step, rather than reporting green as if it had checked
-# something (the comment-style guard prints `no files to check`).
+# The GUARD tier reads prose, licensing metadata, commit messages and the
+# workflows themselves. It is ungated: every one of those inputs exists on every
+# pull request, so gating them on changed paths would only buy seconds and could
+# let an edit through unchecked.
+#
+# The RUST tier builds, lints, tests and audits the instrument. It is gated on
+# the `changes` job, because a pull request touching only prose has nothing for
+# it to judge and a skipped job counts as satisfied at `conclusion`. Every gate
+# runs `--locked`: CI must fail on new commits, never on registry drift
+# (https://doc.rust-lang.org/cargo/faq.html#why-have-cargolock-in-version-control).
+#
+# Branch protection points at `conclusion` alone, so a job absent from its
+# `needs` list runs, goes red, and gates nothing —
+# `scripts/checks/ci-conclusion-complete.sh` compares the two lists in both
+# directions and is itself one of the jobs.
 name: CI
 
 on:
@@ -27,8 +29,8 @@ on:
   # raised after it is applied. Adding `labeled`/`unlabeled` makes applying a
   # label produce a fresh event carrying the current label set
   # (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request).
-  # No such label exists in this repository yet; the trigger is here so the
-  # first one that lands works on the run it triggers.
+  # `no-changelog` is the label this is for; the guard that reads it is issue
+  # #10, and the trigger is already here so it works on the run it triggers.
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
@@ -71,6 +73,69 @@ concurrency:
 permissions: {}
 
 jobs:
+  # ── Which tiers have anything to judge ──────────────────────────────────────
+  # One output, `code`, covering everything the Rust tier compiles or reads: the
+  # sources, the manifests and lockfile, the toolchain and lint configuration,
+  # the catalogue artifacts, the published schemas, the party declarations, the
+  # vendored spec oracle, and this file (whose `run:` lines ARE the recipe those
+  # jobs execute, so editing them must re-run them).
+  changes:
+    name: change detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        # Context reaches the shell through `env:`, never `${{ }}` inline —
+        # zizmor's template-injection rule is the machine check for it.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE"; head="$PR_HEAD"
+          elif [ "$EVENT_NAME" = "merge_group" ]; then
+            # `github.event.before` does not exist on this event; falling through
+            # to the push branch would build the range `..<sha>`, which git reads
+            # as nothing, and every filter would report `false` — turning "run
+            # everything" into "run nothing" on exactly the event a merge queue
+            # reports its required checks on.
+            base="$QUEUE_BASE"; head="$PUSH_SHA"
+          else
+            base="$PUSH_BEFORE"; head="$PUSH_SHA"
+          fi
+          # First push to a branch, or a base that no longer resolves: run
+          # everything. The failure direction matters — an unset output reads as
+          # `false` downstream and a skipped job counts as satisfied at
+          # `conclusion`, so an unknown base must open the gates, never close
+          # them.
+          if ! git rev-parse "${base:-}" >/dev/null 2>&1; then
+            echo "base unresolvable — running every gate"
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base" "$head")
+          echo "changed paths:"
+          echo "$changed"
+          if echo "$changed" | grep -qE '^(src/|tests/|artifacts/|schemas/|party/|specs/|verification-pack/|scripts/vendor/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # ── The guard tier: prose, licensing, commit messages, changelog structure ──
   guards:
     name: guards
@@ -98,12 +163,10 @@ jobs:
       # release section, no subsection header outside the canonical type set.
       # A duplicated header ships the same release notes twice.
       #
-      # Only the STRUCTURE half of FerroEHR's changelog guard is ported. The
-      # other half requires a changelog entry when a user-visible surface
-      # changes, and it decides that by matching changed paths against the
-      # source and deployment directories — none of which exist here yet, so it
-      # would pass on every pull request while looking like a control. It
-      # arrives with the code.
+      # Only the STRUCTURE half is wired. The other half requires a changelog
+      # entry when a user-visible surface changes, and it decides that by
+      # matching changed paths — those paths exist now that the code is here,
+      # so the guard is issue #10 rather than a claim this step makes.
       - name: Changelog structure
         run: bash scripts/checks/changelog-structure.sh
 
@@ -155,8 +218,7 @@ jobs:
       # an instrument built to be forked and re-run, and `REUSE.toml` is the
       # declaration that makes it true without touching a vendored file.
       - name: reuse lint
-        # The OFFICIAL image, digest-pinned — the same construction FerroEHR
-        # uses and for the same reason: `reuse` is distributed as a Python
+        # The OFFICIAL image, digest-pinned: `reuse` is distributed as a Python
         # package, this repository installs no Python toolchain
         # (.claude/rules/ forbids Python as a tooling language), and the
         # published container is the one distribution that needs neither that
@@ -234,6 +296,179 @@ jobs:
       - name: Every CI job gates the merge
         run: bash scripts/checks/ci-conclusion-complete.sh
 
+  # ── The Rust tier ───────────────────────────────────────────────────────────
+  # rustfmt compiles nothing, so a restored target or registry cache here is
+  # pure download time — `cache: false` is deliberate, not an oversight.
+  fmt:
+    name: rustfmt
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          components: rustfmt
+          cache: false
+      - run: cargo fmt --all --check
+
+  # Every deny-tier lint in `Cargo.toml`'s `[lints]` tables, plus the warn tier,
+  # which `-D warnings` promotes. `--all-targets` reaches the tests: the
+  # `clippy.toml` in-tests scoping relaxes the panic family inside `#[test]`
+  # functions and nothing else, so test-support helpers are linted like any code.
+  clippy:
+    name: clippy
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The restored target directory is the only compile cache clippy gets:
+      # sccache cannot cache clippy-driver invocations (mozilla/sccache#539).
+      # Saved only from `main`, so a pull request never writes a cache key a
+      # later run would restore.
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          components: clippy
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo clippy --locked --all-targets -- -D warnings
+
+  # Build, test, and then the instrument's own self-check. `validate` is the gate
+  # the catalogue lives or dies by: it is every machine check over the artifact
+  # tree — id uniqueness, citation resolution against the vendored specs,
+  # binding completeness, coverage of the enumerated wire surface, claim
+  # completeness against the committed party statements — and zero findings is
+  # the only passing result. It runs LAST because a failure here is a catalogue
+  # defect, which reads differently from a compile or test failure.
+  #
+  # No service container: the instrument drives a SUT over HTTP and owns no
+  # database, so its suite needs none.
+  test:
+    name: build & test
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-nextest
+      - run: cargo build --locked --all-targets
+      # The `ci` profile: never stop at the first failure, so one run reports the
+      # whole failure surface.
+      - run: cargo nextest run --locked --profile ci
+      - name: The artifact tree passes every machine gate
+        run: cargo run --locked -- validate --root artifacts --specs specs/openehr
+
+  # The `[lints.rustdoc]` table is inert without a doc run — this is the run.
+  # `-D warnings` promotes the warn-tier entries (unescaped backticks, a missing
+  # crate-level `//!`) to failures, and doctests compile here too.
+  doc:
+    name: rustdoc
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --no-deps --document-private-items
+
+  # The declared MSRV is a possibly-breaking semver datum
+  # (https://doc.rust-lang.org/cargo/reference/semver.html#env-new-rust), and
+  # `cargo hack check --rust-version` is the tool the Cargo book names for
+  # verifying it. Without this job `rust-version = "1.96"` is a claim nothing
+  # tests, because the pinned toolchain is 1.97.1 and compiles it either way.
+  msrv:
+    name: msrv
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-hack
+      - run: cargo hack check --locked --rust-version --all-targets
+
+  # RustSec advisories, yanked crates, the license allowlist, the bans list and
+  # the registry allowlist, in one pass. This is the ONLY advisory gate: it reads
+  # the same database `cargo audit` does, so no second job and no second ignore
+  # list exists.
+  deny:
+    name: cargo-deny
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache: false
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-deny
+      - run: cargo deny check
+
+  # A dependency nothing imports is attack surface and audit weight carried for
+  # free. cargo-machete reads the sources rather than the manifest, so it catches
+  # the entry that stopped being used without being removed.
+  unused-deps:
+    name: unused dependencies
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-machete
+      - run: cargo machete
+
   # ── The single required check ───────────────────────────────────────────────
   # Branch protection points at `conclusion` alone, which is what lets jobs be
   # added, renamed or path-gated without editing repository settings. The cost
@@ -244,8 +479,16 @@ jobs:
     name: conclusion
     if: always()
     needs:
+      - changes
       - guards
       - workflow-audit
+      - fmt
+      - clippy
+      - test
+      - doc
+      - msrv
+      - deny
+      - unused-deps
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

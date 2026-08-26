@@ -14,8 +14,8 @@ It is a **second opinion**. It is not authority, and it gates no merge.
 1. The released openEHR specification text — the oracle for every expectation
    this instrument encodes.
 2. The hard rules: the root `CLAUDE.md` and the rule files beside this one.
-3. The local gates: the CI guard tier, and the Rust and catalogue gates that
-   arrive with the code.
+3. The local gates: the CI guard tier, the Rust tier, and `validate` over the
+   catalogue.
 4. The analyzer.
 
 A finding that contradicts a specification citation is wrong by construction:
@@ -26,11 +26,15 @@ never edit a corpus fixture because a finding suggested it.
 
 ## What it reads today
 
-There is no first-party source code in this repository yet: the runner still
-lives in FerroEHR `tools/cnf-runner` until the extraction lands
-([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789)). So the
-analyzer's material is the shell under `scripts/**` and `.claude/hooks/**`, the
-workflow YAML, the brand study's HTML and CSS, and secret detection.
+Rust, first-party: the analyzer runs Clippy itself from the package manifest,
+under its own managed rule profile. That profile is a deliberately independent
+second Clippy configuration beside the deny-tier lanes in `ci.yml`, so for pure
+Rust it mostly re-reports what those already enforce. Its added value is the
+multi-language sweep the Rust gates never see: the shell under `scripts/**` and
+`.claude/hooks/**`, the workflow YAML, the brand study's HTML and CSS, and
+secret detection. The vendored trees are excluded in
+`sonar-project.properties`, because acting on a finding inside vendored bytes is
+forbidden here.
 
 The shell coverage was verified rather than assumed, and the assumption it
 replaced was wrong: the first scan produced 11 findings, all `shelldre:S7688`

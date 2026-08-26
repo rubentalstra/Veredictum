@@ -1,0 +1,5 @@
+title: DATA_VALUE
+type: object
+properties:
+  _type:
+    type: string

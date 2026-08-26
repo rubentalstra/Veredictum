@@ -1,0 +1,28 @@
+title: DV_TEXT
+type: object
+allOf:
+  - $ref: ../data_types/DataValue.yaml
+required:
+  - value
+properties:
+  _type:
+    type: string
+    default: DV_TEXT
+  value:
+    type: string
+  hyperlink:
+    $ref: ../data_types/UDvUri.yaml
+  formatting:
+    type: string
+  mappings:
+    type: array
+    items:
+      $ref: ../data_types/TermMapping.yaml
+  language:
+    $ref: ../data_types/CodePhrase.yaml
+  encoding:
+    $ref: ../data_types/CodePhrase.yaml
+x-discriminator-value: DV_TEXT
+example:
+  _type: DV_TEXT
+  value: 'Text value'

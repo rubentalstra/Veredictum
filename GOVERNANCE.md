@@ -65,7 +65,6 @@ false authority.
 | What a release contains | [`CHANGELOG.md`](CHANGELOG.md) and the `vX.Y.Z` milestone |
 | A specification silence and how it was disposed of | the ambiguity register, and the `upstream-report` issue it points at |
 | Standing working rules | [`CLAUDE.md`](CLAUDE.md) and [`.claude/rules/`](.claude/rules/) |
-| The migration out of FerroEHR | [FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) |
 
 A decision that exists only in a conversation is not a decision this project
 made.
@@ -76,10 +75,9 @@ made.
    acceptance criteria that settle it.
 2. **A pull request implements it** on a conventional-type branch, declaring
    `Closes #N`, with signed commits.
-3. **The gates run.** They are not advisory and there is no override. Today that
-   is the comment-style guard and the attribution rule; the full battery arrives
-   with the code migration (FerroEHR#2789) and is listed in
-   [CONTRIBUTING.md](CONTRIBUTING.md).
+3. **The gates run.** They are not advisory and there is no override. The
+   battery is listed in [CONTRIBUTING.md](CONTRIBUTING.md): the guard tier, the
+   Rust tier, and `validate` over the catalogue at zero findings.
 4. **The maintainer merges.** A pull request from an account without write access
    additionally needs a code-owner approval
    ([`.github/CODEOWNERS`](.github/CODEOWNERS)).
