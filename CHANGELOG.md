@@ -12,19 +12,18 @@ in prose rather than quoted verbatim on purpose: a release cut rewrites the firs
 literal occurrence of it, and quoting it here is what turned this paragraph into
 a stray release heading at the v0.0.1-alpha.1 cut.
 
-The instrument's code lives here as of the migration
-([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789)). Releases
-before it carried the repository skeleton and the product identity alone.
+Releases before `0.1.0-alpha.1` carried the repository's identity and its
+discipline; the instrument itself builds and runs from this repository from that
+version on.
 
 ## [Unreleased]
 
 ### Added
 
-- **The instrument itself.** The runner, the catalogue, the corpora, the
-  ambiguity register, the party declarations and the vendored openEHR
-  specification oracle now live in this repository, extracted from the FerroEHR
-  mono-repo with 611 commits of history and re-rooted: the crate's own directory
-  became the repository root, and `docs/specs/openehr/` became `specs/openehr/`.
+- **The instrument itself builds and runs from this repository:** the runner,
+  the catalogue with its 1107 case cores and 247 operation bindings, the
+  corpora, the ambiguity register, the party declarations, and the vendored
+  openEHR specification text that is its oracle.
 - The command is `veredictum`. The package, the binary and the library carry the
   product's name, and so does the debug switch, now
   `VEREDICTUM_DEBUG_EXCHANGES`. Every subcommand keeps its name and its flags:
@@ -62,10 +61,20 @@ before it carried the repository skeleton and the product identity alone.
   the merge), and a single required `conclusion` check.
 - `scorecard.yml`: the weekly OpenSSF Scorecard analysis, publishing its score
   to the OpenSSF API and its findings into code scanning.
-- `sonar.yml` and `sonar-project.properties`: SonarQube Cloud analysis of the
-  whole tree on every pull request and every push to `main`, advisory under
+- `sonar.yml` and `sonar-project.properties`: SonarQube Cloud analysis on every
+  pull request and every push to `main`, advisory under
   `.claude/rules/ai-code-review.md`, with the New Code window anchored to the
-  latest release tag.
+  package version so "new code" means "since the last release".
+- Test coverage, measured and published. The Sonar lane runs the suite under
+  `cargo-llvm-cov` and imports the merged lcov; the denominator excludes the
+  test tree, the CLI entry point and the two asset renderers, each with its
+  reason recorded, because a coverage percentage is only useful if every file
+  counted could in principle be covered by a test. The README carries the
+  coverage and quality-gate badges beside the CI, CodeQL, reliability, security,
+  maintainability and duplication readings.
+- Dependabot covers the `cargo` ecosystem, with a seven-day cooldown against
+  the actions entry's three: a crate compiles into the published binary, so a
+  compromised release reaches every downstream run rather than one CI job.
 - The OpenSSF Best Practices and OpenSSF Scorecard badges in the README, both
   reading live scores rather than asserting a posture.
 - Two ported guard scripts: `scripts/checks/changelog-structure.sh` (Keep a

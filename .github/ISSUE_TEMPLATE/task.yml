@@ -27,7 +27,6 @@ body:
     attributes:
       label: Further information
       description: >
-        Links, and whether this is a step of the migration out of FerroEHR
-        (FerroEHR#2789).
+        Links, and any issue this one decomposes or depends on.
     validations:
       required: false

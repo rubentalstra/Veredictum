@@ -5,18 +5,12 @@
 # Options reference:
 # https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 #
-# ONE ecosystem today: `github-actions`. The cargo and docker ecosystems arrive
-# with the code migration (FerroEHR#2789) — there is no Cargo manifest and no
-# Dockerfile in this repository yet, and Dependabot resolves a manifest at the
-# directory it is given, so an entry pointing at nothing is inert configuration
-# that looks like a control. Each one lands in the pull request that adds the
-# thing it updates, with its own cooldown reasoned from what a compromised
-# release in that ecosystem could reach.
-#
-# The github-actions entry is live from the start rather than waiting for the
-# lanes, so the first workflow that lands is already covered: an unpinned or
-# stale action is the cheapest supply-chain foothold in a repository whose
-# release lane will eventually sign artifacts.
+# TWO ecosystems: `github-actions` and `cargo`. Each cooldown is reasoned from
+# what a compromised release in that ecosystem could actually reach, which is
+# why they differ. The `docker` ecosystem is absent because no Dockerfile exists
+# yet: Dependabot resolves a manifest at the directory it is given, so an entry
+# pointing at nothing is inert configuration that looks like a control. It lands
+# with the container image (#12).
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -45,3 +39,27 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "ci" # plain conventional prefix; no attribution
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Seven days rather than the actions entry's three. A crate compiles INTO
+    # the binary this project will publish, so a compromised release reaches
+    # every downstream run rather than one CI job, and `Cargo.lock` means a bump
+    # is a deliberate act with a wider blast radius. Security updates stay
+    # exempt: Dependabot applies no cooldown to advisory-driven bumps, which is
+    # what makes a cooldown safe rather than a delay on getting fixes.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor bumps ride together — reviewing forty of them
+      # individually is not review. A MAJOR stays on its own pull request,
+      # because that is where a breaking change and its migration belong.
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "chore"
+      include: "scope"

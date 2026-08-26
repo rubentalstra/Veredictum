@@ -1,8 +1,7 @@
 # SPDX-FileCopyrightText: Veredictum contributors
 # SPDX-License-Identifier: Apache-2.0
 # Citation metadata (CFF 1.2.0). A release cut updates `version` +
-# `date-released` and re-renders .zenodo.json, mirroring the FerroEHR
-# procedure this repository inherits (FerroEHR#2789).
+# `date-released` and re-renders .zenodo.json in the same pull request.
 cff-version: 1.2.0
 title: Veredictum
 message: If you use this software, please cite it using the metadata from this file.

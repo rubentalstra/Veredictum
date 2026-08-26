@@ -43,9 +43,9 @@ body:
     attributes:
       label: Version
       description: >
-        The release tag or image digest, or the FerroEHR commit if you ran the
+        The release tag or image digest, or the commit if you ran the
         runner from source.
-      placeholder: v0.1.0, or ghcr.io/rubentalstra/veredictum@sha256:..., or FerroEHR e058f9d
+      placeholder: v0.1.0, or ghcr.io/rubentalstra/veredictum@sha256:..., or commit 4aa7923
     validations:
       required: true
   - type: input

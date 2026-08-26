@@ -5,21 +5,39 @@
 <p align="center"><em>The independent conformance instrument for openEHR clinical data repositories.</em></p>
 
 <p align="center">
-<a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-46215C" alt="License: Apache-2.0"></a>
-<a href="https://doi.org/10.5281/zenodo.22113258"><img src="https://zenodo.org/badge/1347360549.svg" alt="DOI"></a>
-<a href="https://www.bestpractices.dev/projects/14252"><img src="https://www.bestpractices.dev/projects/14252/badge" alt="OpenSSF Best Practices"></a>
+<a href="https://github.com/rubentalstra/Veredictum/actions/workflows/ci.yml"><img src="https://github.com/rubentalstra/Veredictum/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+<a href="https://github.com/rubentalstra/Veredictum/actions/workflows/codeql.yml"><img src="https://github.com/rubentalstra/Veredictum/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL"></a>
+<a href="https://sonarcloud.io/summary/new_code?id=rubentalstra_Veredictum"><img src="https://sonarcloud.io/api/project_badges/measure?project=rubentalstra_Veredictum&metric=alert_status" alt="Quality gate status"></a>
+<a href="https://sonarcloud.io/component_measures?id=rubentalstra_Veredictum&metric=coverage"><img src="https://sonarcloud.io/api/project_badges/measure?project=rubentalstra_Veredictum&metric=coverage" alt="Coverage"></a>
+</p>
+
+<p align="center">
+<a href="https://sonarcloud.io/component_measures?id=rubentalstra_Veredictum&metric=reliability_rating"><img src="https://sonarcloud.io/api/project_badges/measure?project=rubentalstra_Veredictum&metric=reliability_rating" alt="Reliability rating"></a>
+<a href="https://sonarcloud.io/component_measures?id=rubentalstra_Veredictum&metric=security_rating"><img src="https://sonarcloud.io/api/project_badges/measure?project=rubentalstra_Veredictum&metric=security_rating" alt="Security rating"></a>
+<a href="https://sonarcloud.io/component_measures?id=rubentalstra_Veredictum&metric=sqale_rating"><img src="https://sonarcloud.io/api/project_badges/measure?project=rubentalstra_Veredictum&metric=sqale_rating" alt="Maintainability rating"></a>
+<a href="https://sonarcloud.io/component_measures?id=rubentalstra_Veredictum&metric=duplicated_lines_density"><img src="https://sonarcloud.io/api/project_badges/measure?project=rubentalstra_Veredictum&metric=duplicated_lines_density" alt="Duplicated lines"></a>
+</p>
+
+<p align="center">
 <a href="https://scorecard.dev/viewer/?uri=github.com/rubentalstra/Veredictum"><img src="https://api.scorecard.dev/projects/github.com/rubentalstra/Veredictum/badge" alt="OpenSSF Scorecard"></a>
-<a href="https://github.com/rubentalstra/FerroEHR/issues/2789"><img src="https://img.shields.io/badge/split_from-FerroEHR-B7431B" alt="Split from FerroEHR"></a>
+<a href="https://www.bestpractices.dev/projects/14252"><img src="https://www.bestpractices.dev/projects/14252/badge" alt="OpenSSF Best Practices"></a>
+<a href="https://doi.org/10.5281/zenodo.22113258"><img src="https://zenodo.org/badge/1347360549.svg" alt="DOI"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-46215C" alt="License: Apache-2.0"></a>
+<a href="https://github.com/rubentalstra/Veredictum/blob/main/rust-toolchain.toml"><img src="https://img.shields.io/badge/rust-1.97-B7431B?logo=rust&logoColor=white" alt="Rust 1.97"></a>
+</p>
+
+<p align="center">
+<strong>openEHR ITS-REST 1.1.0</strong> &nbsp;·&nbsp; <strong>AQL 1.1</strong> &nbsp;·&nbsp; <strong>RM 1.2.0</strong> &nbsp;·&nbsp; <strong>1107 spec-cited cases</strong> &nbsp;·&nbsp; <strong>247 operation bindings</strong>
 </p>
 
 <!--
-The two OpenSSF badges are live scores, not claims. Best Practices is project
-14252 and reads whatever fraction of the criteria is actually recorded; Scorecard
-is published by the weekly analysis lane in .github/workflows/scorecard.yml. Both
-read below their ceiling today, and that workflow's header says why check by
-check — Packaging and Signed-Releases wait on the release pipeline (#12), Fuzzing
-on a harness (#11). Those are the honest numbers, and they are the baseline the
-next ones are measured against.
+Every badge above is a live reading, not a claim. The Sonar badges come from the
+analysis lane in .github/workflows/sonar.yml, coverage included; the two OpenSSF
+badges are the Scorecard weekly analysis and Best Practices project 14252.
+Several read below their ceiling today, and the scorecard workflow's header says
+why check by check — Packaging and Signed-Releases wait on the release pipeline
+(#12), Fuzzing on a harness (#11). Those are the honest numbers, and they are the
+baseline the next ones are measured against.
 -->
 
 Point it at a running openEHR CDR and it tells you, with citations, which parts
@@ -73,7 +91,7 @@ cargo run -- validate --root artifacts --specs specs/openehr
 
 # 2. Declare your deployment: copy an example and edit the endpoints, the
 #    credential variable names and the postures your server actually serves.
-cp -r party/ferroehr party/mine
+cp -r party/ehrbase party/mine
 
 # 3. Drive the catalogue against your running server.
 cargo run -- run --root artifacts --ixit party/mine/ixit.json --out out/ \
@@ -126,15 +144,7 @@ stops coordinated omission from hiding a stall.
 *Veredictum* is medieval Latin for "truly spoken", *vere dictum*, and it is the
 word that became the English *verdict*. That is what this instrument produces: it
 runs the catalogue against a running CDR and speaks a verdict about what it
-observed.
-
-It began inside [FerroEHR](https://github.com/rubentalstra/FerroEHR), the Rust
-openEHR CDR, as that project's conformance instrument, built independent from the
-start so the CDR could never grade its own homework. It moved to its own
-repository after people across the openEHR community pointed out the same thing:
-an independent conformance tool is worth more than any single server, and none
-existed. The code, its history and its catalogue came with it
-([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789)).
+observed. The seal above is the mark of that verdict.
 
 ## Contributing
 

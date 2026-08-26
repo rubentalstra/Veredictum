@@ -218,8 +218,7 @@ jobs:
       # an instrument built to be forked and re-run, and `REUSE.toml` is the
       # declaration that makes it true without touching a vendored file.
       - name: reuse lint
-        # The OFFICIAL image, digest-pinned — the same construction FerroEHR
-        # uses and for the same reason: `reuse` is distributed as a Python
+        # The OFFICIAL image, digest-pinned: `reuse` is distributed as a Python
         # package, this repository installs no Python toolchain
         # (.claude/rules/ forbids Python as a tooling language), and the
         # published container is the one distribution that needs neither that

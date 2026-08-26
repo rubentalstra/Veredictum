@@ -20,8 +20,8 @@ request. No second maintainer exists, no organisation stands behind the project,
 and no legal entity is a party to it.
 
 The same person maintains [FerroEHR](https://github.com/rubentalstra/FerroEHR),
-the CDR this instrument was split out of and one of the servers it grades. That
-conflict of interest, and the mechanical constraints on it, are stated in
+one of the CDRs this instrument grades. That conflict of interest, and the
+mechanical constraints on it, are stated in
 [GOVERNANCE.md § The specifications decide conformance](GOVERNANCE.md#the-specifications-decide-conformance-not-the-maintainer).
 The route to a second maintainer, including one from a competing
 implementation, is in the same file and it is open.
@@ -36,7 +36,7 @@ written down is an inventory nobody can hand over.
 |---|---|---|---|---|
 | The GitHub account `rubentalstra` | everything: the repository, releases, issues, settings, labels | live | the maintainer | none. The repository is user-owned, so GitHub's account-recovery process is the only route, and it is between GitHub and the account holder |
 | The OpenPGP commit- and tag-signing key | the verified signature on every commit and every release tag | live | the maintainer, on his own hardware | none. The private key is not escrowed. A successor would publish a new key and re-establish trust from a signed statement on the repository; historical signatures stay verifiable regardless |
-| `GITHUB_TOKEN` (ephemeral, per workflow run) | the GitHub release, and the GHCR container image once the release lane lands | arrives with the CI lanes (FerroEHR#2789) | GitHub, minted per run; nothing is stored | not applicable. There is no credential to lose |
+| `GITHUB_TOKEN` (ephemeral, per workflow run) | the GitHub release, and the GHCR container image once the release lane lands | arrives with the release pipeline (#12) | GitHub, minted per run; nothing is stored | not applicable. There is no credential to lose |
 | Zenodo | the archived release deposit and its concept DOI | not connected yet. [`CITATION.cff`](CITATION.cff) and [`.zenodo.json`](.zenodo.json) are in the tree ready for the first release | the Zenodo account linked to the GitHub account, once linked | tied to GitHub account recovery |
 | crates.io | nothing today. Whether the runner binary or its schema types publish as crates is an open decision on the migration issue | undecided | not established | not applicable until it exists |
 | A documentation domain | nothing today. The docs-site decision is open on the migration issue | undecided | not established | not applicable until it exists |

@@ -30,12 +30,8 @@ behaviour once the vendor's disclosure is out.
 **No release has been cut yet.** The code lives here, but nothing is published
 from this repository — no binary, no crate, no container image — so there is no
 released version to support. Report against `main`: state the commit you
-reproduced on, and the fix lands there.
-
-A vulnerability in the copy FerroEHR still carries while its conformance
-pipeline is switched over goes to
-[FerroEHR's security policy](https://github.com/rubentalstra/FerroEHR/security/policy)
-as well as here, because that copy is built from its own tree.
+reproduced on, and the fix lands there. Once the release pipeline (#12) exists,
+this section will name the supported versions instead.
 
 Once releases exist, the policy is the one this project can actually keep:
 **only the most recent release is supported.** No maintenance branches, no
