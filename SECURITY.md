@@ -27,13 +27,13 @@ behaviour once the vendor's disclosure is out.
 
 ## Supported versions
 
-**No release has been cut yet.** The code lives here, but nothing is published
-from this repository — no binary, no crate, no container image — so there is no
-released version to support. Report against `main`: state the commit you
-reproduced on, and the fix lands there. Once the release pipeline (#12) exists,
-this section will name the supported versions instead.
+**The supported version is the most recent release**, and every release is
+published by the same tag-driven pipeline: prebuilt `x86_64` and `aarch64` Linux
+binaries with Sigstore bundles, a multi-architecture container image on GHCR, and
+the crate on crates.io. Report against the newest release, or against `main` if
+you reproduced there — either way, state the version or the commit.
 
-Once releases exist, the policy is the one this project can actually keep:
+The policy is the one this project can actually keep:
 **only the most recent release is supported.** No maintenance branches, no
 long-term-support line, no backports. A fix lands on `main` and ships in the
 next tagged release. If you are not on the newest release, you are receiving no
@@ -104,9 +104,11 @@ credit costs you nothing and changes nothing about how the report is handled.
   vulnerability in the strongest sense the product has, whether that is
   tampering with a recorded run, a schema that accepts a forged record, or an
   input a server controls being trusted where it should not be.
-- **Release-artifact integrity is in scope** once the release lane lands:
-  signatures, attestations, SBOMs, the container digest, and anything that lets
-  a consumer be handed bytes this project did not build.
+- **Release-artifact integrity is in scope**: the Sigstore signatures and
+  provenance attestations, the SBOMs, the checksums, the container digest, and
+  anything else that lets a consumer be handed bytes this project did not build.
+  A verification path that appears to pass on a substituted artifact is a report
+  this project wants urgently.
 - **The corpora are test data, and they are supposed to contain hostile
   shapes.** A malformed archetype or an invalid composition in
   `artifacts/corpus` is an asserted negative test, not a defect. What would be a
@@ -134,7 +136,8 @@ finding.
 | Dependabot security updates | enabled | enabled | advisory-driven bumps, exempt from the update cooldowns in [`.github/dependabot.yml`](.github/dependabot.yml) |
 | Ruleset on `main` | active: no deletion, no force-push, signed commits, pull request required | **active** (ruleset 21570979: squash-only, the `conclusion` status check required; repository-admin bypass for recovery) | every commit is now enforced-signed, and every change reaches `main` through a pull request |
 | Immutable releases | enabled: published assets and tags frozen; a bad cut is repaired by a new version, never a retag | **enabled** (owner, 2026-08-26) | the v0.0.1-alpha.1 release predates the toggle and stays mutable-metadata; everything after is frozen at publish |
-| Ruleset on `refs/tags/v*` | active: no tag deletion, no non-fast-forward update, signatures required | **active** (ruleset 21571001, no bypass) | a release lane will publish off a raw tag push, so the window in which a tag drives a build needs protecting |
+| Ruleset on `refs/tags/v*` | active: no tag deletion, no non-fast-forward update, signatures required | **active** (ruleset 21571001, no bypass) | the release pipeline publishes off a raw tag push, so the window in which a tag drives a build is protected: the tag cannot be moved or deleted, and it has to be signed |
+| `crates-io` environment | reviewer approval required; only refs that may publish | **active**: reviewer `rubentalstra`, `main` and `v*` tags | the crate publish is the one irreversible leg — a crates.io version can be yanked, never replaced — so it waits for a human and runs last |
 
 Six of those rows do not match yet. They are listed with their real state rather
 than as intentions, and each is closed by the migration work that makes it

@@ -5,7 +5,7 @@
   "title": "Veredictum",
   "description": "<p>The independent conformance instrument for openEHR clinical data repositories: a machine-readable catalogue of spec-cited test cases, executed against any running CDR, judged by pure-function verdicts. Functional conformance, measured performance, and step-load stress in one tool. The released openEHR specifications are the only authority it accepts.</p>",
   "publication_date": "2026-08-26",
-  "version": "0.0.1-alpha.1",
+  "version": "0.1.0-alpha.2",
   "creators": [
     {
       "name": "Talstra, Ruben",
@@ -33,7 +33,7 @@
       "resource_type": "publication-softwaredocumentation"
     },
     {
-      "identifier": "https://github.com/rubentalstra/Veredictum/tree/v0.0.1-alpha.1",
+      "identifier": "https://github.com/rubentalstra/Veredictum/tree/v0.1.0-alpha.2",
       "relation": "isSupplementTo",
       "resource_type": "software"
     },
@@ -52,47 +52,7 @@
     {
       "identifier": "https://specifications.openehr.org/releases/AM/Release-2.3.0",
       "relation": "isDerivedFrom"
-    },
-    {
-      "identifier": "https://crates.io/crates/openehr-base",
-      "relation": "hasPart",
-      "resource_type": "software"
-    },
-    {
-      "identifier": "https://crates.io/crates/openehr-rm",
-      "relation": "hasPart",
-      "resource_type": "software"
-    },
-    {
-      "identifier": "https://crates.io/crates/openehr-am",
-      "relation": "hasPart",
-      "resource_type": "software"
-    },
-    {
-      "identifier": "https://crates.io/crates/openehr-term",
-      "relation": "hasPart",
-      "resource_type": "software"
-    },
-    {
-      "identifier": "https://crates.io/crates/openehr-lang",
-      "relation": "hasPart",
-      "resource_type": "software"
-    },
-    {
-      "identifier": "https://crates.io/crates/openehr-query",
-      "relation": "hasPart",
-      "resource_type": "software"
-    },
-    {
-      "identifier": "https://crates.io/crates/openehr-its",
-      "relation": "hasPart",
-      "resource_type": "software"
-    },
-    {
-      "identifier": "https://crates.io/crates/openehr-adl",
-      "relation": "hasPart",
-      "resource_type": "software"
     }
   ],
-  "notes": "Implements the openEHR specifications at these pinned versions: Reference Model 1.2.0, BASE 1.3.0, Archetype Model 1.4.0 and 2.4.0, Terminology 3.1.0, AQL (QUERY) 1.1.0, ITS-REST 1.1.0 and ITS-XML. The specification layer is generated from the official machine-readable specifications rather than hand-written, and conformance is measured per release by a built-in openEHR CNF conformance runner whose results are committed alongside the source. Requires PostgreSQL 18. Licensing: the recorded licence covers this project's own code; vendored third-party material keeps its upstream terms — Apache-2.0 for the openEHR machine-readable artifacts and test corpora, CC-BY-SA-3.0 for the openEHR specification text and CKM-derived clinical models — each recorded in the PROVENANCE.md of the tree that carries it."
+  "notes": "The oracle this instrument judges against is the RELEASED openEHR specification text, vendored verbatim in the archived source: the Reference Model, BASE, Archetype Model, Terminology, AQL (QUERY), ITS-XML, ITS-REST and the Service Model, together with the released XSD, JSON Schema and OpenAPI bundles that a citation resolves against where the documentation tree carries only prose. Every expectation in the catalogue names the section it comes from, and a verdict is computed as a pure function over the exchanges a run recorded rather than asserted. The archive carries the runner, the catalogue of spec-cited case cores and their per-operation wire bindings, the corpora, the ambiguity register and the party declarations. It requires no database and no server of its own: it is pointed at a running clinical data repository over that server's own wire. Licensing: the recorded licence covers this project's own code; vendored third-party material keeps its upstream terms — CC-BY-SA-3.0 for the openEHR specification text, Apache-2.0 for the released machine-readable openEHR artifacts, and both CC-BY-SA-3.0 and CC-BY-SA-4.0 across the CKM-derived clinical models, because neither version alone is a true statement about those trees — each recorded in the PROVENANCE.md of the tree that carries it and declared machine-readably in REUSE.toml."
 }

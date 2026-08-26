@@ -24,11 +24,12 @@ A change to instrument behaviour lands here.
 
 What is still open on the migration contract
 [FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) is the
-CONSUMER side: FerroEHR carries its own copy until this one is published and its
-conformance pipeline pins the published version instead. Until that switch the
-two trees exist side by side, and this one is the source of truth. Publication —
-the crates.io posture, the release pipeline, the container image — is tracked
-here as #5 and #6.
+CONSUMER side: FerroEHR carries its own copy until its conformance pipeline pins
+the published version instead. Until that switch the two trees exist side by
+side, and this one is the source of truth. Publication is done on this side: the
+crate is on crates.io, and a `v*` tag publishes signed binaries and the container
+image through the pipeline the Releasing section below describes. The web UI as
+its own image is #6.
 
 Layout:
 

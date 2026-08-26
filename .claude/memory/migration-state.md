@@ -52,11 +52,12 @@ vendored spec text.
   published and its conformance pipeline pins the published version. FerroEHR
   also keeps its committed conformance baselines: those are claims about that
   CDR, not about this instrument.
-- Publication: the crates.io posture (#5) and the release pipeline plus
-  container image (#12).
-- A fuzz lane (#11), Rust coverage into Sonar (#9), the path-matching half of
-  the changelog guard (#10), and an exerciser for the vendored CKM ADL 1.4 pack
-  (#8).
+- A fuzz lane (#11), the web UI as its own image (#6), and an exerciser for the
+  vendored CKM ADL 1.4 pack (#8).
+
+Discharged since the extraction: the crates.io posture (#5), the release
+pipeline plus container image (#12), Rust coverage into Sonar (#9), and the
+path-matching half of the changelog guard (#10).
 
 ## Gates, all verified green at the migration
 
@@ -105,15 +106,20 @@ them are not in this graph; `.config/nextest.toml` carries no `containers` test
 group, because a filter matching no test looks like scheduling discipline and
 enforces nothing.
 
+Landed with the release pipeline and the image (#12): `.dockerignore`,
+`.hadolint.yaml`, `trivy.yaml`, `.github/actionlint.yaml` (the native arm64
+runner labels — actionlint's built-in roster lags GitHub's and reports an unknown
+label as an ERROR, so a real label has to be declared), the `docker` dependabot
+ecosystem, and `.github/actions/` with the zizmor invocation extended to it in
+the same change.
+
 Still absent, each waiting on the thing it configures: `.cargo/config.toml`,
-`.devcontainer/`, `.dockerignore` / `.hadolint.yaml` / `.trivyignore.yaml` and
-`security/vex/` (with the image lane, #12), `.github/actionlint.yaml` (every job
-runs on `ubuntu-latest`), the `cargo` and `docker` dependabot ecosystems,
-`.fossa.yml` / `.fossabot.yml`, `.mdbook-lint.toml` (with the docs-site
-decision), the remaining `scripts/checks/` guards (spec-citation resolver,
-default-value style, typed-status style, SPDX headers), and `.github/actions/`
-(no step is repeated often enough yet; adding the directory means extending the
-zizmor invocation in the same change).
+`.devcontainer/`, `.trivyignore.yaml` and `security/vex/` (no adjudicated CVE
+exception exists yet, and pointing Trivy at an absent ignore-file is a
+configuration error rather than an empty list), `.fossa.yml` / `.fossabot.yml`,
+`.mdbook-lint.toml` (with the docs-site decision), and the remaining
+`scripts/checks/` guards (spec-citation resolver, default-value style,
+typed-status style, SPDX headers).
 
 The OpenSSF Best Practices criteria adjudication stays DEFERRED by owner
 decision 2026-08-26 — do not propose statuses until the owner picks it up. Six

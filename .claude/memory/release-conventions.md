@@ -1,6 +1,6 @@
 ---
 name: release-conventions
-description: Release titles are the bare version (0.0.1-alpha.1), never the product name; immutable releases get enabled in Settings before the first non-alpha cut
+description: Release titles are the bare version, never the product name; releases are immutable so the pipeline publishes the draft last; crates.io Trusted Publishing matches workflow_ref, which names the CALLING workflow
 metadata:
   type: feedback
 ---
@@ -12,10 +12,35 @@ is; no other software prefixes the product name there.
 **Why:** owner correction 2026-08-26 on the first cut ("call it 0.0.1-alpha.1
 not the full name — no other software does it like that").
 
-**How to apply:** `gh release create <tag> --title "<bare version>"`; a
-release workflow passes the tag minus the `v`. Also owner-stated the same
-day: releases here are IMMUTABLE — the Settings toggle (no API) must be on
-before the first non-alpha cut; the repair for a bad cut is a new version,
-never a retag. Zenodo archives each release (concept DOI
+**How to apply:** the pipeline does it — `release.yml`'s draft job passes
+`name: ${{ needs.plan.outputs.version }}`, the tag minus the `v`. Never widen
+that back to the tag or to a sentence. Also owner-stated the same day:
+releases here are IMMUTABLE — the Settings toggle (no API) is on; the repair
+for a bad cut is a new version, never a retag. That is why the pipeline
+creates the release as a DRAFT, refuses to publish until the expected asset
+set is complete, and flips it last. Zenodo archives each release (concept DOI
 10.5281/zenodo.22113258); `CITATION.cff` carries the concept DOI and the
 README badge points at it.
+
+## crates.io Trusted Publishing matches `workflow_ref`, the CALLING workflow
+
+Verified first-hand 2026-08-26 in crates.io's own source: its
+`crates_io_trustpub` GitHub claim struct carries `repository`,
+`workflow_ref`, `environment` and `event_name`, and no `job_workflow_ref` —
+which is the claim GitHub documents as the one naming a reusable workflow
+("the `workflow`, `ref`, and other attributes describe the caller workflow,
+while `job_workflow_ref` refers to the called workflow").
+
+Three consequences, all of which cost a debugging session if forgotten:
+
+1. A publish job moved into a reusable workflow presents the CALLER's
+   identity. Sharing one reusable workflow between the pipeline and the
+   manual lane therefore buys nothing and hides which file the publisher has
+   to name. The shared implementation is a SCRIPT,
+   `scripts/release/publish-crate.sh`, and each lane keeps its own job.
+2. Every entry point that publishes needs its own Trusted Publisher entry on
+   crates.io. Two exist: `publish-crates.yml` (the manual dry-run and
+   recovery lane) and `release.yml` (the pipeline leg).
+3. The `crates-io` environment's deployment policy must allow the `v*` TAG
+   pattern, not only the `main` branch — otherwise a tag-triggered run cannot
+   reach the environment at all and fails before the token exchange.

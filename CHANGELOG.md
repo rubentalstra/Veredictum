@@ -18,6 +18,8 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-08-26
+
 ### Added
 
 - **The release pipeline.** A `v*` tag now publishes a release: `release.yml`
@@ -80,7 +82,7 @@ version on.
   before anything is published.
 - The crates.io version, crate-downloads and docs.rs badges in the README.
 - **Published on crates.io** as `veredictum`, both a binary and a library:
-  `cargo install veredictum --version 0.1.0-alpha.1` puts the command on your
+  `cargo install veredictum --version 0.1.0-alpha.2` puts the command on your
   `PATH`, and the library target lets an integrator consume the typed artifact
   model and the published JSON Schemas rather than reimplementing the format.
   The package carries the code and the legal set; the catalogue and the vendored
@@ -203,5 +205,6 @@ version on.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.0.1-alpha.1...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.2...HEAD
+[0.1.0-alpha.2]: https://github.com/rubentalstra/Veredictum/compare/v0.0.1-alpha.1...v0.1.0-alpha.2
 [0.0.1-alpha.1]: https://github.com/rubentalstra/Veredictum/releases/tag/v0.0.1-alpha.1

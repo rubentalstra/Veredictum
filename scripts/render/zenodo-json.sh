@@ -15,6 +15,14 @@
 # file is GENERATED: CITATION.cff stays the single source for every fact both
 # carry, and `citation-guard` runs this script in --check mode.
 #
+# WHAT THIS FILE MUST NOT INHERIT. It was ported from FerroEHR, whose deposit
+# describes a clinical data repository: the ported version claimed this project
+# `hasPart` the eight published `openehr-*` crates and that it "Requires
+# PostgreSQL 18". Neither is true here — `Cargo.toml` names no `openehr-*`
+# dependency at all, and the instrument owns no database. Both were corrected
+# before the first release cut that would have archived them, because a deposit's
+# FILES freeze at publication and the DOI cannot be corrected afterwards.
+#
 # The output is the FLAT LEGACY DEPOSIT shape the help page documents — not
 # the InvenioRDM record shape this script previously emitted. Measured
 # first-hand on this repository's own first GitHub-archived deposit
@@ -104,8 +112,6 @@ SPECS='[
   "https://specifications.openehr.org/releases/QUERY/Release-1.1.0",
   "https://specifications.openehr.org/releases/AM/Release-2.3.0"
 ]'
-CRATES='["openehr-base","openehr-rm","openehr-am","openehr-term",
-         "openehr-lang","openehr-query","openehr-its","openehr-adl"]'
 
 rendered="$(
   jq -n \
@@ -119,7 +125,6 @@ rendered="$(
     --argjson keywords "$(cff_list keywords)" \
     --argjson creators "$(cff_creators)" \
     --argjson specs    "$SPECS" \
-    --argjson crates   "$CRATES" \
 '{
   # The flat legacy deposit shape — every key spelled as the help page
   # example spells it. No `doi` key on purpose: Zenodo mints the version DOI
@@ -155,11 +160,8 @@ rendered="$(
         relation: "isSupplementTo",
         resource_type: "software" } ]
     + ($specs | map({ identifier: ., relation: "isDerivedFrom" }))
-    + ($crates | map({ identifier: ("https://crates.io/crates/" + .),
-                       relation: "hasPart",
-                       resource_type: "software" }))
   ),
-  notes: "Implements the openEHR specifications at these pinned versions: Reference Model 1.2.0, BASE 1.3.0, Archetype Model 1.4.0 and 2.4.0, Terminology 3.1.0, AQL (QUERY) 1.1.0, ITS-REST 1.1.0 and ITS-XML. The specification layer is generated from the official machine-readable specifications rather than hand-written, and conformance is measured per release by a built-in openEHR CNF conformance runner whose results are committed alongside the source. Requires PostgreSQL 18. Licensing: the recorded licence covers this project'\''s own code; vendored third-party material keeps its upstream terms — Apache-2.0 for the openEHR machine-readable artifacts and test corpora, CC-BY-SA-3.0 for the openEHR specification text and CKM-derived clinical models — each recorded in the PROVENANCE.md of the tree that carries it."
+  notes: "The oracle this instrument judges against is the RELEASED openEHR specification text, vendored verbatim in the archived source: the Reference Model, BASE, Archetype Model, Terminology, AQL (QUERY), ITS-XML, ITS-REST and the Service Model, together with the released XSD, JSON Schema and OpenAPI bundles that a citation resolves against where the documentation tree carries only prose. Every expectation in the catalogue names the section it comes from, and a verdict is computed as a pure function over the exchanges a run recorded rather than asserted. The archive carries the runner, the catalogue of spec-cited case cores and their per-operation wire bindings, the corpora, the ambiguity register and the party declarations. It requires no database and no server of its own: it is pointed at a running clinical data repository over that server\u0027s own wire. Licensing: the recorded licence covers this project\u0027s own code; vendored third-party material keeps its upstream terms \u2014 CC-BY-SA-3.0 for the openEHR specification text, Apache-2.0 for the released machine-readable openEHR artifacts, and both CC-BY-SA-3.0 and CC-BY-SA-4.0 across the CKM-derived clinical models, because neither version alone is a true statement about those trees \u2014 each recorded in the PROVENANCE.md of the tree that carries it and declared machine-readably in REUSE.toml."
 }'
 )"
 
