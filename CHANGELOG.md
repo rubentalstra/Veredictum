@@ -149,6 +149,12 @@ version on.
 
 ### Fixed
 
+- The SonarQube Cloud lane, which had failed on every run since the code
+  migration, the push to `main` included. `sonar.sources=.` and
+  `sonar.tests=tests` overlapped, and the scanner refuses an overlap rather than
+  picking a side, so one YAML fixture under `tests/fixtures/` ended the analysis
+  at exit code 3 — leaving the quality gate and the coverage badge with no
+  current reading at all.
 - The changelog's own intro paragraph, which the v0.0.1-alpha.1 cut turned into
   a stray release heading by rewriting the first literal `## [Unreleased]` it
   found — which was in prose, not the heading. The v0.0.1-alpha.1 section now
