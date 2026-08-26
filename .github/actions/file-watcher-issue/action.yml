@@ -1,0 +1,96 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/actions/file-watcher-issue — file one tracking issue, or comment on it.
+#
+# The workflow-facing interface of the scheduled lanes' filing engine. All the
+# behaviour lives in the sibling `file-issue.sh`, whose header carries the dedup
+# match rule, the body-by-file rule and the run-colour law; it is a script rather
+# than only an action because a lane that files N issues per run calls it
+# directly. In short:
+#
+#   * dedup by an exact-title search over open issues, or by `dedup-key` tokens
+#     that must appear in the title (`state: all` searches closed issues too);
+#   * comment on the existing issue rather than opening a second one, and never
+#     touch a closed one — a finding that returns after a close is new work;
+#   * reaching this action is never a failure. A finding files or updates an
+#     issue and the run stays GREEN; the run goes RED only when the PROBE itself
+#     cannot answer, which fails in the probe step and never reaches here. The
+#     issue is the alert — a red scheduled run is invisible to anyone not
+#     watching the Actions tab.
+#
+# Requires the repository to be checked out (a local action resolves against the
+# runner's workspace), and a token with `issues: write`.
+name: File or update a watcher issue
+description: Open one tracking issue for a watcher finding, or comment on the open one that already exists.
+
+inputs:
+  title:
+    description: The issue title — also the dedup key unless `dedup-key` overrides it, so keep it constant across runs.
+    required: true
+  body-file:
+    description: Path to the markdown body (a file, so remote content is never an argument).
+    required: true
+  labels:
+    description: Comma-separated labels applied when the issue is CREATED (ignored on a comment).
+    required: false
+    default: ""
+  dedup-key:
+    description: Match issues whose title CONTAINS this token instead of matching the title exactly.
+    required: false
+    default: ""
+  state:
+    description: Which issues the dedup search covers — `open` (the default) or `all`.
+    required: false
+    default: open
+  on-existing:
+    description: What an existing match gets — `comment` (the default), `update` (replace the body) or `skip`.
+    required: false
+    default: comment
+  dry-run:
+    description: Report what would be filed and write nothing.
+    required: false
+    default: "false"
+  repo:
+    description: The repository to file in.
+    required: false
+    default: ${{ github.repository }}
+  token:
+    description: "A token with `issues: write`."
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  issue:
+    description: The issue number that was created, commented on, updated or matched.
+    value: ${{ steps.file.outputs.issue }}
+  outcome:
+    description: '"created", "commented" or "none" (a dry run) — plus "updated"/"skipped" when `on-existing` selects those.'
+    value: ${{ steps.file.outputs.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - id: file
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ inputs.repo }}
+        TITLE: ${{ inputs.title }}
+        BODY_FILE: ${{ inputs.body-file }}
+        LABELS: ${{ inputs.labels }}
+        DEDUP_KEY: ${{ inputs.dedup-key }}
+        STATE: ${{ inputs.state }}
+        ON_EXISTING: ${{ inputs.on-existing }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        set -euo pipefail
+        args=(file --title "$TITLE" --body-file "$BODY_FILE" --repo "$REPO"
+              --state "$STATE" --on-existing "$ON_EXISTING" --labels "$LABELS")
+        if [ -n "$DEDUP_KEY" ]; then
+          args+=(--dedup-key "$DEDUP_KEY")
+        fi
+        if [ "$DRY_RUN" = "true" ]; then
+          args+=(--dry-run)
+        fi
+        bash "$GITHUB_ACTION_PATH/file-issue.sh" "${args[@]}"

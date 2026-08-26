@@ -1,0 +1,180 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/workflows/image-scan.yml — scheduled scan of the PUBLISHED image
+# (OWASP Kubernetes Security Cheat Sheet §4.3, "Implement continuous security
+# vulnerability scanning").
+#
+# WHY this is not the scan in the release pipeline. That one scans an image the
+# run just BUILT, which catches what was known at build time and nothing after. A
+# CVE published the week after a release applies to the image people are actually
+# running, and without this lane nothing looks again. The image is scanned where
+# a user pulls it — at its published tag on GHCR — not from a local build.
+#
+# The image is distroless and carries one binary, so its OS surface is small and
+# most weeks this will find nothing. That is the point: the weeks it does find
+# something are the weeks nobody would otherwise have looked. The `cargo auditable`
+# section embedded in the binary means Trivy reads the Rust dependency graph out
+# of the shipped artifact too, so a RustSec advisory in a published release
+# surfaces here as well as in `cargo deny` on the next pull request.
+#
+# The adjudicated configuration carries over rather than being re-argued: the
+# HIGH/CRITICAL floor and `ignore-unfixed` live in `trivy.yaml`, which every lane
+# that scans this image reads.
+#
+# RUN COLOUR. The run is RED only when the PROBE fails — an image that cannot be
+# resolved or pulled, a Trivy crash, output jq cannot read. A FINDING files or
+# updates the tracking issue and the run stays GREEN: the issue is the alert,
+# because a red scheduled run is invisible to anyone not watching the Actions
+# tab.
+#
+# BEFORE THE FIRST RELEASE there is no published image, and the lane says so and
+# exits green rather than failing on a manifest that does not exist yet. A skip
+# is reported in the run summary, so "nothing found" and "nothing looked at" are
+# never the same line.
+name: Published image scan
+
+on:
+  schedule:
+    # Mondays 07:13 UTC — off the hour, because GitHub delays on-the-hour runs
+    # under load, and in a slot of its own. Read the estate's slots with
+    # `grep -rE '^ +- cron:' .github/workflows/`.
+    - cron: "13 7 * * 1"
+  workflow_dispatch:
+    inputs:
+      report_only:
+        description: "Report findings without filing or updating an issue"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: image-scan
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  # `latest` moves only on a release tag (the pipeline's tag policy), so it is
+  # what an operator following the README pulls. The resolved digest is recorded
+  # in the run summary, so a finding is attributable to exact bytes rather than
+  # to a moving tag.
+  SCAN_TAG: latest
+  TRIVY_VERSION: "0.73.0"
+
+jobs:
+  scan:
+    name: scan the published image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read # pull the published image
+      issues: write # file or update the one tracking issue below
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No build cache is restored in this lane at all: it decides whether a
+      # published artifact is safe, so nothing a run could have poisoned should
+      # influence its answer.
+      - uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v${{ env.TRIVY_VERSION }}
+          cache: false
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan the published image
+        id: scan
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          ref="ghcr.io/${OWNER}/veredictum:${SCAN_TAG}"
+          # Nothing published yet is a legitimate state, not a probe failure.
+          # Reported explicitly, so an empty finding table can never be mistaken
+          # for a clean scan of an image that does not exist.
+          if ! digest="$(docker buildx imagetools inspect "$ref" --format '{{.Manifest.Digest}}' 2>/dev/null)"; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "total=0" >> "$GITHUB_OUTPUT"
+            {
+              printf '## Published image scan\n\n'
+              printf 'No image is published at `%s` yet, so nothing was scanned.\n' "$ref"
+              printf 'This lane starts reporting once the release pipeline has run on a tag.\n'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::no published image at ${ref} — nothing to scan yet"
+            exit 0
+          fi
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+          # ONE platform per Trivy invocation (`--platform`, default
+          # linux/amd64 — the container-image guide) while the published index is
+          # dual-arch, so every variant is scanned explicitly. An image scanned
+          # on one architecture is an image whose other architecture nobody
+          # looked at.
+          total=0
+          : > findings.md
+          for platform in linux/amd64 linux/arm64; do
+            arch="${platform##*/}"
+            echo "::group::veredictum ${platform} (${digest})"
+            trivy image --config trivy.yaml --scanners vuln --platform "$platform" \
+              -f json -o "veredictum.${arch}.json" "$ref"
+            count="$(jq '[.Results[]?.Vulnerabilities // [] | .[]] | length' "veredictum.${arch}.json")"
+            trivy image --config trivy.yaml --scanners vuln --platform "$platform" \
+              -f table "$ref" || true
+            echo "::endgroup::"
+            echo "| \`${platform}\` | \`${digest}\` | ${count} |" >> findings.md
+            total=$((total + count))
+          done
+          echo "total=$total" >> "$GITHUB_OUTPUT"
+          {
+            printf '## Published image scan\n\n'
+            printf 'Tag `%s`, Trivy %s, HIGH/CRITICAL with a fix available.\n\n' \
+              "$SCAN_TAG" "$TRIVY_VERSION"
+            printf '| platform | digest | findings |\n|---|---|---|\n'
+            cat findings.md
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "total findings: $total"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && steps.scan.outputs.published == 'true'
+        with:
+          name: image-scan-reports
+          path: "veredictum.*.json"
+          if-no-files-found: warn
+          retention-days: 30
+
+      # An issue with no failing check can be closed without the finding being
+      # addressed, so the issue says what the remedy is.
+      - name: Write the tracking-issue body
+        if: steps.scan.outputs.total != '0' && !inputs.report_only
+        env:
+          TOTAL: ${{ steps.scan.outputs.total }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            printf 'A scheduled scan of the PUBLISHED image found **%s** fixable HIGH/CRITICAL findings.\n\n' "$TOTAL"
+            printf '| platform | digest | findings |\n|---|---|---|\n'
+            cat findings.md
+            printf '\nFull reports are attached to the run as `image-scan-reports`: %s\n' "$RUN_URL"
+            printf '\nThese are findings **with a fix available**, so the remedy is a rebuild and'
+            printf ' a re-release of the image. A finding in the base layer is fixed by bumping'
+            printf ' the pinned digest in `docker/Dockerfile`; a finding in the Rust dependency'
+            printf ' graph is fixed the way `cargo deny` findings are fixed. Either way the fix'
+            printf ' only reaches users on the next tag, because the image republishes on a tag.\n'
+          } > body.md
+
+      - name: File or update the tracking issue
+        if: steps.scan.outputs.total != '0' && !inputs.report_only
+        uses: ./.github/actions/file-watcher-issue
+        with:
+          title: "security(image): the published image carries fixable HIGH/CRITICAL findings"
+          body-file: body.md
+          labels: bug,P1

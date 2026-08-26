@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/workflows/latest-deps.yml — scheduled latest-dependencies check.
+#
+# `Cargo.toml` pins caret ranges and `Cargo.lock` freezes CI to a known-good
+# set — every gate runs `--locked`, so CI fails on a new commit rather than on
+# registry drift. This lane is the Cargo book's named mitigation for the other
+# half of that trade: periodically verify the package still builds against the
+# newest IN-RANGE dependency set, so a breaking upstream patch is discovered on
+# schedule instead of during an unrelated pull request's lockfile bump
+# (https://doc.rust-lang.org/cargo/guide/continuous-integration.html#verifying-latest-dependencies).
+#
+# Check-only by design: a resolution or compile break is the signal this lane
+# exists to catch, and running the full suite against an unpinned set would
+# attribute an unrelated behavioural change to a dependency bump.
+#
+# RUN COLOUR. A compile or resolution break IS this lane's finding: it files or
+# updates a tracking issue through `.github/actions/file-watcher-issue` and the
+# run stays GREEN. The run goes RED only when the PROBE fails — the toolchain not
+# installing, or `cargo update` unable to reach the registry at all — which says
+# nothing about this code. A red scheduled run is invisible to anyone not
+# watching the Actions tab; the issue is the alert.
+name: latest-deps
+
+on:
+  schedule:
+    # Mondays 05:17 UTC — off the hour, because GitHub delays on-the-hour runs
+    # under load, and in a slot of its own. Read the estate's slots with
+    # `grep -rE '^ +- cron:' .github/workflows/`.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+# A scheduled probe: only the newest run is interesting, so cancel freely.
+concurrency:
+  group: latest-deps-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  latest-deps:
+    name: check against the latest in-range deps
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write # file or update the one tracking issue below
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+      # The probe half. A registry it cannot resolve at all is a probe failure
+      # and reddens the run, because it says nothing about this package.
+      - name: Update to the latest in-range dependency set
+        run: cargo update
+      - name: Check the package against it
+        id: check
+        # The exit status is CAPTURED, not propagated: a break here is the
+        # finding this lane exists to report, and the log is carried into the
+        # issue body so the first-line triage needs no run archaeology.
+        run: |
+          set -uo pipefail
+          status=0
+          cargo check --all-targets 2>&1 | tee check.log || status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "cargo check exited ${status}"
+      - name: Write the tracking-issue body
+        if: steps.check.outputs.status != '0'
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          {
+            printf 'The scheduled latest-deps run found that the newest in-range dependency set no'
+            printf ' longer compiles (Cargo book: verifying latest dependencies).\n\n'
+            printf 'Run: %s\n\n' "$RUN_URL"
+            printf 'Triage: reproduce with `cargo update && cargo check --all-targets`, then either'
+            printf ' fix the incompatibility or narrow the offending range in `Cargo.toml` with a'
+            printf ' comment saying why and when.\n\n'
+            printf '<details><summary>Last 200 lines of the check log</summary>\n\n```\n'
+            tail -n 200 check.log
+            printf '```\n\n</details>\n'
+          } > body.md
+      - name: File or update the tracking issue
+        if: steps.check.outputs.status != '0'
+        uses: ./.github/actions/file-watcher-issue
+        with:
+          title: "latest-deps: the package no longer builds against the newest in-range dependencies"
+          body-file: body.md
+          labels: bug,P2,ci

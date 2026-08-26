@@ -29,8 +29,10 @@ on:
   # raised after it is applied. Adding `labeled`/`unlabeled` makes applying a
   # label produce a fresh event carrying the current label set
   # (https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request).
-  # `no-changelog` is the label this is for; the guard that reads it is issue
-  # #10, and the trigger is already here so it works on the run it triggers.
+  # `no-changelog` is the label this is for, and the guard that reads it is the
+  # changelog-entry step in the guards job below — so applying the label raises a
+  # fresh run whose payload carries it. Re-running the failed job instead re-uses
+  # the stale payload and fails again.
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
@@ -175,12 +177,42 @@ jobs:
       # release section, no subsection header outside the canonical type set.
       # A duplicated header ships the same release notes twice.
       #
-      # Only the STRUCTURE half is wired. The other half requires a changelog
-      # entry when a user-visible surface changes, and it decides that by
-      # matching changed paths — those paths exist now that the code is here,
-      # so the guard is issue #10 rather than a claim this step makes.
+      # UNCONDITIONAL, and it stays that way: the `no-changelog` label waives the
+      # ENTRY requirement in the next step, never the file's validity. A
+      # malformed changelog also fails the release pipeline's `plan`, so this is
+      # the cheap place to catch it.
       - name: Changelog structure
         run: bash scripts/checks/changelog-structure.sh
+
+      # The entry half: a change to a user-visible surface must carry a changelog
+      # entry. The path set that decides "user-visible" is declared inside
+      # `scripts/checks/changelog-entry.sh`, beside the reasoning for each path,
+      # rather than as a regular expression in this file — the list is meant to
+      # be read against `CHANGELOG.md`'s own definition of the term.
+      #
+      # PULL-REQUEST ONLY, deliberately: both halves of the decision — the
+      # base..head diff and the label — are pull-request payload, and a
+      # merge_group event carries neither. It has already gated the pull request
+      # by the time a queue entry exists. The `labeled`/`unlabeled` triggers on
+      # this workflow are what make applying the label raise a fresh run whose
+      # payload carries it; re-running the failed job re-uses the stale payload
+      # and would still fail.
+      - name: Require a changelog entry for user-visible changes
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+        run: |
+          set -euo pipefail
+          # The suppression is REPORTED, not silent: a guard that can be waived
+          # invisibly is a guard nobody can audit after the fact.
+          if [ "$HAS_LABEL" = "true" ]; then
+            echo "::notice::the 'no-changelog' label is applied — the changelog-entry requirement is waived for this pull request"
+            echo "changelog-entry: waived by the no-changelog label."
+            exit 0
+          fi
+          bash scripts/checks/changelog-entry.sh "$BASE" "$HEAD"
 
       # The no-attribution hard rule, enforced on what was actually committed.
       # The local `.githooks/commit-msg` hook strips attribution before a commit

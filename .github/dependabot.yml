@@ -5,12 +5,9 @@
 # Options reference:
 # https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference
 #
-# TWO ecosystems: `github-actions` and `cargo`. Each cooldown is reasoned from
-# what a compromised release in that ecosystem could actually reach, which is
-# why they differ. The `docker` ecosystem is absent because no Dockerfile exists
-# yet: Dependabot resolves a manifest at the directory it is given, so an entry
-# pointing at nothing is inert configuration that looks like a control. It lands
-# with the container image (#12).
+# THREE ecosystems: `github-actions`, `cargo` and `docker`. Each cooldown is
+# reasoned from what a compromised release in that ecosystem could actually
+# reach, which is why they differ.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -62,4 +59,25 @@ updates:
         update-types: ["minor", "patch"]
     commit-message:
       prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+    # Fourteen days, the longest of the three. A base-image bump changes the
+    # bytes every user of the published image runs, and both `FROM` lines are
+    # digest-pinned — which is what makes an automated bump reviewable at all,
+    # and also what means a bump nobody notices ships silently. Security updates
+    # stay exempt: Dependabot applies no cooldown to advisory-driven bumps.
+    #
+    # Base-image CVEs do not depend on this lane either. The scheduled
+    # `image-scan.yml` looks at the PUBLISHED image every Monday and files an
+    # issue on a fixable finding, so a base advisory is caught whether or not a
+    # newer tag exists to bump to.
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "build"
       include: "scope"
