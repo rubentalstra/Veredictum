@@ -134,3 +134,4 @@ the owner created the SonarQube Cloud project that day, which is what made a
 scan scope meaningful. Its exclusion tables are deliberately empty — a
 `sonar.exclusions` line naming a vendored or generated path that does not exist
 would be a scope claim about nothing.
+- [ ] codeql.yml gains the `rust` matrix leg when the code lands (the workflow header says so)
