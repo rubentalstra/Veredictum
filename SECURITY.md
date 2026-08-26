@@ -53,14 +53,6 @@ Report privately through
 [GitHub private vulnerability reporting](https://github.com/rubentalstra/Veredictum/security/advisories/new)
 ("Report a vulnerability" on the repository's Security tab).
 
-> [!NOTE]
-> Private vulnerability reporting reads `disabled` on this repository today
-> (`gh api repos/rubentalstra/Veredictum/private-vulnerability-reporting`
-> returns `{"enabled":false}`), so that form may refuse you. Until it is
-> switched on, open a public issue containing only the sentence that a private
-> report is waiting, with **no details**, and the maintainer will open a private
-> channel. This note is here so the gap is visible rather than implied, and it
-> is removed in the pull request that enables the setting.
 
 Include what you can: the affected component, the version or commit,
 reproduction steps or a proof of concept, an impact assessment, and any
@@ -139,11 +131,11 @@ finding.
 | Push protection | enabled | enabled | refuses the commit rather than filing an alert afterwards |
 | Secret scanning, non-provider patterns | enabled | **disabled** | the credential class this repository is most likely to leak is not a provider token: an IXIT declaration carries a server URL with embedded basic-auth credentials, and the SMART lane carries a test signing key |
 | Secret scanning, validity checks | enabled | **disabled** | the difference between "rotate this eventually" and "this credential is live right now" |
-| Private vulnerability reporting | enabled | **disabled** | the reporting route this document points at |
-| Dependabot security updates | enabled | **disabled** | advisory-driven bumps, exempt from the update cooldowns in [`.github/dependabot.yml`](.github/dependabot.yml) |
-| Ruleset on `main` | active: no deletion, no force-push, signed commits, pull request required | **not created** | every commit in the history is signed today by practice; the ruleset is what makes it enforced rather than habitual |
-| Immutable releases | enabled: published assets and tags frozen; a bad cut is repaired by a new version, never a retag | **not enabled** (Settings → General; no API exposes it) | the v0.0.1-alpha.1 release predates the toggle; enable before the first non-alpha cut |
-| Ruleset on `refs/tags/v*` | active: no tag deletion, no non-fast-forward update, signatures required | **not created** | a release lane will publish off a raw tag push, so the window in which a tag drives a build needs protecting |
+| Private vulnerability reporting | enabled | enabled | the reporting route this document points at |
+| Dependabot security updates | enabled | enabled | advisory-driven bumps, exempt from the update cooldowns in [`.github/dependabot.yml`](.github/dependabot.yml) |
+| Ruleset on `main` | active: no deletion, no force-push, signed commits, pull request required | **active** (ruleset 21570979: squash-only, the `conclusion` status check required; repository-admin bypass for recovery) | every commit is now enforced-signed, and every change reaches `main` through a pull request |
+| Immutable releases | enabled: published assets and tags frozen; a bad cut is repaired by a new version, never a retag | **enabled** (owner, 2026-08-26) | the v0.0.1-alpha.1 release predates the toggle and stays mutable-metadata; everything after is frozen at publish |
+| Ruleset on `refs/tags/v*` | active: no tag deletion, no non-fast-forward update, signatures required | **active** (ruleset 21571001, no bypass) | a release lane will publish off a raw tag push, so the window in which a tag drives a build needs protecting |
 
 Six of those rows do not match yet. They are listed with their real state rather
 than as intentions, and each is closed by the migration work that makes it

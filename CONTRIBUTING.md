@@ -100,8 +100,9 @@ These are the ones a pull request is most often refused for. The full set is in
   `build/`, `release/`.
 - Commit subjects are conventional-commit style and describe the change itself.
 - **Commits are signed.** `git commit -S`, verifiable as `G` in
-  `git log --format=%G?`. Every commit in this repository's history is signed;
-  the branch ruleset that will refuse an unsigned one is recorded as pending in
+  `git log --format=%G?`. Every commit in this repository's history is signed,
+  and the `main` ruleset refuses an unsigned one — every change reaches `main`
+  through a squash-merged pull request whose CI `conclusion` check is green. See
   [SECURITY.md § Repository security settings](SECURITY.md#repository-security-settings--the-posture-of-record).
 - **No AI or tool attribution anywhere.** No `Co-Authored-By` trailer of any
   kind, no "Generated with", no robot emoji, in a commit message, a commit
