@@ -1,0 +1,26 @@
+# Changelog
+
+All notable changes to Veredictum are recorded here. The format follows
+[Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/) and the
+versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Every pull request with user-visible changes adds an entry under
+`## [Unreleased]` in the same pull request. User-visible here means the CLI
+surface, the published artifact schemas, verdict semantics, the container
+image, or anything a party's published conformance record depends on.
+
+No release has been cut yet: the runner still lives in FerroEHR
+`tools/cnf-runner` until the migration
+([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789))
+completes.
+
+## [Unreleased]
+
+### Added
+
+- The repository's working discipline: the root `CLAUDE.md`, the rule files
+  under `.claude/rules/`, the guard hooks under `.claude/hooks/`, the agent
+  definitions under `.claude/agents/`, the in-repo memory under
+  `.claude/memory/`, and the comment-style guard under `scripts/checks/`.
+- The product identity: the README, the origin of the name, and the pointer to
+  the migration contract.
