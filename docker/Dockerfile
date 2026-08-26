@@ -2,6 +2,13 @@
 #
 # The Veredictum container image.
 #
+# WHAT IT CARRIES TODAY IS A PLACEHOLDER (owner ruling 2026-08-26). This image
+# ships the CLI for now, and it becomes the WEB UI's image when that lands
+# (#6) — the CLI's own distribution channels are `cargo install veredictum` and
+# the prebuilt binaries attached to each release. Plan changes here with that in
+# mind: the tag policy, the scan-then-tag ordering, the non-root posture and the
+# attestations are the durable parts; the payload is the part that gets replaced.
+#
 # WHAT THIS IMAGE IS: the runner, and nothing else. The catalogue, the corpora
 # and the vendored specification oracle are 347 MB, and the runner reads every
 # one of them as a path the caller passes at run time — no source file embeds an

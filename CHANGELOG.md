@@ -18,6 +18,32 @@ version on.
 
 ## [Unreleased]
 
+### Fixed
+
+- The image vulnerability gate refused to tag the `0.1.0-alpha.2` image, so that
+  release published its binaries and its crate but no pullable image tag. The
+  finding was real: `libssl3t64` in the distroless base, CVE-2026-14456, HIGH,
+  with a Debian fix the base image has not been rebuilt against — the current
+  `:nonroot` digest still carries the vulnerable version, so a base bump does not
+  resolve it and a distroless image has no package manager to upgrade it in a
+  layer of our own.
+
+  It is adjudicated as unreachable rather than suppressed, on the shipped
+  binary's own ELF header: its dynamic dependencies are `libgcc_s`, `libm` and
+  `libc` only. TLS is rustls and the JOSE signing is aws-lc-rs, so nothing this
+  project builds links OpenSSL, and the image is distroless — no shell, no
+  package manager, no second executable that could load the library. The entry
+  lives in a new `.trivyignore.yaml`, scoped to that one package by PURL, with
+  the evidence and a three-month expiry, so it has to be re-argued rather than
+  quietly becoming permanent.
+
+### Changed
+
+- The container image states in its own header that its current payload is a
+  placeholder: it ships the CLI today and becomes the web UI's image when that
+  lands (#6). The CLI's own distribution channels are `cargo install veredictum`
+  and the prebuilt binaries on each release.
+
 ## [0.1.0-alpha.2] - 2026-08-26
 
 ### Added

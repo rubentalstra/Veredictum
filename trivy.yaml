@@ -13,11 +13,10 @@
 #   * HIGH and CRITICAL only. MEDIUM on a distroless image is noise at a volume
 #     that hides the two severities that matter.
 #
-# No `ignorefile` key: there are no adjudicated per-CVE exceptions in this
-# repository, and pointing at a file that does not exist is a configuration
-# error rather than an empty list. The key arrives with the first exception, and
-# each entry there carries its CVE, its reason and an expiry date so an
-# exception cannot become permanent by inattention.
+# The adjudicated-exception file. Each entry there carries its CVE, the evidence
+# for the adjudication, the path it is scoped to, and an expiry date, so an
+# exception cannot become permanent by inattention. The standing rule is that a
+# finding this project can FIX is fixed, never suppressed.
 severity:
   - HIGH
   - CRITICAL
@@ -27,6 +26,8 @@ vulnerability:
   # ignored by Trivy, so the same scan would still return every unfixed finding
   # while the configuration looked correct.
   ignore-unfixed: true
+
+ignorefile: .trivyignore.yaml
 
 scan:
   skip-dirs:
