@@ -48,6 +48,15 @@ version on.
   It also checks that every shared OCI key agrees between the two declaration
   sites, and refuses to pass vacuously if the publishing lane it expects is
   absent.
+- **`ARCHITECTURE.md`** at the repository root: the instrument's design record,
+  moved here from the FerroEHR mono-repo where it was written. It is the design
+  authority for the machinery — the artifact set and the case-core field
+  definitions, the operation bindings, the outcome taxonomy and the ambiguity
+  register, the assertion vocabulary, verdict computation — and it carries the
+  population-anchored performance-class model with its journey decomposition,
+  plus the evidence base and the ISO/IEC 9646 and CASCO grounding the scheme is
+  built in. Names and paths were adapted to this tree; the substance is
+  unchanged.
 - A Dependabot `ignore` for `rand` major bumps. The dev-dependency exists to hand
   `pgp`'s signing call an RNG, and `pgp 0.20` is on `rand_core 0.6`, so a major
   bump does not compile. Patch and minor bumps within the pin are still proposed,

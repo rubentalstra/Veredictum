@@ -195,6 +195,19 @@ word that became the English *verdict*. That is what this instrument produces: i
 runs the catalogue against a running CDR and speaks a verdict about what it
 observed. The seal above is the mark of that verdict.
 
+## Architecture
+
+[`ARCHITECTURE.md`](ARCHITECTURE.md) is the design record, and it is where the
+reasoning lives rather than a summary of it: the testable surface and the
+case-core field definitions, the per-operation wire bindings, the outcome
+taxonomy and the ambiguity register, the assertion vocabulary, how a verdict is
+computed, and the population-anchored performance-class model — the POC / S / L /
+R volumetric floors derived from OECD, Eurostat and NHS statistics, with the
+hospital-simulation journey decomposition behind the measured runs. It also
+carries the evidence base for why the instrument exists in this shape: the state
+of the official CNF component, how other standards run conformance, and the
+ISO/IEC 9646 and CASCO vocabulary the scheme is built in.
+
 ## Contributing
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has the gates and the review bar.
