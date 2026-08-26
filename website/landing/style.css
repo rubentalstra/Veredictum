@@ -515,9 +515,11 @@ td strong {
 }
 
 /* ── Link cards ───────────────────────────────────────────────────────────── */
+/* 280px keeps the six cards at three per row on a desktop width, so the last
+   row is full instead of ragged. */
 .links {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 0.9rem;
 }
 
