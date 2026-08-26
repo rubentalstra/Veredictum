@@ -3,7 +3,7 @@
    deployment displays, and the 1280x640 social-preview master. The verdict
    pipeline fills the three dotted slots; this file ships them empty.
    Not an openEHR Foundation endorsement. -->
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 640" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="640" viewBox="0 0 1280 640">
 <defs><path id="cat" d="M 124,320 A 196,196 0 0 1 516,320"/><path id="cab" d="M 101,320 A 219,219 0 0 0 539,320"/></defs>
 <rect width="1280" height="640" fill="#FFF9F2"/><rect x="18" y="18" width="1244" height="604" fill="none" stroke="#258BB0" stroke-width="3"/><rect x="26" y="26" width="1228" height="588" fill="none" stroke="#FF861C" stroke-width="1.4" stroke-dasharray="4 5"/>
 <circle cx="320" cy="320" r="282" fill="#1B6E92"/><circle cx="320" cy="320" r="273" fill="none" stroke="#FF861C" stroke-width="4.6" stroke-dasharray="6.4 8.9"/><circle cx="320" cy="320" r="253" fill="none" stroke="#F6DECD" stroke-width="3.2" opacity=".65"/><circle cx="320" cy="320" r="167" fill="#14566F" stroke="#F6DECD" stroke-width="3.2"/>
