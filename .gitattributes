@@ -58,3 +58,8 @@ app/ferroehr/migrations/** linguist-detectable=false
 # bit-identical through clone/checkout.
 tools/cnf-runner/artifacts/corpus/archetypes/** -text
 tools/cnf-runner/artifacts/corpus/templates/ckm/full/** -text
+
+# Linguist: the brand palette (tokens.css) is a design asset, not source —
+# without this the language bar reads "CSS 100%" on a repository whose code
+# has not migrated yet.
+assets/** linguist-documentation
