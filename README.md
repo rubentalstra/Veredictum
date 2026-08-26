@@ -115,8 +115,36 @@ cargo run -- verdicts --root artifacts --statement party/mine/statement.json \
 among them. The toolchain pins itself from `rust-toolchain.toml`; the only extra
 tool is `cargo-nextest`, and only if you intend to run the test suite.
 
-The binary is also on crates.io, which is the path to take if you want the
-command on your `PATH` and intend to point it at a catalogue you already have:
+### Without a Rust toolchain
+
+The container image carries the runner, so a clone plus Docker is enough. Mount
+the repository at `/work` and the arguments are the ordinary subcommands — the
+entrypoint is the instrument itself:
+
+```bash
+docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:<tag> \
+    validate --root /work/artifacts --specs /work/specs/openehr
+```
+
+The catalogue and the vendored specification oracle are **not** baked in: they
+are 347 MB, the runner reads every root as a path passed at run time, and a
+party may legitimately want to point at their own. The image is the runner, and
+the data comes from the mount.
+
+Prebuilt binaries for `x86_64` and `aarch64` Linux are attached to each
+[release](https://github.com/rubentalstra/Veredictum/releases), each with a
+`sha256sum`, a CycloneDX dependency SBOM and a Sigstore bundle:
+
+```bash
+gh attestation verify veredictum-<tag>-<target>.tar.gz \
+    -R rubentalstra/Veredictum \
+    --signer-workflow rubentalstra/Veredictum/.github/workflows/release-build.yml
+```
+
+### With cargo
+
+The binary is on crates.io, which is the path to take if you want the command on
+your `PATH` and intend to point it at a catalogue you already have:
 
 ```bash
 cargo install veredictum --version 0.1.0-alpha.1   # pre-release: name the version
@@ -125,8 +153,7 @@ veredictum validate --root <catalogue> --specs <spec-tree>
 
 The library target is published with it, so an integrator can consume the typed
 artifact model and the published JSON Schemas directly rather than reimplementing
-the format. A signed release with prebuilt binaries and a `docker run` image is
-[#12](https://github.com/rubentalstra/Veredictum/issues/12).
+the format.
 
 ## What is in the box
 

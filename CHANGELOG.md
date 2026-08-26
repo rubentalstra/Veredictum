@@ -33,6 +33,22 @@ version on.
   Trivy-scanned on both architectures before any tag names it, with provenance
   and an SPDX SBOM attested on the digest. `:latest` moves on a release tag and
   never on a pre-release.
+- **`docker run` needs no Rust toolchain.** `docker/Dockerfile` builds a
+  distroless image that runs as uid 65532 and carries nothing but the runner:
+  mount the repository at `/work` and every subcommand works, because the
+  entrypoint is the instrument itself.
+
+  ```bash
+  docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:<tag> \
+      validate --root /work/artifacts --specs /work/specs/openehr
+  ```
+
+  The catalogue and the vendored specification oracle are deliberately NOT baked
+  in — 347 MB, read as run-time paths, and a party may want to point at their
+  own — so the image stays 55 MB and the data comes from the mount.
+- A `Dockerfile lint` job in CI, gated on a change to the image tier, running
+  hadolint at its warning threshold against a configuration where any
+  deliberately violated rule is named with its reason.
 - The crate publish joins the same tag, as the last leg of the pipeline and after
   the release is otherwise complete, so the `crates-io` environment's reviewer
   approval blocks nothing else. `publish-crates.yml` stays as the out-of-band
