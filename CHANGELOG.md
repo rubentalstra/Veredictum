@@ -27,6 +27,11 @@ version on.
   The package carries the code and the legal set; the catalogue and the vendored
   specification oracle are 347 MB of data no registry accepts, and every root is
   a path passed at run time, so both come from the repository.
+- `publish-crates.yml`: the release lane for the crate, authenticating through
+  crates.io Trusted Publishing so no long-lived registry token exists in this
+  repository. Manual dispatch, dry run by default, the upload built from the
+  checkout with no cache restored, and the registry read back before the lane
+  reports success.
 - **The instrument itself builds and runs from this repository:** the runner,
   the catalogue with its 1107 case cores and 247 operation bindings, the
   corpora, the ambiguity register, the party declarations, and the vendored

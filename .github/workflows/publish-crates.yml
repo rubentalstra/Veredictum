@@ -1,0 +1,146 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/workflows/publish-crates.yml
+#
+# Publishes `veredictum` to crates.io.
+#
+#   - Manual `workflow_dispatch` only. The default run is a DRY RUN
+#     (`cargo publish --dry-run` — package and verify, no upload); a real
+#     publish needs the `publish` input set to `true`.
+#   - Authentication is crates.io TRUSTED PUBLISHING (OIDC):
+#     `rust-lang/crates-io-auth-action` exchanges this workflow's OIDC identity
+#     for a 30-minute publish token, so no long-lived crates.io token exists in
+#     this repository at all. The Trusted Publisher configured on crates.io
+#     names this repository, THIS workflow file, and the `crates-io`
+#     environment — rename any of the three and the exchange is refused.
+#   - The crate's FIRST-ever release could not use OIDC: crates.io requires an
+#     existing crate before a Trusted Publisher can be configured for it, so
+#     `0.1.0-alpha.1` was pushed with a scoped token and the publisher was
+#     configured afterwards. Every release from here runs through this lane.
+#   - A published version is IMMUTABLE. It can be yanked, never replaced, so the
+#     upload runs from this checkout with no build cache restored and the
+#     registry is read back before the lane reports success.
+name: Publish crate
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Really publish to crates.io (false = dry run)"
+        required: false
+        default: false
+        type: boolean
+
+# Two concurrent runs over the same version produce one success and one
+# confusing failure, and the winner cannot be undone. Queue, never cancel.
+concurrency:
+  group: publish-crates-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  dry-run:
+    name: dry run (package + verify, no upload)
+    if: ${{ !inputs.publish }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No cache in a publishing lane, dry run included: the dry run's whole
+      # value is verifying the same bytes the real publish would upload, and
+      # setup-rust-toolchain caches by default.
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache: false
+      # This also proves the `include` allowlist in Cargo.toml is complete: the
+      # packaged tree is compiled on its own, so a source directory the
+      # allowlist forgot fails here rather than after an irreversible upload.
+      - run: cargo publish --dry-run --locked
+
+  publish:
+    name: publish to crates.io
+    if: ${{ inputs.publish }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The protected environment is part of the Trusted Publisher configuration
+    # on crates.io. A publish attempted outside it is refused.
+    environment: crates-io
+    permissions:
+      contents: read
+      # OIDC token exchange (rust-lang/crates-io-auth-action).
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No cache in the lane that uploads: a published version is immutable, so
+      # it is built from this checkout and nothing else.
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache: false
+
+      - id: auth
+        name: Exchange the OIDC identity for a temporary crates.io token
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        # "already exists" is treated as DONE rather than as failure, which is
+        # what makes the lane safe to re-run after a transient network failure
+        # late in an upload. Matching happens against ANSI-STRIPPED text: cargo
+        # colours the status word alone, so the bytes are `Uploaded<RESET>
+        # veredictum` and a literal "Uploaded veredictum" would never match a
+        # perfectly successful publish.
+        run: |
+          set -uo pipefail
+          out="$(cargo publish --locked 2>&1)" || true
+          printf '%s\n' "$out"
+          plain="$(printf '%s' "$out" | sed -E 's/\x1b\[[0-9;]*m//g')"
+          case "$plain" in
+            *"already exists on crates.io index"*|*"already uploaded"*)
+              echo "already published at this version — nothing to do" ;;
+            *)
+              printf '%s' "$plain" | grep -q "Uploaded veredictum" || {
+                echo "::error::the publish did not report an upload"
+                exit 1
+              } ;;
+          esac
+
+      # The registry is the ground truth, not the exit code above. `always()`,
+      # because this step matters most exactly when the publish step went red: a
+      # run that uploaded successfully but misread its own output would otherwise
+      # end red with nothing to contradict it.
+      - name: Verify the version is on the registry
+        if: always() && inputs.publish
+        run: |
+          set -euo pipefail
+          want="$(awk -F'"' '/^\[package\]/{p=1} p && /^version = /{print $2; exit}' Cargo.toml)"
+          echo "expecting $want"
+          # The index is eventually consistent right after an upload, so a miss
+          # is retried rather than believed. A FAILED REQUEST is not a miss
+          # either: without --fail, curl hands an error body to jq, jq dies on
+          # the absent .versions, and `pipefail` ends the step — so one
+          # transient 429 would report a missing version that is actually there.
+          got=""
+          for _ in 1 2 3 4 5 6; do
+            if body="$(curl -sSL --fail -H 'User-Agent: veredictum-publish-verify' \
+                       "https://crates.io/api/v1/crates/veredictum/versions" 2>/dev/null)"; then
+              got="$(printf '%s' "$body" \
+                     | jq -r --arg v "$want" '.versions[]? | select(.num == $v) | .num' \
+                     | head -1)" || got=""
+            fi
+            [ -n "$got" ] && break
+            sleep 10
+          done
+          if [ -z "$got" ]; then
+            echo "::error::version $want is not on the registry"
+            exit 1
+          fi
+          echo "confirmed on crates.io: veredictum $got"
