@@ -24,3 +24,11 @@ completes.
   `.claude/memory/`, and the comment-style guard under `scripts/checks/`.
 - The product identity: the README, the origin of the name, and the pointer to
   the migration contract.
+- The repository skeleton a public project is read by: `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `MAINTAINERS.md`, `SECURITY.md`,
+  `SUPPORT.md`, `AI_STATEMENT.md`, the `.github/` collaboration surface (issue
+  forms, pull-request template, `CODEOWNERS`, `FUNDING.yml`, and a
+  `dependabot.yml` covering the github-actions ecosystem), the `REUSE.toml`
+  licensing declaration with `LICENSES/Apache-2.0.txt`, the
+  attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
+  the Rust `.gitignore` set.

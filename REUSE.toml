@@ -1,0 +1,46 @@
+# REUSE Specification 3.3 — https://reuse.software/spec-3.3/
+#
+# WHAT THIS ADDS. Licensing is also recorded per file where a header fits, and
+# per vendored tree by a `PROVENANCE.md` naming the upstream source, the pinned
+# revision and the licence. What neither of those does is SURVIVE A FILE LEAVING
+# THIS REPOSITORY — the property REUSE exists for, that licensing "is preserved
+# when the file is copied and reused by third parties". Someone who lifts one
+# case out of the catalogue, or one archetype out of a corpus, takes a file whose
+# terms are otherwise stated only in a manifest they did not copy. This
+# instrument is built to be forked and re-run by other people, so downstream
+# file-level reuse is the expected case.
+#
+# HOW THE TABLES COMPOSE, because ordering is load-bearing: "If a Covered File
+# is covered by multiple [[annotations]] tables in the same REUSE.toml file,
+# then exclusively the LAST matching table in the file is used" (spec 3.3). So
+# the catch-all comes first and every later table narrows it.
+#
+# PRECEDENCE, likewise from the spec: `closest` associates licensing found
+# INSIDE the file (a comment header or a `.license` sidecar) and falls back to
+# the table only when the file carries none; `override` ignores anything closer.
+# First-party globs use `closest`, so adding a real SPDX header to a source file
+# is an improvement that takes effect immediately and never contradicts this
+# file. Vendored globs will use `override`, where the upstream tree's terms are
+# settled by its `PROVENANCE.md` rather than by any per-file marking.
+#
+# WHAT IS DELIBERATELY MISSING. The vendored trees do not exist here yet: the
+# openEHR specification text (CC-BY-SA-3.0), the machine-readable openEHR
+# artifacts (Apache-2.0), and the CKM-derived clinical models (CC-BY-SA-3.0 AND
+# CC-BY-SA-4.0, mixed at file level, with each archetype's own `licence`
+# metadata as the authority for that file) all arrive with the code migration
+# (FerroEHR#2789), and each brings its own `[[annotations]]` table plus the
+# licence text under `LICENSES/` in the same pull request. A table declaring a
+# path that does not exist would be a licensing claim about nothing, so none is
+# written in advance.
+
+version = 1
+
+# ── Catch-all: everything in this repository is Veredictum's own, Apache-2.0 ──
+# `closest` means a file carrying its own SPDX header wins over this
+# declaration. `LICENSES/Apache-2.0.txt` is the licence text REUSE requires,
+# and it is byte-identical to the root `LICENSE`.
+[[annotations]]
+path = "**"
+precedence = "closest"
+SPDX-FileCopyrightText = "Veredictum contributors"
+SPDX-License-Identifier = "Apache-2.0"
