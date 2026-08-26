@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Shields.io badge endpoints, derived from the verdict report.

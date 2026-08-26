@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The loaded artifact set — one root directory laid out per the artifact
@@ -17,7 +17,7 @@
 //!
 //! The committed PARTY statements are swept alongside, from the sibling
 //! `party/` directory of the artifact root (`<root>/../party/*/statement.json`
-//! — the repo layout is `tools/cnf-runner/{artifacts,party}`). They are not
+//! — the repo layout is ``artifacts`/`party``). They are not
 //! schedule artifacts, but the claim-completeness gate is a relation between
 //! a claim and the catalogue, so validate cannot judge one without the other.
 //! The sweep is best-effort by design: a bare artifact tree with no sibling

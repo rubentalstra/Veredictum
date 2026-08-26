@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Operation bindings — the wire layer, one file per SM operation per ITS.

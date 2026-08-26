@@ -50,7 +50,7 @@ flow:
             _type: ORIGINAL_VERSION
             commit_audit:
               _type: AUDIT_DETAILS
-              system_id: "cnf-runner"
+              system_id: "veredictum"
               committer: { _type: PARTY_IDENTIFIED, name: "cnf runner" }
               change_type:
                 _type: DV_CODED_TEXT

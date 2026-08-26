@@ -1,0 +1,19 @@
+# nextest configuration. The suite is `cargo nextest run`; `cargo test` is
+# never the invocation.
+#
+# Nothing here is serialized. The FerroEHR mono-repo carried a `containers`
+# test group pinning three broker/blob suites to one thread, and those suites
+# belong to the CDR, not to this instrument — the group is deliberately absent
+# rather than carried over empty, because a filter matching no test looks like
+# scheduling discipline and enforces nothing.
+#
+# Surface the next slow-test regression immediately instead of letting the
+# suite silently grow: nextest flags any test past 60 s as SLOW (no
+# termination — flagging only).
+[profile.default]
+slow-timeout = { period = "60s" }
+
+# CI: never stop at the first failure — the full failure surface in one run.
+[profile.ci]
+fail-fast = false
+slow-timeout = { period = "60s" }

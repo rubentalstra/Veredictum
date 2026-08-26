@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Cross-artifact validation — the schedule's machine gates.
@@ -199,7 +199,7 @@ impl std::fmt::Display for Finding {
 }
 
 /// Validation context: the artifact set + optional vendored-spec root
-/// (`docs/specs/openehr`) enabling the two resolution checks.
+/// (`specs/openehr`) enabling the two resolution checks.
 #[derive(Debug)]
 pub struct Context<'a> {
     /// The typed artifacts every gate reads.
@@ -1768,16 +1768,15 @@ struct SpecIndex<'a> {
 
 /// One vendored machine-readable bundle, located from the vendored spec root.
 ///
-/// Both are repo-relative and both are vendored by committed scripts, so the
-/// spec root's grandparent IS the workspace root (`docs/specs/openehr` →
-/// `docs/specs` → `docs` → the workspace). The same derivation already
-/// locates `docs/conformance/` for the coverage report. `None` when the
-/// bundle is not there (a spec tree used outside the workspace, e.g. a test
-/// fixture): the component's citations then resolve against the docs tree
-/// alone, exactly as before issue #1833.
+/// Every bundle is repo-relative and vendored by a committed script, so the
+/// spec root's PARENT is the vendored-spec directory that holds them all
+/// (`specs/openehr` → `specs`). `None` when the bundle is not there — a spec
+/// tree used outside a checkout, such as a test fixture: the component's
+/// citations then resolve against the docs tree alone, which is a finding for
+/// a citation that can only resolve against the bundle.
 fn bundle_root(spec_root: &Path, relative: &str) -> Option<PathBuf> {
-    let workspace = spec_root.parent()?.parent()?.parent()?;
-    let bundle = workspace.join(relative);
+    let vendored = spec_root.parent()?;
+    let bundle = vendored.join(relative);
     bundle.is_dir().then_some(bundle)
 }
 
@@ -1802,9 +1801,9 @@ impl<'a> SpecIndex<'a> {
             sections: RefCell::new(BTreeMap::new()),
             attributes: RefCell::new(BTreeMap::new()),
             interfaces: RefCell::new(BTreeMap::new()),
-            xml_schemas: bundle_root(root, "crates/openehr-its/schemas/xml"),
-            json_schemas: bundle_root(root, "crates/openehr-its/schemas/json"),
-            rest_oas: bundle_root(root, "crates/openehr-its/vendor/rest-oas"),
+            xml_schemas: bundle_root(root, "its-xml-schemas"),
+            json_schemas: bundle_root(root, "its-json-schemas"),
+            rest_oas: bundle_root(root, "rest-oas"),
         }
     }
 
@@ -2236,7 +2235,7 @@ fn resolve_sm_operation(
             who,
             format!(
                 "{op} uses the reserved {PSEUDO_INTERFACE_PREFIX}* pseudo-interface but is not \
-                 pinned in the NON_SM_REST_OPERATIONS table (tools/cnf-runner/src/validate.rs) — \
+                 pinned in the NON_SM_REST_OPERATIONS table (src/validate.rs) — \
                  a non-SM anchor exists only for a RELEASED ITS-REST operation the SM defines no \
                  interface for, and that table is the only place one is declared"
             ),
@@ -3727,7 +3726,7 @@ fn check_vocab_drift(set: &ArtifactSet, findings: &mut Vec<Finding>) {
 
 /// The platform interfaces the CNF catalogue speaks — the Axis-1 SM-operation
 /// enumeration domain. The set is the openEHR SM Platform Service Model's
-/// platform interfaces (`docs/specs/openehr/SM/docs/UML/classes/`), which
+/// platform interfaces (`specs/openehr/SM/docs/UML/classes/`), which
 /// anchor the operation identities the case cores use; it is NOT derived from
 /// the vendored OAS (owner ruling 2026-07-24: the OAS is `emit-rest` codegen
 /// input, never a surface source). Every
@@ -3803,7 +3802,7 @@ const PSEUDO_INTERFACE_PREFIX: &str = "I_ITS_REST_";
 /// - `I_ITS_REST_ITEM_TAGS` — the 23 released `ITEM_TAG` routes: the two
 ///   space-wide lists, the EHR-side `COMPOSITION/EHR_STATUS` triples, and the
 ///   five demographic party triples. The SM models no tag concept at all —
-///   `docs/specs/openehr/SM/docs/` contains zero occurrences of "tag"
+///   `specs/openehr/SM/docs/` contains zero occurrences of "tag"
 ///   (grep-verified) — while the released ITS-REST calls the
 ///   `openehr-item-tag` / `openehr-version-item-tag` headers "convenient
 ///   wrappers around the dedicated `ITEM_TAG` operations" (overview
@@ -3813,7 +3812,7 @@ const PSEUDO_INTERFACE_PREFIX: &str = "I_ITS_REST_";
 /// - `I_ITS_REST_REVISION_HISTORY` — the three released revision-history
 ///   reads (COMPOSITION, `EHR_STATUS`, PARTY). The SM declares no
 ///   revision-history operation on any interface —
-///   `docs/specs/openehr/SM/docs/` contains zero occurrences of
+///   `specs/openehr/SM/docs/` contains zero occurrences of
 ///   "`revision_history`" (grep-verified); the abstract counterpart lives in
 ///   the RM (`common` `versioned_object.adoc` §Functions
 ///   `revision_history`), which is a model, not a service interface.
@@ -4644,7 +4643,7 @@ fn check_axis3_section_derivation(
                      wire_surface.yaml elements/branches source names — add a cross-cutting \
                      element for the behaviour (covered_by a case, or a cited exception), or pin \
                      the heading in AXIS3_SECTION_EXCLUSIONS \
-                     (tools/cnf-runner/src/validate.rs) with the citation saying why it defines \
+                     (src/validate.rs) with the citation saying why it defines \
                      no distinct testable wire behaviour"
                 ),
             );
@@ -4701,7 +4700,7 @@ pub fn render_coverage_report(set: &ArtifactSet, spec_root: Option<&Path>) -> St
     let mut out = String::new();
     out.push_str(
         "# CNF wire-surface coverage report\n\n\
-         Generated by `cnf-runner validate --specs …` (the `surface-coverage` gate, issue #271). \
+         Generated by `veredictum validate --specs …` (the `surface-coverage` gate, issue #271). \
          Deterministic — regenerated in place, never hand-edited. The wire surface is enumerated \
          from the RELEASED spec components (the SM platform interfaces + the ITS-REST docs text), \
          never the vendored OAS. Every un-exercised behaviour is either a covering case or a \
@@ -5034,17 +5033,17 @@ h|*1..1*\n\
         assert!(out[0].message.contains("nonexistent"), "{out:?}");
     }
 
-    /// A workspace-shaped fixture: `docs/specs/openehr` beside the vendored
-    /// XSD bundle at `crates/openehr-its/schemas/xml`, mirroring the real
-    /// layout [`bundle_root`] derives.
+    /// A checkout-shaped fixture: `specs/openehr` beside the vendored XSD
+    /// bundle at `specs/its-xml-schemas`, mirroring the real layout
+    /// [`bundle_root`] derives.
     fn workspace_fixture() -> assert_fs::TempDir {
         let dir = assert_fs::TempDir::new().unwrap();
         let docs = dir
             .path()
-            .join("docs/specs/openehr/ITS-XML/components/RM/Release-1.0.2");
+            .join("specs/openehr/ITS-XML/components/RM/Release-1.0.2");
         let schemas = dir
             .path()
-            .join("crates/openehr-its/schemas/xml/components/RM/Release-1.0.2/documents");
+            .join("specs/its-xml-schemas/components/RM/Release-1.0.2/documents");
         std::fs::create_dir_all(&docs).unwrap();
         std::fs::create_dir_all(&schemas).unwrap();
         // What `vendor-spec-docs.sh` actually vendors into the docs tree: the
@@ -5067,7 +5066,7 @@ h|*1..1*\n\
     #[test]
     fn its_xml_citations_resolve_against_the_vendored_schema_bundle() {
         let dir = workspace_fixture();
-        let root = dir.path().join("docs/specs/openehr");
+        let root = dir.path().join("specs/openehr");
         let spec = SpecIndex::new(&root);
 
         // Both roots are offered for ITS-XML, the docs tree first.

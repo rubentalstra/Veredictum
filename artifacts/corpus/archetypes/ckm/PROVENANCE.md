@@ -20,14 +20,13 @@ converter against itself.
 
 ## Exercised, with adjudicated refusals
 
-The pack is parsed 100% by
-`crates/openehr-adl/tests/it/ckm_archetype_packs.rs`
-(`ckm_adl14_pack_parses`). A file the conformant reader REFUSES is listed
-in that gate's `ADJUDICATED_CKM_ADL14` table with the syntax code the
-refusal must carry plus the spec ground for it, and the gate asserts the
-refusal HAPPENS and carries that code — a refusal is a negative test, not
-a skip. Never delete a refused file: that drops the negative case
-(`.claude/rules/vendored-corpora.md`, `.claude/rules/testing.md`).
+NOT YET, and this record says so rather than repeat a claim this repository
+cannot make. The pack's exerciser was an ADL-engine parse gate in the
+mono-repo this instrument was split out of; that engine did not travel, and
+nothing here reads the pack. Whether it is driven through the DEFINITION API
+as ADL 1.4 upload material or dropped is issue #8. Never delete a refused
+file to make a future gate pass: that drops a negative case
+(`.claude/rules/testing.md`).
 
 ## Licensing
 

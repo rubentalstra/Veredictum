@@ -6,18 +6,19 @@
 # findings are advisory, never outrank the released openEHR specification text,
 # the hard rules, or the local gates, and gate no merge.
 #
-# WHAT IT ACTUALLY READS TODAY, stated plainly because the honest answer is
-# "less than it will": there is no first-party source code in this repository
-# yet. The analyzer's real material is the shell — `scripts/**` and
-# `.claude/hooks/**`, under Sonar's own Shell rules, which is where its first 11
-# findings landed — plus the workflow YAML (it ships GitHub Actions rules), the
-# brand study's HTML and CSS, and secret detection across the tree. That shell
-# coverage is a second opinion beside the shellcheck bundled in the actionlint
-# image, not a replacement for it: shellcheck reads the shell embedded in
-# workflow `run:` blocks, which is a set of files Sonar never sees as shell.
-# When the runner arrives, Rust is analyzed first-party (the analyzer runs Clippy
-# itself from the workspace manifest), and this lane grows the instrumented run
-# that feeds coverage.
+# WHAT IT READS. Rust first-party: the analyzer runs Clippy itself from the
+# package manifest, with its own managed rule profile — a deliberately
+# independent second Clippy configuration beside `ci.yml`'s deny-tier lanes,
+# which for pure Rust mostly re-reports what those already enforce. Its added
+# value is the multi-language sweep the Rust gates never see: the shell under
+# `scripts/**` and `.claude/hooks/**`, the workflow YAML, the brand study's HTML
+# and CSS, and secret detection across the tree. The shell coverage is a second
+# opinion beside the shellcheck bundled in the actionlint image, not a
+# replacement: shellcheck reads the shell embedded in workflow `run:` blocks,
+# which is a set of files Sonar never sees as shell. Coverage is not imported
+# yet (issue #9); the vendored trees are excluded in
+# `sonar-project.properties`, because acting on a finding inside vendored bytes
+# is forbidden here.
 #
 # CI-based analysis rather than Automatic Analysis, and that is a decision:
 # Automatic Analysis would serve a YAML-and-HTML tree with no workflow at all,
@@ -54,25 +55,57 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Full history and tags: Sonar assigns issues and new-code status by
-          # blame, and the version step below reads the latest release tag.
+          # Full history: Sonar assigns issues and new-code status by blame.
           fetch-depth: 0
           persist-credentials: false
+
+      # Coverage rides this lane rather than `ci.yml`: the scan is the only
+      # consumer of the report, and an instrumented build is a second full
+      # compile that nothing else needs. This lane publishes nothing, so
+      # restoring a build cache is inside the reliability rule — only a
+      # publishing lane must run cache-free. `cache-shared-key` keeps the
+      # instrumented profile out of the plain CI cache.
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          components: llvm-tools-preview
+          cache-shared-key: sonar
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-llvm-cov,cargo-nextest
+
+      # The `ci` profile, so one run reports the whole failure surface rather
+      # than stopping at the first failure. `--no-report` then `report` is the
+      # documented two-step: it accumulates the profile and merges it into the
+      # single lcov the scan imports through `sonar.rust.lcov.reportPaths`
+      # (https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/test-coverage/test-coverage-parameters).
+      - run: cargo llvm-cov --no-report nextest --locked --profile ci
+      - run: cargo llvm-cov report --lcov --output-path lcov.info
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-lcov
+          path: lcov.info
 
       # `sonar.projectVersion` anchors the "Previous version" New Code window
       # (https://docs.sonarsource.com/sonarqube-cloud/standards/about-new-code),
       # so "new code" means "since the last release" — the same window the
-      # changelog section describes. FerroEHR reads that version from its
-      # workspace manifest; there is no manifest here yet, so the release tag is
-      # the source, and it is read at scan time rather than copied into a second
-      # place that can drift. It is appended to the properties file the scanner
-      # reads, so no context value reaches a shell or an action argument.
-      - name: Derive sonar.projectVersion from the latest release tag
+      # changelog section describes. The package version is the source: it bumps
+      # at every release cut, which is exactly the boundary that window needs,
+      # and it is read at scan time rather than copied into a second place that
+      # can drift. `[package]` is the only table in the manifest carrying a
+      # `version` key, and awk scopes the read to it so a future table cannot
+      # shadow it. Appended to the properties file the scanner reads, so no
+      # value reaches a shell argument or an action input.
+      - name: Derive sonar.projectVersion from the package version
         run: |
           set -euo pipefail
-          tag="$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0)"
-          echo "sonar.projectVersion=${tag#v}" >> sonar-project.properties
-          echo "projectVersion=${tag#v}"
+          version="$(awk -F'"' '/^\[package\]/{p=1} p && /^version = /{print $2; exit}' Cargo.toml)"
+          if [ -z "$version" ]; then
+            echo "::error::no version found under [package] in Cargo.toml"
+            exit 1
+          fi
+          echo "sonar.projectVersion=$version" >> sonar-project.properties
+          echo "projectVersion=$version"
 
       - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
         env:

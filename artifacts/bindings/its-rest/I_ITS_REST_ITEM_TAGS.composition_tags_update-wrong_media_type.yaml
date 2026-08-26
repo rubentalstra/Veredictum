@@ -24,7 +24,7 @@
 #
 # ANCHOR: `I_ITS_REST_ITEM_TAGS` is a reserved CATALOGUE pseudo-interface, NOT
 # an SM interface — the vendored SM models no tag concept at all — pinned in
-# NON_SM_REST_OPERATIONS (tools/cnf-runner/src/validate.rs) and adjudicated in
+# NON_SM_REST_OPERATIONS (src/validate.rs) and adjudicated in
 # register AMB-161.
 sm_operation: I_ITS_REST_ITEM_TAGS.composition_tags_update
 its: its-rest

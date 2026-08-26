@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Serde helpers: ordered maps as `Vec<(K, V)>` (authored key order is part

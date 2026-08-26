@@ -26,5 +26,5 @@ performance schedule's cases reference (`cnf.scale.10k` / `cnf.scale.100k` /
    [openEHR-EHR-OBSERVATION.blood_pressure.v2]
    WHERE e/ehr_id/value = $ehr_id LIMIT 10`.
 
-Implementation: `cnf-runner` `perf_run::seed_scale_ladder` (the reference
+Implementation: `veredictum` `perf_run::seed_scale_ladder` (the reference
 seeder); any runner reproducing this contract produces an equivalent corpus.

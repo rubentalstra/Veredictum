@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Every seeded-defect fixture is rejected with the expected gate — the
@@ -31,14 +31,14 @@
 
 use std::path::{Path, PathBuf};
 
-use cnf_runner::artifacts::load_root;
-use cnf_runner::validate::{Context, validate};
+use veredictum::artifacts::load_root;
+use veredictum::validate::{Context, validate};
 
 /// The seeded-defect battery: one row per fixture, and one `#[test]` per row.
 ///
 /// Each row is `<test name> => (<fixture file>, <overlay destination inside
 /// the world>, <the gate that must reject it>)`. The gate is spelled with the
-/// stable token `cnf_runner::validate::CheckId::token` publishes — that enum
+/// stable token `veredictum::validate::CheckId::token` publishes — that enum
 /// is the vocabulary these strings come from.
 macro_rules! defects {
     ($($test:ident => ($fixture:literal, $dest:literal, $gate:literal)),+ $(,)?) => {
@@ -133,7 +133,7 @@ defects! {
         ("wire-surface-empty.yaml", "vocab/wire_surface.yaml", "surface-coverage"),
 }
 
-/// This crate's directory (`tools/cnf-runner`).
+/// This package's directory, which is the repository root.
 fn crate_dir() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
 }
@@ -145,11 +145,7 @@ fn fixture_dir() -> PathBuf {
 
 /// The vendored spec tree the citation-resolution gates read.
 fn spec_root() -> PathBuf {
-    crate_dir()
-        .ancestors()
-        .nth(2)
-        .expect("repo root")
-        .join("docs/specs/openehr")
+    crate_dir().join("specs/openehr")
 }
 
 /// Build the world one defect validates against: the pristine artifact tree,

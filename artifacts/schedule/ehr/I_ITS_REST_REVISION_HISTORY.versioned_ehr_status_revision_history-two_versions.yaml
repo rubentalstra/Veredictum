@@ -20,7 +20,7 @@
 # ANCHOR: `I_ITS_REST_REVISION_HISTORY` is a reserved catalogue pseudo-interface
 # (register AMB-161), not an SM operation — the vendored SM declares no
 # revision-history operation on any interface. It is pinned in
-# NON_SM_REST_OPERATIONS (tools/cnf-runner/src/validate.rs).
+# NON_SM_REST_OPERATIONS (src/validate.rs).
 #
 # The second revision is committed through the SM setter's ITS-REST realization
 # (a read-modify-write of the whole EHR_STATUS behind the If-Match precondition

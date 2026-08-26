@@ -7,7 +7,7 @@
 # (docs/smart_app_launch/master02-overview.adoc §Glossary), which
 # is not an SM service; the CDR is only its `org.openehr.rest` member. Case
 # cores speak SM operations only, so the pinned NON_SM_REST_OPERATIONS table in
-# tools/cnf-runner/src/validate.rs is what makes this RELEASED ITS-REST
+# src/validate.rs is what makes this RELEASED ITS-REST
 # operation enumerable at all. The naming convention (and the fact that it
 # claims nothing about the SM) is adjudicated in register AMB-161, exactly as
 # for I_ITS_REST_SYSTEM and I_ITS_REST_ITEM_TAGS.

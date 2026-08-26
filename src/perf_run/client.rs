@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The blocking SUT clients for the measurement machinery: base URL + auth
@@ -108,13 +108,6 @@ impl PerfClient {
     /// A message when a credential env var is unset, a `bearer_mint`
     /// instance has no declared SMART lane to mint against, or the client
     /// cannot be built.
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "credentials are read from the environment BY DESIGN: the ixit \
-                  declares only the variable NAME so no secret ever enters the \
-                  catalogue; cnf-runner is a standalone instrument with no access \
-                  to the server's config tree, which is what that ban protects"
-    )]
     pub fn from_instance(instance: &Instance, ixit: &Ixit) -> Result<Self, String> {
         let credential = match &instance.auth {
             AuthMode::None => Credential::Fixed(None),

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# SPDX-FileCopyrightText: FerroEHR contributors
-# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
 # Vendors the openEHR specification *documentation* (the normative spec text)
-# into docs/specs/openehr/, pinned per docs/VERSIONS.md. Text formats only
+# into specs/openehr/, pinned per docs/VERSIONS.md. Text formats only
 # (adoc/md/txt/csv/json/yaml) — bitmap images, UML .xmi, XSDs, and other
 # binaries are excluded (fetch from the upstream repo at the pinned ref if
 # needed). .robot/.xml/.opt are included for the executable CNF suite +
@@ -35,7 +35,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DEST="$REPO_ROOT/docs/specs/openehr"
+DEST="$REPO_ROOT/specs/openehr"
 INCLUDE_EXT=(adoc md txt csv json yaml yml robot xml opt g4)
 
 # component | upstream repo | human ref | pinned commit

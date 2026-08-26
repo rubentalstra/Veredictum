@@ -1,7 +1,7 @@
 # The capability -> family -> tier matrix: CNF profiles master03-profiles.adoc
 # capability x tier tables as data, plus the CNF 2.0 Security family proposal
 # (our own extension). OPTIONS rows are required: false.
-# Columns (all enforced by cnf-runner validate):
+# Columns (all enforced by veredictum validate):
 #   min_cases          verdict-bearing case-count FLOOR; ratchets UP only.
 #   realization        released-wire (default) | extension (never required).
 #   evidence_exception register entry adjudicating an all-excused capability.

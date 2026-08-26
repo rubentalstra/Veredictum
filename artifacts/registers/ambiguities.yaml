@@ -197,7 +197,7 @@ AMB-10:
     sentence) + ITS-REST specifications/operations/admin_ehr_delete.yaml + ITS-REST
     specifications/operations/admin_ehr_delete_all.yaml (the quoted permanent/physical/GDPR sentence; the
     grep for GDPR and "data protection" over the whole of
-    docs/specs/openehr/ hits only those two files and the three assembled OAS
+    specs/openehr/ hits only those two files and the three assembled OAS
     bundles) — ALL CONFIRMED first-hand.
   handling: >-
     Fixed handling, split by ROUTE FAMILY, because the two readings govern
@@ -5132,7 +5132,7 @@ AMB-136:
     DIFFERENT mechanism from the closest-SM-read convention this entry declined,
     and it POST-DATES the original adjudication: AMB-161 established the
     reserved `I_ITS_REST_*` prefix plus the pinned `NON_SM_REST_OPERATIONS`
-    table (tools/cnf-runner/src/validate.rs) for exactly this shape — a RELEASED
+    table (src/validate.rs) for exactly this shape — a RELEASED
     ITS-REST operation the SM models no interface for — and it names no SM
     operation at all, so unlike a closest-read anchor it asserts nothing about
     what the SM defines. Pseudo-interface families group by the SERVED RESOURCE
@@ -6973,7 +6973,7 @@ AMB-161:
     AMB-127 draws when it anchors the version get to list_queries with a
     variant. The convention is not free-form: the pseudo-interface prefix is
     RESERVED and the operations bearing it are pinned in the
-    NON_SM_REST_OPERATIONS table (tools/cnf-runner/src/validate.rs), which is
+    NON_SM_REST_OPERATIONS table (src/validate.rs), which is
     the ITS-side half of the Axis-1 enumeration domain — the pinned operations
     resolve without an SM class export, are held to the same
     binding-or-cited-exception obligation as an SM operation, and appear as

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The party artifacts — the two canonical JSON interchange documents a
@@ -629,7 +629,7 @@ mod tests {
     fn results_round_trip_and_invariants() {
         let json = serde_json::json!({
             "sut": { "name": "ferroehr", "version": "3.5.0" },
-            "runner": { "name": "cnf-runner", "version": "0.1.0",
+            "runner": { "name": "veredictum", "version": "0.1.0",
                          "verification_pack_status": "passed" },
             "schedule_release": "CNF-2.0",
             "tech_profile": { "its": "its-rest", "formats": ["canonical-json"] },

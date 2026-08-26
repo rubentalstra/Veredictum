@@ -5,7 +5,7 @@
 # (the Platform is "a software ecosystem comprising at minimum an Authorization
 # Server, an openEHR Clinical Data Repository (CDR), and a FHIR Server",
 # ITS-REST docs/smart_app_launch/master02-overview.adoc §Glossary). It is
-# pinned in NON_SM_REST_OPERATIONS (tools/cnf-runner/src/validate.rs), the
+# pinned in NON_SM_REST_OPERATIONS (src/validate.rs), the
 # ITS-side half of the Axis-1 enumeration domain, so it carries the same
 # coverage obligation as an SM operation.
 #

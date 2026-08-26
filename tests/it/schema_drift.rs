@@ -1,11 +1,11 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The committed schema set (`schemas/*.schema.json`) is the published norm;
 //! it must stay byte-identical to what the code emits (regenerate with
-//! `cargo run -p cnf-runner -- emit-schemas --out tools/cnf-runner/schemas`).
+//! `cargo run -- emit-schemas --out schemas`).
 
-use cnf_runner::schema::{emit_all, render};
+use veredictum::schema::{emit_all, render};
 
 #[test]
 fn committed_schemas_are_byte_identical_to_emission() {
@@ -16,7 +16,7 @@ fn committed_schemas_are_byte_identical_to_emission() {
         assert_eq!(
             committed,
             render(&schema),
-            "{name} drifted — regenerate with `cargo run -p cnf-runner -- emit-schemas`"
+            "{name} drifted — regenerate with `cargo run -- emit-schemas`"
         );
     }
 }

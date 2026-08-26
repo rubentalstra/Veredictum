@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The verdict pipeline — a **pure** function of (statement, results,
@@ -916,7 +916,7 @@ mod tests {
     fn results(outcomes: serde_json::Value) -> Results {
         let mut value = serde_json::json!({
             "sut": { "name": "s", "version": "1" },
-            "runner": { "name": "cnf-runner", "version": "0", "verification_pack_status": "passed" },
+            "runner": { "name": "veredictum", "version": "0", "verification_pack_status": "passed" },
             "schedule_release": "CNF-2.0",
             "tech_profile": { "its": "its-rest", "formats": ["canonical-json"] },
             "ixit_digest": "d"

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The journey template pack.
@@ -328,7 +328,7 @@ pub(crate) fn contribution_body(
     let audit = |change: &str, code: &str| {
         serde_json::json!({
             "_type": "AUDIT_DETAILS",
-            "system_id": "cnf-runner",
+            "system_id": "veredictum",
             "committer": { "_type": "PARTY_IDENTIFIED", "name": staff(arrival) },
             "change_type": { "_type": "DV_CODED_TEXT", "value": change,
                 "defining_code": { "_type": "CODE_PHRASE",

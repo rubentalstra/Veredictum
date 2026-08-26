@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 #![recursion_limit = "256"]
@@ -6,7 +6,7 @@
 //! and JSON-Schema emission for the openEHR conformance framework.
 //!
 //! The conformance oracle is the vendored openEHR CNF component
-//! (`docs/specs/openehr/CNF/`); the artifact families this crate models are
+//! (`specs/openehr/CNF/`); the artifact families this crate models are
 //! the machine-readable normative form of the Platform Conformance Test
 //! Schedule (case cores, operation bindings, vocabularies incl. the
 //! capability matrix, corpus manifest, ambiguity register). Every closed

@@ -1,5 +1,5 @@
 <!-- ADOPTED VERBATIM from the vendored CNF data set
-     docs/specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
+     specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
      compositions/TDD/persistent_minimal.en.v1__full.xml, except for the root
      `uid` (see below). A Template Data Document: the SM `import_tdd` `tdd:
      String` parameter (i_tdd_service.adoc), concretely a template-namespaced

@@ -1,0 +1,46 @@
+# Clippy value-configuration (lint LEVELS live in Cargo.toml's [lints] tables —
+# the only legal home; this file carries behaviour).
+# Reference: https://doc.rust-lang.org/clippy/lint_configuration.html
+# `msrv` is deliberately NOT set: it defaults to the package `rust-version`
+# (1.96); duplicating it here invites silent drift.
+
+# ── test scoping: panicking assertion idioms are correct IN TESTS (Book ch11) ─
+allow-unwrap-in-tests = true            # clippy::unwrap_used
+allow-expect-in-tests = true            # clippy::expect_used
+allow-panic-in-tests = true             # clippy::panic
+allow-print-in-tests = true             # clippy::print_stdout / print_stderr
+allow-indexing-slicing-in-tests = true  # clippy::indexing_slicing
+check-incompatible-msrv-in-tests = true # clippy::incompatible_msrv reaches tests too
+# allow-dbg-in-tests stays false (default): dbg! is never committed, tests included
+
+# ── the ~15 API-shape lints this option suppresses report real findings here ──
+#    Nothing downstream is protected by hiding an API-shape finding: the crate
+#    is not published (Cargo.toml `publish = false`), so no consumer version
+#    range spans a break. Re-adjudicate if that posture changes (Veredictum#5).
+avoid-breaking-exported-api = false
+
+# ── clippy::doc_markdown domain vocabulary (".." appends to the defaults) ────
+doc-valid-idents = [
+  "..",
+  "openEHR", "EHRbase", "FerroEHR", "Veredictum", "OpenAPI", "PostgreSQL", "JSONB",
+  "AQL", "cADL", "dADL", "ODIN", "WebTemplate", "GraphQL",
+  "FHIR", "SNOMED", "LOINC", "DICOM", "IANA", "OAuth2", "OpenID",
+]
+
+# ── type-level enforcement of the typed-carrier and time-library rules ───────
+disallowed-types = [
+  { path = "serde_json::Value", reason = "typed carriers by default: an approved Value seam carries a scoped #[expect] naming its adjudicated family (the artifact loaders, the wire bodies, the emitted schemas)" },
+  { path = "serde_json::Map", reason = "typed carriers by default: an approved Value seam carries a scoped #[expect] naming its adjudicated family (the artifact loaders, the wire bodies, the emitted schemas)" },
+  { path = "chrono::DateTime", reason = "use jiff — the pinned time library" },
+  { path = "chrono::NaiveDateTime", reason = "use jiff — the pinned time library" },
+  { path = "chrono::NaiveDate", reason = "use jiff — the pinned time library" },
+  { path = "chrono::Utc", reason = "use jiff — the pinned time library" },
+]
+
+# ── method bans; a legitimate exception site carries a narrowly-scoped
+#    #[expect(clippy::disallowed_methods, reason = "…")] ─────────────────────
+disallowed-methods = [
+  { path = "std::time::SystemTime::now", reason = "wall-clock time comes from jiff (Zoned/Timestamp); std::time::Instant stays fine for latency measurement" },
+  { path = "core::option::Option::as_slice", reason = "on Option<Vec<T>> this yields &[Vec<T>] (0-or-1 vectors), not &[T] — it compiles silently after a container-shape flip; spell it .as_deref().unwrap_or_default() (Vec::as_slice stays fine)" },
+  { path = "core::option::Option::as_mut_slice", reason = "on Option<Vec<T>> this yields &mut [Vec<T>] (0-or-1 vectors), not &mut [T] — same shape-flip trap as Option::as_slice; match on the Option instead" },
+]

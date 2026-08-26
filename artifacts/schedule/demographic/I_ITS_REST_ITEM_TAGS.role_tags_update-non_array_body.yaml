@@ -13,7 +13,7 @@
 # ANCHOR: `I_ITS_REST_ITEM_TAGS` is a reserved catalogue pseudo-interface
 # (register AMB-161), not an SM operation — the vendored SM models no tag
 # concept at all. It is pinned in NON_SM_REST_OPERATIONS
-# (tools/cnf-runner/src/validate.rs), so the operation is enumerated by Axis 1
+# (src/validate.rs), so the operation is enumerated by Axis 1
 # and held to the same coverage obligation as an SM one.
 #
 # PER-FAMILY, NOT REDUNDANT: the five demographic party tag families are five

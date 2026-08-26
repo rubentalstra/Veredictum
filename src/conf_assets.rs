@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Deterministic conformance SVG assets rendered from committed artifacts.
@@ -328,7 +328,7 @@ fn xml_escape(s: &str) -> String {
 /// mapping function and the table cannot drift apart silently.
 ///
 /// Chapters follow the openEHR SM platform interfaces
-/// (`docs/specs/openehr/SM/docs/openehr_platform/`) where the case ids name an
+/// (`specs/openehr/SM/docs/openehr_platform/`) where the case ids name an
 /// SM interface, and
 /// the catalogue's own case-id families otherwise. NOTE: no openEHR spec
 /// governs this grouping — our own presentation design.
@@ -397,7 +397,7 @@ pub enum TaxonomyError {
     /// No `(chapter, band)` pair claims this case id.
     #[error(
         "conformance-assets: case id `{0}` maps to no (chapter, band) pair — \
-         extend TAXONOMY + band_of in tools/cnf-runner/src/conf_assets.rs \
+         extend TAXONOMY + band_of in src/conf_assets.rs \
          (the taxonomy is total by contract; there is no `Other` bucket)"
     )]
     UnmappedCase(String),
@@ -975,42 +975,20 @@ mod tests {
         ids
     }
 
-    /// Every case id appearing in a committed party `results.json` — the
-    /// charts render from those, and they can carry retired ids a catalogue
-    /// rename left behind.
-    fn committed_result_ids() -> Vec<String> {
-        #[derive(serde::Deserialize)]
-        struct Slice {
-            outcomes: Vec<Outcome>,
-        }
-        #[derive(serde::Deserialize)]
-        struct Outcome {
-            case: String,
-        }
-        let conformance = crate_dir().join("../../docs/conformance");
-        let mut ids = Vec::new();
-        for entry in std::fs::read_dir(&conformance).unwrap() {
-            let results = entry.unwrap().path().join("results.json");
-            if !results.is_file() {
-                continue;
-            }
-            let text = std::fs::read_to_string(&results).unwrap();
-            let slice: Slice = serde_json::from_str(&text).unwrap();
-            ids.extend(slice.outcomes.into_iter().map(|o| o.case));
-        }
-        assert!(
-            ids.len() > 500,
-            "results walk found only {} outcomes",
-            ids.len()
-        );
-        ids.sort();
-        ids.dedup();
-        ids
-    }
+    /// Case ids the catalogue no longer declares but a published party record
+    /// may still name — the charts render from those records, so the taxonomy
+    /// stays total over them too.
+    ///
+    /// A party's records are the party's own artifacts and live wherever that
+    /// party publishes them, so this list is what a rename owes the renderer:
+    /// retire an id and its old spelling is added here in the same change.
+    /// Empty is the honest state today, verified against the published records
+    /// that exist at the time of writing.
+    const RETIRED_CASE_IDS: &[&str] = &[];
 
     /// The never-`Other` ratchet, in test form: the taxonomy is TOTAL over
-    /// every committed case id — both the catalogue's case cores and the
-    /// published party results — and every band it produces is declared.
+    /// every case id a chart can carry — the catalogue's case cores plus the
+    /// retired spellings above — and every band it produces is declared.
     #[test]
     fn the_taxonomy_is_total_over_every_committed_case_id() {
         let declared: Vec<(&str, &str)> = TAXONOMY
@@ -1020,7 +998,7 @@ mod tests {
         let mut unmapped: Vec<String> = Vec::new();
         for id in committed_case_ids()
             .into_iter()
-            .chain(committed_result_ids())
+            .chain(RETIRED_CASE_IDS.iter().map(|id| (*id).to_owned()))
         {
             let mapped = band_of(&id).ok();
             match mapped {
@@ -1198,7 +1176,7 @@ mod tests {
                 version: "0".to_owned(),
             },
             runner: crate::party::Runner {
-                name: "cnf-runner".to_owned(),
+                name: "veredictum".to_owned(),
                 version: "0".to_owned(),
                 verification_pack_status: crate::party::VerificationPackStatus::Passed,
             },

@@ -11,9 +11,9 @@ commits the row's instance against it.
 This contract is realized by two pure Rust modules (the runner implementation
 must match this spec):
 
-- `tools/cnf-runner/src/exec/content_synth.rs` — the single dispatch entry
+- `src/exec/content_synth.rs` — the single dispatch entry
   (`synthesize_opt`) plus the STRUCTURAL families (carrier-shape constraints).
-- `tools/cnf-runner/src/exec/opt_synth.rs` — the VALUE + INTERVAL families
+- `src/exec/opt_synth.rs` — the VALUE + INTERVAL families
   (`synthesize_value_opt`, ELEMENT.value domain constraints).
 
 ## Template id and determinism

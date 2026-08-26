@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Deterministic Markdown renderers for the three published submission
@@ -833,7 +833,7 @@ mod tests {
     fn results() -> Results {
         serde_json::from_value(serde_json::json!({
             "sut": { "name": "ferroehr", "version": "3.5.0" },
-            "runner": { "name": "cnf-runner", "version": "0.1.0",
+            "runner": { "name": "veredictum", "version": "0.1.0",
                          "verification_pack_status": "passed" },
             "schedule_release": "CNF-2.0",
             "tech_profile": { "its": "its-rest", "formats": ["canonical-json"] },

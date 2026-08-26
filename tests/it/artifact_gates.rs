@@ -1,30 +1,23 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The production artifact tree (`artifacts/`) passes every machine gate —
 //! the eight pilot encodings plus their `verified_by` targets, validated
 //! against the vendored spec tree.
 
-#![expect(
-    clippy::expect_used,
-    reason = "test-support helpers (not `#[test]` fns, so the clippy.toml in-tests scoping does not reach them) are panic-idiomatic: a broken fixture must abort the test loudly, Book ch11"
-)]
+use veredictum::artifacts::load_root;
+use veredictum::validate::{Context, validate};
 
-use cnf_runner::artifacts::load_root;
-use cnf_runner::validate::{Context, validate};
-
+/// The repository root. The one package sits at it, so the manifest directory
+/// IS the root.
 fn repo_root() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(2)
-        .expect("repo root")
-        .to_owned()
+    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 #[test]
 fn pilot_world_is_clean_under_all_gates() {
     let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let specs = repo_root().join("docs/specs/openehr");
+    let specs = repo_root().join("specs/openehr");
     assert!(
         specs.is_dir(),
         "vendored spec tree missing at {}",
@@ -104,7 +97,7 @@ fn pilot_world_is_clean_under_all_gates() {
 /// happened to carry a floor for some unrelated reason.
 #[test]
 fn every_release_dated_header_rule_carries_the_same_floor() {
-    use cnf_runner::model::binding::HeaderMatcher;
+    use veredictum::model::binding::HeaderMatcher;
 
     let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let loaded = load_root(&crate_dir.join("artifacts")).expect("schema compilation");

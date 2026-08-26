@@ -9,7 +9,7 @@ cnf.opt.invalid.empty_file:
     verdict: invalid
     defect: "empty file"
     spec_ref: "CNF platform_test_schedule master04 (upload_opt invalid data sets)"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.opt.invalid.empty_template_id:
   source: fixtures/opt/invalid/empty_template_id.opt
   format: opt-xml
@@ -18,7 +18,7 @@ cnf.opt.invalid.empty_template_id:
     verdict: invalid
     defect: "empty template_id"
     spec_ref: "CNF platform_test_schedule master04 (upload_opt invalid data sets); AM AOM1.4 (OPERATIONAL_TEMPLATE.template_id)"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.opt.invalid.removed_mandatory:
   source: fixtures/opt/invalid/removed_mandatory.opt
   format: opt-xml
@@ -27,7 +27,7 @@ cnf.opt.invalid.removed_mandatory:
     verdict: invalid
     defect: "removed mandatory elements (no definition)"
     spec_ref: "CNF platform_test_schedule master04 (upload_opt invalid data sets); AM AOM1.4 (OPERATIONAL_TEMPLATE.definition is mandatory)"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.opt.invalid.cluster_items_cardinality_widened:
   source: fixtures/opt/invalid/cluster_items_cardinality_widened.opt
   format: opt-xml
@@ -37,7 +37,7 @@ cnf.opt.invalid.cluster_items_cardinality_widened:
     defect: "the CLUSTER node's `items` C_MULTIPLE_ATTRIBUTE states cardinality {0..3}, wider on the lower side than the reference model's CLUSTER.items List<ITEM> [1..*] — it admits an empty CLUSTER the RM forbids"
     spec_ref: "AM AOM2 master04.5-constraint_model-class_definitions.adoc §VCACA (\"the cardinality of an attribute must conform, i.e. be the same or narrower, to the cardinality of the corresponding attribute in the underlying information model\"); master08-validation.adoc §Validate Definition (\"check that cardinality in C_ATTRIBUTE is valid with respect to RM (VCACA)\"); RM UML/classes/org.openehr.rm.data_structures.cluster.adoc §Attributes (items: List<ITEM> [1..*])"
   template_id: "cnf.opt.invalid.cluster_items_cardinality_widened"
-  provenance: "authored 2026-08-02 from the openEHR CNF Robot minimal_evaluation.opt skeleton (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin) with three targeted edits: the data-slot node retyped ITEM_TREE -> CLUSTER (the RM class whose items carries a cardinality lower bound of 1), its items existence raised to 1..1 so the artefact carries no VCAEX defect, and the items cardinality interval restated as the FINITE {0..3}. A STATED interval is the case VCACA can decide; the fully-open {0..*} that real published OPTs carry states no cardinality override at all (AOM 1.4 makes C_MULTIPLE_ATTRIBUTE.cardinality mandatory where AOM2 makes it optional and \"only set if it overrides the underlying reference model\", and cADL's open constraint means \"any value permitted by the underlying information model\" - ADL1.4 master05-cadl.adoc §'Any' Constraints), so it is accepted. This row pins the refusal so a server that skips VCACA's numeric arm fails it"
+  provenance: "authored 2026-08-02 from the openEHR CNF Robot minimal_evaluation.opt skeleton (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin) with three targeted edits: the data-slot node retyped ITEM_TREE -> CLUSTER (the RM class whose items carries a cardinality lower bound of 1), its items existence raised to 1..1 so the artefact carries no VCAEX defect, and the items cardinality interval restated as the FINITE {0..3}. A STATED interval is the case VCACA can decide; the fully-open {0..*} that real published OPTs carry states no cardinality override at all (AOM 1.4 makes C_MULTIPLE_ATTRIBUTE.cardinality mandatory where AOM2 makes it optional and \"only set if it overrides the underlying reference model\", and cADL's open constraint means \"any value permitted by the underlying information model\" - ADL1.4 master05-cadl.adoc §'Any' Constraints), so it is accepted. This row pins the refusal so a server that skips VCACA's numeric arm fails it"
 cnf.opt.invalid.multiple_elements:
   source: fixtures/opt/invalid/multiple_elements.opt
   format: opt-xml
@@ -46,7 +46,7 @@ cnf.opt.invalid.multiple_elements:
     verdict: invalid
     defect: "multiple elements where upper bound is 1 (two template_id)"
     spec_ref: "CNF platform_test_schedule master04 (upload_opt invalid data sets); AM AOM1.4 (OPERATIONAL_TEMPLATE.template_id 1..1)"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.opt.minimal_event:
   source: templates/minimal_event.opt
   format: opt-xml
@@ -67,7 +67,7 @@ cnf.opt.minimal_action:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_action.en.v1"
-  provenance: "the minimal ACTION template (openEHR-EHR-COMPOSITION.minimal.v1 + openEHR-EHR-ACTION.minimal.v1, WT root `minimal`, ISM_TRANSITION + DV_MULTIMEDIA leaf), preserved verbatim 2026-07-22 from the former templates/vitals.opt when cnf.opt.vitals was re-authored as the body_temperature carrier. Carries the minimal/... FLAT paths + ISM_TRANSITION current_state that the SF ctx/example/wt/map/nodeid cases and the cnf.flat.vitals.minimal_ctx / cnf.flat.vitals.composer_self fixtures exercise; provenance of the ACTION content: openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin)"
+  provenance: "the minimal ACTION template (openEHR-EHR-COMPOSITION.minimal.v1 + openEHR-EHR-ACTION.minimal.v1, WT root `minimal`, ISM_TRANSITION + DV_MULTIMEDIA leaf), preserved verbatim 2026-07-22 from the former templates/vitals.opt when cnf.opt.vitals was re-authored as the body_temperature carrier. Carries the minimal/... FLAT paths + ISM_TRANSITION current_state that the SF ctx/example/wt/map/nodeid cases and the cnf.flat.vitals.minimal_ctx / cnf.flat.vitals.composer_self fixtures exercise; provenance of the ACTION content: openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin)"
 cnf.opt.blood_pressure:
   source: templates/blood_pressure.opt
   format: opt-xml
@@ -88,7 +88,7 @@ cnf.composition.minimal_event.v1:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_evaluation.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.composition.dv_text_in_content:
   source: fixtures/composition/minimal_event.dv_text_in_content.json
   format: canonical-json
@@ -137,7 +137,7 @@ cnf.composition.minimal_event.v2:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_evaluation.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence; leaf value updated for the v2 content state"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence; leaf value updated for the v2 content state"
 # The canonical-XML serializations of the two content states above — the request
 # payloads of the canonical-xml commit cases. ITS-REST overview Resources.md
 # §"XML Format": "When resources are serialized in **canonical XML** format,
@@ -152,7 +152,7 @@ cnf.composition.minimal_event.v1.xml:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_evaluation.en.v1"
-  provenance: "codec-derived from cnf.composition.minimal_event.v1 (fixtures/composition/minimal_event.v1.json) via crates/openehr-its/examples/canonical_convert.rs — the gate-proven FromJson + ToXml codec pair; the JSON twin's own provenance is the openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin), re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "codec-derived from cnf.composition.minimal_event.v1 (fixtures/composition/minimal_event.v1.json) via crates/openehr-its/examples/canonical_convert.rs — the gate-proven FromJson + ToXml codec pair; the JSON twin's own provenance is the openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin), re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.composition.minimal_event.v2.xml:
   source: fixtures/composition/minimal_event.v2.xml
   format: canonical-xml
@@ -410,7 +410,7 @@ cnf.flat.vitals.minimal_ctx:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_action.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
   views:
     current_state_code:
       select: "$['minimal/minimal:0/ism_transition/current_state|code']"
@@ -440,7 +440,7 @@ cnf.ehr_status.with_subject:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.ehr_status.with_subject.b:
   source: fixtures/ehr/ehr_status.with_subject.b.json
   format: canonical-json
@@ -559,35 +559,35 @@ cnf.opt.minimal_all_entries:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "obs_act.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21; closest official artifact: the multi-ENTRY minimal (OBSERVATION+ACTION) — no official all-ENTRY minimal exists"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21; closest official artifact: the multi-ENTRY minimal (OBSERVATION+ACTION) — no official all-ENTRY minimal exists"
 cnf.opt.maximal:
   source: fixtures/opt/valid/maximal.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "test_all_types.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21; the maximal official template (all ENTRY subtypes + SECTION, every DV family)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21; the maximal official template (all ENTRY subtypes + SECTION, every DV family)"
 cnf.opt.versioned.v1:
   source: fixtures/opt/valid/versioned.v1.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "test_versioned.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21; the official versioned-template family, v1"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21; the official versioned-template family, v1"
 cnf.opt.versioned.v2:
   source: fixtures/opt/valid/versioned.v2.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "test_versioned.en.v2"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21; the official versioned-template family, v2"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21; the official versioned-template family, v2"
 cnf.opt.obs_admin:
   source: fixtures/opt/valid/obs_admin.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "obs_admin.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.opt.obs_admin.v2:
   source: fixtures/opt/valid/obs_admin.v2.opt
   format: opt-xml
@@ -601,42 +601,42 @@ cnf.opt.obs_eva:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "obs_eva.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.opt.obs_inst:
   source: fixtures/opt/valid/obs_inst.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "obs_inst.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.opt.minimal_instruction:
   source: fixtures/opt/valid/minimal_instruction.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_instruction.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.opt.minimal_admin:
   source: fixtures/opt/valid/minimal_admin.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_admin.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.opt.nested:
   source: fixtures/opt/valid/nested.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "nested.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.opt.time_series:
   source: fixtures/opt/valid/time_series.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "time_series.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.opt.time_series.v2:
   source: fixtures/opt/valid/time_series.v2.opt
   format: opt-xml
@@ -664,21 +664,21 @@ cnf.opt.vital_signs:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "ehrn_vital_signs.v2"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.opt.versioned.v3:
   source: fixtures/opt/valid/versioned.v3.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "test_versioned.en.v3"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; derived from the official versioned family by bumping the template_id version suffix (test_versioned.en.v1 -> test_versioned.en.v3) so the upload-flow case owns a fresh pair"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; derived from the official versioned family by bumping the template_id version suffix (test_versioned.en.v1 -> test_versioned.en.v3) so the upload-flow case owns a fresh pair"
 cnf.opt.versioned.v4:
   source: fixtures/opt/valid/versioned.v4.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "test_versioned.en.v4"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; derived from the official versioned family by bumping the template_id version suffix (test_versioned.en.v2 -> test_versioned.en.v4) so the upload-flow case owns a fresh pair"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; derived from the official versioned family by bumping the template_id version suffix (test_versioned.en.v2 -> test_versioned.en.v4) so the upload-flow case owns a fresh pair"
 # Corpus additions for the master07 (COMPOSITION) schedule cases.
 # Merged into corpus/MANIFEST.yaml at verify time; entries here ONLY.
 cnf.opt.minimal_persistent:
@@ -687,21 +687,21 @@ cnf.opt.minimal_persistent:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.composition.minimal_persistent.v1:
   source: fixtures/composition/minimal_persistent.v1.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.minimal_persistent.v2:
   source: fixtures/composition/minimal_persistent.v2.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; leaf value updated for the v2 content state; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; leaf value updated for the v2 content state; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.minimal_persistent.invalid_structure:
   source: fixtures/composition/minimal_persistent.invalid_structure.json
   format: canonical-json
@@ -711,7 +711,7 @@ cnf.composition.minimal_persistent.invalid_structure:
     defect: "EVALUATION carries no data attribute"
     spec_ref: "RM ehr (EVALUATION.data is mandatory)"
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; mandatory ENTRY seam removed"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; mandatory ENTRY seam removed"
 # Corpus additions for the master08 (EHR_CONTRIBUTION) schedule cases. Same
 # entry schema as MANIFEST.yaml; the validate harness concatenates this into
 # MANIFEST.yaml at integration (never edit MANIFEST.yaml directly here).
@@ -729,27 +729,27 @@ cnf.composition.maximal:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "test_all_types.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; extracted from the official all_types contribution (no-multimedia variant) and normalized to the literal RM invariants the upstream instance predates (ENTRY Is_archetype_root: archetype_details added at archetype-id nodes; ELEMENT Inv_null_flavour_indicated; DV_PROPORTION Precision_validity: precision 0->1 on the 1.5 unitary leaf)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; extracted from the official all_types contribution (no-multimedia variant) and normalized to the literal RM invariants the upstream instance predates (ENTRY Is_archetype_root: archetype_details added at archetype-id nodes; ELEMENT Inv_null_flavour_indicated; DV_PROPORTION Precision_validity: precision 0->1 on the 1.5 unitary leaf)"
 cnf.composition.persistent.v1:
   source: fixtures/contribution/composition.persistent.v1.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.persistent.v2:
   source: fixtures/contribution/composition.persistent.v2.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; leaf value updated for the v2 content state; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; leaf value updated for the v2 content state; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.ehr_status.minimal:
   source: fixtures/contribution/ehr_status.minimal.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; subject reduced to the bare PARTY_SELF the master08 minimal ground declares (the upstream file carries a fixed external ref that collides with single-EHR-per-subject SUTs)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; subject reduced to the bare PARTY_SELF the master08 minimal ground declares (the upstream file carries a fixed external ref that collides with single-EHR-per-subject SUTs)"
 cnf.ehr_status.invalid:
   source: fixtures/contribution/ehr_status.invalid.json
   format: canonical-json
@@ -764,13 +764,13 @@ cnf.folder.minimal:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 cnf.folder.updated:
   source: fixtures/contribution/folder.updated.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22"
 # master08 coverage additions (2026-07-24, catalogue audit #231): the official
 # B.2 valid-COMPOSITION variant data sets (time series, alternative types,
 # DV_CODED_TEXT on a DV_TEXT node, null_flavour) and the second persistent OPT
@@ -782,42 +782,42 @@ cnf.opt.alternative_types:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "alternative_types.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); adopted 2026-07-24 for the master08 B.2.e valid variant (ELEMENT with alternative value types)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); adopted 2026-07-24 for the master08 B.2.e valid variant (ELEMENT with alternative value types)"
 cnf.opt.persistent_minimal_2:
   source: fixtures/opt/valid/persistent_minimal_2.opt
   format: opt-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal_2.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); adopted 2026-07-24 as the second persistent OPT the master08 multi-version combination B mandates (its NOTE: both COMPOSITIONs reference different persistent OPTs)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); adopted 2026-07-24 as the second persistent OPT the master08 multi-version combination B mandates (its NOTE: both COMPOSITIONs reference different persistent OPTs)"
 cnf.composition.time_series:
   source: fixtures/contribution/composition.time_series.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "time_series.en.v2"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official time_series.contribution.json (versions[0].data — OBSERVATION with a multi-event HISTORY, the master08 B.2.d time-series row) and normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official time_series.contribution.json (versions[0].data — OBSERVATION with a multi-event HISTORY, the master08 B.2.d time-series row) and normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness)"
 cnf.composition.alternative_types:
   source: fixtures/contribution/composition.alternative_types.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "alternative_types.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official alternative_types.contribution.json (versions[0].data — the DV_COUNT alternative on the multi-type ELEMENT, the master08 B.2.e row) and normalized to the literal RM ENTRY Is_archetype_root invariant"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official alternative_types.contribution.json (versions[0].data — the DV_COUNT alternative on the multi-type ELEMENT, the master08 B.2.e row) and normalized to the literal RM ENTRY Is_archetype_root invariant"
 cnf.composition.coded_text_on_text:
   source: fixtures/contribution/composition.obs_admin.coded_text_on_text.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "obs_admin.en.v2"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official obs_admin.contribution.altdvcodedtext.json (versions[0].data — a DV_CODED_TEXT instance on the OPT's DV_TEXT node at0004, the master08 B.2.f row) and normalized to the literal RM ENTRY Is_archetype_root invariant; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official obs_admin.contribution.altdvcodedtext.json (versions[0].data — a DV_CODED_TEXT instance on the OPT's DV_TEXT node at0004, the master08 B.2.f row) and normalized to the literal RM ENTRY Is_archetype_root invariant; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.null_flavour:
   source: fixtures/contribution/composition.obs_admin.null_flavour.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "obs_admin.en.v2"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official obs_admin.contribution.null_flavour.json (versions[0].data — empty ELEMENT.value with null_flavour |no information|, the master08 B.2.g row; RM data_structures ELEMENT Inv_null_flavour_indicated holds) and normalized to the literal RM ENTRY Is_archetype_root invariant; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official obs_admin.contribution.null_flavour.json (versions[0].data — empty ELEMENT.value with null_flavour |no information|, the master08 B.2.g row; RM data_structures ELEMENT Inv_null_flavour_indicated holds) and normalized to the literal RM ENTRY Is_archetype_root invariant; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.persistent_2.v1:
   source: fixtures/contribution/composition.persistent_2.v1.json
   format: canonical-json
@@ -834,19 +834,19 @@ cnf.directory.root_only:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.directory.reference_structure:
   source: fixtures/directory/reference_structure.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.directory.v2:
   source: fixtures/directory/v2.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 # The canonical-XML siblings of the two FOLDER payloads: the SAME structures in
 # the other canonical representation, so a canonical-xml create/update can be
 # read back and compared against the JSON twin. ITS-REST overview Resources.md
@@ -1682,7 +1682,7 @@ cnf.ehr_status.invalid.missing-is-queryable:
     verdict: invalid
     defect: "RM/Schema: is_queryable is mandatory"
     spec_ref: "RM ehr §EHR_STATUS (is_queryable 1..1)"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.ehr_status.invalid.missing-is-modifiable:
   source: fixtures/ehr/invalid/ehr_status.missing_is_modifiable.json
   format: canonical-json
@@ -1691,7 +1691,7 @@ cnf.ehr_status.invalid.missing-is-modifiable:
     verdict: invalid
     defect: "RM/Schema: is_modifiable is mandatory"
     spec_ref: "RM ehr §EHR_STATUS (is_modifiable 1..1)"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.ehr_status.invalid.missing-subject:
   source: fixtures/ehr/invalid/ehr_status.missing_subject.json
   format: canonical-json
@@ -1700,7 +1700,7 @@ cnf.ehr_status.invalid.missing-subject:
     verdict: invalid
     defect: "RM/Schema: subject is mandatory"
     spec_ref: "RM ehr §EHR_STATUS (subject 1..1)"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
 cnf.ehr_status.invalid.missing-archetype-details:
   source: fixtures/ehr/invalid/ehr_status.missing_archetype_details.json
   format: canonical-json
@@ -1718,7 +1718,7 @@ cnf.ehr_status.invalid.invalid-other-details:
     verdict: invalid
     defect: "other_details carries no _type discriminator on the abstract ITEM_STRUCTURE slot"
     spec_ref: "ITS-REST specifications/docs/overview/Resources.md §JSON Format (_type 'should be used to specify the RM type whenever polymorphism is involved, or when the underlying definition in RM type is abstract') + RM ehr ehr_status.adoc (other_details: ITEM_STRUCTURE, abstract per RM data_structures master04-item_structure_package §Class Descriptions)"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence; re-authored 2026-08-04 to carry the declared defect (it previously omitted archetype_details and no other_details at all — the Archetyped_valid defect its sibling fixture already owns)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence; re-authored 2026-08-04 to carry the declared defect (it previously omitted archetype_details and no other_details at all — the Archetyped_valid defect its sibling fixture already owns)"
 cnf.ehr_status.invalid.empty-rm-version:
   source: fixtures/ehr/invalid/ehr_status.empty_rm_version.json
   format: canonical-json
@@ -2028,7 +2028,7 @@ cnf.demographic.person.archetyped_full:
 # FORMAT NOTE: a TDD is XML but NOT canonical openEHR RM XML — it is an
 # instance of the template-derived TDS (AM OPT2 master02-overview.adoc
 # §Purpose of the OPT). The closed CorpusFormat vocabulary
-# (tools/cnf-runner/src/vocab.rs) has no TDS member and a vocabulary value
+# (src/vocab.rs) has no TDS member and a vocabulary value
 # enters only by schedule release, so these entries carry `canonical-xml`,
 # which the resolver treats as "an XML text payload".
 # TODO: give the TDS its own CorpusFormat member when the schedule releases one.
@@ -2172,7 +2172,7 @@ cnf.messaging.tdd.v1:
   format: canonical-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin, compositions/TDD/persistent_minimal.en.v1__full.xml); adopted 2026-07-29 (#659) with ONE change — the root `uid` is removed, because a version identifier is minted by the committing system (RM common master06 §Version Identification) and carrying the source system's would assert a foreign identity as this server's. It names persistent_minimal.en.v1, the template cnf.opt.minimal_persistent provisions"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin, compositions/TDD/persistent_minimal.en.v1__full.xml); adopted 2026-07-29 (#659) with ONE change — the root `uid` is removed, because a version identifier is minted by the committing system (RM common master06 §Version Identification) and carrying the source system's would assert a foreign identity as this server's. It names persistent_minimal.en.v1, the template cnf.opt.minimal_persistent provisions"
 cnf.archetype.adl14.medication:
   source: fixtures/archetypes/adl14.medication.v1.adl
   format: adl14-text
@@ -2203,7 +2203,7 @@ cnf.messaging.tdd.nested:
   format: canonical-xml
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin, compositions/TDD/nested.en.v1__full.xml); adopted 2026-07-29 (#659) with the same root-`uid` removal as its sibling. It names nested.en.v1, category 433|event| — paired with tdd.v1 in the bulk case precisely because persistent_minimal.en.v1 is 431|persistent| and an EHR holds exactly one such COMPOSITION (RM ehr master04 §COMPOSITION category), so a same-template batch could never succeed"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin, compositions/TDD/nested.en.v1__full.xml); adopted 2026-07-29 (#659) with the same root-`uid` removal as its sibling. It names nested.en.v1, category 433|event| — paired with tdd.v1 in the bulk case precisely because persistent_minimal.en.v1 is 431|persistent| and an EHR holds exactly one such COMPOSITION (RM ehr master04 §COMPOSITION category), so a same-template batch could never succeed"
 cnf.messaging.tdd.nonconforming:
   source: fixtures/messaging/tdd.nonconforming.xml
   format: canonical-xml
@@ -2227,7 +2227,7 @@ cnf.messaging.tdd.invalid:
 #
 # FORMAT NOTE: ADL2 operational templates and archetypes are `text/plain`
 # ADL2 SOURCE; these entries carry the dedicated `adl2-text` CorpusFormat
-# (tools/cnf-runner/src/vocab.rs — added with the ADL2 chapter wave).
+# (src/vocab.rs — added with the ADL2 chapter wave).
 
 cnf.adl2.opt.minimal:
   source: fixtures/adl2/opt/minimal.adls
@@ -2401,7 +2401,7 @@ cnf.flat.vitals.composer_self:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_action.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22 — derived from cnf.flat.vitals.minimal_ctx by replacing ctx/composer_name with ctx/composer_self:true to exercise the master06 §Composer composer_self branch (PARTY_SELF)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22 — derived from cnf.flat.vitals.minimal_ctx by replacing ctx/composer_name with ctx/composer_self:true to exercise the master06 §Composer composer_self branch (PARTY_SELF)"
 
 cnf.flat.action_instruction_details:
   source: fixtures/sf/flat.action_instruction_details.json
@@ -2424,7 +2424,7 @@ cnf.flat.all_types:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "test_all_types.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22 — FLAT keys derived from the SUT web template of the official Test_all_types.opt (cnf.opt.maximal), exercising the master05 §RM Type Mappings suffix tables across every DV family (DV_TEXT/DV_CODED_TEXT/DV_QUANTITY/DV_COUNT/DV_DATE(_TIME)/DV_TIME/DV_ORDINAL/DV_BOOLEAN/DV_DURATION/DV_MULTIMEDIA/DV_PARSABLE/DV_IDENTIFIER/DV_PROPORTION/DV_URI, DV_INTERVAL, CLUSTER nesting)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22 — FLAT keys derived from the SUT web template of the official Test_all_types.opt (cnf.opt.maximal), exercising the master05 §RM Type Mappings suffix tables across every DV family (DV_TEXT/DV_CODED_TEXT/DV_QUANTITY/DV_COUNT/DV_DATE(_TIME)/DV_TIME/DV_ORDINAL/DV_BOOLEAN/DV_DURATION/DV_MULTIMEDIA/DV_PARSABLE/DV_IDENTIFIER/DV_PROPORTION/DV_URI, DV_INTERVAL, CLUSTER nesting)"
 
 cnf.flat.all_types.raw:
   source: fixtures/sf/flat.all_types_raw.json
@@ -2432,7 +2432,7 @@ cnf.flat.all_types.raw:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "test_all_types.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored docs/specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22 — cnf.flat.all_types with the DV_QUANTITY leaf supplied via the master04 |raw suffix (an embedded canonical DV_QUANTITY object carrying _type) instead of attribute decomposition"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22 — cnf.flat.all_types with the DV_QUANTITY leaf supplied via the master04 |raw suffix (an embedded canonical DV_QUANTITY object carrying _type) instead of attribute decomposition"
 
 cnf.sf.flat.raw_no_type:
   source: fixtures/sf/flat.raw_no_type.json

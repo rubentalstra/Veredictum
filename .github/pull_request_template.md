@@ -17,7 +17,8 @@ An expectation with no citation is not reviewable.
 ## Checks
 
 - [ ] `bash scripts/checks/comment-style.sh --all`
-- [ ] Rust gates green where they apply: `cargo fmt --all --check` · `cargo clippy --all-targets -- -D warnings` · `cargo nextest run` <!-- these arrive with the code migration, FerroEHR#2789 -->
+- [ ] Rust gates green: `cargo fmt --all --check` · `cargo clippy --all-targets -- -D warnings` · `cargo nextest run` · `cargo deny check`
+- [ ] `cargo run -- validate --root artifacts --specs specs/openehr` reports zero findings
 - [ ] No test, case, or expectation weakened, skipped, or deleted, and no test edited to route around a defect it exposes
 - [ ] Every new or changed expectation carries the specification section it comes from
 - [ ] No expectation set or adjusted from what a server under test did

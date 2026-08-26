@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The live HTTP driver.
@@ -210,13 +210,6 @@ impl<'a> HttpDriver<'a> {
     /// The `Authorization` header for an instance. `scopes` is the SMART
     /// `scope` claim the step declared (`None` = the step declared none), and
     /// is consumed only by the `bearer_mint` principal.
-    #[expect(
-        clippy::disallowed_methods,
-        reason = "credentials are read from the environment BY DESIGN: the ixit \
-                  declares only the variable NAME so no secret ever enters the \
-                  catalogue; cnf-runner is a standalone instrument with no access \
-                  to the server's config tree, which is what that ban protects"
-    )]
     fn auth_header(
         ixit: &Ixit,
         auth: &AuthMode,
@@ -453,14 +446,9 @@ impl<'a> HttpDriver<'a> {
             headers: response_headers,
             body,
         };
-        // CNF_DEBUG_EXCHANGES=1: dump every wire exchange to stderr (live
+        // VEREDICTUM_DEBUG_EXCHANGES=1: dump every wire exchange to stderr (live
         // triage aid; the transcript seam is the durable record).
-        #[expect(
-            clippy::disallowed_methods,
-            reason = "the instrument's own debug switch, not server configuration: \
-                      cnf-runner is a standalone tool with no config tree"
-        )]
-        let debug_exchanges = std::env::var_os("CNF_DEBUG_EXCHANGES").is_some();
+        let debug_exchanges = std::env::var_os("VEREDICTUM_DEBUG_EXCHANGES").is_some();
         if debug_exchanges {
             #[expect(
                 clippy::print_stderr,
@@ -1335,7 +1323,7 @@ impl HttpDriver<'_> {
             .or_insert_with(|| Value::String("UPDATE_ATTESTATION".to_owned()));
         audit
             .entry("system_id")
-            .or_insert_with(|| Value::String("cnf-runner".to_owned()));
+            .or_insert_with(|| Value::String("veredictum".to_owned()));
         audit.entry("committer").or_insert_with(
             || serde_json::json!({ "_type": "PARTY_IDENTIFIED", "name": "cnf runner" }),
         );
@@ -1408,7 +1396,7 @@ impl HttpDriver<'_> {
         };
         let mut audit = serde_json::json!({
             "_type": "AUDIT_DETAILS",
-            "system_id": "cnf-runner",
+            "system_id": "veredictum",
             "committer": { "_type": "PARTY_IDENTIFIED", "name": "cnf runner" },
             "change_type": aggregate
         });
@@ -1532,7 +1520,7 @@ impl HttpDriver<'_> {
             },
             "commit_audit": {
                 "_type": "AUDIT_DETAILS",
-                "system_id": "cnf-runner",
+                "system_id": "veredictum",
                 "committer": { "_type": "PARTY_IDENTIFIED", "name": "cnf runner" },
                 "change_type": { "_type": "DV_CODED_TEXT", "value": label,
                     "defining_code": { "_type": "CODE_PHRASE",
@@ -3424,7 +3412,7 @@ mod tests {
         assert!(!same_deployment("not a url", "also not a url"));
     }
 
-    /// The committed CNF SMART test issuer (`tools/cnf-runner/party/smart/`) —
+    /// The committed CNF SMART test issuer (`party/smart/`) —
     /// public test material by design, never production key material.
     fn test_mint(roles: &[String]) -> crate::ixit::BearerMint {
         let key_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

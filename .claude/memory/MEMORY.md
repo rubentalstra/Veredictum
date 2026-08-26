@@ -12,9 +12,9 @@ apply" part so a future session can act on it without re-deriving it.
 - [Product identity and origin](product-identity-and-origin.md) — the name
   Veredictum, why the instrument is a separate product, the rejected
   alternatives, and the FerroEHR#2789 pointer
-- [Migration state](migration-state.md) — the runner code is still FerroEHR
-  `tools/cnf-runner`; what has moved here and what has not, and how to work in
-  the meantime
+- [Migration state](migration-state.md) — the code lives here now; what the
+  extraction carried, what it re-rooted, and what is still open on the consumer
+  side
 - [Contents API commits are unsigned](contents-api-commits-unsigned.md) —
   learned 2026-08-26: never write to the repository through the GitHub contents
   API; local signed commits or the Git Data API in workflows

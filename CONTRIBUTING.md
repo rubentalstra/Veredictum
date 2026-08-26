@@ -14,36 +14,26 @@ catalogue does not cover, a specification citation that refutes an expectation,
 a defect report against a CDR that this instrument mis-judged, a documentation
 correction, or a measurement from your own hardware all count.
 
-## Read this first: where the code is
-
-Veredictum was built inside [FerroEHR](https://github.com/rubentalstra/FerroEHR)
-as `tools/cnf-runner`, and that is still where the living code is. The split is
-tracked as
-[FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789).
-
-- **A change to runner behaviour, the catalogue, or the schemas lands in
-  FerroEHR** until the extraction completes. Do not re-implement it here.
-- **This repository owns the product identity and the tracker.** Issues about
-  the instrument belong here.
-
-Once the extraction lands, this section goes away and the paths in
-[`CLAUDE.md`](CLAUDE.md) § Migration state become real.
-
 ## Setup
 
 - **Install the shared git hooks once:** `bash scripts/install-hooks.sh`. It
   points `core.hooksPath` at [`.githooks/`](.githooks/), whose `commit-msg` hook
   strips any tool attribution from a commit message before the commit is
   recorded.
-- The Rust toolchain pin, the container tooling, and the rest of the build
-  environment arrive with the code migration (FerroEHR#2789).
+- **The toolchain pins itself.** `rust-toolchain.toml` names the exact channel,
+  so `cargo` fetches it on first use and there is nothing to install by hand.
+- **`cargo-nextest` is the test runner**, never `cargo test`:
+  `cargo install cargo-nextest --locked`, or take it from
+  [its releases](https://nexte.st/docs/installation/pre-built-binaries/).
 
 ## Before you start
 
 - **The released openEHR specifications are the only authority.** Read the
   governing section first-hand and quote the sentence that assigns the value.
-  Until the spec text is vendored here, read it in a FerroEHR checkout under
-  `docs/specs/openehr/` and say in your pull request which checkout you read.
+  The specification text is in this repository, at `specs/openehr/`. An XSD,
+  JSON-Schema or OpenAPI citation resolves against the released bundles beside
+  it (`specs/its-xml-schemas/`, `specs/its-json-schemas/`, `specs/rest-oas/`),
+  because the documentation tree carries only prose for those components.
 - **No CDR's behaviour is evidence of what is correct**, including the CDR you
   work on. A server response is evidence in a comparison against the spec, and
   the spec is the reference.
@@ -53,10 +43,23 @@ Once the extraction lands, this section goes away and the paths in
 
 ## The gates
 
-The Rust gates arrive with the code migration (FerroEHR#2789). There is no Rust code in
-this repository yet, so `cargo build` has nothing to build and no CI lane runs.
+Run these before you push. CI runs the same ones, behind a single required
+`conclusion` check, and gates the Rust tier on whether your change touched
+anything it reads.
 
-What applies to a prose or configuration pull request today:
+```bash
+cargo build --all-targets
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all --check
+cargo nextest run
+cargo deny check
+cargo run -- validate --root artifacts --specs specs/openehr   # zero findings
+```
+
+That last one is the gate the catalogue lives or dies by: it is every machine
+check over the artifact tree, and zero findings is the only passing result.
+
+And for every pull request, prose and configuration included:
 
 ```shell
 bash scripts/checks/comment-style.sh --all   # comment form and budgets

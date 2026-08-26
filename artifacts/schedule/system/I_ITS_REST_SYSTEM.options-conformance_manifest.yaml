@@ -4,7 +4,7 @@
 #
 # ANCHOR: `I_ITS_REST_SYSTEM.options` is a reserved catalogue pseudo-interface
 # (register AMB-161), not an SM operation — the SM defines no System component.
-# It is pinned in NON_SM_REST_OPERATIONS (tools/cnf-runner/src/validate.rs), the
+# It is pinned in NON_SM_REST_OPERATIONS (src/validate.rs), the
 # ITS-side half of the Axis-1 enumeration domain, so this operation is
 # enumerated and held to the same coverage obligation as an SM one.
 #

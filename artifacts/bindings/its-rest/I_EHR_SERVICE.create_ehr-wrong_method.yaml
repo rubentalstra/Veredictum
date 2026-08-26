@@ -11,7 +11,7 @@
 # overview's §HTTP Methods table is "the following subset is used in this
 # specification" — GET, HEAD, POST, PUT, DELETE, OPTIONS — and the binding
 # request model's method vocabulary is exactly that subset
-# (tools/cnf-runner/src/vocab.rs `HttpMethod`). A method is therefore
+# (src/vocab.rs `HttpMethod`). A method is therefore
 # RECOGNIZED by the specification and still not allowed on a given resource
 # whenever the release assigns that resource no operation under it, which is
 # precisely the antecedent of the second SHOULD. The released `/ehr` resource

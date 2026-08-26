@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The claim-completeness battery (issue #622): the four gates that make a
@@ -16,19 +16,17 @@
     reason = "test-support helpers (not `#[test]` fns, so the clippy.toml in-tests scoping does not reach them) are panic-idiomatic: a broken fixture must abort the test loudly, Book ch11"
 )]
 
-use cnf_runner::artifacts::load_root;
-use cnf_runner::validate::{Context, Finding, validate};
+use veredictum::artifacts::load_root;
+use veredictum::validate::{Context, Finding, validate};
 
+/// This package's directory, which is the repository root.
 fn crate_dir() -> &'static std::path::Path {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
 }
 
+/// The vendored spec tree the citation-resolution gates read.
 fn specs() -> std::path::PathBuf {
-    crate_dir()
-        .ancestors()
-        .nth(2)
-        .expect("repo root")
-        .join("docs/specs/openehr")
+    crate_dir().join("specs/openehr")
 }
 
 fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
@@ -190,7 +188,7 @@ fn the_measured_workload_exercises_every_claimed_capability_but_the_adjudicated_
                 .get(name)
                 .unwrap_or_else(|| panic!("workload names unknown journey {name}"));
             for stage in &journey.stages {
-                let op = cnf_runner::perf::PerfOp::parse(&stage.op).expect("closed vocabulary");
+                let op = veredictum::perf::PerfOp::parse(&stage.op).expect("closed vocabulary");
                 for capability in op.capabilities() {
                     if !exercised.contains(capability) {
                         exercised.push(capability);
@@ -216,7 +214,7 @@ fn the_measured_workload_exercises_every_claimed_capability_but_the_adjudicated_
     // the matrix row, so the certificate renders a reason and never a gap.
     for name in ADJUDICATED {
         let entry = matrix
-            .get(&cnf_runner::ids::CapabilityName::parse(name).expect("capability name"))
+            .get(&veredictum::ids::CapabilityName::parse(name).expect("capability name"))
             .unwrap_or_else(|| panic!("{name} is not a matrix row"));
         assert!(
             entry.workload_exclusion.is_some(),
@@ -241,7 +239,7 @@ fn every_committed_floor_equals_its_derived_count() {
     let (_, matrix) = loaded.set.matrix.as_ref().expect("capability matrix");
     let mut floors = 0_usize;
     for (name, entry) in matrix.entries() {
-        let derived = cnf_runner::validate::verdict_bearing(&loaded.set, name).len();
+        let derived = veredictum::validate::verdict_bearing(&loaded.set, name).len();
         assert_eq!(
             entry.min_cases, derived,
             "{name}: committed floor {} vs the derived verdict-bearing count \

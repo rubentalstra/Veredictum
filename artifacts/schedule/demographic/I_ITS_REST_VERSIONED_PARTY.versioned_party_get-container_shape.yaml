@@ -36,7 +36,7 @@
 # and SM master06-demographic_service.adoc includes no versioned-party interface
 # (register AMB-136). The two EHR-side twins of this route DO have SM anchors;
 # this one is pinned in NON_SM_REST_OPERATIONS
-# (tools/cnf-runner/src/validate.rs).
+# (src/validate.rs).
 #
 # The header pair rides the docs-text SHOULD the binding declares (overview
 # Requests_and_responses.md §"ETag and Last-Modified": "Both `ETag` and

@@ -49,7 +49,7 @@ evidence. You never edit files: findings only.
    these conflicts with a released component, the RELEASED component wins, and
    an expectation with no released-component ground is not enforceable.
    Where the spec text has not been vendored into this repository yet
-   (FerroEHR#2789), read it in a FerroEHR checkout at `docs/specs/openehr/`
+   (FerroEHR#2789), read it in a FerroEHR checkout at `specs/openehr/`
    and say in your report which checkout you read.
 2. **Everything else is a suspect. Three bins:**
    - **SUT defect** — the server under test violates the spec. The outcome is

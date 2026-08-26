@@ -7,19 +7,19 @@ self-contained OPT 1.4 XML that a conformant server accepts (201), carrying the
 value/structural constraint the matching content case declares.
 
 Carrier skeleton: the openEHR CNF Robot minimal_observation.opt
-(docs/specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
+(specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
 valid_templates/minimal/minimal_observation.opt) — a COMPOSITION
 (openEHR-EHR-COMPOSITION.minimal.v1) whose single content OBSERVATION
 (openEHR-EHR-OBSERVATION.minimal.v1) carries the
 data/events/data/items/value ELEMENT (at0004) the content cases constrain.
 
 Constraint XML shapes are grounded in:
-  * AM AOM 1.4 (docs/specs/openehr/AM/) — C_PRIMITIVE_OBJECT / C_INTEGER /
+  * AM AOM 1.4 (specs/openehr/AM/) — C_PRIMITIVE_OBJECT / C_INTEGER /
     C_REAL / C_STRING / C_BOOLEAN / C_DATE / C_TIME / C_DATE_TIME / C_DURATION,
     C_CODE_PHRASE, C_DV_ORDINAL, C_DV_QUANTITY (+ C_QUANTITY_ITEM),
     CONSTRAINT_REF, C_MULTIPLE_ATTRIBUTE.cardinality, C_ATTRIBUTE.existence,
     C_OBJECT.rm_type_name.
-  * RM data_types (docs/specs/openehr/RM/) — DV_* value shapes.
+  * RM data_types (specs/openehr/RM/) — DV_* value shapes.
   * The ITS-XML XSD family (crates/openehr-its/schemas/xml/) and the vendored
     real OPTs (validation/proportion.opt) for exact element ordering.
 
@@ -435,7 +435,7 @@ def dv_scale_list(symbol_codes=None):
     # `local::at0666` row needs the symbol code_list to have a ground, while
     # the interval carrier's case DOES declare constraint_columns and commits
     # against per-row OPTs the runner synthesizes instead
-    # (tools/cnf-runner/src/exec/opt_synth.rs, which emits the same
+    # (src/exec/opt_synth.rs, which emits the same
     # value+symbol shape).
     attrs = c_single_attr("value", c_primitive_object("REAL", item_c_real_list([1.5, 2.0])))
     if symbol_codes:

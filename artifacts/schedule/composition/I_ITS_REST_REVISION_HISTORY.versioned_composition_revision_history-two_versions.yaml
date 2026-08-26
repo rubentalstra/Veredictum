@@ -24,7 +24,7 @@
 # ANCHOR: `I_ITS_REST_REVISION_HISTORY` is a reserved catalogue pseudo-interface
 # (register AMB-161), not an SM operation — the vendored SM declares no
 # revision-history operation on any interface. It is pinned in
-# NON_SM_REST_OPERATIONS (tools/cnf-runner/src/validate.rs), so the route is
+# NON_SM_REST_OPERATIONS (src/validate.rs), so the route is
 # enumerated by Axis 1 and held to the same coverage obligation as an SM one.
 #
 # COMPONENT is taxonomy only: the route has no CNF chapter of its own, so the

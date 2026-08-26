@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The runner-verification pack, part 1 (verdict conformance): replaying
@@ -11,10 +11,10 @@
     reason = "test-support helpers (not `#[test]` fns, so the clippy.toml in-tests scoping does not reach them) are panic-idiomatic: a broken fixture must abort the test loudly, Book ch11"
 )]
 
-use cnf_runner::artifacts::load_root;
-use cnf_runner::exec::player::{ExpectedVerdict, Transcript, replay_entry, verdict_matches};
+use veredictum::artifacts::load_root;
+use veredictum::exec::player::{ExpectedVerdict, Transcript, replay_entry, verdict_matches};
 
-fn load() -> (cnf_runner::artifacts::ArtifactSet, Transcript) {
+fn load() -> (veredictum::artifacts::ArtifactSet, Transcript) {
     let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let loaded = load_root(&crate_dir.join("artifacts")).expect("schema compilation");
     assert!(loaded.errors.is_empty(), "artifact tree must load cleanly");

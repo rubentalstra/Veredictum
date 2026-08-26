@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Per-row OPT synthesis for the *structural* content families, plus the
@@ -12,7 +12,7 @@
 //! object type narrowing), not an ELEMENT.value domain constraint — and routes
 //! the value/interval families to [`crate::exec::opt_synth`].
 //!
-//! Constraint shapes are grounded in AM AOM1.4 (`docs/specs/openehr/AM/docs/AOM1.4/`):
+//! Constraint shapes are grounded in AM AOM1.4 (`specs/openehr/AM/docs/AOM1.4/`):
 //! `C_MULTIPLE_ATTRIBUTE.cardinality`, `C_ATTRIBUTE.existence`, and
 //! `C_OBJECT.rm_type_name`. The carrier skeleton mirrors the committed Python
 //! reference `corpus/templates/generate_content_opts.py` (itself built on the

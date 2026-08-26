@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! The resource-telemetry sampler for measured runs.
@@ -236,12 +236,6 @@ fn container_counters(container: &str) -> Result<RawCounters, String> {
 /// --unix-socket`; honours a `unix://` `DOCKER_HOST`). One short-lived
 /// subprocess per tick — the sampling cost is negligible against the 10 s
 /// cadence.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "`DOCKER_HOST` is the Docker CLI's own published environment contract \
-              (docs.docker.com/reference/cli/docker/#environment-variables), read \
-              here exactly as the CLI would; it is not server configuration"
-)]
 fn engine_api_get(path: &str) -> Result<String, String> {
     let socket = std::env::var("DOCKER_HOST")
         .ok()

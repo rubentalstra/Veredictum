@@ -6,7 +6,7 @@ Each file is CKM's own OPT export for the cited template, verbatim.
 Example skeletons (`*.example.json`) are generated once against the
 composed SUT by `scripts/generate-ckm-examples.sh` and committed
 (byte-identical payload ground for every SUT; never fetched at run
-time). Manifest entries: `tools/cnf-runner/artifacts/corpus/MANIFEST.yaml`.
+time). Manifest entries: `artifacts/corpus/MANIFEST.yaml`.
 
 Four of them — `ccta-report`, `gp-data-set`,
 `international-patient-summary`, `sars-event-notification` — were

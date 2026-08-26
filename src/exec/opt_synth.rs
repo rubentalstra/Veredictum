@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Per-row OPT 1.4 XML synthesis for the *value* and *interval* content
@@ -12,7 +12,7 @@
 //! here.
 //!
 //! The constraint XML shapes are grounded in AM AOM1.4
-//! (`docs/specs/openehr/AM/docs/`): `C_PRIMITIVE_OBJECT`/`C_INTEGER`/`C_REAL`/
+//! (`specs/openehr/AM/docs/`): `C_PRIMITIVE_OBJECT`/`C_INTEGER`/`C_REAL`/
 //! `C_STRING`/`C_DATE`/`C_TIME`/`C_DATE_TIME`/`C_DURATION`, `C_CODE_PHRASE`,
 //! `CONSTRAINT_REF`, `C_DV_ORDINAL`, and the temporal `<pattern>` grammar of
 //! `AM ADL1.4 master05-cadl §Patterns` + `§Duration Constraints`. The carrier

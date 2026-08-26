@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! Identifier newtypes for the schedule artifacts.
@@ -179,7 +179,7 @@ string_id!(
 
 /// An SM operation anchor: `I_<INTERFACE>.<operation>` — resolved by the
 /// validator against the vendored SM UML class exports
-/// (`docs/specs/openehr/SM/docs/UML/classes/`).
+/// (`specs/openehr/SM/docs/UML/classes/`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SmOperationRef {
     interface: String,

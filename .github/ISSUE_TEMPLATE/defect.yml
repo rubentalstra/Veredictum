@@ -20,9 +20,8 @@ body:
         - label: I have searched existing issues
           required: true
         - label: >
-            I understand the runner code still lives in FerroEHR
-            `tools/cnf-runner` until the migration (FerroEHR#2789) completes, so
-            a fix may land there
+            I have stated the commit or tag I reproduced on. Nothing is published
+            from this repository yet, so `main` is the only version there is
           required: true
   - type: dropdown
     id: suspect

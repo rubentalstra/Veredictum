@@ -2,9 +2,9 @@
 #
 # ANCHOR: `I_ITS_REST_SYSTEM` is a reserved CATALOGUE pseudo-interface, NOT an
 # SM interface — the SM defines no System component and no interface owns this
-# operation (verified against docs/specs/openehr/SM/docs/UML/classes/). Case
+# operation (verified against specs/openehr/SM/docs/UML/classes/). Case
 # cores speak SM operations only, so the pinned NON_SM_REST_OPERATIONS table in
-# tools/cnf-runner/src/validate.rs is what makes a RELEASED ITS-REST operation
+# src/validate.rs is what makes a RELEASED ITS-REST operation
 # with no SM anchor enumerable at all; the naming convention (and the fact that
 # it claims nothing about the SM) is adjudicated in register AMB-161, the same
 # distinction AMB-127 draws for variant anchoring.

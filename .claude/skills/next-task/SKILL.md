@@ -16,11 +16,9 @@ issue workflow (`CLAUDE.md`). Does not do the work; that is a separate step the
 caller takes after seeing the plan.
 
 Ported from FerroEHR at the Veredictum split (FerroEHR#2789) and trimmed to what
-this repository actually has. What was dropped, so nobody looks for it: the
-crate-map and code-generator routing (there is no Rust code here yet), the
-vendored-spec-section step (the spec text arrives with the migration), the
-conformance-gate definition of done (no catalogue here yet), and the board move
-(deferred). Step 3 below says where each of those lands instead.
+this repository has. What was dropped, so nobody looks for it: the
+code-generator routing (nothing here is generated from a meta-model) and the
+project-board move (deferred by owner decision).
 
 ## Steps
 
@@ -38,26 +36,25 @@ conformance-gate definition of done (no catalogue here yet), and the board move
 
 2. **Turn the task into a plan**, stating:
    - **What** the task requires, in one or two sentences.
-   - **Which files** are involved. Search for them rather than guessing paths.
-     The planned layout after the split is the table in `CLAUDE.md` §
-     Repository layout; anything marked "arrives with FerroEHR#2789" is not
-     here yet, so a task naming it is a task for the FerroEHR checkout.
-   - **Where the work belongs.** This is the decision that matters most right
-     now: **a change to runner behaviour, the catalogue, the schemas or the
-     register lands in FerroEHR `tools/cnf-runner`** until the extraction
-     completes. Do not re-implement it here. What belongs here is the product's
-     identity, its discipline, its CI and release machinery, its documentation,
-     and the tracker.
+   - **Which files** are involved. Search for them rather than guessing paths;
+     the layout table in `CLAUDE.md` § Migration state names every tree.
+   - **Which of the three the change touches** — the runner machinery under
+     `src/`, the catalogue under `artifacts/`, or the repository's own
+     machinery. The attribution law turns on that distinction, so the plan
+     states it before any code is written.
    - **Which released specification sections govern it**, for anything
-     spec-facing. The spec text is not vendored here yet: read it first-hand in
-     a FerroEHR checkout under `docs/specs/openehr/` and say in the plan which
-     checkout was read. Never answer from memory, from a vendor's
-     documentation, or from what a server did (`.claude/rules/cnf-triage.md`).
+     spec-facing. Read them first-hand in `specs/openehr/` and quote the
+     sentence that assigns the value. An XSD, JSON-Schema or OpenAPI citation
+     resolves against the bundles beside it. Never answer from memory, from a
+     vendor's documentation, or from what a server did
+     (`.claude/rules/cnf-triage.md`).
    - **What "done" looks like** for this task: the issue's
-     `## Acceptance criteria` checklist, plus what proves each item. Today the
-     available proof is the CI guard tier (`bash scripts/checks/*.sh`,
-     actionlint, zizmor, reuse lint); the catalogue's own `validate` gate and
-     the Rust gates arrive with the code.
+     `## Acceptance criteria` checklist, plus what proves each item. The
+     available proof is the guard tier (`bash scripts/checks/*.sh`, actionlint,
+     zizmor, reuse lint), the Rust tier (`cargo clippy --all-targets -- -D
+     warnings`, `cargo nextest run`, `cargo deny check`) and
+     `cargo run -- validate --root artifacts --specs specs/openehr` at zero
+     findings.
 
 3. **Note whether the task suits a subagent.** Bounded, well-specified work with
    the governing material named up front fans out (`.claude/agents/`); the

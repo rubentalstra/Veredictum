@@ -1,5 +1,5 @@
 <!-- ADOPTED VERBATIM from the vendored CNF data set
-     docs/specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
+     specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
      compositions/TDD/nested.en.v1__full.xml, except for the root `uid` (see
      below). A Template Data Document naming `nested.en.v1`, the EVENT-category
      operational template the case provisions through

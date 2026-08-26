@@ -5,7 +5,7 @@
      template-absence ground holds on a SHARED world where the sibling
      success cases have already provisioned persistent_minimal.en.v1.
      Original provenance: the vendored CNF data set
-     docs/specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
+     specs/openehr/CNF/tests/platform/robot/_resources/test_data_sets/
      compositions/TDD/cnf.absent_template.v99__full.xml, except for the root
      `uid` (see below). A Template Data Document: the SM `import_tdd` `tdd:
      String` parameter (i_tdd_service.adoc), concretely a template-namespaced

@@ -28,10 +28,10 @@ Part 2 defines them: requirement, recommendation, permission.
 This document covers the use of AI tools in developing everything in this
 repository: the runner machinery, the conformance catalogue, the schemas, the
 tests, the infrastructure, the documentation, and this document itself. It also
-covers the same work while it is still happening in FerroEHR
-`tools/cnf-runner`, which is where the code lives until the migration
-([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789))
-completes.
+covers the years of that work done while the instrument was still a member of
+the [FerroEHR](https://github.com/rubentalstra/FerroEHR) workspace, which the
+extraction carried here with its history
+([FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789)).
 
 It does not cover an AI system in the product, because there is none.
 **Veredictum ships no AI.** No model is trained, embedded, or called at run
@@ -283,7 +283,7 @@ tracker, and never silently absorbed.
 **Normative for this project**, the documents that bind the practice described
 here: the [Apache-2.0 licence](LICENSE); the released openEHR specifications
 (vendored with the code migration, read in a FerroEHR checkout at
-`docs/specs/openehr/` until then); this repository's rule set
+`specs/openehr/` until then); this repository's rule set
 ([`.claude/rules/`](.claude/rules/), in particular `cnf-triage.md`,
 `testing.md`, `reliability.md`, `comments.md`, `writing-style.md`);
 [GOVERNANCE.md](GOVERNANCE.md), [MAINTAINERS.md](MAINTAINERS.md),

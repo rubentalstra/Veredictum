@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: FerroEHR contributors
+// SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
 //! End-to-end exercise of the performance measurement machinery against a
@@ -18,12 +18,12 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use cnf_runner::ixit::{Environment, Ixit};
-use cnf_runner::perf::{ClassVerdict, JourneyCatalogue, PerformanceCase};
-use cnf_runner::perf_run::client::{PerfClient, PerfPrincipals};
-use cnf_runner::perf_run::corpus::{SeededCorpus, seed_scale_ladder, seed_ward};
-use cnf_runner::perf_run::pack::{AuxPayloads, FlatPayload, JourneyPack, PackTemplate, TddPayload};
-use cnf_runner::perf_run::window::{drive_case, rederive_verdict};
+use veredictum::ixit::{Environment, Ixit};
+use veredictum::perf::{ClassVerdict, JourneyCatalogue, PerformanceCase};
+use veredictum::perf_run::client::{PerfClient, PerfPrincipals};
+use veredictum::perf_run::corpus::{SeededCorpus, seed_scale_ladder, seed_ward};
+use veredictum::perf_run::pack::{AuxPayloads, FlatPayload, JourneyPack, PackTemplate, TddPayload};
+use veredictum::perf_run::window::{drive_case, rederive_verdict};
 
 /// A minimal keep-alive HTTP stub realizing the journey wire shapes: OPT
 /// upload 201, EHR create 201+Location, EHR/status/directory/contribution

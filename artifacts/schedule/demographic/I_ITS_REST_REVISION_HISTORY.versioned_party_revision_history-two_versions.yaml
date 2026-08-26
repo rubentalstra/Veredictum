@@ -21,7 +21,7 @@
 # operation and no container read. That entry left the route unanchored, which
 # PRE-DATES the AMB-161 mechanism; the re-adjudication of 2026-07-28 extends the
 # mechanism here, and the operation is pinned in NON_SM_REST_OPERATIONS
-# (tools/cnf-runner/src/validate.rs).
+# (src/validate.rs).
 id: I_ITS_REST_REVISION_HISTORY.versioned_party_revision_history-two_versions
 kind: functional
 component: DEMOGRAPHIC

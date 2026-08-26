@@ -16,7 +16,7 @@
 # Fully executable: the status branch, the body identity of the returned
 # document, and the response Content-Type — the `Content-Type: negotiated`
 # matcher on the get_opt binding outcome is an EXECUTED assertion since #403
-# (tools/cnf-runner/src/exec/headers.rs).
+# (src/exec/headers.rs).
 id: SF-WT-web_template_json_accept
 kind: functional
 component: SIMPLIFIED_FORMATS

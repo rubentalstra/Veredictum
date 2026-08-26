@@ -7,12 +7,12 @@
 #
 # ANCHOR: `I_ITS_REST_REVISION_HISTORY` is a reserved CATALOGUE pseudo-interface,
 # NOT an SM interface. The vendored SM defines no revision-history operation on
-# any interface (grep across docs/specs/openehr/SM/docs/ = zero hits; the
+# any interface (grep across specs/openehr/SM/docs/ = zero hits; the
 # abstract counterpart is RM common
 # UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions
 # `revision_history`), while the release publishes three revision-history reads
 # — one per versioned family. Case cores speak SM operations only, so without
-# the pinned NON_SM_REST_OPERATIONS table (tools/cnf-runner/src/validate.rs)
+# the pinned NON_SM_REST_OPERATIONS table (src/validate.rs)
 # these routes would be unnameable AND structurally invisible to the Axis-1
 # enumeration. The mechanism and the reservation are adjudicated in register
 # AMB-161; register AMB-136 records the ITS→SM realization gap the anchoring

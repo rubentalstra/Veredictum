@@ -20,18 +20,8 @@
 # the table only when the file carries none; `override` ignores anything closer.
 # First-party globs use `closest`, so adding a real SPDX header to a source file
 # is an improvement that takes effect immediately and never contradicts this
-# file. Vendored globs will use `override`, where the upstream tree's terms are
+# file. Vendored globs use `override`, where the upstream tree's terms are
 # settled by its `PROVENANCE.md` rather than by any per-file marking.
-#
-# WHAT IS DELIBERATELY MISSING. The vendored trees do not exist here yet: the
-# openEHR specification text (CC-BY-SA-3.0), the machine-readable openEHR
-# artifacts (Apache-2.0), and the CKM-derived clinical models (CC-BY-SA-3.0 AND
-# CC-BY-SA-4.0, mixed at file level, with each archetype's own `licence`
-# metadata as the authority for that file) all arrive with the code migration
-# (FerroEHR#2789), and each brings its own `[[annotations]]` table plus the
-# licence text under `LICENSES/` in the same pull request. A table declaring a
-# path that does not exist would be a licensing claim about nothing, so none is
-# written in advance.
 
 version = 1
 
@@ -42,5 +32,72 @@ version = 1
 [[annotations]]
 path = "**"
 precedence = "closest"
+SPDX-FileCopyrightText = "Veredictum contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+# ── The vendored openEHR specification text: the oracle ─────────────────────
+# CC-BY-SA-3.0, the terms the specification documents themselves carry.
+[[annotations]]
+path = "specs/openehr/**"
+precedence = "override"
+SPDX-FileCopyrightText = "openEHR Foundation"
+SPDX-License-Identifier = "CC-BY-SA-3.0"
+
+# ── The vendored machine-readable openEHR artifacts ─────────────────────────
+# The XSD bundles, the ITS-JSON schemas and the ITS-REST OpenAPI documents come
+# from the specification repositories, which carry Apache-2.0 at their root.
+# (Each OAS bundle declares CC-BY-ND-3.0 in its own `info.license` stanza,
+# contradicting that grant; the contradiction is reported upstream and the files
+# are taken under the repository LICENSE — see `specs/rest-oas/PROVENANCE.md`.)
+[[annotations]]
+path = [
+  "specs/its-xml-schemas/**",
+  "specs/its-json-schemas/**",
+  "specs/rest-oas/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "openEHR Foundation"
+SPDX-License-Identifier = "Apache-2.0"
+
+# ── The clinical-model corpora ──────────────────────────────────────────────
+# CKM-derived archetypes and operational templates, plus the upstream ADL 2
+# reference pack. Both CC-BY-SA versions occur across these trees, so `AND` is
+# the only true statement about the tree as a whole; each archetype's own
+# `licence` metadata remains the authority for that individual file.
+[[annotations]]
+path = "artifacts/corpus/**"
+precedence = "override"
+SPDX-FileCopyrightText = ["openEHR Foundation", "the respective archetype authors"]
+SPDX-License-Identifier = "CC-BY-SA-3.0 AND CC-BY-SA-4.0"
+
+# ── One vendored file whose NAME contains a newline character ───────────────
+# A file in the vendored CNF suite is tracked with a literal U+000A inside its
+# filename — an upstream defect, and not something this repository may rename,
+# because hand-editing a vendored tree is forbidden and the fix belongs
+# upstream. Glob matching over a newline-bearing path does not reach it, so it
+# is named explicitly.
+[[annotations]]
+path = "specs/openehr/CNF/tests/platform/robot/I_EHR_COMPOSITION/get_composition/I_EHR_COMPOSITION.get_composition_version-bad_ehr\n.robot"
+precedence = "override"
+SPDX-FileCopyrightText = "openEHR Foundation"
+SPDX-License-Identifier = "CC-BY-SA-3.0"
+
+# ── Our own provenance records inside the vendored trees ────────────────────
+# The PROVENANCE.md files are FIRST-PARTY prose about the upstream material:
+# what was fetched, from which commit, under which terms, and what exercises it.
+# They are ours, Apache-2.0, and they sit inside directories the tables above
+# claim for the openEHR Foundation. Placed LAST, because a later matching
+# annotation wins.
+[[annotations]]
+path = [
+  "specs/its-xml-schemas/PROVENANCE.md",
+  "specs/its-json-schemas/PROVENANCE.md",
+  "specs/rest-oas/PROVENANCE.md",
+  "artifacts/corpus/archetypes/adl2/PROVENANCE.md",
+  "artifacts/corpus/archetypes/ckm/PROVENANCE.md",
+  "artifacts/corpus/templates/ckm/PROVENANCE.md",
+  "artifacts/corpus/templates/ckm/full/PROVENANCE.md",
+]
+precedence = "override"
 SPDX-FileCopyrightText = "Veredictum contributors"
 SPDX-License-Identifier = "Apache-2.0"

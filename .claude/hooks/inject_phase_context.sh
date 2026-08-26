@@ -31,9 +31,10 @@ echo "=== spec oracle ==="
 if [ -d specs/openehr ]; then
   echo "Vendored released openEHR spec text: specs/openehr/ (index: its README.md). Derive every expectation from that text first-hand — never from memory, a vendor's docs, or a server's behaviour (.claude/rules/cnf-triage.md)."
 else
-  echo "The vendored openEHR spec text is NOT in this repository yet — it arrives with the migration (FerroEHR#2789). Read it first-hand in a FerroEHR checkout at docs/specs/openehr/. Never answer a spec question from memory, from a vendor's documentation, or from what a server did (.claude/rules/cnf-triage.md)."
+  echo "The vendored openEHR spec text is MISSING from this checkout — specs/openehr/ is not there. Do not answer a spec question until it is restored: re-run scripts/vendor/spec-docs.sh. Never answer from memory, from a vendor's documentation, or from what a server did (.claude/rules/cnf-triage.md)."
 fi
-echo "The living runner code is still FerroEHR tools/cnf-runner until the split lands."
+echo "Released machine-readable bundles (the second root for XSD / JSON-Schema / OpenAPI citations): specs/its-xml-schemas/, specs/its-json-schemas/, specs/rest-oas/."
+echo "The instrument's code lives HERE. Gate before every commit: cargo clippy --all-targets -- -D warnings && cargo nextest run && cargo run -- validate --root artifacts --specs specs/openehr (zero findings)."
 echo
 echo "=== tracker: open GitHub issues (gh issue view <n> --comments for the contract + discussion) ==="
 echo "--- pinned (current focus) ---"
