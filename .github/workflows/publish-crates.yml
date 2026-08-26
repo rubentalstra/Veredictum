@@ -5,9 +5,20 @@
 #
 # Publishes `veredictum` to crates.io.
 #
-#   - Manual `workflow_dispatch` only. The default run is a DRY RUN
-#     (`cargo publish --dry-run` — package and verify, no upload); a real
-#     publish needs the `publish` input set to `true`.
+#   - Manual `workflow_dispatch` only, and it is the OUT-OF-BAND lane: the
+#     ordinary path is the `publish-crate` leg of `release.yml`, which publishes
+#     on the tag once the rest of the release has landed. This one exists for
+#     the dry run and for recovery — a publish that has to happen without a new
+#     tag. The upload itself is `scripts/release/publish-crate.sh`, the one
+#     implementation both lanes call; each keeps its own JOB because crates.io
+#     Trusted Publishing matches the OIDC `workflow_ref` claim, which for a job
+#     inside a reusable workflow names the CALLING workflow
+#     (https://docs.github.com/en/actions/concepts/security/openid-connect,
+#     https://crates.io/docs/trusted-publishing). Sharing a reusable workflow
+#     would present one identity for both lanes and only obscure which workflow
+#     file the publisher configuration has to name.
+#   - The default run is a DRY RUN (`cargo publish --dry-run` — package and
+#     verify, no upload); a real publish needs the `publish` input set to `true`.
 #   - Authentication is crates.io TRUSTED PUBLISHING (OIDC):
 #     `rust-lang/crates-io-auth-action` exchanges this workflow's OIDC identity
 #     for a 30-minute publish token, so no long-lived crates.io token exists in
@@ -92,55 +103,12 @@ jobs:
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        # "already exists" is treated as DONE rather than as failure, which is
-        # what makes the lane safe to re-run after a transient network failure
-        # late in an upload. Matching happens against ANSI-STRIPPED text: cargo
-        # colours the status word alone, so the bytes are `Uploaded<RESET>
-        # veredictum` and a literal "Uploaded veredictum" would never match a
-        # perfectly successful publish.
-        run: |
-          set -uo pipefail
-          out="$(cargo publish --locked 2>&1)" || true
-          printf '%s\n' "$out"
-          plain="$(printf '%s' "$out" | sed -E 's/\x1b\[[0-9;]*m//g')"
-          case "$plain" in
-            *"already exists on crates.io index"*|*"already uploaded"*)
-              echo "already published at this version — nothing to do" ;;
-            *)
-              printf '%s' "$plain" | grep -q "Uploaded veredictum" || {
-                echo "::error::the publish did not report an upload"
-                exit 1
-              } ;;
-          esac
+        run: bash scripts/release/publish-crate.sh publish
 
       # The registry is the ground truth, not the exit code above. `always()`,
       # because this step matters most exactly when the publish step went red: a
       # run that uploaded successfully but misread its own output would otherwise
       # end red with nothing to contradict it.
       - name: Verify the version is on the registry
-        if: always() && inputs.publish
-        run: |
-          set -euo pipefail
-          want="$(awk -F'"' '/^\[package\]/{p=1} p && /^version = /{print $2; exit}' Cargo.toml)"
-          echo "expecting $want"
-          # The index is eventually consistent right after an upload, so a miss
-          # is retried rather than believed. A FAILED REQUEST is not a miss
-          # either: without --fail, curl hands an error body to jq, jq dies on
-          # the absent .versions, and `pipefail` ends the step — so one
-          # transient 429 would report a missing version that is actually there.
-          got=""
-          for _ in 1 2 3 4 5 6; do
-            if body="$(curl -sSL --fail -H 'User-Agent: veredictum-publish-verify' \
-                       "https://crates.io/api/v1/crates/veredictum/versions" 2>/dev/null)"; then
-              got="$(printf '%s' "$body" \
-                     | jq -r --arg v "$want" '.versions[]? | select(.num == $v) | .num' \
-                     | head -1)" || got=""
-            fi
-            [ -n "$got" ] && break
-            sleep 10
-          done
-          if [ -z "$got" ]; then
-            echo "::error::version $want is not on the registry"
-            exit 1
-          fi
-          echo "confirmed on crates.io: veredictum $got"
+        if: always()
+        run: bash scripts/release/publish-crate.sh verify

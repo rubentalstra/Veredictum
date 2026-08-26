@@ -1,0 +1,690 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/workflows/release.yml — THE release pipeline.
+#
+# ONE workflow owns the `v*` tag, and every ordering in it is a `needs` edge. No
+# job polls another workflow's runs or jobs: `needs` is the only primitive that
+# carries a guarantee. A concurrency group has no queue-order guarantee, and a
+# `workflow_run` conclusion is run-level, so an advisory scanner elsewhere in the
+# same run can suppress an unrelated consumer.
+#
+# The graph:
+#
+#   plan ─┬─ github-release ── binaries ── finalize ──┐
+#         └─ image-binary ─── image ─┬─ scan-and-tag ─┴─ publish-crate
+#                                    └─ image-smoke
+#   announce ── needs everything, if: always()
+#
+# `plan` re-verifies every release fact against the TAGGED commit before
+# anything is built or published: the tag matches the manifest, the changelog
+# section exists and is not empty, `CITATION.cff` agrees, `.zenodo.json` is in
+# sync with it. A red plan costs seconds and leaves the registry, the release
+# list and the crate index untouched.
+#
+# RE-RUNNING is the recovery for a partial failure, and every leg is idempotent
+# by construction: the image pushes by digest and is re-tagged, the GitHub
+# release updates its draft until it is published, and the crate publish treats
+# an already-published version as done. The one irreversible moment is
+# `finalize`, because a published release is frozen — which is exactly why it is
+# the last thing that happens to the release and why it refuses to run until
+# every expected asset is attached.
+#
+# `workflow_dispatch` re-runs the pipeline for an existing tag and must be
+# dispatched AT the tag (`gh workflow run Release --ref vX.Y.Z -f tag=vX.Y.Z`).
+# `plan` refuses anything else: the reusable image leg resolves the event's own
+# ref, so a dispatch from `main` would build main's tree and label it with the
+# tag's version.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing vX.Y.Z tag to (re)publish — dispatch this workflow AT that tag"
+        required: true
+        type: string
+
+# A release must never be cancelled part-way through publishing: a half-created
+# release with some assets attached is worse than a queued second run. A second
+# tag push QUEUES behind the first rather than replacing it.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  # ── plan: every release fact, verified before anything is built ─────────────
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      is-release: ${{ steps.kind.outputs.is-release }}
+      is-prerelease: ${{ steps.kind.outputs.is-prerelease }}
+    steps:
+      - id: tag
+        name: Resolve the release tag
+        # The dispatch input reaches the shell through env, never `${{ }}`
+        # inline, and must match a full semver tag shape before anything uses it
+        # as a ref: `case v*` would accept any string starting with "v".
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"
+            if [ "${GITHUB_REF}" != "refs/tags/${tag}" ]; then
+              echo "::error::this workflow was dispatched at '${GITHUB_REF}', not at refs/tags/${tag}. The image leg resolves the event's own ref, so a dispatch from a branch would publish that branch's tree under ${tag}. Run: gh workflow run Release --ref ${tag} -f tag=${tag}" >&2
+              exit 1
+            fi
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          if ! printf '%s\n' "$tag" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$tag' is not a vX.Y.Z tag" >&2
+            exit 1
+          fi
+          {
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+          } >> "$GITHUB_OUTPUT"
+
+      # `github.sha` is the commit the event ref pointed at, fixed for the whole
+      # run, and the tag-mismatch refusal above guarantees it IS the tag's commit
+      # on a dispatch too. Checking that out rather than the input-derived tag
+      # string keeps dispatch input out of every checkout, which is also what the
+      # CodeQL actions taint model verifies.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      # THE pre-release rule, one definition. The tag comes from the step above
+      # — a dispatch names it, a push carries it — never from the ref alone.
+      - id: kind
+        uses: ./.github/actions/release-kind
+        with:
+          tag: ${{ steps.tag.outputs.tag }}
+
+      - name: The tag matches the manifest version
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          manifest="$(bash scripts/release/publish-crate.sh version)"
+          if [ "$manifest" != "$VERSION" ]; then
+            echo "::error::Tag $TAG does not match the Cargo.toml package version $manifest." >&2
+            exit 1
+          fi
+          echo "package version $manifest matches $TAG"
+
+      - name: Changelog structure (no duplicate subsections, canonical types)
+        run: bash scripts/checks/changelog-structure.sh
+
+      # The release NOTES are produced here rather than at publish time: the
+      # section existing and being non-empty is a release fact like any other,
+      # and the extraction that proves it may as well hand the result on. The
+      # artifact is what the draft job attaches.
+      - name: Extract the changelog section for this tag
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          if ! grep -q "^## \[$VERSION\]" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for $VERSION — releases are changelog-driven (Keep a Changelog). Add '## [$VERSION] - YYYY-MM-DD' first." >&2
+            exit 1
+          fi
+          # Everything between "## [<version>]" and the next "## [" heading.
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::The [$VERSION] changelog section is empty." >&2
+            exit 1
+          fi
+          echo "Release notes for $VERSION:"; cat release-notes.md
+
+      - name: CITATION.cff version matches the released version
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          cff_ver="$(sed -nE 's/^version:[[:space:]]*"?([^"]+)"?[[:space:]]*$/\1/p' CITATION.cff)"
+          if [ "$cff_ver" != "$VERSION" ]; then
+            echo "::error::CITATION.cff version ($cff_ver) != released version ($VERSION) — the release cut bumps CITATION.cff version and date-released together." >&2
+            exit 1
+          fi
+          echo "CITATION.cff version $cff_ver matches the released version."
+
+      # `.zenodo.json` is GENERATED from CITATION.cff, because Zenodo ignores
+      # CITATION.cff entirely whenever a .zenodo.json is present
+      # (https://help.zenodo.org/docs/github/describe-software/zenodo-json/).
+      # The deposit's FILES freeze at publication, so a drifted copy is archived
+      # under a DOI nobody can correct — this is the last moment it can be seen.
+      - name: .zenodo.json is in sync with CITATION.cff
+        run: bash scripts/render/zenodo-json.sh --check
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Plan
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          SHA: ${{ github.sha }}
+          IS_RELEASE: ${{ steps.kind.outputs.is-release }}
+          IS_PRERELEASE: ${{ steps.kind.outputs.is-prerelease }}
+        run: |
+          {
+            printf '## Release plan\n\n| | |\n|---|---|\n'
+            printf '| tag | `%s` |\n' "$TAG"
+            printf '| commit | `%s` |\n' "$SHA"
+            printf '| release | `%s` |\n' "$IS_RELEASE"
+            printf '| pre-release | `%s` |\n' "$IS_PRERELEASE"
+            printf '\nEvery release fact verified at this commit. Nothing published yet.\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── The GitHub release, created as a DRAFT ──────────────────────────────────
+  github-release:
+    name: github release (draft)
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create or update the GitHub release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }} # == plan's commit: the dispatch-at-tag refusal makes them equal
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-notes
+
+      # An SPDX SBOM of the REPOSITORY, generated from the release commit. It is
+      # not redundant with the other two this pipeline publishes — they answer
+      # different questions for different readers:
+      #
+      #   * the CycloneDX `.cdx.json` per binary (release-build.yml) carries the
+      #     cargo dependency GRAPH with direct-versus-transitive edges and purls,
+      #     which is what a vulnerability tool consumes;
+      #   * the SPDX SBOM BuildKit attaches to the image index (build-image.yml)
+      #     describes the image's OS layer;
+      #   * this one is the ATTRIBUTION document for the source tree — the
+      #     licence-obligation view a procurement reviewer of an Apache-2.0
+      #     redistribution asks for, over a tree that also carries CC-BY-SA
+      #     specification text.
+      #
+      # SPDX satisfies the CISA/NTIA minimum-element data fields directly:
+      # supplier, component name, version, other unique identifiers (purl),
+      # dependency relationships, SBOM author and timestamp
+      # (https://www.cisa.gov/sbom).
+      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: syft@1.50.0
+      - name: Generate the repository SPDX SBOM
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          # `dir:.` catalogues the checked-out release commit, so the document
+          # describes the tree the release was cut from rather than a graph
+          # resolved afterwards. --source-name/--source-version, or the document
+          # names itself after the scanned directory and ships as ".", which is
+          # indistinguishable from any other directory scan once a consumer has
+          # ingested several.
+          syft scan "dir:." \
+            --source-name veredictum --source-version "$VERSION" \
+            --output "spdx-json=veredictum-${TAG}.spdx.json"
+          # Refuse to attach a document that is not SPDX, or that does not
+          # identify itself: either one ships a file that looks like an SBOM and
+          # answers no question a consumer can ask of it.
+          version="$(jq -r '.spdxVersion' "veredictum-${TAG}.spdx.json")"
+          case "$version" in
+            SPDX-*) ;;
+            *) echo "::error::generated SBOM is not SPDX (spdxVersion=${version})"; exit 1 ;;
+          esac
+          name="$(jq -r '.name' "veredictum-${TAG}.spdx.json")"
+          if [ "$name" != "veredictum" ]; then
+            echo "::error::SPDX document names itself '${name}', expected 'veredictum'"
+            exit 1
+          fi
+          count="$(jq '.packages | length' "veredictum-${TAG}.spdx.json")"
+          [ "$count" -gt 0 ] || { echo "::error::the SPDX SBOM lists no packages"; exit 1; }
+          echo "SPDX ${version}, ${count} packages"
+
+      # Created as a DRAFT and finalized only after every asset is attached.
+      # A published GitHub release can have its assets and tag frozen by the
+      # repository's immutability setting, and the binaries, SBOMs and Sigstore
+      # bundles are produced by the matrix that runs AFTER this job — so
+      # publishing here would freeze the release before its most important
+      # assets exist. A draft is still mutable, which is exactly the window
+      # those uploads need.
+      #
+      # The release TITLE is the BARE version, not the tag and not a sentence:
+      # the release page already says which project it belongs to, so a name
+      # that repeats it is noise in every list a consumer reads.
+      - name: Create the GitHub release as a draft
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          draft: true
+          tag_name: ${{ needs.plan.outputs.tag }}
+          name: ${{ needs.plan.outputs.version }}
+          body_path: release-notes.md
+          files: |
+            veredictum-${{ needs.plan.outputs.tag }}.spdx.json
+          # Only an explicitly suffixed tag is a pre-release. The rule's one
+          # definition lives in .github/actions/release-kind, which `plan` ran.
+          prerelease: ${{ needs.plan.outputs.is-prerelease }}
+
+  # Native runner per architecture — no cross toolchain, no QEMU.
+  #
+  # This job is a CALL AND NOTHING ELSE, deliberately. SLSA Build L3 requires
+  # the signing material to be out of reach of user-defined build steps
+  # (https://slsa.dev/spec/v1.2/build-requirements), and a job's steps all share
+  # one runner VM. Moving the build and its attestation into a reusable workflow
+  # puts them on their own VM with a build definition a caller cannot add steps
+  # to, which is GitHub's documented construction for Build L3.
+  #
+  # So there must be no `steps:` here — adding one would put caller-defined code
+  # back beside the signing and silently drop this lane to L2 while every
+  # attestation still looked identical. A reusable-workflow call cannot carry
+  # steps at all, which is what makes that regression unrepresentable rather
+  # than merely discouraged.
+  binaries:
+    name: binaries
+    needs: [plan, github-release]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-26.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-26.04-arm
+            target: aarch64-unknown-linux-gnu
+    # Declared on both sides: a reusable workflow receives the caller's token
+    # permissions, and GitHub's L3 guide asks for the same set in both places.
+    permissions:
+      contents: write # attach the per-arch tarballs to the release
+      id-token: write # Sigstore, for the provenance + SBOM attestations
+      attestations: write # store them against this repository
+    uses: ./.github/workflows/release-build.yml
+    with:
+      tag: ${{ needs.plan.outputs.tag }}
+      sha: ${{ github.sha }}
+      target: ${{ matrix.target }}
+      runner: ${{ matrix.runner }}
+
+  # The moment the release becomes immutable, so it happens only once every
+  # asset is in place. `needs` the matrix rather than just the draft: a draft
+  # with no binaries must never be flipped to published, and a failed matrix
+  # leaves the draft visible for inspection instead of shipping a release
+  # nobody can add to afterwards.
+  finalize:
+    name: github release (publish)
+    needs: [plan, binaries]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Every expected asset is attached before the release is frozen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          echo "$assets"
+          # `grep -Fxq` — fixed string, whole line. A substring match is
+          # satisfied as soon as any longer asset name contains the expected
+          # one, so ".tar.gz" would pass on ".tar.gz.sigstore.json" alone and a
+          # missing tarball would ship.
+          missing=""
+          for arch in x86_64 aarch64; do
+            for suffix in \
+              ".tar.gz" \
+              ".tar.gz.sha256sum" \
+              ".tar.gz.sigstore.json" \
+              ".tar.gz.sbom.sigstore.json" \
+              ".tar.gz.intoto.jsonl" \
+              ".cdx.json"; do
+              printf '%s\n' "$assets" \
+                | grep -Fxq "veredictum-${TAG}-${arch}-unknown-linux-gnu${suffix}" \
+                || missing="$missing veredictum-${TAG}-${arch}-unknown-linux-gnu${suffix}"
+            done
+          done
+          printf '%s\n' "$assets" | grep -Fxq "veredictum-${TAG}.spdx.json" \
+            || missing="$missing veredictum-${TAG}.spdx.json"
+          [ -z "$missing" ] || {
+            echo "::error::the draft is missing assets, so it will not be published:$missing"
+            exit 1
+          }
+          echo "every expected asset is attached"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+
+  # ── Compile the image binary natively per architecture ──────────────────────
+  # Separate from the `binaries` matrix above on purpose, and not a duplicate of
+  # it: this one builds inside the Debian 13 (trixie) rust image so the produced
+  # binary links glibc 2.41, which is exactly what the distroless cc-debian13
+  # runtime ships. The release tarballs are built on the runner's own newer
+  # glibc, which is correct for a downloaded binary and wrong for that base
+  # image. Building here also keeps the image a COPY-only build, so the
+  # multi-architecture push needs no QEMU.
+  image-binary:
+    name: image binary (${{ matrix.platform }})
+    needs: plan
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: amd64
+            runner: ubuntu-26.04
+          - platform: arm64
+            runner: ubuntu-26.04-arm
+    # Digest-pinned rather than tag-pinned: a tag is mutable, so a re-run of an
+    # already-reviewed commit could otherwise build against different bytes. The
+    # INDEX digest, so both runner architectures resolve it.
+    container: rust:1.97.1-slim-trixie@sha256:3b2879047d42784ca9403ad20c51ed3df361a50f1df96f5777d39b4e33aa65cd
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }} # == plan's commit: the dispatch-at-tag refusal makes them equal
+
+      - name: Toolchain pins agree (container == rust-toolchain.toml == Dockerfile)
+        shell: bash
+        run: |
+          set -euo pipefail
+          channel="$(grep -E '^channel' rust-toolchain.toml | sed -E 's/.*"(.*)".*/\1/')"
+          have="$(rustc --version | awk '{print $2}')"
+          arg="$(grep -E '^ARG RUST_VERSION=' docker/Dockerfile | head -1 | cut -d= -f2)"
+          echo "rust-toolchain=$channel  container-rustc=$have  Dockerfile ARG=$arg"
+          if [ "$channel" != "$have" ]; then
+            echo "::error::job container rustc ($have) != rust-toolchain.toml ($channel). Bump the container: tag in release.yml."
+            exit 1
+          fi
+          if [ "$channel" != "$arg" ]; then
+            echo "::error::docker/Dockerfile RUST_VERSION ($arg) != rust-toolchain.toml ($channel)."
+            exit 1
+          fi
+
+      # No cache in a publishing lane: nothing a prior run could have poisoned
+      # may influence the bytes that get pushed and attested.
+      - name: Install cargo-auditable
+        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        with:
+          tool: cargo-auditable@0.7.5
+
+      - name: Build (release, native)
+        run: cargo auditable build --release --locked --bin veredictum
+
+      - name: Strip
+        run: strip target/release/veredictum
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: veredictum-${{ matrix.platform }}
+          path: target/release/veredictum
+          if-no-files-found: error
+          retention-days: 1
+
+  # ── Package and push the multi-architecture image (COPY-only; seconds) ──────
+  # `defer-tags` pushes BY DIGEST: the tags are applied by scan-and-tag once the
+  # vulnerability gate passes, so a HIGH finding can never already be `:latest`
+  # by the time the lane turns red. The labels mirror the Dockerfile's.
+  image:
+    name: image
+    needs: image-binary
+    permissions:
+      contents: read
+      packages: write # push the image to GHCR
+      id-token: write # Sigstore, for the signed attestation
+      attestations: write # store it against this repository
+    uses: ./.github/workflows/build-image.yml
+    with:
+      image: ghcr.io/${{ github.repository_owner }}/veredictum
+      defer-tags: true
+      dockerfile: docker/Dockerfile
+      target: runtime-prebuilt
+      binary-artifact-prefix: veredictum
+      labels: |
+        org.opencontainers.image.title=Veredictum
+        org.opencontainers.image.description=The independent conformance instrument for openEHR clinical data repositories
+        org.opencontainers.image.source=https://github.com/rubentalstra/Veredictum
+        org.opencontainers.image.url=https://github.com/rubentalstra/Veredictum
+        org.opencontainers.image.documentation=https://github.com/rubentalstra/Veredictum#readme
+        org.opencontainers.image.vendor=Veredictum
+        org.opencontainers.image.authors=Ruben Talstra <https://github.com/rubentalstra>
+        org.opencontainers.image.licenses=Apache-2.0
+        org.opencontainers.image.base.name=gcr.io/distroless/cc-debian13:nonroot
+        org.opencontainers.image.base.digest=sha256:d97bc0a941b8d4be647dc0ee75b264ddbb772f1ac5ba690a4309c00723b23775
+
+  # The pushed artifact is assembled from a compile job and a COPY, so its one
+  # novel failure class is an image that does not RUN: a distroless base missing
+  # a library the binary dynamically links fails at load, and no build step sees
+  # it. This drives the very digest this run pushed, before any tag names it.
+  image-smoke:
+    name: image smoke (amd64)
+    needs: image
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read # pull the digest this run just pushed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }} # == plan's commit: the dispatch-at-tag refusal makes them equal
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: The pushed image runs the catalogue it was built to run
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/veredictum
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker pull "${IMAGE}@${DIGEST}"
+          # The entrypoint IS the instrument, so the arguments are subcommands.
+          docker run --rm "${IMAGE}@${DIGEST}" --version
+          # The image ships the runner, not the 347 MB catalogue, so the real
+          # smoke is the documented invocation: mount this checkout and validate
+          # the artifact tree through the image. Zero findings is the only
+          # passing result, and `validate` exits non-zero otherwise.
+          docker run --rm -v "$PWD:/work" "${IMAGE}@${DIGEST}" \
+            validate --root /work/artifacts --specs /work/specs/openehr
+
+  # ── The gate that makes the pushed digest referencable ──────────────────────
+  scan-and-tag:
+    name: scan + tag
+    needs: image
+    permissions:
+      contents: read
+      packages: write # pull the pushed digest, then tag it
+    uses: ./.github/workflows/scan-and-tag.yml
+    with:
+      image: ghcr.io/${{ github.repository_owner }}/veredictum
+      digest: ${{ needs.image.outputs.digest }}
+      tags: ${{ needs.image.outputs.tags }}
+
+  # ── crates.io ───────────────────────────────────────────────────────────────
+  # LAST on purpose, and after the release is otherwise complete. A crates.io
+  # version is immutable — it can be yanked, never replaced — so it is the one
+  # thing in this pipeline that must not go out before everything else has
+  # proven itself. The `crates-io` environment additionally requires a reviewer's
+  # approval, so this job PAUSES until a human approves it; placing it here means
+  # that pause blocks nothing, because the GitHub release is already published
+  # and the image tags already applied.
+  #
+  # The publish steps are INLINE here rather than in a reusable workflow shared
+  # with publish-crates.yml, and that is not duplication by oversight. crates.io
+  # Trusted Publishing matches the OIDC `workflow_ref` claim, which for a job
+  # inside a reusable workflow names the CALLING workflow
+  # (https://docs.github.com/en/actions/concepts/security/openid-connect,
+  # https://crates.io/docs/trusted-publishing) — so a shared reusable workflow
+  # would present `release.yml` as the identity anyway, and the only thing moving
+  # the job there would achieve is hiding which workflow the publisher
+  # configuration has to name. The shared implementation is
+  # `scripts/release/publish-crate.sh`, which both lanes call.
+  #
+  # Consequence, stated where it bites: crates.io needs a Trusted Publisher
+  # entry for THIS workflow file (repository `rubentalstra/Veredictum`, workflow
+  # `release.yml`, environment `crates-io`) in addition to the one naming
+  # `publish-crates.yml`. Without it the token exchange below is refused, and the
+  # step says so.
+  publish-crate:
+    name: publish to crates.io
+    needs: [plan, finalize, scan-and-tag]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write # OIDC token exchange (rust-lang/crates-io-auth-action)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }} # == plan's commit: the dispatch-at-tag refusal makes them equal
+      # No cache in the lane that uploads: a published version is immutable, so
+      # it is built from this checkout and nothing else.
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache: false
+
+      - id: auth
+        name: Exchange the OIDC identity for a temporary crates.io token
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      - name: Publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: bash scripts/release/publish-crate.sh publish
+
+      # The registry is the ground truth, not the exit code above. `always()`,
+      # because this matters most exactly when the publish step went red: a run
+      # that uploaded successfully but misread its own output would otherwise end
+      # red with nothing to contradict it.
+      - name: Verify the version is on the registry
+        if: always()
+        run: bash scripts/release/publish-crate.sh verify
+
+  # ── announce: the one summary a human reads ────────────────────────────────
+  # Asserts every leg landed and, on any failure, names the exact recovery
+  # instead of leaving it tribal.
+  announce:
+    name: announce
+    if: always()
+    needs:
+      - plan
+      - github-release
+      - binaries
+      - finalize
+      - image-binary
+      - image
+      - image-smoke
+      - scan-and-tag
+      - publish-crate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Assert every leg landed, and say what published where
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          IS_RELEASE: ${{ needs.plan.outputs.is-release }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+          R_PLAN: ${{ needs.plan.result }}
+          R_DRAFT: ${{ needs.github-release.result }}
+          R_BINARIES: ${{ needs.binaries.result }}
+          R_FINALIZE: ${{ needs.finalize.result }}
+          R_IMAGE_BINARY: ${{ needs.image-binary.result }}
+          R_IMAGE: ${{ needs.image.result }}
+          R_IMAGE_SMOKE: ${{ needs.image-smoke.result }}
+          R_SCAN_AND_TAG: ${{ needs.scan-and-tag.result }}
+          R_CRATE: ${{ needs.publish-crate.result }}
+        run: |
+          set -uo pipefail
+          fail=0
+          rows=""
+          check() {
+            if [ "$2" = "success" ]; then
+              rows="${rows}| $1 | ok |"$'\n'
+            else
+              rows="${rows}| $1 | **$2** |"$'\n'
+              fail=1
+            fi
+          }
+          check "plan" "$R_PLAN"
+          check "github release (draft)" "$R_DRAFT"
+          check "binaries" "$R_BINARIES"
+          check "github release (published)" "$R_FINALIZE"
+          check "image binaries" "$R_IMAGE_BINARY"
+          check "image" "$R_IMAGE"
+          check "image smoke" "$R_IMAGE_SMOKE"
+          check "scan + tag" "$R_SCAN_AND_TAG"
+          check "crates.io" "$R_CRATE"
+
+          repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          {
+            printf '## %s\n\n' "$TAG"
+            printf '| leg | outcome |\n|---|---|\n%s\n' "$rows"
+            printf '### What published where\n\n| | |\n|---|---|\n'
+            printf '| release | %s/releases/tag/%s |\n' "$repo_url" "$TAG"
+            printf '| image | `ghcr.io/%s/veredictum:%s` `@%s` |\n' \
+              "$GITHUB_REPOSITORY_OWNER" "$VERSION" "${DIGEST:-not pushed}"
+            printf '| `:latest` moved | %s |\n' \
+              "$([ "$IS_RELEASE" = "true" ] && echo yes || echo 'no — pre-release')"
+            printf '| crate | https://crates.io/crates/veredictum/%s |\n' "$VERSION"
+            printf '\n'
+            if [ "$fail" != 0 ]; then
+              printf '### Recovery\n\n'
+              printf 'Re-dispatch this pipeline AT the tag: `gh workflow run Release --ref %s -f tag=%s`.\n' "$TAG" "$TAG"
+              printf 'Every leg is idempotent, with these exceptions:\n\n'
+              # `printf '%s\n' '<line>'` for every line that STARTS with `-`: as
+              # a format string it would be read as an option and the step dies
+              # with "printf: - : invalid option".
+              printf '%s\n' \
+                '- **plan failed**: nothing was published at all. Fix the fact it named and cut' \
+                '  the next version; a tag is never re-pointed.' \
+                '- **github release (published) failed**: the draft is still there and still' \
+                '  mutable. Read the missing-asset list, re-run, and it publishes.' \
+                '- **crates.io refused the token exchange**: crates.io needs a Trusted Publisher' \
+                '  entry for `release.yml` (repository, workflow file, environment `crates-io`),' \
+                '  beside the one naming `publish-crates.yml`. Add it, then re-run this leg.' \
+                '- **crates.io published and a later step failed**: that version is public and' \
+                '  immutable. Do NOT try to replace it — yank it and cut the next version.' \
+                ''
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$rows"
+          [ "$fail" = 0 ] || { echo "::error::the release pipeline for ${TAG} did not land every leg — see the run summary for the recovery"; exit 1; }

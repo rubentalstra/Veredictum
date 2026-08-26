@@ -1,0 +1,38 @@
+# Trivy configuration, shared by every lane that scans this project's image
+# (OWASP Docker Security Cheat Sheet rule 9). Configuration lives here rather
+# than in workflow inputs because a lane that forgets a flag silently changes
+# what the gate MEANS, and a gate whose meaning drifts is worse than none.
+#
+# Two deliberate choices, stated rather than implied:
+#
+#   * `ignore-unfixed`. A CVE in an upstream base image with no fix available is
+#     not something a merge can resolve, and a gate that fails on it stops being
+#     a gate within a week — it becomes a thing people re-run until it passes.
+#     Unfixed findings still appear in the job log; they just do not block.
+#     Fixed ones do block, because those a rebuild resolves.
+#   * HIGH and CRITICAL only. MEDIUM on a distroless image is noise at a volume
+#     that hides the two severities that matter.
+#
+# No `ignorefile` key: there are no adjudicated per-CVE exceptions in this
+# repository, and pointing at a file that does not exist is a configuration
+# error rather than an empty list. The key arrives with the first exception, and
+# each entry there carries its CVE, its reason and an expiry date so an
+# exception cannot become permanent by inattention.
+severity:
+  - HIGH
+  - CRITICAL
+
+vulnerability:
+  # The nesting is load-bearing: a top-level `ignore-unfixed` key is silently
+  # ignored by Trivy, so the same scan would still return every unfixed finding
+  # while the configuration looked correct.
+  ignore-unfixed: true
+
+scan:
+  skip-dirs:
+    # Vendored upstream material — the specification oracle, the released
+    # machine-readable bundles and the breadth corpora — none of it built into
+    # the image. Scanning it reports other projects' findings as this one's.
+    - specs
+    - artifacts/corpus
+    - target
