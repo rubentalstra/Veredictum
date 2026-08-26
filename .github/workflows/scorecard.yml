@@ -38,6 +38,9 @@
 name: Scorecard
 
 on:
+  # Re-score immediately when branch protection changes (the official template's
+  # trigger; the Branch-Protection check reads exactly that configuration).
+  branch_protection_rule:
   # Weekly, because most checks measure repository CONFIGURATION rather than a
   # commit: branch protection, code scanning, the update bot. A per-push run
   # would re-measure unchanged settings.
