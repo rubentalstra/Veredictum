@@ -1,0 +1,63 @@
+# The ONE build-context ignore file for every image built from this repository
+# root. A Dockerfile-adjacent `*.dockerignore` would SHADOW this file entirely
+# (https://docs.docker.com/build/concepts/context — a Dockerfile-specific
+# ignore-file takes precedence), so there is only this one.
+#
+# The context is deliberately small. This repository is 347 MB, and almost none
+# of it is a compile input: the catalogue, the corpora and the vendored
+# specification oracle are read at RUN time from a mount, never embedded — no
+# source file uses `include_str!` or `include_bytes!`. Sending them to the
+# daemon would cost minutes per build and invalidate the COPY layer on every
+# artifact edit.
+#
+# What must NOT be excluded, so a future edit does not quietly break a build:
+# `src/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` (the builder stage
+# compiles from them) and `bin/` (the CI target COPYs the prebuilt native binary
+# from there).
+
+# Build output. The single most important line: `target/` alone can be tens of
+# gigabytes.
+target/
+**/target/
+
+# History. It adds no compile input, and it invalidates the COPY layer on every
+# commit and every fetch (https://docs.docker.com/build/cache). Build provenance
+# comes from the OCI-standard REVISION build-arg instead, which the publishing
+# workflow sets.
+.git/
+.gitattributes
+
+# The catalogue, the corpora, the party declarations and the vendored oracle —
+# read from a mount at run time, and the bulk of the repository's size.
+artifacts/
+specs/
+party/
+schemas/
+verification-pack/
+assets/
+
+# Tests and their fixtures: nothing in the image runs them.
+tests/
+
+# CI, tooling, agent and editor directories — never a compile input.
+.github/
+.githooks/
+.claude/
+.idea/
+.vscode/
+
+# Local environment, secrets, coverage and logs. The secret patterns mirror
+# `.gitignore`: an IXIT declaration carries a live endpoint and its credentials,
+# and SECURITY.md treats leaking one as a vulnerability in this instrument.
+.env
+.env.*
+*.pem
+*.key
+*.log
+ixit.local.json
+**/ixit.local.json
+lcov.info
+*.profraw
+coverage/
+.sccache/
+.DS_Store

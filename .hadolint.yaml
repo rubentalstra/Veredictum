@@ -1,0 +1,18 @@
+# hadolint configuration (OWASP Docker Security Cheat Sheet rule 9: "Dockerfile
+# lint for best practices").
+#
+# The policy: a rule this repository deliberately violates is named here with
+# its reason. Never a blanket disable, and never a lowered failure threshold to
+# make one specific finding go away.
+#
+# `failure-threshold: warning` means info-level style advice does not gate a
+# merge while a genuine best-practice violation does. Nothing is ignored today —
+# the Dockerfile installs no apt packages, so the usual DL3008 exemption has
+# nothing to apply to; the `ignored` list arrives with its first real entry
+# rather than as speculative configuration.
+failureThreshold: warning
+
+trustedRegistries:
+  # Every FROM is digest-pinned; these are the registries those digests live in.
+  - docker.io
+  - gcr.io

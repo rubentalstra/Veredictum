@@ -87,6 +87,7 @@ jobs:
       contents: read
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      docker: ${{ steps.filter.outputs.docker }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -124,7 +125,10 @@ jobs:
           # them.
           if ! git rev-parse "${base:-}" >/dev/null 2>&1; then
             echo "base unresolvable — running every gate"
-            echo "code=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "code=true"
+              echo "docker=true"
+            } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           changed=$(git diff --name-only "$base" "$head")
@@ -134,6 +138,14 @@ jobs:
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+          # The image tier: the Dockerfile, the build-context ignore file that
+          # decides what the Dockerfile can even see, the lint configuration, and
+          # this file.
+          if echo "$changed" | grep -qE '^(docker/|\.dockerignore$|\.hadolint\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docker=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ── The guard tier: prose, licensing, commit messages, changelog structure ──
@@ -296,6 +308,34 @@ jobs:
       # a job missing from its `needs` list run without gating anything.
       - name: Every CI job gates the merge
         run: bash scripts/checks/ci-conclusion-complete.sh
+
+  # ── The image tier ──────────────────────────────────────────────────────────
+  # hadolint over the Dockerfile. Configuration lives in `.hadolint.yaml`, where
+  # a rule this repository deliberately violates is named with its reason —
+  # never a blanket disable (OWASP Docker Security Cheat Sheet rule 9).
+  #
+  # Gated on the `docker` filter rather than ungated, because there is exactly
+  # one Dockerfile and a prose-only change has nothing here to judge. The
+  # threshold is passed explicitly as well as set in the config file: the action
+  # has its own default, and a lane whose severity floor came from whichever of
+  # the two happened to win is a gate with no stated meaning.
+  dockerfile-lint:
+    name: Dockerfile lint
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
+        with:
+          dockerfile: docker/Dockerfile
+          config: .hadolint.yaml
+          failure-threshold: warning
 
   # ── The Rust tier ───────────────────────────────────────────────────────────
   # rustfmt compiles nothing, so a restored target or registry cache here is
@@ -483,6 +523,7 @@ jobs:
       - changes
       - guards
       - workflow-audit
+      - dockerfile-lint
       - fmt
       - clippy
       - test
