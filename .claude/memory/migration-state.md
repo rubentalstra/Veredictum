@@ -117,6 +117,15 @@ them are not in this graph; `.config/nextest.toml` carries no `containers` test
 group, because a filter matching no test looks like scheduling discipline and
 enforces nothing.
 
+Landed with the documentation site (#33): `website/landing/` and
+`website/book/` (this project's own design, not a recolour of FerroEHR's),
+`scripts/site/build.sh` trimmed to one documentation tree with no version-freeze
+machinery, `.github/workflows/docs.yml`, `.github/actions/docs-toolchain` (mdBook
+plus mdbook-toc, mdbook-lint and lychee; no mermaid and no katex, because the
+book draws no diagrams and writes no formulas), and `.mdbook-lint.toml` — which
+settles the "with the docs-site decision" hold this file used to carry. So does
+FerroEHR#2789's own docs-site checklist item.
+
 Landed with the release pipeline and the image (#12): `.dockerignore`,
 `.hadolint.yaml`, `trivy.yaml`, `.github/actionlint.yaml` (the native arm64
 runner labels — actionlint's built-in roster lags GitHub's and reports an unknown
@@ -128,9 +137,8 @@ Still absent, each waiting on the thing it configures: `.cargo/config.toml`,
 `.devcontainer/`, `.trivyignore.yaml` and `security/vex/` (no adjudicated CVE
 exception exists yet, and pointing Trivy at an absent ignore-file is a
 configuration error rather than an empty list), `.fossa.yml` / `.fossabot.yml`,
-`.mdbook-lint.toml` (with the docs-site decision), and the remaining
-`scripts/checks/` guards (spec-citation resolver, default-value style,
-typed-status style, SPDX headers).
+and the remaining `scripts/checks/` guards (spec-citation resolver,
+default-value style, typed-status style, SPDX headers).
 
 The OpenSSF Best Practices criteria adjudication stays DEFERRED by owner
 decision 2026-08-26 — do not propose statuses until the owner picks it up. Six
@@ -141,6 +149,8 @@ tree.
 
 Not applicable, checked and recorded so they are not re-surveyed:
 `.editorconfig` (does not exist in FerroEHR), `vercel.json`,
-`Dockerfile.vercel`, `docker-compose*.yml`, `deploy/`, `website/` — FerroEHR's
-CDR, sandbox and documentation-site surfaces with no counterpart here. A compose
-file for a target CDR, if one is ever wanted, is new work rather than a port.
+`Dockerfile.vercel`, `docker-compose*.yml`, `deploy/` — FerroEHR's CDR and
+sandbox surfaces with no counterpart here. A compose file for a target CDR, if
+one is ever wanted, is new work rather than a port. (`website/` was on this list
+until #33; it landed as its own design, sharing only the assemble-and-deploy
+shape.)

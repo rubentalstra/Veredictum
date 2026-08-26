@@ -1,0 +1,8 @@
+# Veredictum site — crawl policy.
+# One documentation tree, at /docs/. Everything published here is meant to be
+# indexed, so nothing is disallowed. The sitemap is written by
+# scripts/site/build.sh.
+User-agent: *
+Allow: /
+
+Sitemap: https://veredictum.eu/sitemap.xml

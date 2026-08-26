@@ -1,0 +1,85 @@
+/* SPDX-FileCopyrightText: Veredictum contributors
+   SPDX-License-Identifier: Apache-2.0 */
+
+/* Veredictum book theme: a brand recolour of mdBook's own themes. It changes
+   colour and nothing else, so mdBook keeps its typography, layout and
+   accessibility work.
+   Palette source: assets/brand/tokens.css. */
+
+:root {
+  --ver-teal: #258bb0;
+  --ver-teal-deep: #1b6e92;
+  --ver-teal-field: #14566f;
+  --ver-orange: #ff861c;
+  --ver-parchment: #f6decd;
+  --ver-paper: #fff9f2;
+  --ver-ink: #363636;
+}
+
+/* ── Light themes (light / rust) ───────────────────────────────────────────── */
+.light,
+.rust {
+  --bg: var(--ver-paper);
+  --fg: var(--ver-ink);
+  --links: var(--ver-teal-deep);
+  --sidebar-bg: #f3e7d9;
+  --sidebar-fg: #4a4238;
+  --sidebar-active: var(--ver-teal-deep);
+  --sidebar-non-existant: #a89a89;
+  --inline-code-color: var(--ver-teal-field);
+  --search-mark-bg: #f0b271;
+  --table-header-bg: #f0e2d2;
+  --table-alternate-bg: #fdf4ea;
+  --quote-bg: #f7ece0;
+  --quote-border: #e3d2bd;
+}
+
+.light .content code,
+.rust .content code {
+  background-color: #f6e9db;
+}
+
+/* ── Dark themes (coal / navy / ayu) ──────────────────────────────────────── */
+.coal,
+.navy,
+.ayu {
+  --links: #6cc0e0; /* the brand teal brightened for AA contrast on dark */
+  --sidebar-active: #6cc0e0;
+  --inline-code-color: #f0b271;
+  --search-mark-bg: #8a5a1e;
+}
+
+/* ── Shared brand touches ─────────────────────────────────────────────────── */
+.content a,
+.content a:visited {
+  color: var(--links);
+}
+
+.content h1,
+.content h2,
+.content h3 {
+  font-family: Georgia, "Times New Roman", Times, serif;
+}
+
+.content h2,
+.content h3 {
+  margin-top: 2rem;
+}
+
+/* The seal's signal orange marks the one thing a reader must not miss: a
+   warning callout's rule. */
+.content blockquote {
+  border-inline-start-color: var(--ver-teal);
+}
+
+.menu-title {
+  font-family: Georgia, "Times New Roman", Times, serif;
+  letter-spacing: 0.04em;
+}
+
+/* A wide table scrolls inside its own box instead of pushing the page sideways. */
+.content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}

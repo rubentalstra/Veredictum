@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- GitHub Pages serves static files and sets no response headers, so the
+       policy travels as a <meta> element. A meta CSP is weaker than the header
+       by specification: `frame-ancestors`, `report-uri` and `sandbox` are
+       ignored in meta form (W3C CSP3 §3.3). It still blocks an injected
+       external script and an exfiltrating connection, which is the realistic
+       risk for a static page.
+       script-src carries no inline allowance: the page's only <script> is an
+       application/ld+json DATA BLOCK, which browsers never execute, so
+       script-src does not govern it
+       (https://html.spec.whatwg.org/multipage/scripting.html#data-block). -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Veredictum — the independent openEHR conformance instrument</title>
+  <meta name="description" content="Veredictum drives 1103 spec-cited test cases against a running openEHR clinical data repository, records every exchange, and computes verdicts as pure functions over what it recorded. The released openEHR specifications are the only authority it accepts.">
+  <link rel="canonical" href="https://veredictum.eu/">
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+  <link rel="stylesheet" href="./style.css">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Veredictum — the independent openEHR conformance instrument">
+  <meta property="og:description" content="1103 spec-cited cases, 247 operation bindings, verdicts computed as pure functions. The released openEHR specifications are the only authority.">
+  <meta property="og:url" content="https://veredictum.eu/">
+  <meta property="og:site_name" content="Veredictum">
+  <meta property="og:image" content="https://veredictum.eu/assets/veredictum-seal.svg">
+  <meta property="og:image:alt" content="The Veredictum conformance seal">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Veredictum — the independent openEHR conformance instrument">
+  <meta name="twitter:description" content="1103 spec-cited cases, 247 operation bindings, verdicts computed as pure functions.">
+  <meta name="twitter:image" content="https://veredictum.eu/assets/veredictum-seal.svg">
+
+  <!-- Structured data. `WebSite` and `Organization` identify the site and its
+       publisher; `SoftwareSourceCode` describes what the site is about, which
+       is what lets a search engine treat the docs subtree as one entity rather
+       than a set of unrelated pages. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://veredictum.eu/#website",
+        "url": "https://veredictum.eu/",
+        "name": "Veredictum",
+        "description": "The independent conformance instrument for openEHR clinical data repositories.",
+        "inLanguage": "en",
+        "publisher": { "@id": "https://veredictum.eu/#publisher" },
+        "hasPart": [
+          {
+            "@type": "WebPage",
+            "name": "Documentation",
+            "url": "https://veredictum.eu/docs/",
+            "description": "Installation, the command surface, the conformance methodology, and catalogue authoring."
+          }
+        ]
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://veredictum.eu/#publisher",
+        "name": "Veredictum",
+        "url": "https://veredictum.eu/",
+        "logo": "https://veredictum.eu/assets/veredictum-icon.svg",
+        "sameAs": ["https://github.com/rubentalstra/Veredictum"]
+      },
+      {
+        "@type": "SoftwareSourceCode",
+        "@id": "https://veredictum.eu/#software",
+        "name": "Veredictum",
+        "description": "A conformance instrument that drives a machine-readable catalogue of spec-cited test cases against a running openEHR clinical data repository and computes verdicts as pure functions over the recorded exchanges.",
+        "url": "https://veredictum.eu/",
+        "codeRepository": "https://github.com/rubentalstra/Veredictum",
+        "programmingLanguage": "Rust",
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "applicationCategory": "DeveloperApplication",
+        "isBasedOn": "https://specifications.openehr.org/",
+        "documentation": "https://veredictum.eu/docs/"
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <img src="./assets/veredictum-icon.svg" alt="" aria-hidden="true">
+      <span>Veredictum</span>
+    </a>
+    <nav aria-label="Primary">
+      <a href="./docs/">Docs</a>
+      <a href="#method" class="hide-sm">Method</a>
+      <a href="#start" class="hide-sm">Quick start</a>
+      <a href="https://github.com/rubentalstra/Veredictum" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ── Hero ───────────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="wrap">
+      <img class="seal" src="./assets/veredictum-seal.svg" alt="The Veredictum conformance seal, reading VEREDICTUM around a checkmark, openEHR CONFORMANCE below it, and the motto vere dictum">
+      <h1>An independent verdict on what an openEHR server implements</h1>
+      <p class="lede">
+        Point Veredictum at a running clinical data repository and it tells you,
+        with citations, which parts of the openEHR specification that server
+        actually implements. It executes a machine-readable catalogue against
+        the server's own wire, records every exchange, and computes verdicts as
+        pure functions over what it recorded.
+      </p>
+      <div class="actions">
+        <a class="btn btn-solid" href="./docs/">Read the documentation</a>
+        <a class="btn btn-outline" href="https://github.com/rubentalstra/Veredictum" rel="noopener">Source on GitHub</a>
+      </div>
+      <div class="facts">
+        <div class="fact"><span class="n">1103</span><span class="l">spec-cited cases</span></div>
+        <div class="fact"><span class="n">247</span><span class="l">operation bindings</span></div>
+        <div class="fact"><span class="n">1.1.0</span><span class="l">openEHR ITS-REST</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── The name ───────────────────────────────────────────────────────── -->
+  <section class="origin">
+    <div class="wrap">
+      <blockquote>
+        <em>Veredictum</em> is medieval Latin for “truly spoken”, <em>vere
+        dictum</em>, and it is the word that became the English
+        <em>verdict</em>.
+        <cite>That is what the instrument produces: it runs the catalogue
+        against a running CDR and speaks a verdict about what it observed. The
+        seal above is the mark of that verdict.</cite>
+      </blockquote>
+    </div>
+  </section>
+
+  <!-- ── What it does ───────────────────────────────────────────────────── -->
+  <section id="what">
+    <div class="wrap">
+      <div class="head center">
+        <span class="eyebrow">What it does</span>
+        <h2>Catalogue, run, verdict</h2>
+        <p>Three stages, each one a separate command, each one auditable on its
+          own. Nothing is computed at a stage that could hide what an earlier
+          stage recorded.</p>
+      </div>
+      <div class="stages">
+        <div class="stage">
+          <h3>The catalogue</h3>
+          <p>1103 test cases, one small isolated case per behaviour, so a red
+            row names one defect. Every expectation carries the specification
+            section it comes from. 247 operation bindings say how each case
+            reaches the wire; a case core carries no status code, header or
+            media type of its own.</p>
+          <p><code>veredictum validate</code> checks the catalogue itself. Zero
+            findings is the only passing result.</p>
+        </div>
+        <div class="stage">
+          <h3>The run</h3>
+          <p>You declare your deployment once, in an IXIT file: endpoints, the
+            names of the environment variables holding credentials, and the
+            postures your server serves. The instrument drives the catalogue
+            against those endpoints and records every request and response.</p>
+          <p><code>veredictum run</code> writes <code>results.json</code>, which
+            is a record of exchanges and not yet a judgement.</p>
+        </div>
+        <div class="stage">
+          <h3>The verdict</h3>
+          <p>A verdict is a pure function of your statement of claims, the
+            recorded results, the catalogue and the capability matrix. Run it
+            again on the same inputs and you get the same documents, on any
+            machine.</p>
+          <p><code>veredictum verdicts</code> writes the report, the statement
+            and the certificate.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Three kinds of evidence ────────────────────────────────────────── -->
+  <section id="evidence">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">One tool, three kinds of evidence</span>
+        <h2>Functional conformance, measured performance, step-load stress</h2>
+        <p>The same catalogue and the same recorded-then-computed discipline
+          carry all three, so a performance number and a functional verdict come
+          from one instrument against one deployment.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th scope="col">Instrument</th><th scope="col">What it answers</th><th scope="col">Record</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Functional</strong><br><code>run</code> + <code>verdicts</code></td>
+              <td>Which capabilities does this server implement to the released specification, and which does it fail?</td>
+              <td><code>results.json</code>, then the report, statement and certificate</td>
+            </tr>
+            <tr>
+              <td><strong>Measured performance</strong><br><code>perf</code></td>
+              <td>Does this deployment sustain the volumetric class it claims, over the normative hour or a longer window?</td>
+              <td>HDR histograms embedded in <code>results.json</code>, so the stored summary is re-derived rather than trusted</td>
+            </tr>
+            <tr>
+              <td><strong>Step-load stress</strong><br><code>stress</code></td>
+              <td>Where does this deployment break, in arrivals per second?</td>
+              <td><code>stress.json</code>. Exploration only, and never a conformance record</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="after-code">Latency is measured from the planned arrival instant
+        under open-loop offered load, which is what stops coordinated omission
+        from hiding a stall.</p>
+    </div>
+  </section>
+
+  <!-- ── Independence ───────────────────────────────────────────────────── -->
+  <section id="method">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Independence</span>
+        <h2>No server grades its own homework</h2>
+      </div>
+      <div class="prose">
+        <p>A server vendor's own test suite cannot answer the question a
+          hospital is asking. The suite and the server are written by the same
+          people against the same reading of the specification, and when the two
+          disagree it is usually the suite that gets adjusted.</p>
+        <p>The released openEHR specifications are the only authority this
+          instrument accepts. The vendored specification text is the oracle and
+          is never a suspect. Every expectation in the catalogue names the
+          section it comes from, so it can be refuted by a better reading of the
+          specification and by nothing else.</p>
+        <p>When a run goes red the failure is attributed before anything is
+          changed, to exactly one of three suspects, by comparing what the
+          specification requires against what the catalogue expects against what
+          the server did.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th scope="col">Suspect</th><th scope="col">Fix path</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>The server under test</strong> violates the specification</td>
+              <td>A defect report to that CDR, carrying the reproduced exchange and the citation</td>
+            </tr>
+            <tr>
+              <td><strong>The instrument</strong> misdrove the case or misjudged the response</td>
+              <td>Fix the runner. Those rows were inconclusive, never failures</td>
+            </tr>
+            <tr>
+              <td><strong>The catalogue</strong> expectation is wrong against the specification</td>
+              <td>Fix the artifact, with a new cited source for the corrected expectation</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="after-code">The instrument is a first-class suspect on every red
+        row, ahead of the server. The first live triage attributed 7 of 7
+        diagnosed defects to the runner and none to the server under test. An
+        instrument that presumes itself correct is worth nothing to the people
+        who are supposed to rely on its verdicts.
+        <a href="./docs/methodology.html">How the method works →</a></p>
+    </div>
+  </section>
+
+  <!-- ── Quick start ────────────────────────────────────────────────────── -->
+  <section class="quickstart" id="start">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Quick start</span>
+        <h2>Install it, then check the catalogue</h2>
+        <p>The catalogue and the vendored specification oracle are 347 MB of
+          data that no registry accepts, so the instrument reads both as paths
+          you pass it and the repository is where they live.</p>
+      </div>
+      <figure class="code">
+        <figcaption>With cargo</figcaption>
+        <pre><code><span class="cmt"># A pre-release needs its version named.</span>
+<span class="p">$</span> cargo install veredictum --locked --version 0.1.0-alpha.3
+<span class="p">$</span> veredictum validate --root artifacts --specs specs/openehr</code></pre>
+      </figure>
+      <figure class="code">
+        <figcaption>With Docker</figcaption>
+        <pre><code><span class="cmt"># Mount the clone at /work. The entrypoint is the instrument itself,</span>
+<span class="cmt"># so the arguments are the ordinary subcommands.</span>
+<span class="p">$</span> docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:&lt;tag&gt; \
+      validate --root /work/artifacts --specs /work/specs/openehr</code></pre>
+      </figure>
+      <p class="after-code">Prebuilt binaries for x86_64 and aarch64 Linux are
+        attached to each release, every one with a checksum, a CycloneDX
+        dependency SBOM and a Sigstore bundle.
+        <a href="./docs/installation.html">Installation, in full →</a></p>
+    </div>
+  </section>
+
+  <!-- ── Links ──────────────────────────────────────────────────────────── -->
+  <section id="links">
+    <div class="wrap">
+      <div class="head center">
+        <span class="eyebrow">Where to go next</span>
+        <h2>The instrument, published</h2>
+      </div>
+      <div class="links">
+        <a class="link-card" href="./docs/"><b>Documentation</b><span>Installation, the command surface, the method, catalogue authoring</span></a>
+        <a class="link-card" href="https://github.com/rubentalstra/Veredictum" rel="noopener"><b>GitHub</b><span>The source, the catalogue and the vendored specification oracle</span></a>
+        <a class="link-card" href="https://crates.io/crates/veredictum" rel="noopener"><b>crates.io</b><span>The binary and the library, published as one crate</span></a>
+        <a class="link-card" href="https://github.com/rubentalstra/Veredictum/pkgs/container/veredictum" rel="noopener"><b>Container image</b><span>ghcr.io/rubentalstra/veredictum, multi-architecture</span></a>
+        <a class="link-card" href="https://github.com/rubentalstra/Veredictum/releases" rel="noopener"><b>Releases</b><span>Binaries, checksums, SBOMs and Sigstore bundles</span></a>
+        <a class="link-card" href="https://doi.org/10.5281/zenodo.22113258" rel="noopener"><b>Archived record</b><span>The Zenodo concept DOI, 10.5281/zenodo.22113258</span></a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <img src="./assets/veredictum-icon.svg" alt="" aria-hidden="true">
+      <span>Veredictum</span>
+    </a>
+    <p>The independent conformance instrument for openEHR clinical data
+      repositories. Licensed under
+      <a href="https://github.com/rubentalstra/Veredictum/blob/main/LICENSE" rel="noopener">Apache-2.0</a>;
+      attribution travels with every copy and derivative through the license and
+      the <code>NOTICE</code> file. The vendored specification text and clinical
+      models keep their upstream terms, recorded per tree in the repository.</p>
+    <p>If you maintain a CDR and want it graded,
+      <a href="https://github.com/rubentalstra/Veredictum/issues" rel="noopener">open an issue</a>.
+      A defect this instrument finds in your server arrives with the exchange and
+      the citation, and a defect you find in this instrument is a first-class bug
+      here.</p>
+    <div class="fine">
+      <p>openEHR® is the registered trademark of the openEHR Foundation. The
+        seal names openEHR descriptively, to say what is being tested, and is
+        not an openEHR Foundation endorsement.</p>
+      <p>© Veredictum contributors.</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

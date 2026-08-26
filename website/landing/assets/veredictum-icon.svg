@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64" role="img" aria-label="Veredictum icon">
+  <!-- Veredictum primary icon: the verdict seal without its ring wording
+     (that is veredictum-seal.svg). openEHR community palette - teal ground,
+     signal-orange seal edge, the V that doubles as the checkmark the
+     instrument's verdicts stand for. Carries its own ground. -->
+  <circle cx="32" cy="32" r="30" fill="#1B6E92"/>
+  <circle cx="32" cy="32" r="29" fill="none" stroke="#FF861C" stroke-width="1.2" stroke-dasharray="1.6 2.4" opacity="0.95"/>
+  <circle cx="32" cy="32" r="26.5" fill="none" stroke="#F6DECD" stroke-width="1.4" opacity="0.55"/>
+  <path d="M18.5 27 L29 45.5 L46.5 17.5" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

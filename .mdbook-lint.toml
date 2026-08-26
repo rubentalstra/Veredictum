@@ -1,0 +1,22 @@
+# mdbook-lint configuration (the Docs workflow runs `mdbook-lint lint
+# website/book/src`).
+#
+# Four rule classes are disabled, each for a property of this book rather than
+# to quiet a warning:
+#
+#   CONTENT003  it counts `SUMMARY.md` as a chapter and reports the table of
+#               contents as too short, which it will be at every book size.
+#               mdbook-lint recognizes no per-file exemption, so the rule is
+#               off; a genuinely thin chapter is caught at review.
+#   CONTENT004  the book uses sentence-case headings throughout, deliberately.
+#   MD050       strong-emphasis style is mixed inside tables by design.
+#   MD028       consecutive `> [!NOTE]` callouts are the mdBook 0.5 idiom.
+#   MDBOOK005   its orphan scan walks the whole repository and reports every
+#               markdown file outside the book as "not referenced in
+#               SUMMARY.md", which is every root document this project has.
+#
+# MD013 is set to the width the book actually wraps at.
+disabled-rules = ["CONTENT003", "CONTENT004", "MD050", "MD028", "MDBOOK005"]
+
+[MD013]
+line-length = 101

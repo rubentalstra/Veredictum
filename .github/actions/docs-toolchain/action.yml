@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/actions/docs-toolchain — install the pinned documentation toolchain.
+#
+# The versions below are the single source of truth for the site build, so a
+# bump happens here and reaches every job at once. Bump only after building the
+# site locally on the new version.
+#
+# The tool set is deliberately small. mdbook-toc is the book's only
+# preprocessor, and no other mdBook plugin is installed, because the book draws
+# no diagrams and writes no formulas and an installed plugin nothing uses is
+# download time for nothing.
+#
+# The lint and link-check tools are optional: a job that only RENDERS the site
+# lints nothing and checks nothing, so pulling them there buys nothing.
+#
+# Requires the repository to be checked out (a local action resolves against the
+# runner's workspace).
+name: Install the docs toolchain
+description: Install the pinned mdBook toolchain, plus the lint and link-check tools when asked for.
+
+inputs:
+  mdbook-version:
+    description: mdBook version.
+    required: false
+    default: "0.5.4"
+  mdbook-toc-version:
+    description: mdbook-toc version.
+    required: false
+    default: "0.15.4"
+  mdbook-lint-version:
+    description: mdbook-lint version.
+    required: false
+    default: "0.14.4"
+  lychee-version:
+    description: lychee version.
+    required: false
+    default: "0.24.2"
+  lint:
+    description: Also install mdbook-lint (the markdown lint gate).
+    required: false
+    default: "true"
+  link-check:
+    description: Also install lychee (the link-check gate).
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      with:
+        tool: mdbook@${{ inputs.mdbook-version }},mdbook-toc@${{ inputs.mdbook-toc-version }}${{ inputs.lint == 'true' && format(',mdbook-lint@{0}', inputs.mdbook-lint-version) || '' }}${{ inputs.link-check == 'true' && format(',lychee@{0}', inputs.lychee-version) || '' }}
