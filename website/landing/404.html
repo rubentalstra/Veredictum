@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>404 — page not found · Veredictum</title>
+  <meta name="robots" content="noindex">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #fff9f2;
+      --text: #363636;
+      --heading: #1f2a30;
+      --muted: #6a6259;
+      --accent: #1b6e92;
+      --signal: #c25c00;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #101c22;
+        --text: #e6ded4;
+        --heading: #f4efe8;
+        --muted: #9fb0b9;
+        --accent: #6cc0e0;
+        --signal: #ff9f47;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 2rem;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+    }
+    img { width: 96px; height: 96px; }
+    .code {
+      font-family: Georgia, "Times New Roman", Times, serif;
+      font-size: clamp(3rem, 12vw, 6rem);
+      font-weight: 700;
+      line-height: 1;
+      margin: 1.25rem 0 0;
+      color: var(--signal);
+    }
+    h1 {
+      font-family: Georgia, "Times New Roman", Times, serif;
+      font-size: 1.35rem;
+      color: var(--heading);
+      margin: 0.4rem 0 0.75rem;
+    }
+    p { color: var(--muted); max-width: 46ch; margin: 0 auto 1.75rem; }
+    a {
+      display: inline-block;
+      padding: 0.7rem 1.4rem;
+      border-radius: 4px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      text-decoration: none;
+    }
+    @media (prefers-color-scheme: dark) { a { color: #101c22; } }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/assets/veredictum-icon.svg" alt="" aria-hidden="true">
+    <p class="code">404</p>
+    <h1>No such page</h1>
+    <p>The page you asked for does not exist here, or it has moved. The
+      documentation and the front page are both one click away.</p>
+    <a href="/">Go to the front page</a>
+  </main>
+</body>
+</html>

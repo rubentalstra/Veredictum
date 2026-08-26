@@ -61,3 +61,9 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/.session-start-head
 .claude/.session-start-time
+
+# ── Documentation site build output ─────────────────────────────────────────
+# `scripts/site/build.sh` assembles the deployable tree here; the Docs workflow
+# rebuilds it from `website/` on every run, so nothing under it is committed.
+/_site/
+/website/book/book/

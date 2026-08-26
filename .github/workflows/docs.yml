@@ -1,0 +1,180 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/workflows/docs.yml — build and deploy the documentation website.
+#
+# Two jobs. `build` runs on every event and deploys nothing: it lints the book,
+# assembles the site, and checks that every internal link resolves inside the
+# assembled tree. `deploy` runs on anything that is not a pull request and
+# publishes that same tree to GitHub Pages.
+#
+# There is no per-release version freeze here. The site serves ONE documentation
+# tree, because the instrument has no released docs history worth pinning yet.
+# Freezing arrives with a real docs-versioning need and arrives as its own
+# change, rather than as machinery standing idle and rotting.
+#
+# The site render needs no Rust, no Node and no Python, so this workflow
+# installs a pinned mdBook toolchain and nothing else.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # The custom domain (veredictum.eu) serves the site at the apex root, so the
+  # base path is empty. Declared here so CI and scripts/site/build.sh agree; the
+  # tool pins live in .github/actions/docs-toolchain, because those are a
+  # toolchain and this is site configuration.
+  SITE_ORIGIN: "https://veredictum.eu"
+  SITE_BASE: ""
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  # ── Change detection (pull requests only) ───────────────────────────────────
+  # An IN-WORKFLOW gate rather than a workflow-level `paths:` filter, for the
+  # reason ci.yml uses the same shape: a workflow skipped by path filtering
+  # leaves a required check pending forever, while a job skipped by `if:`
+  # reports as skipped and satisfies branch protection
+  # (https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks).
+  #
+  # Any non-pull-request event answers `true` unconditionally: a push to main
+  # deploys the site and a manual dispatch is an explicit request to rebuild it,
+  # so neither is ever gated on a delta.
+  changes:
+    name: change detection
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      docs: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        # Context reaches the shell through `env:`, never spliced inline — the
+        # template-injection rule the whole workflow tier is audited against.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "$EVENT_NAME is not a pull request — building the site unconditionally."
+            echo "docs=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git rev-parse --verify --quiet "$PR_BASE" >/dev/null; then
+            echo "Base $PR_BASE unavailable — treating as a docs change."
+            echo "docs=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$PR_BASE" "$PR_HEAD")
+          echo "Changed files:"; echo "$changed"
+          # The site's sources, the assemble script, the lint configuration, and
+          # the job's own recipe — this workflow plus the toolchain action — so a
+          # change to what the job DOES exercises the job it changes.
+          if echo "$changed" | grep -qE '^(website/|scripts/site/|\.mdbook-lint\.toml$|\.github/workflows/docs\.yml$|\.github/actions/docs-toolchain/)'; then
+            echo "docs=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No site-relevant paths touched — the docs build will be skipped."
+            echo "docs=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Build and verify (no deploy) ────────────────────────────────────────────
+  build:
+    name: build
+    needs: changes
+    if: needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/docs-toolchain
+      - name: Markdown lint gate
+        run: mdbook-lint lint website/book/src
+      - name: Assemble _site (landing + /docs/)
+        run: bash scripts/site/build.sh
+      - name: Link-check gate (internal links only — blocking)
+        # `--offline` blocks network requests, so this checks exactly the
+        # property this repository controls: that every relative and absolute
+        # in-site link resolves inside the built tree. A broken cross-reference
+        # is a real defect and this is the only thing that catches it.
+        #
+        # External reachability is deliberately NOT checked. A remote host
+        # rate-limiting or resetting a runner's connection says nothing about the
+        # change under review, and a gate that goes red for reasons the author
+        # cannot influence teaches people to merge past red.
+        #
+        # The deployed site is served at the veredictum.eu apex ROOT, so
+        # absolute /docs/... links resolve against _site itself and no prefixed
+        # check tree is needed.
+        run: |
+          lychee --offline --no-progress --exclude-loopback \
+            --root-dir "$PWD/_site" \
+            './_site/**/*.html'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: site
+          path: _site
+
+  # ── Deploy (push to main, or a manual dispatch) ─────────────────────────────
+  deploy:
+    name: deploy
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+      contents: read
+    # A separate concurrency group from the workflow's own, and NOT cancelled in
+    # progress: a half-cancelled Pages deployment leaves the site in whatever
+    # state the upload reached.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Assembly only — the lint and link-check gates ran in `build`, so this
+      # job installs neither tool.
+      - uses: ./.github/actions/docs-toolchain
+        with:
+          lint: "false"
+          link-check: "false"
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - name: Assemble _site
+        # The same script the build job ran, deliberately: the deployed tree is
+        # produced by the recipe a pull request already exercised, so "it built
+        # on my machine" and "it built in CI" and "it is what is served" are one
+        # statement. The CNAME the custom domain needs is written by this script,
+        # because Pages reads that file out of the deployed ARTIFACT and never
+        # out of the repository.
+        run: bash scripts/site/build.sh
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+      - id: pages
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0

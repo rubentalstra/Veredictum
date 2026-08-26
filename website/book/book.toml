@@ -1,0 +1,26 @@
+[book]
+title = "Veredictum Documentation"
+authors = ["Veredictum contributors"]
+description = "User documentation for Veredictum, the independent conformance instrument for openEHR clinical data repositories."
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+additional-css = ["theme/custom.css"]
+git-repository-url = "https://github.com/rubentalstra/Veredictum"
+edit-url-template = "https://github.com/rubentalstra/Veredictum/edit/main/website/book/{path}"
+smart-punctuation = true
+
+[output.html.search]
+enable = true
+
+# The only preprocessor. Every long chapter carries a `<!-- toc -->` marker, so
+# the plugin is exercised by the pages that install it. mdbook-mermaid and
+# mdbook-katex are deliberately absent: this book draws no diagrams and writes
+# no formulas, and an installed plugin nothing uses is download time for
+# nothing.
+[preprocessor.toc]
+command = "mdbook-toc"
+renderer = ["html"]

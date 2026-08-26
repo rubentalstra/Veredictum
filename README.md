@@ -5,6 +5,11 @@
 <p align="center"><em>The independent conformance instrument for openEHR clinical data repositories.</em></p>
 
 <p align="center">
+<a href="https://veredictum.eu"><strong>veredictum.eu</strong></a> &nbsp;·&nbsp;
+<a href="https://veredictum.eu/docs/">Documentation</a>
+</p>
+
+<p align="center">
 <a href="https://github.com/rubentalstra/Veredictum/actions/workflows/ci.yml"><img src="https://github.com/rubentalstra/Veredictum/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
 <a href="https://github.com/rubentalstra/Veredictum/actions/workflows/codeql.yml"><img src="https://github.com/rubentalstra/Veredictum/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL"></a>
 <a href="https://sonarcloud.io/summary/new_code?id=rubentalstra_Veredictum"><img src="https://sonarcloud.io/api/project_badges/measure?project=rubentalstra_Veredictum&metric=alert_status" alt="Quality gate status"></a>

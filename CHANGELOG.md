@@ -20,6 +20,18 @@ version on.
 
 ### Added
 
+- A documentation website at <https://veredictum.eu>, built from `website/` and
+  deployed to GitHub Pages by a new `Docs` workflow. The root serves a
+  hand-written landing page in the project's own brand palette, and `/docs/`
+  serves an mdBook with five chapters: an introduction, installation, running
+  the instrument, a command reference covering every subcommand with its real
+  flags, the conformance method (the attribution law, positive and negative
+  testing, the ambiguity-register lifecycle), and catalogue authoring. The site
+  loads nothing from an external host, renders in both light and dark, and takes
+  its palette from the brand tokens. `scripts/site/build.sh` assembles the same
+  tree locally that the workflow deploys, the `CNAME` for the custom domain
+  included. A pull request touching the site builds, lints and link-checks it
+  without deploying.
 - The vendored CKM ADL 1.4 archetype pack is exercised in this repository, by
   `tests/it/corpus_packs.rs` on every `cargo nextest run`. All 944 ADL 1.4
   exports are decoded as UTF-8 and required to open with an `archetype (…)`
