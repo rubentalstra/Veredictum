@@ -45,8 +45,10 @@ jobs:
     # Analysis authenticates with SONAR_TOKEN, which a fork's pull request
     # cannot read. A run from a fork would fail on a missing secret rather than
     # report anything, so it is skipped and the guard tier in ci.yml — which
-    # needs no secret — is what gates a fork's contribution.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    # needs no secret — is what gates a fork's contribution. A Dependabot pull
+    # request is skipped for the same reason: its runs read Dependabot secrets,
+    # a separate store that SONAR_TOKEN is not in.
+    if: (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

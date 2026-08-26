@@ -45,6 +45,13 @@ vendored spec text.
   whose script stayed behind was un-refreshable. `adl2-archetypes.sh` was split:
   its FerroEHR half vendored an ADL-engine regression library that does not
   exist here.
+- A byte-level exerciser for the CKM ADL 1.4 pack, `tests/it/corpus_packs.rs`
+  (#8). The pack's only exerciser was a FerroEHR ADL parse gate that did not
+  travel, and the owner ruled on 2026-08-26 that the pack STAYS as reserve
+  material, so the gate reads every file, pins both counts against the pack's
+  own inventory record, and claims no parse this repository cannot perform.
+  A vendored tree that arrives with a claim about a gate elsewhere gets this
+  treatment, never a deletion.
 
 ## What is still open
 
@@ -52,12 +59,16 @@ vendored spec text.
   published and its conformance pipeline pins the published version. FerroEHR
   also keeps its committed conformance baselines: those are claims about that
   CDR, not about this instrument.
-- A fuzz lane (#11), the web UI as its own image (#6), and an exerciser for the
-  vendored CKM ADL 1.4 pack (#8).
+- A fuzz lane (#11) and the web UI as its own image (#6).
+- Two more inherited breadth packs with no exerciser here, found by the #8
+  sweep: the ADL 2 pair pack (#29) and the CKM template breadth pack (#30).
+  Both keep their bytes; what they need is #8's gate extended to their
+  dialects, which is each issue's own adjudication.
 
 Discharged since the extraction: the crates.io posture (#5), the release
-pipeline plus container image (#12), Rust coverage into Sonar (#9), and the
-path-matching half of the changelog guard (#10).
+pipeline plus container image (#12), Rust coverage into Sonar (#9), the
+path-matching half of the changelog guard (#10), and the CKM ADL 1.4 pack's
+exerciser (#8).
 
 ## Gates, all verified green at the migration
 

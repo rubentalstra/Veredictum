@@ -18,6 +18,36 @@ version on.
 
 ## [Unreleased]
 
+### Added
+
+- The vendored CKM ADL 1.4 archetype pack is exercised in this repository, by
+  `tests/it/corpus_packs.rs` on every `cargo nextest run`. All 944 ADL 1.4
+  exports are decoded as UTF-8 and required to open with an `archetype (…)`
+  header declaring `adl_version=1.4` and to declare the archetype id their file
+  name carries; all 944 AM 1.4 XML twins are read to end of input and required
+  to root at `archetype` in `http://schemas.openehr.org/v1` with that same
+  identity; both counts are pinned against the pack's own inventory record. The
+  pack had no exerciser here — its only one was an ADL-engine parse gate in the
+  repository this instrument was split out of, and this repository ships no ADL
+  parser. The pack stays as reserve material for wire batteries the catalogue
+  has not authored yet, and the exercise is at the byte level, which is what the
+  instrument can perform first-hand.
+
+### Fixed
+
+- The README quoted 1107 spec-cited cases, which was the file count under
+  `artifacts/schedule/`. The instrument reports 1103, because the four
+  `schedule/performance/` journey definitions load as measured-workload
+  definitions and are not case cores. The page now carries the number
+  `validate` prints and says where that number comes from.
+- Re-running `scripts/vendor/ckm-archetypes.sh` would have regressed two facts
+  in the pack's `PROVENANCE.md`: the corrected mixed-licence count, and now the
+  exerciser. The script emits both, so the record survives a refresh.
+- The SonarQube lane no longer runs on a Dependabot pull request. `SONAR_TOKEN`
+  is an Actions secret and a Dependabot run reads a separate store, so every
+  such run failed on the missing secret. The lane is advisory and gates no
+  merge, so skipping it costs nothing.
+
 ## [0.1.0-alpha.3] - 2026-08-26
 
 ### Fixed

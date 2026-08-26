@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-<strong>openEHR ITS-REST 1.1.0</strong> &nbsp;·&nbsp; <strong>AQL 1.1</strong> &nbsp;·&nbsp; <strong>RM 1.2.0</strong> &nbsp;·&nbsp; <strong>1107 spec-cited cases</strong> &nbsp;·&nbsp; <strong>247 operation bindings</strong>
+<strong>openEHR ITS-REST 1.1.0</strong> &nbsp;·&nbsp; <strong>AQL 1.1</strong> &nbsp;·&nbsp; <strong>RM 1.2.0</strong> &nbsp;·&nbsp; <strong>1103 spec-cited cases</strong> &nbsp;·&nbsp; <strong>247 operation bindings</strong>
 </p>
 
 <!--
@@ -52,13 +52,14 @@ are the baseline the next ones are measured against.
 Point it at a running openEHR CDR and it tells you, with citations, which parts
 of the specification that server actually implements.
 
-It executes a machine-readable catalogue of 1107 spec-cited test cases against
+It executes a machine-readable catalogue of 1103 spec-cited test cases against
 the server's own wire, records every exchange, and computes verdicts as pure
 functions over what it recorded. Functional conformance, measured performance and
 step-load stress come from one tool. The released openEHR specifications are the
 only authority it accepts: every expectation in the catalogue names the section
 it comes from, so it can be refuted by a better reading of the specification and
-by nothing else.
+by nothing else. The case and binding counts quoted on this page come from the
+line `veredictum validate` prints over `artifacts/`, which step 1 below runs.
 
 ## Why an independent instrument
 
@@ -159,7 +160,7 @@ the format.
 
 | | |
 |---|---|
-| **1107 case cores** | `artifacts/schedule/` — one small isolated case per behaviour, so a red row names one defect. Grouped by chapter: EHR, composition, contribution, directory, query, definition, demographic, admin, messaging, security, SMART, simplified formats, system, performance |
+| **1103 case cores** | `artifacts/schedule/` — one small isolated case per behaviour, so a red row names one defect. Grouped by chapter: EHR, composition, content, contribution, directory, query, definition, demographic, admin, messaging, security, SMART, simplified formats, system. `schedule/performance/` holds the four measured-workload journey definitions, which are their own family and are not case cores |
 | **247 operation bindings** | `artifacts/bindings/` — a case says what the operation IS, in the Service Model's own vocabulary; a binding says how it reaches the wire. A case core carries no status code, header or media type |
 | **The vocabularies** | `artifacts/vocab/` — the capability matrix, the wire surface the coverage gate enumerates, the outcome and selector grammars, and the journey catalogue the measured workload decomposes through |
 | **The corpora** | `artifacts/corpus/` — payload fixtures with their adjudicated verdicts, plus breadth packs vendored verbatim from upstream libraries. Every invalid shape is kept as a negative case, so a lenient server fails it |
