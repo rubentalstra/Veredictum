@@ -94,9 +94,11 @@ gh attestation verify veredictum-<tag>-<target>.tar.gz \
     --signer-workflow rubentalstra/Veredictum/.github/workflows/release-build.yml
 ```
 
-A release is published only once every expected asset is attached, and a
-published release is immutable: its tag and its assets cannot be changed
-afterwards. The recovery path for a bad cut is the next version, never a retag.
+A release is created as a draft and published only once every expected asset is
+attached, so you never meet a release whose binaries are still uploading. Its
+tag is signed, and a repository rule refuses to delete one, so a tag is never
+re-pointed at different code. The recovery path for a bad cut is the next
+version.
 
 ## From source
 
