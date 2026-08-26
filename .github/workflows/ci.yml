@@ -341,6 +341,16 @@ jobs:
       - name: Every CI job gates the merge
         run: bash scripts/checks/ci-conclusion-complete.sh
 
+      # The image's OCI metadata is declared in two places and must agree. It
+      # lives in THIS job rather than the image tier because it reads
+      # `release.yml` and `build-image.yml` as well as the Dockerfile — the
+      # `docker` change filter does not cover those, so gating it there would
+      # let a label edited in the workflow alone through unchecked. Guard-tier
+      # material by the same rule as the rest of this job: its inputs exist on
+      # every pull request, and it is a text check that costs seconds.
+      - name: The image's OCI metadata agrees with itself
+        run: bash scripts/checks/image-labels.sh
+
   # ── The image tier ──────────────────────────────────────────────────────────
   # hadolint over the Dockerfile. Configuration lives in `.hadolint.yaml`, where
   # a rule this repository deliberately violates is named with its reason —

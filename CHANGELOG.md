@@ -37,12 +37,32 @@ version on.
   the evidence and a three-month expiry, so it has to be re-argued rather than
   quietly becoming permanent.
 
+### Added
+
+- `scripts/checks/image-labels.sh`, in the ungated guard tier. The base image
+  digest is declared in three places — the runtime `FROM`, the Dockerfile's
+  `base.digest` label, and the release pipeline's `labels:` input, which is the
+  copy the published image actually carries because it overrides the Dockerfile's
+  — and an automated base bump edits only the first. Without the guard, merging
+  one publishes an image whose `base.digest` names a parent it was not built on.
+  It also checks that every shared OCI key agrees between the two declaration
+  sites, and refuses to pass vacuously if the publishing lane it expects is
+  absent.
+- A Dependabot `ignore` for `rand` major bumps. The dev-dependency exists to hand
+  `pgp`'s signing call an RNG, and `pgp 0.20` is on `rand_core 0.6`, so a major
+  bump does not compile. Patch and minor bumps within the pin are still proposed,
+  and advisory-driven updates are unaffected.
+
 ### Changed
 
 - The container image states in its own header that its current payload is a
   placeholder: it ships the CLI today and becomes the web UI's image when that
   lands (#6). The CLI's own distribution channels are `cargo install veredictum`
   and the prebuilt binaries on each release.
+- The distroless base moves to the current `:nonroot` digest
+  (`sha256:a77defd6…`). This is **not** a security fix — the new digest carries
+  the same `libssl3t64` version, verified by scanning it — it is base currency,
+  so the image is not built on a two-month-old parent.
 
 ## [0.1.0-alpha.2] - 2026-08-26
 

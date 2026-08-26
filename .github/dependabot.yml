@@ -57,6 +57,27 @@ updates:
       cargo-minor-patch:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      # `rand` is a dev-dependency for ONE purpose: handing `pgp`'s signing call
+      # an RNG in the version-signature tests. The types have to unify with the
+      # `rand_core` generation `pgp` itself uses, and `pgp 0.20` is on
+      # `rand_core 0.6` — verified in the resolved graph, not from a comment:
+      #
+      #   $ cargo tree -i rand@0.8.8 --depth 1
+      #   rand v0.8.8
+      #   ├── num-bigint-dig v0.8.6
+      #   └── pgp v0.20.0
+      #
+      # A major bump brings `rand_core 0.10`, which does not unify, and the test
+      # stops compiling. `rand 0.10` is already in the graph for `uuid`, so both
+      # majors coexist fine — the pin is on OUR dev-dependency alone.
+      #
+      # MAJOR versions only: patch and minor bumps within 0.8 are still wanted,
+      # and a security advisory is exempt from `ignore` in neither direction —
+      # Dependabot still opens advisory-driven pull requests. The entry lifts when
+      # `pgp` moves to a newer `rand_core`, not before.
+      - dependency-name: "rand"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore"
       include: "scope"
