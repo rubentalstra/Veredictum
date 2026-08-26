@@ -15,6 +15,7 @@
 <a href="https://crates.io/crates/veredictum"><img src="https://img.shields.io/crates/v/veredictum?logo=rust" alt="crates.io"></a>
 <a href="https://crates.io/crates/veredictum"><img src="https://img.shields.io/crates/d/veredictum?logo=rust&label=crate%20downloads" alt="crate downloads"></a>
 <a href="https://docs.rs/veredictum"><img src="https://img.shields.io/docsrs/veredictum?logo=docsdotrs" alt="docs.rs"></a>
+<a href="https://github.com/rubentalstra/Veredictum/pkgs/container/veredictum"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Frubentalstra%2FVeredictum%2Fveredictum&query=downloadCount&label=image%20pulls&logo=github" alt="Image pulls"></a>
 </p>
 
 <p align="center">
@@ -40,13 +41,12 @@
 Every badge above is a live reading, not a claim. The Sonar badges come from the
 analysis lane in .github/workflows/sonar.yml, coverage included; the two OpenSSF
 badges are the Scorecard weekly analysis and Best Practices project 14252; the
-registry row reads crates.io and docs.rs directly, so the version shown is
-whatever is actually published and the docs badge goes red if a docs.rs build
-fails. Several read below their ceiling today, and the scorecard workflow's
-header says why check by check — Packaging and Signed-Releases read from
-published releases, so they move on the first tag the release pipeline runs, and
-Fuzzing waits on a harness (#11). Those are the honest numbers, and they are the
-baseline the next ones are measured against.
+registry row reads crates.io, docs.rs and the GHCR package directly, so the
+version shown is whatever is actually published, the docs badge goes red if a
+docs.rs build fails, and the pull count is the package's own. Several read below
+their ceiling today, and the scorecard workflow's header says why check by
+check — Fuzzing waits on a harness (#11). Those are the honest numbers, and they
+are the baseline the next ones are measured against.
 -->
 
 Point it at a running openEHR CDR and it tells you, with citations, which parts
@@ -147,7 +147,7 @@ The binary is on crates.io, which is the path to take if you want the command on
 your `PATH` and intend to point it at a catalogue you already have:
 
 ```bash
-cargo install veredictum --version 0.1.0-alpha.2   # pre-release: name the version
+cargo install veredictum --version 0.1.0-alpha.3   # pre-release: name the version
 veredictum validate --root <catalogue> --specs <spec-tree>
 ```
 
