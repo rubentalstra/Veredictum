@@ -49,6 +49,27 @@ version on.
 - A `Dockerfile lint` job in CI, gated on a change to the image tier, running
   hadolint at its warning threshold against a configuration where any
   deliberately violated rule is named with its reason.
+- **The changelog guard now requires an entry**, not just a valid file shape. A
+  change touching a user-visible surface with no entry under the Unreleased
+  heading fails, and the path set that decides "user-visible" is declared in
+  `scripts/checks/changelog-entry.sh` beside the reason for each path rather
+  than inferred from a pattern in a workflow. The `no-changelog` label waives it
+  and says so in the run, so a waived guard is auditable afterwards.
+- Two scheduled lanes, both of which report a finding by filing or updating one
+  tracking issue and keep the run green — the run goes red only when the probe
+  itself cannot answer, because a red scheduled run is invisible to anyone not
+  watching the Actions tab:
+  - `image-scan.yml`, Mondays, Trivy over the PUBLISHED image on both
+    architectures, so a CVE disclosed after a release is still found. Before the
+    first release it reports that nothing is published and exits green, so
+    "nothing found" and "nothing looked at" are never the same line.
+  - `latest-deps.yml`, Mondays, `cargo update` then `cargo check --all-targets`,
+    the Cargo book's named mitigation for a committed lockfile: a breaking
+    in-range upstream release is found on a schedule instead of during an
+    unrelated pull request.
+- Dependabot covers the `docker` ecosystem now that a Dockerfile exists, with a
+  fourteen-day cooldown — the longest of the three, because a base-image bump
+  changes the bytes every user of the published image runs.
 - The crate publish joins the same tag, as the last leg of the pipeline and after
   the release is otherwise complete, so the `crates-io` environment's reviewer
   approval blocks nothing else. `publish-crates.yml` stays as the out-of-band
