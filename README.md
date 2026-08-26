@@ -147,7 +147,7 @@ The binary is on crates.io, which is the path to take if you want the command on
 your `PATH` and intend to point it at a catalogue you already have:
 
 ```bash
-cargo install veredictum --version 0.1.0-alpha.1   # pre-release: name the version
+cargo install veredictum --version 0.1.0-alpha.2   # pre-release: name the version
 veredictum validate --root <catalogue> --specs <spec-tree>
 ```
 
