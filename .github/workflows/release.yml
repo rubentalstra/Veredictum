@@ -233,7 +233,7 @@ jobs:
       # supplier, component name, version, other unique identifiers (purl),
       # dependency relationships, SBOM author and timestamp
       # (https://www.cisa.gov/sbom).
-      - uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
           tool: syft@1.50.0
       - name: Generate the repository SPDX SBOM
@@ -435,7 +435,7 @@ jobs:
       # No cache in a publishing lane: nothing a prior run could have poisoned
       # may influence the bytes that get pushed and attested.
       - name: Install cargo-auditable
-        uses: taiki-e/install-action@288e746965032cfcc232e09af2daf5f23c14d780 # v2.86.1
+        uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
           tool: cargo-auditable@0.7.5
 
