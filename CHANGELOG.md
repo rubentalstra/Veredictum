@@ -20,6 +20,13 @@ version on.
 
 ### Added
 
+- **Published on crates.io** as `veredictum`, both a binary and a library:
+  `cargo install veredictum --version 0.1.0-alpha.1` puts the command on your
+  `PATH`, and the library target lets an integrator consume the typed artifact
+  model and the published JSON Schemas rather than reimplementing the format.
+  The package carries the code and the legal set; the catalogue and the vendored
+  specification oracle are 347 MB of data no registry accepts, and every root is
+  a path passed at run time, so both come from the repository.
 - **The instrument itself builds and runs from this repository:** the runner,
   the catalogue with its 1107 case cores and 247 operation bindings, the
   corpora, the ambiguity register, the party declarations, and the vendored

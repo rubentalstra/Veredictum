@@ -77,10 +77,10 @@ nothing to the people who are supposed to rely on its verdicts.
 
 ## Run it
 
-Nothing is published from this repository yet, so it runs from a checkout. A
-published release, a `cargo install` path and a `docker run` image are
-[#12](https://github.com/rubentalstra/Veredictum/issues/12) and
-[#5](https://github.com/rubentalstra/Veredictum/issues/5).
+Work from a clone. The published crate carries the code, and the catalogue and
+the vendored specification oracle are 347 MB of data that no registry accepts —
+so `veredictum` reads both as paths you pass it, and the repository is where
+they live.
 
 ```bash
 git clone https://github.com/rubentalstra/Veredictum
@@ -105,6 +105,19 @@ cargo run -- verdicts --root artifacts --statement party/mine/statement.json \
 `cargo run -- --help` lists every subcommand, `perf`, `stress` and `aql-probe`
 among them. The toolchain pins itself from `rust-toolchain.toml`; the only extra
 tool is `cargo-nextest`, and only if you intend to run the test suite.
+
+The binary is also on crates.io, which is the path to take if you want the
+command on your `PATH` and intend to point it at a catalogue you already have:
+
+```bash
+cargo install veredictum --version 0.1.0-alpha.1   # pre-release: name the version
+veredictum validate --root <catalogue> --specs <spec-tree>
+```
+
+The library target is published with it, so an integrator can consume the typed
+artifact model and the published JSON Schemas directly rather than reimplementing
+the format. A signed release with prebuilt binaries and a `docker run` image is
+[#12](https://github.com/rubentalstra/Veredictum/issues/12).
 
 ## What is in the box
 

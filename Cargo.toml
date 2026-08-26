@@ -22,10 +22,34 @@ categories = ["development-tools::testing", "command-line-utilities", "science"]
 # and it cannot be corrected after publication. Attribution is the repository
 # link above plus CITATION.cff, which IS editable and is what GitHub's citation
 # box and the Zenodo deposit read.
+
+# WHAT SHIPS TO crates.io, and why it is an allowlist rather than an exclude
+# list. The catalogue and the vendored specification oracle are 347 MB of data
+# in this repository — far past what a registry accepts, and nothing the crate
+# needs in order to COMPILE: no source file embeds an artifact
+# (`include_str!`/`include_bytes!` appear nowhere), because every root is a path
+# the caller passes at run time. So the package carries the code and the legal
+# set, and the data is obtained from the repository or a release.
 #
-# The crates.io posture is still open (Veredictum#5); the instrument is invoked
-# with `cargo run` from a checkout today.
-publish = false
+# `include` wins over `exclude` here on the failure direction: a new vendored
+# tree lands in this repository regularly, and with an exclude list one that
+# nobody remembered to add would silently blow the package size on the next
+# publish. An allowlist fails the other way — a new SOURCE directory would be
+# missing and the build verification catches it immediately.
+#
+# NOTICE travels because Apache-2.0 §4(d) requires it to: the whole point of
+# choosing that licence for this instrument is that attribution follows every
+# copy and derivative.
+include = [
+  "src/**/*.rs",
+  "Cargo.toml",
+  "README.md",
+  "CHANGELOG.md",
+  "LICENSE",
+  "LICENSES/**",
+  "NOTICE",
+  "REUSE.toml",
+]
 
 [[bin]]
 name = "veredictum"
