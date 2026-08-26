@@ -20,6 +20,28 @@ version on.
 
 ### Added
 
+- **The release pipeline.** A `v*` tag now publishes a release: `release.yml`
+  verifies every release fact against the tagged commit before anything is
+  built, creates the GitHub release as a draft, builds per-architecture Linux
+  binaries (x86_64 and aarch64) each with a checksum, a CycloneDX dependency
+  SBOM and Sigstore provenance and SBOM bundles, attaches a repository-wide
+  SPDX SBOM, and publishes the release only once every expected asset is
+  attached. The binary and image builds each live in a reusable workflow, which
+  is GitHub's documented construction for SLSA Build Level 3, so a consumer can
+  pin the signer with `gh attestation verify --signer-workflow`.
+- The multi-architecture container image on GHCR, pushed BY DIGEST, smoke-run and
+  Trivy-scanned on both architectures before any tag names it, with provenance
+  and an SPDX SBOM attested on the digest. `:latest` moves on a release tag and
+  never on a pre-release.
+- The crate publish joins the same tag, as the last leg of the pipeline and after
+  the release is otherwise complete, so the `crates-io` environment's reviewer
+  approval blocks nothing else. `publish-crates.yml` stays as the out-of-band
+  dry-run and recovery lane, and both lanes call one implementation,
+  `scripts/release/publish-crate.sh`.
+- The release procedure is written into `CLAUDE.md` and driven by this file: a
+  missing or empty section for the tagged version fails the pipeline's `plan` job
+  before anything is published.
+- The crates.io version, crate-downloads and docs.rs badges in the README.
 - **Published on crates.io** as `veredictum`, both a binary and a library:
   `cargo install veredictum --version 0.1.0-alpha.1` puts the command on your
   `PATH`, and the library target lets an integrator consume the typed artifact

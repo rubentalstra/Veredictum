@@ -190,7 +190,9 @@ Milestones are releases, and a release is cut when its milestone reaches zero
 open issues. `scripts/checks/changelog-structure.sh` runs in CI on every change;
 the guard that REQUIRES an entry when a user-visible surface changes is issue
 #10 — those paths exist now that the code is here, so it is tracked rather than
-assumed.
+assumed. The full cut procedure is the Releasing section below, and the pipeline
+reads this file: a missing or empty section for the tagged version fails `plan`
+before anything is published.
 
 ### 11. Cite only durable references
 
@@ -319,6 +321,57 @@ statements — and **zero findings is the only passing result.** The instrument'
 own canonical CLI table (`validate`, `run`, `verdicts`, `perf`, `stress`,
 `aql-probe`, `emit-schemas`) is the authority on how to invoke everything else;
 never improvise a flag.
+
+## Releasing
+
+A release is a `v*` tag, and `.github/workflows/release.yml` is the only thing
+that publishes anything. The tag is the trigger; every ordering inside the
+pipeline is a `needs` edge, so no leg guesses whether an earlier one finished.
+
+**Cut the release in one pull request**, on a `release/vX.Y.Z` branch:
+
+1. `CHANGELOG.md`: rename the Unreleased heading to `## [X.Y.Z] - YYYY-MM-DD`,
+   re-add an empty Unreleased heading above it, and add both link references at
+   the bottom. Rewrite the HEADING, never the first textual match — the
+   v0.0.1-alpha.1 cut rewrote a mention inside the intro paragraph and shipped a
+   release with no section at all.
+2. `Cargo.toml` `[package] version`, and `Cargo.lock` with it (`cargo check`).
+3. `CITATION.cff`: `version` and `date-released`.
+4. `bash scripts/render/zenodo-json.sh` — `.zenodo.json` is GENERATED, because
+   Zenodo ignores `CITATION.cff` completely whenever a `.zenodo.json` exists
+   (<https://help.zenodo.org/docs/github/describe-software/zenodo-json/>). The
+   deposit's FILES freeze at publication, so a drifted copy is archived under a
+   DOI nobody can correct.
+5. Merge on green, then **verify the merge actually landed** —
+   `gh pr view <n> --json state --jq .state` must read `MERGED`. `gh pr merge`
+   can print advice and exit zero without merging, and a tag on an unmerged
+   branch publishes the wrong tree.
+6. `git tag -s vX.Y.Z -m "…"` on the verified merge commit, and push it. The
+   `release tags` ruleset requires a signature and refuses deletion, so a tag is
+   never re-pointed: the recovery for a bad cut is the next version.
+
+**What the tag then does**, in order: `plan` re-verifies every fact above
+against the tagged commit and publishes nothing; the GitHub release is created
+as a DRAFT with the changelog section as its notes and the bare version as its
+title; the per-architecture binaries build in the reusable SLSA L3 lane and
+attach their tarball, checksum, CycloneDX SBOM and Sigstore bundles; `finalize`
+refuses to publish until every expected asset is attached, then flips the draft
+— last, because publication freezes the asset set. In parallel the image binary
+compiles natively per architecture, the multi-architecture image pushes BY
+DIGEST, a smoke run drives that digest, Trivy scans both variants, and only then
+do the tags apply, `:latest` among them for a non-pre-release. `publish-crate`
+runs last of all and pauses for the `crates-io` environment's reviewer, so that
+approval blocks nothing else. `announce` asserts every leg landed and prints the
+exact recovery per leg.
+
+**Two facts that are easy to get wrong.** A pre-release is a `v*` tag with a `-`
+suffix and moves no release pointer; the rule has one definition,
+`.github/actions/release-kind`. And crates.io Trusted Publishing matches the
+OIDC `workflow_ref` claim, which names the CALLING workflow for a job inside a
+reusable workflow — so the publisher configuration must name `release.yml`
+itself, beside the entry for the out-of-band `publish-crates.yml` lane, and the
+publish logic is shared as `scripts/release/publish-crate.sh` rather than as a
+reusable workflow.
 
 ## Model orchestration
 

@@ -261,13 +261,14 @@ jobs:
         # do that offline. `--min-severity=low` gates every actionable tier
         # (artipacked is Low) and leaves the informational tier advisory.
         #
-        # Only `.github/workflows/` is passed: there are no composite actions
-        # under `.github/actions/` in this repository, and naming a path that
-        # does not exist is an error, not a no-op. Add the directory to this
-        # invocation in the same change that adds the first composite action.
+        # Both directories are passed. `.github/actions/` joined the invocation
+        # with the first composite action (`release-kind`), because naming a path
+        # that does not exist is an error rather than a no-op — so it could not
+        # be listed before there was something in it, and an action added without
+        # extending this line would be audited by nothing.
         env:
           GH_TOKEN: ${{ github.token }}
-        run: zizmor --min-severity=low .github/workflows/
+        run: zizmor --min-severity=low .github/workflows/ .github/actions/
 
       - name: actionlint
         # The OFFICIAL image, digest-pinned. actionlint is a Go binary, so

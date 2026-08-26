@@ -34,9 +34,12 @@
 #   * `Pinned-Dependencies` — SATISFIED. `Cargo.lock` is committed (this
 #     repository ships a binary), every Rust gate in `ci.yml` runs `--locked`,
 #     every `uses:` is digest-pinned and every container is pulled by digest.
-#   * `Packaging` and `Signed-Releases` — issue #12. There is no release
-#     pipeline yet, so the instrument is consumable only by `cargo run` from a
-#     checkout, and both scores are honestly zero until that tag lane exists.
+#   * `Packaging` and `Signed-Releases` — the pipeline exists (`release.yml`),
+#     and both scores read from PUBLISHED releases, so they stay at their
+#     pre-pipeline value until the first tag runs it. `Packaging` reads the
+#     crates.io publish; `Signed-Releases` reads the per-architecture Sigstore
+#     bundles the binary lane attaches. Neither is a claim this file makes — the
+#     probe looks at the release list.
 #   * `Fuzzing` — issue #11. The readers worth fuzzing are identified; no
 #     harness exists yet.
 #   * `CII-Best-Practices` — the OpenSSF Best Practices entry is project 14252

@@ -1,0 +1,12 @@
+# actionlint configuration (https://github.com/rhysd/actionlint/blob/main/docs/config.md).
+#
+# actionlint's built-in runner-label roster lags GitHub's actual one, and it
+# reports an unknown label as an error rather than a warning — so a
+# GitHub-hosted label the tool has not learned yet has to be declared here or
+# the lane fails on a correct workflow. These two are the native amd64 and
+# arm64 runners the release pipeline builds on, which is what keeps QEMU out of
+# every compile.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04
+    - ubuntu-26.04-arm
