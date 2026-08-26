@@ -1,0 +1,12 @@
+Veredictum
+Copyright 2026 Ruben Talstra and the Veredictum contributors
+https://github.com/rubentalstra/Veredictum
+
+The independent openEHR conformance instrument: the data-driven runner, its
+machine-readable catalogue, the verdict pipeline, and the measured-performance
+and stress instruments. Licensed under the Apache License, Version 2.0; this
+NOTICE file travels with every copy and derivative work per its section 4(d).
+
+The vendored test corpora under artifacts/corpus keep their upstream terms
+(Apache-2.0 openEHR machine-readable artifacts; CC-BY-SA 3.0/4.0 CKM clinical
+models) as declared per tree in their PROVENANCE.md files.

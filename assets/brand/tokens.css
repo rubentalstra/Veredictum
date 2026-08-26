@@ -1,0 +1,12 @@
+/* SPDX-FileCopyrightText: Veredictum contributors
+   SPDX-License-Identifier: Apache-2.0 */
+/* The Veredictum palette — "Tyrian & Parchment": the imperial verdict purple,
+   the parchment the verdict is written on, and the assay-gold seal edge.
+   The single source for brand colours. */
+:root {
+  --ver-tyrian: #46215C;      /* ground: deep verdict purple */
+  --ver-tyrian-deep: #331745; /* hover/pressed ground */
+  --ver-parchment: #F4EDE1;   /* foreground on tyrian; light-theme page ground */
+  --ver-gold: #D8B04A;        /* the seal edge; accents, never body text */
+  --ver-ink: #241A2E;         /* body text on parchment */
+}

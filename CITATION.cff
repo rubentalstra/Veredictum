@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+# Citation metadata (CFF 1.2.0). A release cut updates `version` +
+# `date-released` and re-renders .zenodo.json, mirroring the FerroEHR
+# procedure this repository inherits (FerroEHR#2789).
+cff-version: 1.2.0
+title: Veredictum
+message: If you use this software, please cite it using the metadata from this file.
+type: software
+authors:
+  - family-names: Talstra
+    given-names: Ruben
+    orcid: "https://orcid.org/0009-0009-2758-0141"
+repository-code: https://github.com/rubentalstra/Veredictum
+url: https://github.com/rubentalstra/Veredictum
+abstract: >-
+  The independent conformance instrument for openEHR clinical data
+  repositories: a machine-readable catalogue of spec-cited test cases,
+  executed against any running CDR, judged by pure-function verdicts.
+  Functional conformance, measured performance, and step-load stress in one
+  tool. The released openEHR specifications are the only authority it
+  accepts.
+keywords:
+  - openEHR
+  - conformance-testing
+  - clinical-data-repository
+  - healthcare
+  - rust
+license: Apache-2.0
+version: 0.0.0
+date-released: "2026-08-26"

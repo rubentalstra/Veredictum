@@ -1,4 +1,10 @@
+<p align="center"><img src="assets/brand/veredictum-icon.svg" width="112" alt="The Veredictum seal"></p>
+
 # Veredictum
+
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-46215C)](LICENSE)
+[![Split from FerroEHR](https://img.shields.io/badge/split_from-FerroEHR-B7431B)](https://github.com/rubentalstra/FerroEHR/issues/2789)
+
 
 The independent conformance instrument for openEHR clinical data repositories:
 a machine-readable catalogue of spec-cited test cases, executed against any

@@ -1,0 +1,60 @@
+# Normalize line endings: everything git detects as text becomes LF in the
+# repository. Rust toolchain + shell scripts require LF.
+* text=auto
+
+*.rs   text eol=lf
+*.toml text eol=lf
+*.sh   text eol=lf
+*.md   text
+*.yml  text
+*.yaml text
+*.json text
+*.xml  text
+
+# Binary assets
+*.png  binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+
+# Generated code: collapse in diffs/linguist (still reviewed via the emitter)
+crates/*/src/**/generated/** linguist-generated=true
+crates/openehr-rm/src/model/data.rs linguist-generated=true
+
+# ── Linguist: honest language stats ──────────────────────────────────────────
+# Generated spec crates: emitted from the vendored BMM by openehr-codegen. The
+# hand-written *_impl.rs siblings are re-included below.
+crates/openehr-base/src/** linguist-generated=true
+crates/openehr-rm/src/**   linguist-generated=true
+crates/openehr-am/src/**   linguist-generated=true
+crates/openehr-base/src/**/*_impl.rs linguist-generated=false
+crates/openehr-rm/src/**/*_impl.rs   linguist-generated=false
+crates/openehr-am/src/**/*_impl.rs   linguist-generated=false
+
+# Vendored third-party / spec inputs (never authored here)
+crates/openehr-codegen/vendor/** linguist-vendored
+crates/openehr-its/schemas/**    linguist-vendored
+crates/openehr-its/vendor/**     linguist-vendored
+website/book/theme/mermaid.min.js linguist-vendored
+website/book/theme/mermaid-init.js linguist-vendored
+
+# Byte-copied / machine-produced artifacts
+deploy/helm/golden/**  linguist-generated=true
+docs/conformance/**    linguist-generated=true
+
+# Only the product code counts toward the language bar: helper scripts, docs
+# website assets, packaging, hooks, and migrations are support material.
+website/**   linguist-documentation
+scripts/**   linguist-detectable=false
+docker/**    linguist-detectable=false
+deploy/**    linguist-detectable=false
+.githooks/** linguist-detectable=false
+.claude/**   linguist-detectable=false
+Dockerfile*  linguist-detectable=false
+app/ferroehr/migrations/** linguist-detectable=false
+
+# Vendored upstream corpora are byte-verbatim (the vendored-corpora rule):
+# no EOL normalization — upstream CKM exports carry CRLF and must round-trip
+# bit-identical through clone/checkout.
+tools/cnf-runner/artifacts/corpus/archetypes/** -text
+tools/cnf-runner/artifacts/corpus/templates/ckm/full/** -text
