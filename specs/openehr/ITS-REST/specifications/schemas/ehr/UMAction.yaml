@@ -1,0 +1,7 @@
+title: ACTION
+type: object
+allOf:
+  - $ref: ../ehr/Action.yaml
+required:
+  - _type
+x-discriminator-value: ACTION

@@ -1,0 +1,8 @@
+title: DATA_STRUCTURE
+type: object
+allOf:
+  - $ref: ../common/Locatable.yaml
+properties:
+  _type:
+    type: string
+x-discriminator-value: DATA_STRUCTURE

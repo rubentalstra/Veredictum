@@ -1,0 +1,16 @@
+title: DV_URI
+type: object
+allOf:
+  - $ref: ../data_types/DataValue.yaml
+required:
+  - value
+properties:
+  _type:
+    type: string
+    default: DV_URI
+  value:
+    type: string
+x-discriminator-value: DV_URI
+example:
+  _type: DV_URI
+  value: 'https://www.example.com'

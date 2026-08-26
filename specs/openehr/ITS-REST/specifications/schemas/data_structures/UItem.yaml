@@ -1,0 +1,10 @@
+title: ITEM
+type: object
+oneOf:
+  - $ref: ../data_structures/Element.yaml
+  - $ref: ../data_structures/Clstr.yaml
+discriminator:
+  propertyName: _type
+  mapping:
+    ELEMENT: ../data_structures/Element.yaml
+    CLUSTER: ../data_structures/Clstr.yaml

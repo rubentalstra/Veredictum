@@ -1,0 +1,23 @@
+title: ENTRY
+type: object
+allOf:
+  - $ref: ../ehr/ContentItem.yaml
+required:
+  - language
+  - encoding
+  - subject
+properties:
+  language:
+    $ref: ../data_types/CodePhrase.yaml
+  encoding:
+    $ref: ../data_types/CodePhrase.yaml
+  other_participations:
+    type: array
+    items:
+      $ref: ../common/Participation.yaml
+  workflow_id:
+    $ref: ../base_types/ObjectRef.yaml
+  subject:
+    $ref: ../common/UPartyProxy.yaml
+  provider:
+    $ref: ../common/UPartyProxy.yaml

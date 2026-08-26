@@ -1,0 +1,16 @@
+operationId: definition_template_adl2_get
+summary: Get a template
+description: |
+  Retrieves the latest version of the ADL2 operational template identified by `template_id` identifier.
+tags:
+  - ADL2
+parameters:
+  - $ref: ../parameters/path/template_id_adl2.yaml
+  - $ref: ../parameters/header/Accept_Template_adl2.yaml
+responses:
+  '200':
+    $ref: ../responses/200_Template_adl2_retrieved.yaml
+  '400':
+    $ref: ../responses/400.yaml
+  '404':
+    $ref: ../responses/404_unknown_template_id.yaml

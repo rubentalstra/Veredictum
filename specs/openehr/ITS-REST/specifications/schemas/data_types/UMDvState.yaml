@@ -1,0 +1,7 @@
+title: DV_STATE
+type: object
+allOf:
+  - $ref: ../data_types/DvState.yaml
+required:
+  - _type
+x-discriminator-value: DV_STATE

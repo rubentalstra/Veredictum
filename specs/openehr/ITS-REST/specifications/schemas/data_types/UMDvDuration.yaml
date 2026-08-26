@@ -1,0 +1,7 @@
+title: DV_DURATION
+type: object
+allOf:
+  - $ref: ../data_types/DvDuration.yaml
+required:
+  - _type
+x-discriminator-value: DV_DURATION

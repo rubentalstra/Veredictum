@@ -1,0 +1,5 @@
+title: PATHABLE
+type: object
+properties:
+  _type:
+    type: string

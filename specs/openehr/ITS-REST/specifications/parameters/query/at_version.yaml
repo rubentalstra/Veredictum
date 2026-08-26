@@ -1,0 +1,8 @@
+name: version
+in: query
+style: form
+explode: true
+deprecated: true
+schema:
+  type: string
+  example: '1.0.1'

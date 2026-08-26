@@ -1,0 +1,7 @@
+title: DV_PROPORTION
+type: object
+allOf:
+  - $ref: ../data_types/DvProportion.yaml
+required:
+  - _type
+x-discriminator-value: DV_PROPORTION

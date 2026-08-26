@@ -1,0 +1,21 @@
+title: TemplateMetadata
+description:
+  Uploaded TEMPLATE meta information.
+required:
+  - template_id
+  - concept
+  - archetype_id
+  - created_timestamp
+type: object
+properties:
+  template_id:
+    type: string
+  version:
+    type: string
+    deprecated: true
+  concept:
+    type: string
+  archetype_id:
+    type: string
+  created_timestamp:
+    type: string

@@ -1,0 +1,9 @@
+title: CARE_ENTRY
+type: object
+allOf:
+  - $ref: ../ehr/AbstractEntry.yaml
+properties:
+  protocol:
+    $ref: ../data_structures/UItemStructure.yaml
+  guideline_id:
+    $ref: ../base_types/ObjectRef.yaml

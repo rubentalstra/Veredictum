@@ -1,0 +1,5 @@
+title: Versionable
+description: A Versionable resource
+type: object
+allOf:
+  - $ref: ../common/Locatable.yaml

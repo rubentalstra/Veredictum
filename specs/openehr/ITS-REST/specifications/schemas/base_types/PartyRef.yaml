@@ -1,0 +1,17 @@
+title: PARTY_REF
+type: object
+description: Identifier for parties in a demographic or identity service.
+allOf:
+  - $ref: ../base_types/ObjectRef.yaml
+properties:
+  type:
+    type: string
+    pattern: '^PERSON|ORGANISATION|GROUP|AGENT|ROLE|PARTY|ACTOR$'
+  id:
+    $ref: ../base_types/UMHierObjectId.yaml
+example:
+  id:
+    _type: HIER_OBJECT_ID
+    value: 'b52b9408-7048-4ec8-94bd-831fb0727e67'
+  namespace: local
+  type: PERSON

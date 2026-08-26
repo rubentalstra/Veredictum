@@ -1,0 +1,9 @@
+title: PARTY_PROXY
+type: object
+required:
+  - _type
+properties:
+  _type:
+    type: string
+  external_ref:
+    $ref: ../base_types/PartyRef.yaml

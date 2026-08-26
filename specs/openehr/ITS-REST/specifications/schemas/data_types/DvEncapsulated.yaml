@@ -1,0 +1,13 @@
+title: DV_ENCAPSULATED
+type: object
+allOf:
+  - $ref: ../data_types/DataValue.yaml
+required:
+  - _type
+properties:
+  _type:
+    type: string
+  charset:
+    $ref: ../data_types/CodePhrase.yaml
+  language:
+    $ref: ../data_types/CodePhrase.yaml
