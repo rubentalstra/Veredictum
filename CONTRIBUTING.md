@@ -36,7 +36,7 @@ Once the extraction lands, this section goes away and the paths in
   strips any tool attribution from a commit message before the commit is
   recorded.
 - The Rust toolchain pin, the container tooling, and the rest of the build
-  environment arrive with the code migration (#2789).
+  environment arrive with the code migration (FerroEHR#2789).
 
 ## Before you start
 
@@ -53,7 +53,7 @@ Once the extraction lands, this section goes away and the paths in
 
 ## The gates
 
-The Rust gates arrive with the code migration (#2789). There is no Rust code in
+The Rust gates arrive with the code migration (FerroEHR#2789). There is no Rust code in
 this repository yet, so `cargo build` has nothing to build and no CI lane runs.
 
 What applies to a prose or configuration pull request today:

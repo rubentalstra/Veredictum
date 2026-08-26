@@ -78,7 +78,7 @@ made.
    `Closes #N`, with signed commits.
 3. **The gates run.** They are not advisory and there is no override. Today that
    is the comment-style guard and the attribution rule; the full battery arrives
-   with the code migration (#2789) and is listed in
+   with the code migration (FerroEHR#2789) and is listed in
    [CONTRIBUTING.md](CONTRIBUTING.md).
 4. **The maintainer merges.** A pull request from an account without write access
    additionally needs a code-owner approval

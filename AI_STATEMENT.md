@@ -154,7 +154,7 @@ the maintainer's cooperation.**
 - **Static and supply-chain gates.** No `unsafe`, deny-tier lints on panicking
   shortcuts, typed errors, machine-checked comment style, `cargo deny` policy,
   workflow security audits, and signed release artifacts. **These arrive with
-  the code migration (#2789)**; today they run in FerroEHR against the same
+  the code migration (FerroEHR#2789)**; today they run in FerroEHR against the same
   code, and this row is written as pending rather than as a control this
   repository already has.
 
@@ -264,7 +264,7 @@ off-cycle when any of these fires: the tooling changes materially, a tool
 vendor's terms change in a way §8 or §9 relies on, a binding rule emerges (EU AI
 Act guidance touching this use, a foundation policy this project follows, a
 court decision on AI output and copyright), or a claim in this document stops
-being true. The migration completing (#2789) is itself a trigger, because §7's
+being true. The migration completing (FerroEHR#2789) is itself a trigger, because §7's
 pending rows become real then. The maintainer owns the review; the change lands
 as a pull request like everything else, and the version and change log update in
 the same one.
