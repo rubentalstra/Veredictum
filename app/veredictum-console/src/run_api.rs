@@ -379,7 +379,7 @@ pub mod read {
             .as_mut()
             .ok_or_else(|| String::from("no connection draft: complete the Connect step first"))?;
         let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
-        let out_dir = state.out.join(format!("console-job-{id}"));
+        let out_dir = crate::run_job::job_dir(&state.out, id);
         std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
         // A run into this directory invalidates any export of it (#68). The
         // job counter restarts with the console process while the output

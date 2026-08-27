@@ -118,14 +118,14 @@ pub fn ToastHost() -> impl IntoView {
                                 )
                             >
                                 <div class="flex items-start justify-between gap-2">
-                                    <p class="text-sm font-semibold text-ink-heading">{item.title}</p>
+                                    <p class="text-sm font-semibold text-ink-heading">
+                                        {item.title}
+                                    </p>
                                     <button
                                         class="text-ink-faint hover:text-ink"
                                         aria-label="Dismiss"
                                         on:click=move |_| {
-                                            toasts
-                                                .items
-                                                .update(|items| items.retain(|i| i.id != id));
+                                            toasts.items.update(|items| items.retain(|i| i.id != id));
                                         }
                                     >
                                         "×"
@@ -164,5 +164,9 @@ pub fn MessageBar(
             "rounded-control border border-danger/40 bg-danger-subtle px-3 py-2 text-sm text-ink"
         }
     };
-    view! { <div role="alert" class=class>{message}</div> }
+    view! {
+        <div role="alert" class=class>
+            {message}
+        </div>
+    }
 }

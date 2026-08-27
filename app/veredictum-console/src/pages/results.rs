@@ -295,8 +295,7 @@ fn detail_view(detail: &ResultDetail) -> impl IntoView + use<> {
                     view! { <p class="mb-3 text-sm text-ink-muted">{purpose}</p> }
                 })}
             <div class="space-y-3">
-                {reason}
-                {citation}
+                {reason} {citation}
                 {detail
                     .failing_step
                     .map(|step| {
@@ -305,12 +304,9 @@ fn detail_view(detail: &ResultDetail) -> impl IntoView + use<> {
                                 {format!("first failing step: {step}")}
                             </p>
                         }
-                    })}
-                {failed_rows}
-                <h3 class=CARD_TITLE>"Spec citations"</h3>
+                    })} {failed_rows} <h3 class=CARD_TITLE>"Spec citations"</h3>
                 <ul class=format!("{WELL} space-y-1")>{refs}</ul>
-                <h3 class=CARD_TITLE>"The wire"</h3>
-                {wire}
+                <h3 class=CARD_TITLE>"The wire"</h3> {wire}
                 <p class="text-sm text-ink-muted">
                     "A red row names a defect in exactly one of three suspects — the server, the runner, or the catalogue — and the cited text is the reference, never any side's confidence."
                 </p>

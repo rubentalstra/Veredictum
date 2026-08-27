@@ -93,18 +93,20 @@ pub mod prepare {
 
     /// The finished job's own directory, when a finished run exists.
     ///
+    /// The path itself comes from the run seam's one derivation
+    /// (`run_job::job_dir`), so the export reads exactly the directory the run
+    /// wrote into rather than a second spelling of it (#134).
+    ///
     /// # Errors
     /// The slot's verbatim refusal.
     pub fn job_dir(state: &ConsoleState) -> Result<Option<PathBuf>, String> {
         let Some(view) = state.jobs.view().map_err(|e| e.to_string())? else {
             return Ok(None);
         };
-        let Some(finished) = view.finished else {
+        if view.finished.is_none() {
             return Ok(None);
-        };
-        Ok(PathBuf::from(finished.results_path)
-            .parent()
-            .map(Path::to_path_buf))
+        }
+        Ok(Some(crate::run_job::job_dir(&state.out, view.id)))
     }
 
     /// Removes any sealed bundle left in a job directory.

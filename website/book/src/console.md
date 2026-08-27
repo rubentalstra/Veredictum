@@ -170,6 +170,15 @@ The manifest's signature is an ordinary detached OpenPGP signature, so
 `gpg --verify` accepts a bundle too. Nobody has to trust this console to check
 this console.
 
+## An address the console does not serve
+
+A path outside the route tree answers `404` and renders it: the same chrome,
+the path that missed named back to you, and two ways on. Nothing was run and
+nothing was judged, which is what the page says.
+
+![The 404 page in light mode](console/img/not-found-light.png)
+![The 404 page in dark mode](console/img/not-found-dark.png)
+
 ## Two real servers, side by side
 
 The same catalogue, the same wizard, the same judgement — driven against two
