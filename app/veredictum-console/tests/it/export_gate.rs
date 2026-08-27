@@ -10,11 +10,10 @@
 //! manifest, the zip route serves the sealed bytes, and a tampered copy fails
 //! naming the file that changed.
 //!
-//! `gpg --verify` compatibility is deliberately NOT asserted here: CI carries
-//! no gpg, and a gate that silently skips its own claim is worse than one
-//! that states its boundary. The property is the engine's own
-//! (`veredictum::record`'s module documentation records the RFC 9580 detached
-//! form); this gate checks it through the lib.
+//! `gpg --verify` compatibility is deliberately NOT asserted here: it is the
+//! engine's own property (`veredictum::record`'s module documentation records
+//! the RFC 9580 detached form), and the engine's suite shells out to `GnuPG`
+//! for it. This gate checks the bundle through the lib.
 
 #![allow(
     clippy::print_stderr,
@@ -31,8 +30,9 @@ use veredictum_console::state::ConsoleState;
 
 use crate::engine_gate;
 
-/// The committed test keypair (`artifacts/corpus/keys/README.md` records how
-/// it was generated; it carries no passphrase).
+/// The committed test keypair, which carries no passphrase. The armored
+/// certificate is self-describing: its packets carry the user id, the key
+/// flags and the subkey binding signature.
 fn key(name: &str) -> PathBuf {
     engine_gate::repo_root()
         .join("artifacts/corpus/keys")

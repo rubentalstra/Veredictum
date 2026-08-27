@@ -337,8 +337,9 @@ statements — and **zero findings is the only passing result.** The instrument'
 own canonical CLI table (`validate`, `run`, `verdicts`, `verify-record`,
 `perf`, `stress`, `stress-compare`, `aql-probe`, `perf-assets`,
 `conformance-assets`, `emit-schemas`) is the authority on how to invoke
-everything else; never improvise a flag (#76 tracks the drift guard over the
-hand-maintained copies).
+everything else; never improvise a flag. `scripts/checks/cli-surface.sh` holds
+this list, the binary's own header table and the book's command reference to
+clap's `--help`, so a subcommand cannot land in one copy and rot in another.
 
 ## Releasing
 
