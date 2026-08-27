@@ -862,7 +862,6 @@ fn selection_exception(
 /// # Errors
 /// Interpreter defects only; per-case conformance outcomes land in the
 /// report.
-/// The one not-applicable record shape every drive-time exclusion produces.
 pub fn execute(
     set: &ArtifactSet,
     ixit: &Ixit,
