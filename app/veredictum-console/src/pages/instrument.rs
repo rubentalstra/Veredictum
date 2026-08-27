@@ -6,8 +6,8 @@
 //! the same expressions the CLI's validate summary prints.
 
 use leptos::prelude::{
-    AddAnyAttr, ClassAttribute, ElementChild, IntoAny, IntoView, Resource, Suspend, Suspense,
-    component, view,
+    AddAnyAttr, ClassAttribute, ElementChild, GlobalAttributes, IntoAny, IntoView, Resource,
+    Suspend, Suspense, component, view,
 };
 use leptos_meta::Title;
 use leptos_router::components::A;
@@ -44,7 +44,7 @@ pub fn Instrument() -> impl IntoView {
                     Ok(InstrumentView::Loaded(s)) => {
                         let findings_ok = s.findings == 0;
                         view! {
-                            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            <div id="instrument-stats" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                                 <StatCard
                                     label="Case cores"
                                     value=s.cases.to_string()

@@ -279,20 +279,28 @@ is the precedent to imitate, not a path in this tree.
   (`testing`). Components stay thin.
 - Component/browser tests: `wasm-bindgen-test` with `mount_to` — remember
   updates are async: `tick().await` before asserting.
-- **E2E doctrine, for when the harness lands with the screens (#6):**
-  Rust-native only — `thirtyfour` (WebDriver, built on `fantoccini`)
-  driving headless Chromium; journeys are plain `#[tokio::test]`s,
-  skip-with-reason when the base-URL variable is unset. Every journey
-  fails on any browser-console hydration error or panic. Explicit waits on
-  elements/conditions, never `sleep`; a flaky journey is fixed, never
-  `#[ignore]`d or retried-by-default. NOT Playwright/JS (the no-JS mandate
-  covers the test suite). The harness does not exist yet — a claim of E2E
-  coverage before it lands is false.
+- **E2E doctrine (the harness is `scripts/ui-e2e.sh`, #69):** Rust-native
+  only — `thirtyfour` (WebDriver, built on `fantoccini`) driving headless
+  Chromium; journeys are plain `#[tokio::test]`s in
+  `app/veredictum-console/tests/it/e2e_console.rs`, skip-with-reason when
+  the base-URL variable is unset. Every journey ends by reading the browser
+  console and failing on any `SEVERE` entry, hydration error or panic.
+  Explicit waits on elements/conditions, never `sleep`; a flaky journey is
+  fixed, never `#[ignore]`d or retried-by-default. NOT Playwright/JS (the
+  no-JS mandate covers the test suite). A journey drives a control only
+  after `body[data-hydrated]` appears (`app.rs` stamps it from a
+  browser-only effect): a click landing earlier is silently lost.
+- **The capture pass is the visual feedback loop.** With
+  `UI_E2E_DOCS_SHOTS=1` the journeys photograph every surface in one fixed
+  1440×900 window, light and dark, into `website/book/src/console/img/`,
+  which the book's console chapter embeds. The `ui-screenshot-guard` CI job
+  holds the two together: a pull request touching the console's `src/` or
+  `style/` either commits refreshed captures or carries the
+  `no-ui-visual-change` label.
 - Gates for every console change: `/ui-gates` — clippy on native
   (`--features ssr`) **and** wasm32 (`hydrate`, lib), `cargo nextest run`,
-  `leptosfmt` + `cargo fmt`, and `cargo leptos build` when the build surface
-  changed. FerroEHR's screenshot-guard CI job is deliberately NOT ported:
-  no docs-site screenshot set exists here yet.
+  `leptosfmt` + `cargo fmt`, `cargo leptos build` when the build surface
+  changed, and `scripts/ui-e2e.sh` when behaviour or appearance changed.
 - `console_error_panic_hook` is set in the hydrate entry point (real stack
   traces in the browser — `getting_started/leptos_dx`).
 

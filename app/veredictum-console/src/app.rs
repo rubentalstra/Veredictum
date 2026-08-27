@@ -3,15 +3,15 @@
 
 //! The application shell and route tree.
 //!
-//! Every rule in `.claude/rules/leptos-ui.md` governs this module: identical
-//! view structure on both targets, valid HTML, every routed page sets a
-//! `<Title>`, and the chrome renders exactly once around the `<Outlet/>`.
+//! The hydration contract governs this module: identical view structure on
+//! both targets, valid HTML, every routed page setting a `<Title>`, and the
+//! chrome rendering exactly once around the `<Outlet/>`.
 
 use leptos::prelude::{
-    AutoReload, ElementChild, GlobalAttributes, HydrationScripts, IntoView, LeptosOptions,
-    component, view,
+    AutoReload, Effect, ElementChild, GlobalAttributes, HydrationScripts, IntoView, LeptosOptions,
+    component, document, view,
 };
-use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{Link, MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     ParamSegment, StaticSegment,
     components::{ParentRoute, Route, Router, Routes},
@@ -54,8 +54,26 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
 pub fn App() -> impl IntoView {
     provide_meta_context();
 
+    // The hydration marker every browser journey waits on before driving a
+    // control: a click that lands before hydration attaches its listener is
+    // silently lost. An Effect never runs on the server, so the server pass
+    // and the first paint stay deterministic, and the marker sits on the root
+    // component so the routes' 404 fallback carries it too.
+    Effect::new(|_| {
+        if let Some(body) = document().body() {
+            let outcome = body.set_attribute("data-hydrated", "");
+            // NOTE: no openEHR spec governs this — our own design; a failed
+            // attribute write on a live document has nothing to recover from.
+            drop(outcome);
+        }
+    });
+
     view! {
         <Stylesheet id="leptos" href="/pkg/veredictum-console.css" />
+        // Declaring the icon is what stops the browser probing `/favicon.ico`,
+        // whose 404 the journeys' console gate reads as a page error on every
+        // load. The seal is the one brand original (`public/seal.svg`).
+        <Link rel="icon" href="/seal.svg" />
         <Title text="Veredictum console" />
         <Router>
             <Routes fallback=|| "Page not found.">

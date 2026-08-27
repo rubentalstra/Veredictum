@@ -5,6 +5,8 @@
 //! (`.claude/rules/testing.md` §Where tests live).
 
 #[cfg(feature = "ssr")]
+mod e2e_console;
+#[cfg(feature = "ssr")]
 mod engine_gate;
 #[cfg(feature = "ssr")]
 mod read_surfaces;
