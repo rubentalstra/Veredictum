@@ -21,10 +21,9 @@ crate-type = ["cdylib", "rlib"]
 name = "veredictum-console"
 path = "src/main.rs"
 
-# The engine seam is deliberately absent from the scaffold: the console will
-# depend on `veredictum` by exact version FROM crates.io (never `path =`) and
-# spawn the same pinned binary for runs, which needs the first published
-# release carrying the lib's pipeline API. Tracked as #54.
+# The engine seam (#54): `veredictum` by exact version FROM crates.io, never
+# `path =` — the lib's typed pipeline API for reads, the same pinned binary
+# spawned for runs.
 [dependencies]
 # The engine, from crates.io BY EXACT VERSION — never `path =` (#52, #54):
 # the console can only ever ship over a released instrument, so a console
