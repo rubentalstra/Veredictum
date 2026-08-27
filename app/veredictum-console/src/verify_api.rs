@@ -135,6 +135,9 @@ pub mod unpack {
     /// How many hex characters a bundle id carries.
     const ID_CHARS: usize = ID_BYTES * 2;
 
+    /// The longest file name an uploaded entry may carry.
+    const MAX_NAME_CHARS: usize = 128;
+
     /// Whether `name` is a plain bundle-relative file name.
     ///
     /// Mirrors `veredictum::record`'s own rule: an entry carrying a path
@@ -147,6 +150,46 @@ pub mod unpack {
             && name != ".."
             && !name.contains('/')
             && !name.contains('\\')
+    }
+
+    /// Rebuilds an uploaded entry's name from an allowlist, or refuses it.
+    ///
+    /// The returned string is CONSTRUCTED character by checked character —
+    /// never the uploader's bytes reused — so nothing the uploader typed
+    /// reaches a path join. The allowlist is what a record bundle's own
+    /// files spell (letters, digits, dot, dash, underscore), a leading dot
+    /// and over-long names refused with the reason.
+    ///
+    /// # Errors
+    /// The actionable refusal naming the offending name.
+    pub fn safe_entry_name(name: &str) -> Result<String, String> {
+        if !is_plain_file_name(name) {
+            return Err(format!(
+                "the archive carries {name:?}, which is not a plain file name — a record bundle is one flat directory"
+            ));
+        }
+        if name.len() > MAX_NAME_CHARS {
+            return Err(format!(
+                "the archive carries a {}-character file name; the page accepts at most {MAX_NAME_CHARS}",
+                name.len()
+            ));
+        }
+        if name.starts_with('.') {
+            return Err(format!(
+                "the archive carries the hidden file {name:?}; a record bundle carries none"
+            ));
+        }
+        let mut rebuilt = String::with_capacity(name.len());
+        for c in name.chars() {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                rebuilt.push(c);
+            } else {
+                return Err(format!(
+                    "the archive carries {name:?}, whose {c:?} is outside a record bundle's name alphabet (letters, digits, dot, dash, underscore)"
+                ));
+            }
+        }
+        Ok(rebuilt)
     }
 
     /// Whether `id` is one this console could have minted.
@@ -195,7 +238,10 @@ pub mod unpack {
         if !is_bundle_id(id) {
             return Err(String::from("not a bundle this console unpacked"));
         }
-        Ok(state.out.join(format!("{SCRATCH_PREFIX}{id}")))
+        // The joined id is REBUILT from the checked characters, so no byte
+        // of the query parameter itself reaches the filesystem path.
+        let rebuilt: String = id.chars().filter(char::is_ascii_hexdigit).collect();
+        Ok(state.out.join(format!("{SCRATCH_PREFIX}{rebuilt}")))
     }
 
     /// Removes every scratch directory older than [`TTL`].
@@ -283,13 +329,9 @@ pub mod unpack {
                 continue;
             }
             // The RAW name, never a resolved one: resolving is exactly the
-            // step that lets `../` escape.
-            let name = entry.name().to_owned();
-            if !is_plain_file_name(&name) {
-                return Err(format!(
-                    "the archive carries {name:?}, which is not a plain file name — a record bundle is one flat directory"
-                ));
-            }
+            // step that lets `../` escape. The on-disk name is then REBUILT
+            // from the allowlist, so no uploader byte reaches the join.
+            let name = safe_entry_name(entry.name())?;
             let declared = entry.size();
             if declared > MAX_ENTRY_BYTES {
                 return Err(format!(
@@ -524,6 +566,14 @@ mod tests {
         assert!(is_plain_file_name("record-manifest.json"));
         assert!(is_plain_file_name("CONFORMANCE_REPORT.md"));
         assert!(!is_plain_file_name(""));
+        assert_eq!(
+            super::unpack::safe_entry_name("record-manifest.json.asc").as_deref(),
+            Ok("record-manifest.json.asc")
+        );
+        assert!(super::unpack::safe_entry_name(".hidden").is_err());
+        assert!(super::unpack::safe_entry_name("na me.json").is_err());
+        assert!(super::unpack::safe_entry_name("nam\u{202e}e.json").is_err());
+        assert!(super::unpack::safe_entry_name(&"n".repeat(200)).is_err());
         assert!(!is_plain_file_name("."));
         assert!(!is_plain_file_name(".."));
         assert!(!is_plain_file_name("../outside.json"));
