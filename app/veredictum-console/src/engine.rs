@@ -86,6 +86,10 @@ pub struct RunSpec {
     /// Ask the engine for its `--progress` stream (#81); a binary predating
     /// the flag refuses the argument, so the caller decides.
     pub progress: bool,
+    /// Ask the engine to persist the wire exchanges as `transcript.json`
+    /// beside the results (#96). Off by default: the artifact can carry real
+    /// patient data, so the operator opts in per run.
+    pub record_exchanges: bool,
 }
 
 /// What to judge and seal, mirroring the `veredictum verdicts` CLI surface
@@ -461,6 +465,9 @@ pub fn args(spec: &RunSpec) -> Vec<std::ffi::OsString> {
         args.push("--filter".into());
         args.push(filter.clone().into());
     }
+    if spec.record_exchanges {
+        args.push("--record-exchanges".into());
+    }
     if spec.progress {
         args.push("--progress".into());
     }
@@ -508,9 +515,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_argument_vector_mirrors_the_cli_surface() {
-        let spec = RunSpec {
+    /// One spec with every optional argument set, so the mapping is pinned
+    /// argument for argument.
+    fn full_spec() -> RunSpec {
+        RunSpec {
             root: "artifacts".into(),
             ixit: "out/ixit.json".into(),
             out_dir: "out".into(),
@@ -520,13 +528,21 @@ mod tests {
             filter: Some("create_ehr-main".into()),
             credentials: vec![],
             progress: true,
-        };
-        let rendered: Vec<String> = args(&spec)
+            record_exchanges: true,
+        }
+    }
+
+    fn rendered(spec: &RunSpec) -> Vec<String> {
+        args(spec)
             .into_iter()
             .map(|a| a.to_string_lossy().into_owned())
-            .collect();
+            .collect()
+    }
+
+    #[test]
+    fn the_argument_vector_mirrors_the_cli_surface() {
         assert_eq!(
-            rendered,
+            rendered(&full_spec()),
             [
                 "run",
                 "--root",
@@ -543,8 +559,24 @@ mod tests {
                 "party/mine/statement.json",
                 "--filter",
                 "create_ehr-main",
+                "--record-exchanges",
                 "--progress",
             ]
+        );
+    }
+
+    /// Recording is opt-in: an unchecked box passes no flag at all, so the
+    /// engine's own default (no transcript) governs.
+    #[test]
+    fn an_unrecorded_run_passes_no_transcript_flag() {
+        let spec = RunSpec {
+            record_exchanges: false,
+            ..full_spec()
+        };
+        assert!(
+            !rendered(&spec).contains(&String::from("--record-exchanges")),
+            "{:?}",
+            rendered(&spec)
         );
     }
 

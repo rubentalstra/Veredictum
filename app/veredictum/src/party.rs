@@ -206,7 +206,7 @@ pub struct Statement {
 // ── the results ─────────────────────────────────────────────────────────────
 
 /// The SUT identity as recorded by the run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Sut {
     /// SUT name.
     pub name: String,

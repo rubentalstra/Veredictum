@@ -96,6 +96,7 @@ use veredictum::record::{
     DigestOutcome, HONESTY_LINE, MANIFEST_FILE, RecordedFile, SIGNATURE_FILE, SignatureOutcome,
     seal, verify_bundle,
 };
+use veredictum::transcript::Recording;
 
 #[derive(Parser)]
 #[command(
@@ -152,6 +153,15 @@ enum Command {
         /// process on the host.
         #[arg(long, env = "VEREDICTUM_SIGN_PASSPHRASE", hide_env_values = true)]
         sign_passphrase: Option<String>,
+        /// Persist the wire exchanges beside results.json as transcript.json.
+        ///
+        /// OFF by default. The artifact can carry real patient data — a SUT's
+        /// response body is recorded verbatim — so it is operator-controlled
+        /// output, never a log: store it where the record itself is stored.
+        /// The `authorization` request header's value is withheld; everything
+        /// else lands exactly as it went out and came back.
+        #[arg(long)]
+        record_exchanges: bool,
         /// Print one machine-parseable line per processed case:
         /// `progress: <k>/<n> <case-id>` after `progress: 0/<n>` — a stable
         /// grammar a driver may parse. Off by default, so existing output is
@@ -431,6 +441,7 @@ fn main() -> ExitCode {
             statement,
             sign_key,
             sign_passphrase,
+            record_exchanges,
             progress,
         } => run_command(
             &RunRequest {
@@ -441,6 +452,7 @@ fn main() -> ExitCode {
                 sut_version: &sut_version,
                 filter: filter.as_deref(),
                 statement: statement.as_deref(),
+                recording: Recording::from(record_exchanges),
             },
             &Signing {
                 key: sign_key,
@@ -851,6 +863,23 @@ fn perf_command(
     }
 }
 
+/// Says where the transcript landed, with the caution its content earns.
+fn report_transcript(outcome: &veredictum::pipeline::conformance::RunOutcome) {
+    let Some(path) = &outcome.transcript_path else {
+        return;
+    };
+    let exchanges: usize = outcome
+        .report
+        .transcripts
+        .iter()
+        .map(|case| case.exchanges.len())
+        .sum();
+    println!(
+        "wrote {} ({exchanges} recorded exchange(s)) — it can carry real patient data; store it as you store the record",
+        path.display()
+    );
+}
+
 fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> ExitCode {
     let warn = |warning: RunWarning<'_>| match warning {
         RunWarning::CarriedMeasurements {
@@ -893,6 +922,17 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> E
     if let Err(e) = write_file(&outcome.exceptions_path, &exceptions) {
         return fail(&e);
     }
+    // The transcript is written before the manifest is built, so a sealed
+    // bundle covers every document the run emitted.
+    let transcript = match outcome.transcript_document() {
+        Ok(transcript) => transcript,
+        Err(e) => return fail(&e),
+    };
+    if let (Some(body), Some(path)) = (transcript.as_ref(), outcome.transcript_path.as_ref())
+        && let Err(e) = write_file(path, body)
+    {
+        return fail(&e);
+    }
     let names = match (
         record_name(&outcome.results_path),
         record_name(&outcome.exceptions_path),
@@ -901,7 +941,7 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> E
         (Err(code), _) | (_, Err(code)) => return code,
     };
     let [results_name, exceptions_name] = names;
-    let sealed = [
+    let mut sealed = vec![
         RecordedFile {
             name: results_name,
             body: document.as_bytes(),
@@ -911,6 +951,16 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> E
             body: exceptions.as_bytes(),
         },
     ];
+    if let (Some(body), Some(path)) = (transcript.as_ref(), outcome.transcript_path.as_ref()) {
+        let name = match record_name(path) {
+            Ok(name) => name,
+            Err(code) => return code,
+        };
+        sealed.push(RecordedFile {
+            name,
+            body: body.as_bytes(),
+        });
+    }
     if let Err(code) = seal_emitted(request.out_dir, &sealed, signing) {
         return code;
     }
@@ -925,6 +975,7 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> E
         outcome.report.exceptions.len(),
         outcome.results_path.display()
     );
+    report_transcript(&outcome);
     if outcome.is_clean() {
         ExitCode::SUCCESS
     } else {

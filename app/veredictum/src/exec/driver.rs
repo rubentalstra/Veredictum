@@ -34,9 +34,13 @@ use crate::model::assertion::{Assertion, EquivalentTarget, RowsSpec};
 use crate::model::binding::{OperationBinding, RequestBody, StripRule, WireCapture, WireFrom};
 use crate::model::case::{CaseCore, EhrRequirement, FlowStep, ImportRequirement};
 use crate::refgrammar::{CaptureField, Template, ValueRef};
+use crate::transcript::{
+    RecordedExchange, RecordedRequest, RecordedResponse, Recording, recorded_headers,
+};
 use crate::vocab::{FormatName, HttpMethod, MemberChangeType, MemberVersionType, OutcomeKind};
 
-/// One captured HTTP exchange (also the transcript-recording seam).
+/// One captured HTTP exchange: the response side, which is what every
+/// classification, capture and assertion reads.
 #[derive(Debug, Clone)]
 pub struct Exchange {
     /// The HTTP method the driver sent.
@@ -79,8 +83,12 @@ pub struct HttpDriver<'a> {
     /// binds it, and a server could dodge every dated MUST by
     /// under-advertising — divergence surfaces as a static-review finding.
     observed_restapi_specs_version: Option<String>,
-    /// Recorded exchanges (the transcript seam).
-    pub exchanges: Vec<Exchange>,
+    /// Whether the wire is being recorded for the transcript artifact.
+    recording: Recording,
+    /// The row the driver is on, stamped onto each recorded exchange.
+    row: u32,
+    /// The recorded exchanges, in send order — empty unless [`Recording::On`].
+    pub exchanges: Vec<RecordedExchange>,
 }
 
 impl std::fmt::Debug for HttpDriver<'_> {
@@ -124,8 +132,26 @@ impl<'a> HttpDriver<'a> {
             last_body: None,
             last_version_uid: None,
             observed_restapi_specs_version: None,
+            recording: Recording::Off,
+            row: 0,
             exchanges: Vec::new(),
         })
+    }
+
+    /// Turns wire recording on or off for this driver.
+    ///
+    /// Recording keeps the exchanges the driver already builds; it sends
+    /// nothing extra and changes no classification, so a recorded run and an
+    /// unrecorded one reach the same verdicts.
+    #[must_use]
+    pub fn with_recording(mut self, recording: Recording) -> Self {
+        self.recording = recording;
+        self
+    }
+
+    /// Takes the recorded exchanges, leaving the driver empty.
+    pub fn take_exchanges(&mut self) -> Vec<RecordedExchange> {
+        std::mem::take(&mut self.exchanges)
     }
 
     /// Take the System-manifest `restapi_specs_version` this driver observed,
@@ -432,7 +458,7 @@ impl<'a> HttpDriver<'a> {
             }
         }
         let text = response.text().map_err(|e| format!("transport: {e}"))?;
-        let body = if text.is_empty() {
+        let response_body = if text.is_empty() {
             None
         } else {
             serde_json::from_str(&text)
@@ -444,8 +470,9 @@ impl<'a> HttpDriver<'a> {
             path: url.to_owned(),
             status,
             headers: response_headers,
-            body,
+            body: response_body,
         };
+        self.record(headers, body, &exchange);
         // VEREDICTUM_DEBUG_EXCHANGES=1: dump every wire exchange to stderr (live
         // triage aid; the transcript seam is the durable record).
         let debug_exchanges = std::env::var_os("VEREDICTUM_DEBUG_EXCHANGES").is_some();
@@ -468,8 +495,41 @@ impl<'a> HttpDriver<'a> {
                 );
             }
         }
-        self.exchanges.push(exchange.clone());
         Ok(exchange)
+    }
+
+    /// Keeps one exchange for the transcript artifact, when recording is on.
+    ///
+    /// The request headers are lower-cased and the credential header's value
+    /// is withheld ([`crate::transcript::recorded_headers`]); everything else
+    /// lands exactly as it went out and came back.
+    fn record(
+        &mut self,
+        request_headers: &BTreeMap<String, String>,
+        request_body: Option<&Value>,
+        exchange: &Exchange,
+    ) {
+        if !self.recording.is_on() {
+            return;
+        }
+        let seq = u32::try_from(self.exchanges.len())
+            .unwrap_or(u32::MAX)
+            .saturating_add(1);
+        self.exchanges.push(RecordedExchange {
+            seq,
+            row: self.row,
+            request: RecordedRequest {
+                method: exchange.method.clone(),
+                url: exchange.path.clone(),
+                headers: recorded_headers(request_headers),
+                body: request_body.cloned(),
+            },
+            response: RecordedResponse {
+                status: exchange.status.as_u16(),
+                headers: recorded_headers(&exchange.headers),
+                body: exchange.body.clone(),
+            },
+        });
     }
 
     fn extract_capture(
@@ -2963,6 +3023,7 @@ impl StepDriver for HttpDriver<'_> {
         vars: &mut VarStore,
     ) -> Result<StepObservation, String> {
         self.resolver.bind_row(case, row);
+        self.row = u32::try_from(row).unwrap_or(u32::MAX);
         let binding = self.binding_for_variant(case, &step.call, step.variant.as_deref())?;
         if binding.is_unrealized() {
             // The interpreter surfaces this before perform() normally; the
@@ -3112,6 +3173,7 @@ impl StepDriver for HttpDriver<'_> {
         vars: &mut VarStore,
     ) -> Result<Provisioned, String> {
         self.resolver.bind_row(case, row);
+        self.row = u32::try_from(row).unwrap_or(u32::MAX);
         self.committed.clear();
         self.last_body = None;
         self.last_version_uid = None;
@@ -3229,6 +3291,7 @@ impl StepDriver for HttpDriver<'_> {
         vars: &mut VarStore,
     ) -> Result<Vec<String>, String> {
         self.resolver.bind_row(case, row);
+        self.row = u32::try_from(row).unwrap_or(u32::MAX);
         let body = self.last_body.clone().unwrap_or(Value::Null);
         let mut failures = Vec::new();
         for assertion in &case.postconditions {

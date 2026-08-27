@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use crate::party::{OutcomeRecord, OutcomeStatus, Results, Statement};
 use crate::pipeline::{Error, load_clean_root, load_ixit, read_json, to_json_document};
 use crate::run::RunReport;
+use crate::transcript::{Recording, RunTranscript, TRANSCRIPT_FILE};
 
 /// What to drive, against which SUT, from which topology.
 #[derive(Debug)]
@@ -35,6 +36,9 @@ pub struct RunRequest<'a> {
     /// option-gated case whose option the statement does not declare is
     /// recorded not-applicable at drive time instead of driven.
     pub statement: Option<&'a Path>,
+    /// Whether the run keeps its wire exchanges for the transcript artifact
+    /// ([`crate::transcript::TRANSCRIPT_FILE`], written beside the results).
+    pub recording: Recording,
 }
 
 /// Something a run reports as it goes that is not a failure.
@@ -82,6 +86,8 @@ pub struct RunOutcome {
     /// Where the interpreter-exception record belongs, under the requested
     /// output directory.
     pub exceptions_path: PathBuf,
+    /// Where the wire transcript belongs, when the run recorded one.
+    pub transcript_path: Option<PathBuf>,
 }
 
 impl RunOutcome {
@@ -113,6 +119,26 @@ impl RunOutcome {
             .map(|(case, e)| serde_json::json!({ "case": case.to_string(), "exception": e }))
             .collect();
         to_json_document(&entries, "serialize")
+    }
+
+    /// Renders the wire transcript, or `None` when the run recorded nothing.
+    ///
+    /// The document is canonicalized before rendering, so the same exchanges
+    /// always produce the same bytes.
+    ///
+    /// # Errors
+    /// [`Error::Serialize`] when the transcript cannot be serialized.
+    pub fn transcript_document(&self) -> Result<Option<String>, Error> {
+        if self.report.transcripts.is_empty() {
+            return Ok(None);
+        }
+        let mut transcript = RunTranscript {
+            sut: self.results.sut.clone(),
+            schedule_release: self.results.schedule_release.clone(),
+            cases: self.report.transcripts.clone(),
+        };
+        transcript.canonicalize();
+        to_json_document(&transcript, "serialize").map(Some)
     }
 }
 
@@ -153,7 +179,7 @@ pub fn execute_run(
         None => None,
         Some(path) => Some(read_json(path, "statement")?),
     };
-    let report = crate::run::execute(&set, &ixit, statement.as_ref(), progress)
+    let report = crate::run::execute(&set, &ixit, statement.as_ref(), request.recording, progress)
         .map_err(|e| Error::Instrument(format!("execution defect: {e}")))?;
     let outcomes: Vec<OutcomeRecord> = report.records.iter().map(OutcomeRecord::from).collect();
     let counts = tally(&outcomes);
@@ -179,12 +205,15 @@ pub fn execute_run(
     results
         .check_invariants()
         .map_err(Error::RecordedInvariants)?;
+    let transcript_path =
+        (!report.transcripts.is_empty()).then(|| request.out_dir.join(TRANSCRIPT_FILE));
     Ok(RunOutcome {
         results,
         report,
         counts,
         results_path: request.out_dir.join("results.json"),
         exceptions_path: request.out_dir.join("run-exceptions.json"),
+        transcript_path,
     })
 }
 
@@ -293,6 +322,7 @@ mod tests {
             sut_version,
             filter: None,
             statement: None,
+            recording: Recording::Off,
         }
     }
 
@@ -357,6 +387,7 @@ mod tests {
             counts,
             results_path: PathBuf::from("results.json"),
             exceptions_path: PathBuf::from("run-exceptions.json"),
+            transcript_path: None,
         };
         assert!(outcome_of(clean).is_clean());
         assert!(
@@ -537,6 +568,7 @@ mod tests {
             counts: OutcomeCounts::default(),
             results_path: PathBuf::from("results.json"),
             exceptions_path: PathBuf::from("run-exceptions.json"),
+            transcript_path: None,
         };
 
         let document = outcome

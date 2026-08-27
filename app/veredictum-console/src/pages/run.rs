@@ -307,6 +307,7 @@ pub fn Scope() -> impl IntoView {
         }
     });
     let filter = RwSignal::new(String::new());
+    let record_exchanges = RwSignal::new(false);
     let preview = ServerAction::<FetchScopePreview>::new();
     let save = ServerAction::<SaveScope>::new();
     let start = ServerAction::<StartRun>::new();
@@ -430,6 +431,21 @@ pub fn Scope() -> impl IntoView {
                         on:input:target=move |ev| filter.set(ev.target().value())
                     />
                 </div>
+                <div>
+                    <label class="flex items-center gap-2 text-sm text-ink" for="record-exchanges">
+                        <input
+                            id="record-exchanges"
+                            type="checkbox"
+                            class="size-4 accent-accent"
+                            prop:checked=move || record_exchanges.get()
+                            on:change:target=move |ev| record_exchanges.set(ev.target().checked())
+                        />
+                        "Record the wire exchanges"
+                    </label>
+                    <p class="mt-1 text-sm text-ink-muted">
+                        "Off by default. The transcript keeps every request and response the run drove, so it can carry real patient data from the server you are grading. It lands beside results.json in the run's output directory, and the sealed record covers it."
+                    </p>
+                </div>
                 <div class="flex items-center gap-2">
                     <button
                         type="button"
@@ -449,6 +465,7 @@ pub fn Scope() -> impl IntoView {
                             save.dispatch(SaveScope {
                                 statement_json: Some(statement_json.get()),
                                 filter: Some(filter.get()),
+                                record_exchanges: record_exchanges.get(),
                             });
                             preview.dispatch(FetchScopePreview {
                                 filter: filter.get(),

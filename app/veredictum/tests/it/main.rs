@@ -23,5 +23,6 @@ mod corpus_packs;
 mod defect_rejection;
 mod perf_driver;
 mod pipeline_seams;
+mod run_transcript;
 mod schema_drift;
 mod verification_pack;

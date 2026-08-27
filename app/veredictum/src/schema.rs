@@ -1672,6 +1672,88 @@ pub fn transcript_schema() -> Value {
     })
 }
 
+/// The run wire transcript (`transcript.json` beside a run's `results.json`).
+///
+/// A different family from [`transcript_schema`], which is the verification
+/// pack's REPLAY fixture: that one requires an adjudicated `expected_verdict`
+/// and an `adjudication_ref` per entry, and carries no request headers or
+/// request body at all. A run transcript adjudicates nothing and records both
+/// sides of the wire, so it is its own document.
+#[must_use]
+pub fn run_transcript_schema() -> Value {
+    json!({
+        "$schema": DRAFT,
+        "$id": urn("run-transcript"),
+        "title": "CNF 2.0 run wire transcript",
+        "description": "The exchanges one run drove, request and response verbatim, written beside its results.json when `run --record-exchanges` is set. Ordered by case id then send sequence, so a re-run of the same campaign emits the same bytes. The `authorization` request header's value is withheld; response bodies are recorded as they arrived and can carry real patient data.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sut", "schedule_release", "cases"],
+        "properties": {
+            "sut": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "version"],
+                "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "version": { "type": "string", "minLength": 1 }
+                }
+            },
+            "schedule_release": { "type": "string", "minLength": 1 },
+            "cases": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["case", "exchanges"],
+                    "properties": {
+                        "case": { "type": "string", "pattern": CASE_ID_PATTERN },
+                        "format": { "enum": tokens(FormatName::ALL) },
+                        "exchanges": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["seq", "row", "request", "response"],
+                                "properties": {
+                                    "seq": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "description": "The exchange's ordinal within its case, in send order — provisioning exchanges included."
+                                    },
+                                    "row": { "type": "integer", "minimum": 0 },
+                                    "request": {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": ["method", "url", "headers"],
+                                        "properties": {
+                                            "method": { "enum": tokens(HttpMethod::ALL) },
+                                            "url": { "type": "string", "minLength": 1 },
+                                            "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                                            "body": {}
+                                        }
+                                    },
+                                    "response": {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "required": ["status", "headers"],
+                                        "properties": {
+                                            "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+                                            "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                                            "body": {}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
+
 /// The full published set: (file name, schema document).
 #[must_use]
 pub fn emit_all() -> Vec<(&'static str, Value)> {
@@ -1695,6 +1777,7 @@ pub fn emit_all() -> Vec<(&'static str, Value)> {
         ("stress.schema.json", stress_schema()),
         ("aql-probe.schema.json", aql_probe_schema()),
         ("transcript.schema.json", transcript_schema()),
+        ("run-transcript.schema.json", run_transcript_schema()),
     ]
 }
 

@@ -23,6 +23,7 @@ use crate::ixit::Ixit;
 use crate::model::assertion::assertion_refs;
 use crate::model::case::{CaseCore, PartyRelationshipRequirement};
 use crate::refgrammar::{IxitField, ValueRef};
+use crate::transcript::{CaseTranscript, Recording};
 use crate::vocab::CaseStatus;
 
 /// Why a case was not interpreter-run (the registered-exception taxonomy).
@@ -59,6 +60,9 @@ pub struct RunReport {
     /// (the released `Options` schema has no `required` list; a divergence
     /// becomes a static-review finding, not a re-declaration).
     pub restapi_specs_version: Option<String>,
+    /// The recorded exchanges per case, in execution order — empty unless the
+    /// run asked for [`Recording::On`].
+    pub transcripts: Vec<CaseTranscript>,
 }
 
 impl RunReport {
@@ -896,6 +900,10 @@ impl Progress<'_> {
 /// against a server that legitimately implements the other register branch.
 /// Without a statement every case runs (the statement-blind sweep).
 ///
+/// `recording` decides whether the exchanges the driver builds are kept for
+/// the transcript artifact. Recording sends nothing extra and judges nothing
+/// differently, so a recorded run reaches the same verdicts as a plain one.
+///
 /// # Errors
 /// Interpreter defects only; per-case conformance outcomes land in the
 /// report.
@@ -903,6 +911,7 @@ pub fn execute(
     set: &ArtifactSet,
     ixit: &Ixit,
     statement: Option<&crate::party::Statement>,
+    recording: Recording,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<RunReport, String> {
     let mut report = RunReport::default();
@@ -952,10 +961,20 @@ pub fn execute(
         } else {
             case.clone()
         };
-        let mut driver = HttpDriver::new(set, ixit, statement.map(|s| &s.spec_versions))?;
-        let record = run_case(&runnable, runnable.formats.first().copied(), &mut driver)?;
+        let mut driver = HttpDriver::new(set, ixit, statement.map(|s| &s.spec_versions))?
+            .with_recording(recording);
+        let format = runnable.formats.first().copied();
+        let record = run_case(&runnable, format, &mut driver)?;
         report.interpreter_run += 1;
         report.records.push(record);
+        let exchanges = driver.take_exchanges();
+        if !exchanges.is_empty() {
+            report.transcripts.push(CaseTranscript {
+                case: case.id.clone(),
+                format,
+                exchanges,
+            });
+        }
         if let Some(version) = driver.take_observed_restapi_specs_version() {
             report.restapi_specs_version.get_or_insert(version);
         }

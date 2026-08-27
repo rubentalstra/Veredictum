@@ -137,6 +137,7 @@ fn a_console_run_and_a_cli_run_emit_identical_documents() -> Result<(), Box<dyn 
             statement: None,
             filter: Some(String::from(GATE_FILTER)),
             progress: false,
+            record_exchanges: false,
             credentials: vec![
                 Credential {
                     name: String::from("GATE_SUT_USER"),
