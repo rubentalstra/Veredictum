@@ -55,8 +55,11 @@ pub struct RunDraft {
     pub credentials: Vec<crate::engine::Credential>,
     /// Whether the probe answered 2xx for these facts.
     pub probed_ok: bool,
-    /// The picked statement path (under the party tree), when any.
-    pub statement: Option<String>,
+    /// The pasted statement DOCUMENT (the vendor's own claim), when any —
+    /// validated content, written into the job's output directory at start.
+    pub statement_json: Option<String>,
+    /// The claim's product identity, parsed once at save time.
+    pub statement_product: Option<String>,
     /// The case-id filter, when any.
     pub filter: Option<String>,
 }
@@ -74,10 +77,22 @@ pub struct DraftView {
     pub auth: String,
     /// Whether the probe answered 2xx.
     pub probed_ok: bool,
-    /// The picked statement path, when any.
+    /// The saved claim's product identity, when a statement was pasted.
     pub statement: Option<String>,
     /// The case-id filter, when any.
     pub filter: Option<String>,
+}
+
+/// The accepted claim, summarized for the overview the operator reads
+/// before starting: who claims, which tiers, how many capabilities.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaimSummary {
+    /// The product identity the statement declares.
+    pub product: String,
+    /// The claimed profile tiers, the statement's own tokens.
+    pub profiles: Vec<String>,
+    /// The number of claimed verdict-bearing capabilities.
+    pub capabilities: u64,
 }
 
 /// The probe's verbatim answer.
@@ -124,8 +139,11 @@ pub struct ScopePreview {
 pub mod read {
     //! The component-free ssr readers and writers behind the endpoints.
 
-    use super::{DraftView, RunDraft, ScopePreview, StatementRow};
+    use super::{ClaimSummary, DraftView, RunDraft, ScopePreview, StatementRow};
     use crate::state::ConsoleState;
+
+    /// The pasted-claim size cap: far above any real ICS, far below abuse.
+    const STATEMENT_CAP_BYTES: usize = 1_048_576;
 
     /// NOTE: no openEHR spec governs this — our own design; usize → u64 is
     /// lossless on every supported target (see `catalogue_api::read::count`).
@@ -143,7 +161,7 @@ pub mod read {
             sut_version: draft.sut_version.clone(),
             auth: draft.auth.token().to_owned(),
             probed_ok: draft.probed_ok,
-            statement: draft.statement.clone(),
+            statement: draft.statement_product.clone(),
             filter: draft.filter.clone(),
         })
     }
@@ -158,23 +176,97 @@ pub mod read {
         Ok(())
     }
 
-    /// Stores the scope half onto the existing draft.
+    /// Validates and stores the scope half onto the existing draft.
+    ///
+    /// The pasted claim is UNTRUSTED input on a public endpoint: size-capped,
+    /// parsed through the published lib's own statement type, and refused
+    /// with the reader's finding verbatim — never stored unvalidated.
     ///
     /// # Errors
-    /// "no connection draft" when S3 has not run, or the poisoned-lock
-    /// diagnostic.
+    /// "no connection draft" when S3 has not run, the size cap, the
+    /// statement reader's finding verbatim, or the poisoned-lock diagnostic.
+    #[expect(
+        clippy::disallowed_types,
+        reason = "the artifact-loader family: schema validation runs over the raw JSON value before the typed parse, exactly as the engine's own loaders do"
+    )]
     pub fn save_scope(
         state: &ConsoleState,
-        statement: Option<String>,
+        statement_json: Option<String>,
         filter: Option<String>,
-    ) -> Result<(), String> {
+    ) -> Result<Option<ClaimSummary>, String> {
+        let summary = statement_json
+            .as_deref()
+            .map(|body| {
+                if body.len() > STATEMENT_CAP_BYTES {
+                    return Err(format!(
+                        "the statement is {} bytes; the cap is {STATEMENT_CAP_BYTES}",
+                        body.len()
+                    ));
+                }
+                let value: serde_json::Value = serde_json::from_str(body)
+                    .map_err(|e| format!("the statement is not JSON: {e}"))?;
+                // Held to the PUBLISHED statement schema — the same document
+                // the engine emits and loads by — before the typed parse.
+                let validator = jsonschema::validator_for(&veredictum::schema::statement_schema())
+                    .map_err(|e| format!("the statement schema itself failed to compile: {e}"))?;
+                if let Some(finding) = validator.iter_errors(&value).next() {
+                    return Err(format!(
+                        "the statement fails its published schema at {}: {finding}",
+                        finding.instance_path()
+                    ));
+                }
+                let statement: veredictum::party::Statement = serde_json::from_value(value)
+                    .map_err(|e| format!("the statement does not parse: {e}"))?;
+                Ok(ClaimSummary {
+                    product: format!("{} {}", statement.product.name, statement.product.version),
+                    profiles: statement
+                        .claims
+                        .profiles
+                        .iter()
+                        .map(|tier| {
+                            serde_json::to_string(tier)
+                                .unwrap_or_default()
+                                .trim_matches('"')
+                                .to_owned()
+                        })
+                        .collect(),
+                    capabilities: count(statement.claims.capabilities.len()),
+                })
+            })
+            .transpose()?;
         let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
         let draft = guard
             .as_mut()
             .ok_or_else(|| String::from("no connection draft: complete the Connect step first"))?;
-        draft.statement = statement;
+        draft.statement_product = summary.as_ref().map(|claim| claim.product.clone());
+        draft.statement_json = statement_json;
         draft.filter = filter;
-        Ok(())
+        Ok(summary)
+    }
+
+    /// One committed statement's body, for the example fillers.
+    ///
+    /// The path is untrusted client input: it must canonicalize to a
+    /// `statement.json` under the mounted party tree, or it is refused.
+    ///
+    /// # Errors
+    /// The refusal above, or the filesystem's verbatim failure.
+    pub fn statement_body(state: &ConsoleState, path: &str) -> Result<String, String> {
+        let candidate = std::path::Path::new(path)
+            .canonicalize()
+            .map_err(|e| format!("{path}: {e}"))?;
+        let party = state
+            .party
+            .canonicalize()
+            .map_err(|e| format!("{}: {e}", state.party.display()))?;
+        if !candidate.starts_with(&party)
+            || candidate.file_name() != Some(std::ffi::OsStr::new("statement.json"))
+        {
+            return Err(String::from(
+                "refused: only a statement.json under the mounted party tree loads as an example",
+            ));
+        }
+        std::fs::read_to_string(&candidate).map_err(|e| format!("{}: {e}", candidate.display()))
     }
 
     /// The pickable statements: every `*/statement.json` under the party
@@ -284,6 +376,18 @@ pub mod read {
         let ixit_path = out_dir.join("ixit.json");
         std::fs::write(&ixit_path, ixit_document(draft))
             .map_err(|e| format!("{}: {e}", ixit_path.display()))?;
+        // The claim travels WITH the run: the job directory carries the
+        // exact bytes the engine graded, and the verdicts read them back
+        // from there — never from the mutable draft.
+        let statement_path = draft
+            .statement_json
+            .as_deref()
+            .map(|body| {
+                let path = out_dir.join("statement.json");
+                std::fs::write(&path, body).map_err(|e| format!("{}: {e}", path.display()))?;
+                Ok::<_, String>(path)
+            })
+            .transpose()?;
         let engine = crate::engine::locate().map_err(|e| e.to_string())?;
         let spec = crate::engine::RunSpec {
             root: state.root.clone(),
@@ -291,7 +395,7 @@ pub mod read {
             out_dir,
             sut_name: draft.sut_name.clone(),
             sut_version: draft.sut_version.clone(),
-            statement: draft.statement.clone().map(std::path::PathBuf::from),
+            statement: statement_path,
             filter: draft.filter.clone(),
             credentials: std::mem::take(&mut draft.credentials),
             progress: true,
@@ -376,7 +480,7 @@ pub mod fns {
 
     use leptos::prelude::{ServerFnError, server};
 
-    use super::{AuthChoice, DraftView, ProbeAnswer, ScopePreview, StatementRow};
+    use super::{AuthChoice, ClaimSummary, DraftView, ProbeAnswer, ScopePreview, StatementRow};
 
     /// Probes the connection and, on any answer, stores the draft with these
     /// facts (the probe outcome seed-gates Continue client-side). The secret
@@ -427,7 +531,8 @@ pub mod fns {
                 auth,
                 credentials,
                 probed_ok,
-                statement: None,
+                statement_json: None,
+                statement_product: None,
                 filter: None,
             },
         )
@@ -496,21 +601,34 @@ pub mod fns {
         state.jobs.cancel().map_err(ServerFnError::new)
     }
 
-    /// Stores the scope half onto the draft.
+    /// Validates and stores the scope half onto the draft, answering with
+    /// the claim's summary (`None` for an honest no-claim run).
     ///
     /// # Errors
-    /// "no connection draft" when S3 has not run, or the draft-store failure.
+    /// "no connection draft" when S3 has not run, the statement reader's
+    /// refusal verbatim, or the draft-store failure.
     #[server]
     pub async fn save_scope(
-        statement: Option<String>,
+        statement_json: Option<String>,
         filter: Option<String>,
-    ) -> Result<(), ServerFnError> {
+    ) -> Result<Option<ClaimSummary>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         super::read::save_scope(
             &state,
-            statement.filter(|s| !s.is_empty()),
+            statement_json.filter(|s| !s.trim().is_empty()),
             filter.filter(|f| !f.is_empty()),
         )
         .map_err(ServerFnError::new)
+    }
+
+    /// One committed statement's body, for the example fillers.
+    ///
+    /// # Errors
+    /// The path refusal (only a statement.json under the party tree loads),
+    /// or the filesystem's verbatim failure.
+    #[server]
+    pub async fn fetch_statement_body(path: String) -> Result<String, ServerFnError> {
+        let state: crate::state::ConsoleState = leptos::prelude::expect_context();
+        super::read::statement_body(&state, &path).map_err(ServerFnError::new)
     }
 }

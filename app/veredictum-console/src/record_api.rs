@@ -240,16 +240,19 @@ pub mod read {
         let Some((_, results_path)) = finished_results(state)? else {
             return Ok(VerdictsScreen::NoRun);
         };
-        let statement = {
-            let guard = state.draft.lock().map_err(|e| e.to_string())?;
-            guard.as_ref().and_then(|draft| draft.statement.clone())
-        };
-        let Some(statement) = statement else {
+        // The claim travels with the run: start_run writes the accepted
+        // statement beside the results, so the judgement certifies exactly
+        // the bytes the engine graded — never the mutable draft.
+        let statement_path = results_path
+            .parent()
+            .map(|dir| dir.join("statement.json"))
+            .filter(|path| path.is_file());
+        let Some(statement_path) = statement_path else {
             return Ok(VerdictsScreen::NoStatement);
         };
         let judgement = veredictum::pipeline::judgement::judge(
             &veredictum::pipeline::judgement::JudgementRequest {
-                statement: std::path::Path::new(&statement),
+                statement: &statement_path,
                 results: &results_path,
                 root: &state.root,
             },
