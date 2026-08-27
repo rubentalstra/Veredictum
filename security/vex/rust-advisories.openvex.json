@@ -1,0 +1,40 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://veredictum.eu/vex/rust-advisories",
+  "author": "Veredictum project",
+  "role": "vendor",
+  "statements": [
+    {
+      "impact_statement": "The Marvin attack is a timing sidechannel in RSA decryption and signing, which leaks PRIVATE-key operations. The `rsa` crate reaches this graph only through `pgp` 0.20, which the instrument uses to VERIFY detached OpenPGP signatures on version content (RM common master06 §Digital Signature): a verification-only path over public keys. The instrument holds no RSA private key and performs no RSA decryption or signing, so there is no secret for the sidechannel to leak. No fixed release exists upstream; the deleting event is the rsa 0.10 release, taken the day it ships (deny.toml carries the same adjudication as the gate).",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "products": [
+        {
+          "@id": "pkg:cargo/veredictum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/rsa"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/veredictum",
+          "subcomponents": [
+            {
+              "@id": "pkg:cargo/rsa"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "vulnerability": {
+        "aliases": [
+          "CVE-2023-49092"
+        ],
+        "name": "RUSTSEC-2023-0071"
+      }
+    }
+  ],
+  "timestamp": "2026-08-27T00:00:00Z",
+  "tooling": "scripts/security/vex-generate.sh from security/vex/rust-advisories.toml + deny.toml",
+  "version": 1
+}

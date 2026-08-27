@@ -6,11 +6,19 @@
 # make one specific finding go away.
 #
 # `failure-threshold: warning` means info-level style advice does not gate a
-# merge while a genuine best-practice violation does. Nothing is ignored today —
-# the Dockerfile installs no apt packages, so the usual DL3008 exemption has
-# nothing to apply to; the `ignored` list arrives with its first real entry
-# rather than as speculative configuration.
+# merge while a genuine best-practice violation does.
 failureThreshold: warning
+
+# The one adjudicated exemption. DL3008 wants apt packages version-pinned; the
+# console builder (docker/Dockerfile) installs `curl` and
+# `ca-certificates` to fetch its pinned tool binaries, and Debian rolls
+# security point releases under those names — a version pin there fails every
+# rebuild after a point release while pinning nothing that ships: the
+# artifact's real pins are the digest-pinned base images, the tool versions,
+# and Cargo.lock. Scoped to the one rule, with this reason, per the policy
+# above.
+ignored:
+  - DL3008
 
 trustedRegistries:
   # Every FROM is digest-pinned; these are the registries those digests live in.

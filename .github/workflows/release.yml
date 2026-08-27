@@ -382,14 +382,16 @@ jobs:
           TAG: ${{ needs.plan.outputs.tag }}
         run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
 
-  # ── Compile the image binary natively per architecture ──────────────────────
+  # ── Compile the console server binary natively per architecture ─────────────
+  # The image is the WEB CONSOLE (#6; one image by owner ruling 2026-08-27).
   # Separate from the `binaries` matrix above on purpose, and not a duplicate of
   # it: this one builds inside the Debian 13 (trixie) rust image so the produced
   # binary links glibc 2.41, which is exactly what the distroless cc-debian13
   # runtime ships. The release tarballs are built on the runner's own newer
   # glibc, which is correct for a downloaded binary and wrong for that base
   # image. Building here also keeps the image a COPY-only build, so the
-  # multi-architecture push needs no QEMU.
+  # multi-architecture push needs no QEMU. The architecture-independent site
+  # bundle (WASM + CSS) is built once, by `console-site` below.
   image-binary:
     name: image binary (${{ matrix.platform }})
     needs: plan
@@ -440,15 +442,73 @@ jobs:
           tool: cargo-auditable@0.7.5
 
       - name: Build (release, native)
-        run: cargo auditable build --release --locked --bin veredictum
+        run: >-
+          cargo auditable build --release --locked -p veredictum-console
+          --bin veredictum-console --no-default-features --features ssr
 
       - name: Strip
-        run: strip target/release/veredictum
+        run: strip target/release/veredictum-console
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: veredictum-${{ matrix.platform }}
-          path: target/release/veredictum
+          name: veredictum-console-${{ matrix.platform }}
+          path: target/release/veredictum-console
+          if-no-files-found: error
+          retention-days: 1
+
+  # ── Build the console site bundle once (architecture-independent) ───────────
+  # The WASM client, the generated bootstrap and the Tailwind CSS are the same
+  # bytes on every platform, so they build once and both image variants COPY
+  # them. The tools arrive as the SAME pinned, checksum-verified prebuilt
+  # binaries the Dockerfile's from-source path fetches — never
+  # `cargo install cargo-leptos` (it compiles a vendored OpenSSL tree), and
+  # never a third-party installer manifest in a publishing lane. No cache in a
+  # publishing lane, same as every other leg here.
+  console-site:
+    name: console site bundle
+    needs: plan
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }} # == plan's commit: the dispatch-at-tag refusal makes them equal
+
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          target: wasm32-unknown-unknown
+          cache: false
+
+      - name: Fetch cargo-leptos and Tailwind (pinned, checksum-verified)
+        env:
+          # The versions are single-sourced from the Dockerfile's ARGs by the
+          # step below, so the lane and the from-source image cannot drift.
+          DOCKERFILE: docker/Dockerfile
+        run: |
+          set -euo pipefail
+          clv="$(grep -E '^ARG CARGO_LEPTOS_VERSION=' "$DOCKERFILE" | head -1 | cut -d= -f2)"
+          twv="$(grep -E '^ARG TAILWIND_VERSION=' "$DOCKERFILE" | head -1 | cut -d= -f2)"
+          echo "cargo-leptos ${clv}, tailwindcss ${twv}"
+          triple=x86_64-unknown-linux-gnu
+          curl -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${clv}/cargo-leptos-${triple}.tar.gz"
+          curl -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${clv}/cargo-leptos-${triple}.tar.gz.sha256"
+          sha256sum -c "cargo-leptos-${triple}.tar.gz.sha256"
+          tar -xzf "cargo-leptos-${triple}.tar.gz"
+          sudo install -m 0755 "$(find . -type f -name cargo-leptos | head -1)" /usr/local/bin/cargo-leptos
+          curl -fsSLo tailwindcss "https://github.com/tailwindlabs/tailwindcss/releases/download/${twv}/tailwindcss-linux-x64"
+          sudo install -m 0755 tailwindcss /usr/local/bin/tailwindcss
+          rm -rf cargo-leptos* tailwindcss
+
+      - name: Build the site bundle
+        run: cargo leptos build --release
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: veredictum-console-site
+          path: target/site
           if-no-files-found: error
           retention-days: 1
 
@@ -458,7 +518,7 @@ jobs:
   # by the time the lane turns red. The labels mirror the Dockerfile's.
   image:
     name: image
-    needs: image-binary
+    needs: [image-binary, console-site]
     permissions:
       contents: read
       packages: write # push the image to GHCR
@@ -470,10 +530,11 @@ jobs:
       defer-tags: true
       dockerfile: docker/Dockerfile
       target: runtime-prebuilt
-      binary-artifact-prefix: veredictum
+      binary-artifact-prefix: veredictum-console
+      site-artifact: veredictum-console-site
       labels: |
-        org.opencontainers.image.title=Veredictum
-        org.opencontainers.image.description=The independent conformance instrument for openEHR clinical data repositories
+        org.opencontainers.image.title=Veredictum console
+        org.opencontainers.image.description=The web console of the independent conformance instrument for openEHR clinical data repositories
         org.opencontainers.image.source=https://github.com/rubentalstra/Veredictum
         org.opencontainers.image.url=https://github.com/rubentalstra/Veredictum
         org.opencontainers.image.documentation=https://github.com/rubentalstra/Veredictum#readme
@@ -505,21 +566,23 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: The pushed image runs the catalogue it was built to run
+      - name: The pushed image serves the console it was built to serve
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/veredictum
           DIGEST: ${{ needs.image.outputs.digest }}
         run: |
           set -euo pipefail
           docker pull "${IMAGE}@${DIGEST}"
-          # The entrypoint IS the instrument, so the arguments are subcommands.
-          docker run --rm "${IMAGE}@${DIGEST}" --version
-          # The image ships the runner, not the 347 MB catalogue, so the real
-          # smoke is the documented invocation: mount this checkout and validate
-          # the artifact tree through the image. Zero findings is the only
-          # passing result, and `validate` exits non-zero otherwise.
-          docker run --rm -v "$PWD:/work" "${IMAGE}@${DIGEST}" \
-            validate --root /work/artifacts --specs /work/specs/openehr
+          # The image serves a web console, so the smoke is the documented
+          # invocation: start it, and the landing page must answer 200 with
+          # the console's own title — which proves the binary loads against
+          # the distroless base AND the site bundle sits where the server
+          # expects it. --retry-connrefused covers the startup window.
+          cid="$(docker run -d --rm -p 127.0.0.1:3000:3000 "${IMAGE}@${DIGEST}")"
+          trap 'docker stop "$cid" >/dev/null 2>&1 || true' EXIT
+          body="$(curl -fsS --retry 12 --retry-delay 2 --retry-connrefused --retry-all-errors http://127.0.0.1:3000/)"
+          echo "$body" | grep -F "Veredictum console" >/dev/null \
+            || { echo "::error::the served landing page does not carry the console title"; exit 1; }
 
   # ── The gate that makes the pushed digest referencable ──────────────────────
   scan-and-tag:
@@ -608,6 +671,7 @@ jobs:
       - binaries
       - finalize
       - image-binary
+      - console-site
       - image
       - image-smoke
       - scan-and-tag
@@ -628,6 +692,7 @@ jobs:
           R_BINARIES: ${{ needs.binaries.result }}
           R_FINALIZE: ${{ needs.finalize.result }}
           R_IMAGE_BINARY: ${{ needs.image-binary.result }}
+          R_CONSOLE_SITE: ${{ needs.console-site.result }}
           R_IMAGE: ${{ needs.image.result }}
           R_IMAGE_SMOKE: ${{ needs.image-smoke.result }}
           R_SCAN_AND_TAG: ${{ needs.scan-and-tag.result }}
@@ -649,6 +714,7 @@ jobs:
           check "binaries" "$R_BINARIES"
           check "github release (published)" "$R_FINALIZE"
           check "image binaries" "$R_IMAGE_BINARY"
+          check "console site bundle" "$R_CONSOLE_SITE"
           check "image" "$R_IMAGE"
           check "image smoke" "$R_IMAGE_SMOKE"
           check "scan + tag" "$R_SCAN_AND_TAG"

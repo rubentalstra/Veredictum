@@ -142,7 +142,7 @@ jobs:
           # reason (#11): the fuzz-build job compiles the harnesses, and the
           # harnesses read `src/`, so either side changing must compile the
           # other.
-          if echo "$changed" | grep -qE '^(src/|tests/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
+          if echo "$changed" | grep -qE '^(src/|app/|tests/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
@@ -357,10 +357,20 @@ jobs:
       - name: The image's OCI metadata agrees with itself
         run: bash scripts/checks/image-labels.sh
 
+      # The published VEX record cannot drift from the advisory gate: the
+      # generator's two-way agreement between deny.toml's ignore set and the
+      # published justifications, plus well-formedness of every hand-authored
+      # OpenVEX document (security/vex/README.md). Guard-tier by the same
+      # rule: text inputs that exist on every pull request, seconds to check.
+      # `yq` and `jq` ship on the GitHub Ubuntu runner images.
+      - name: Every accepted advisory has a published VEX justification
+        run: bash scripts/checks/vex-advisories.sh
+
   # ── The image tier ──────────────────────────────────────────────────────────
-  # hadolint over the Dockerfile. Configuration lives in `.hadolint.yaml`, where
-  # a rule this repository deliberately violates is named with its reason —
-  # never a blanket disable (OWASP Docker Security Cheat Sheet rule 9).
+  # hadolint over the Dockerfile — the ONE image, the web console (#6).
+  # Configuration lives in `.hadolint.yaml`, where a rule this repository
+  # deliberately violates is named with its reason — never a blanket disable
+  # (OWASP Docker Security Cheat Sheet rule 9).
   #
   # Gated on the `docker` filter rather than ungated, because there is exactly
   # one Dockerfile and a prose-only change has nothing here to judge. The
@@ -429,8 +439,15 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           components: clippy
+          target: wasm32-unknown-unknown
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo clippy --locked --all-targets -- -D warnings
+      # The console's two SHIPPING shapes (.claude/rules/leptos-ui.md §10):
+      # the featureless pass above compiles neither, so without these a
+      # server-only dependency leaking past the `ssr` feature gate, or an
+      # ssr-shape lint finding, reaches main unseen.
+      - run: cargo clippy --locked -p veredictum-console --all-targets --features ssr -- -D warnings
+      - run: cargo clippy --locked -p veredictum-console --lib --target wasm32-unknown-unknown --no-default-features --features hydrate -- -D warnings
 
   # Build, test, and then the instrument's own self-check. `validate` is the gate
   # the catalogue lives or dies by: it is every machine check over the artifact
@@ -517,7 +534,9 @@ jobs:
       - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
           tool: cargo-hack
-      - run: cargo hack check --locked --rust-version --all-targets
+      # --workspace: without it cargo-hack checks the root package alone, and
+      # the console's declared MSRV would be a claim nothing tests (#53).
+      - run: cargo hack check --locked --rust-version --all-targets --workspace
 
   # RustSec advisories, yanked crates, the license allowlist, the bans list and
   # the registry allowlist, in one pass. This is the ONLY advisory gate: it reads

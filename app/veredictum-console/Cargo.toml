@@ -1,0 +1,80 @@
+[package]
+name = "veredictum-console"
+# Never published (`publish = false` below): the console ships only as an OCI
+# image, and the image versions by the release tag rather than by this field.
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.96"
+license = "Apache-2.0"
+description = "The Veredictum web console: a Leptos SSR frontend over the published instrument (its own binary and OCI image; runs execute through the pinned veredictum CLI, never a fork of it)"
+repository = "https://github.com/rubentalstra/Veredictum"
+publish = false
+
+# Full-stack Leptos crate (cargo-leptos): the rlib feeds the server binary
+# (feature `ssr`) and the cdylib is the WASM client bundle (feature
+# `hydrate`). NOTE: no openEHR spec governs a web console — our own design
+# (#52); the wire the runs it orchestrates drive is spec-bound.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "veredictum-console"
+path = "src/main.rs"
+
+# The engine seam is deliberately absent from the scaffold: the console will
+# depend on `veredictum` by exact version FROM crates.io (never `path =`) and
+# spawn the same pinned binary for runs, which needs the first published
+# release carrying the lib's pipeline API. Tracked as #54.
+[dependencies]
+leptos = "0.8"
+leptos_meta = "0.8"
+leptos_router = "0.8"
+
+# server-only (behind `ssr`)
+leptos_axum = { version = "0.8", optional = true }
+axum = { version = "0.8", optional = true }
+# `signal` carries the SIGTERM handler: the binary is PID 1 in the image, so
+# graceful shutdown on `docker stop` is its own duty (src/main.rs).
+tokio = { version = "1", features = ["rt-multi-thread", "signal"], optional = true }
+# `anyhow` stays legal in binary entry points only
+# (`.claude/rules/reliability.md`); the ssr main is one.
+anyhow = { version = "1", optional = true }
+
+# browser-only (behind `hydrate`)
+wasm-bindgen = { version = "0.2", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
+
+[features]
+default = []
+hydrate = [
+    "leptos/hydrate",
+    "dep:wasm-bindgen",
+    "dep:console_error_panic_hook",
+]
+ssr = [
+    "leptos/ssr",
+    "leptos_meta/ssr",
+    "leptos_router/ssr",
+    "dep:leptos_axum",
+    "dep:axum",
+    "dep:tokio",
+    "dep:anyhow",
+]
+
+[lints]
+workspace = true
+
+# cargo-leptos build config (Tailwind v4 standalone — no Node/npm anywhere in
+# the build; pin the binary with LEPTOS_TAILWIND_VERSION in CI and containers).
+[package.metadata.leptos]
+output-name = "veredictum-console"
+site-root = "target/site"
+site-pkg-dir = "pkg"
+tailwind-input-file = "style/tailwind.css"
+site-addr = "127.0.0.1:3000"
+reload-port = 3001
+bin-features = ["ssr"]
+bin-default-features = false
+lib-features = ["hydrate"]
+lib-default-features = false
+lib-profile-release = "wasm-release"

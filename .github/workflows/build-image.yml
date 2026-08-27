@@ -62,6 +62,14 @@ on:
         required: false
         type: string
         default: ""
+      site-artifact:
+        description: >-
+          If set, download this run artifact into site/ — the
+          architecture-independent site bundle (WASM, CSS, the generated
+          bootstrap) a prebuilt web-app target COPYs beside the binary.
+        required: false
+        type: string
+        default: ""
       labels:
         description: The per-image OCI labels (multiline, metadata-action syntax).
         required: true
@@ -111,6 +119,11 @@ jobs:
         with:
           name: ${{ inputs.binary-artifact-prefix }}-arm64
           path: bin/arm64
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: inputs.site-artifact != ''
+        with:
+          name: ${{ inputs.site-artifact }}
+          path: site
 
       # No QEMU input: the published target is COPY-only, so nothing foreign-arch
       # ever executes during the build. A lane that needs a RUN layer on the
