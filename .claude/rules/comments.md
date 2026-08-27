@@ -91,6 +91,19 @@ history carries it. A comment describes the code as it IS.
   justification exactly like a comment. Runs per-edit via the
   `rust_fmt_clippy.sh` PostToolUse hook, and per-PR through the `--all` step
   in the CI guards job.
+- **Adjudicated 2026-08-27 (#125): a corpus-local README is NOT a sanctioned
+  exception to rule 11.** A document committed beside the material it
+  describes moves and dies like any other internal document, so the guard
+  refuses every in-repo markdown citation — an `artifacts/`, `party/`,
+  `scripts/`, `website/`, `schemas/`, `fuzz/`, `app/` or `verification-pack/`
+  path ending in `.md`, and the root documents by name — and a comment grounds
+  on the material itself instead (the committed test keypair's armored
+  certificate carries its own user id and subkey binding, so nothing outside
+  the packets has to state its identity). That check reads COMMENT LINES only,
+  because `specs/**` is full of `.md` documents that ARE the oracle and a
+  string the code emits may legitimately name a markdown file the tool writes.
+  `scripts/checks/comment-style.sh --self-test` is its seeded-violation proof
+  and runs in the CI guards job.
 - `clippy::too_long_first_doc_paragraph` (nursery cherry-pick, CI
   `-D warnings`) — the RFC 1574 summary line.
 - Doc lints, all live: `doc_markdown`,

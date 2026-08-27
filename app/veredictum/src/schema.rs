@@ -15,7 +15,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use serde::Serialize;
@@ -709,9 +709,9 @@ pub fn ambiguity_register_schema() -> Value {
             "required": ["ambiguity", "source", "handling", "disposition"],
             "properties": {
                 "ambiguity": { "type": "string", "minLength": 1 },
-                "source": { "type": "string", "minLength": 1, "description": "Where the silence/divergence was verified. Convention (machine-gated by the validate spec-ref check, issue #2545): the field splits into `;`/` + ` fragments; every fragment opening with a spec component token (RM, BASE, AM, QUERY, TERM, LANG, SM, CNF, ITS-REST, ITS-XML, ITS-JSON) is a citation clause and must machine-resolve against the vendored trees (document + § sections; {a,b} brace shorthands expand and every variant must resolve); any other fragment is adjudication prose and passes. A source with no citation clause at all fails — a silence claim must ground on at least one resolvable citation." },
+                "source": { "type": "string", "minLength": 1, "description": "Where the silence/divergence was verified. Convention (machine-gated by the validate spec-ref check, issue FerroEHR#2545): the field splits into `;`/` + ` fragments; every fragment opening with a spec component token (RM, BASE, AM, QUERY, TERM, LANG, SM, CNF, ITS-REST, ITS-XML, ITS-JSON) is a citation clause and must machine-resolve against the vendored trees (document + § sections; {a,b} brace shorthands expand and every variant must resolve); any other fragment is adjudication prose and passes. A source with no citation clause at all fails — a silence claim must ground on at least one resolvable citation." },
                 "handling": { "type": "string", "minLength": 1 },
-                "disposition": { "enum": tokens(Disposition::ALL), "description": "The machine-readable handling class. The fixed_handling/editorial boundary (issue #2546) is one question — did the entry CHOOSE anything? editorial = a wording/typography defect with zero behavioural latitude (the corrected reading is forced by the surrounding released text); fixed_handling = real latitude existed and the entry pins this catalogue's choice. Neither changes gating; report_only and editorial additionally require an upstream_issue." },
+                "disposition": { "enum": tokens(Disposition::ALL), "description": "The machine-readable handling class. The fixed_handling/editorial boundary (issue FerroEHR#2546) is one question — did the entry CHOOSE anything? editorial = a wording/typography defect with zero behavioural latitude (the corrected reading is forced by the surrounding released text); fixed_handling = real latitude existed and the entry pins this catalogue's choice. Neither changes gating; report_only and editorial additionally require an upstream_issue." },
                 "options": { "type": "array", "items": { "type": "string", "pattern": OPTION_TAG_PATTERN } },
                 "upstream_issue": { "type": "integer", "minimum": 1 }
             },
@@ -1508,7 +1508,7 @@ pub fn wire_surface_schema() -> Value {
         "$schema": DRAFT,
         "$id": urn("wire-surface"),
         "title": "CNF 2.0 wire-surface coverage register",
-        "description": "The authored, spec-cited record of the wire surface the catalogue is measured against for TOTAL coverage (issue #271): Axis-1 SM operations with no its-rest binding, Axis-2 per-binding outcome/format branches no case exercises, Axis-3 cross-cutting wire behaviours mapped to cases or an adjudicated exception, and Axis-4 the outward declaration of the route families the SUT serves beyond the openEHR resource set (a declaration, never an obligation — no coverage requirement is derived from it). Every source is a released spec component / ITS-REST docs text, never the vendored OAS.",
+        "description": "The authored, spec-cited record of the wire surface the catalogue is measured against for TOTAL coverage (issue FerroEHR#271): Axis-1 SM operations with no its-rest binding, Axis-2 per-binding outcome/format branches no case exercises, Axis-3 cross-cutting wire behaviours mapped to cases or an adjudicated exception, and Axis-4 the outward declaration of the route families the SUT serves beyond the openEHR resource set (a declaration, never an obligation — no coverage requirement is derived from it). Every source is a released spec component / ITS-REST docs text, never the vendored OAS.",
         "type": "object",
         "additionalProperties": false,
         "properties": {

@@ -25,7 +25,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use std::collections::HashMap;
@@ -96,7 +96,7 @@ impl CaptureStore {
         }
     }
 
-    // NOTE: a poisoned shard is RECOVERED, never dropped (#1853) — the guarded
+    // NOTE: a poisoned shard is RECOVERED, never dropped (FerroEHR#1853) — the guarded
     // value is a plain per-id map with no cross-entry invariant a panic
     // elsewhere can break, so `None` now means only "no such shard".
     fn journey<R>(&self, id: u64, f: impl FnOnce(&mut JourneyState) -> R) -> Option<R> {

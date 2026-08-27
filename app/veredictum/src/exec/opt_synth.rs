@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Per-row OPT 1.4 XML synthesis for the *value* and *interval* content
-//! families (issue #228).
+//! families (issue FerroEHR#228).
 //!
 //! A content decision table whose `constraint_context.constraint_columns`
 //! name constraint-axis columns needs one OPT per row (the ELEMENT.value
@@ -34,7 +34,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use serde_json::Value;
@@ -525,7 +525,7 @@ const ORDINAL_LIST_COLUMNS: &[&str] = &[
 ];
 
 /// Refuse a row whose list cells carry a member the lenient parsers would
-/// DROP (issue #1853).
+/// DROP (issue FerroEHR#1853).
 ///
 /// A dropped member shrinks the synthesized OPT's value set, so the SUT is
 /// judged against a NARROWER constraint than the row declares — a value the
@@ -674,7 +674,7 @@ fn build_coded_text(row: &Row<'_>) -> (String, Vec<(String, String, String)>) {
 
 fn build_identifier(row: &Row<'_>) -> String {
     // The `attribute` column selects which DV_IDENTIFIER field the C_STRING
-    // binds to (issue #228). Default `id` (the mandatory field).
+    // binds to (issue FerroEHR#228). Default `id` (the mandatory field).
     let field = row.text("attribute").unwrap_or("id");
     if let Some(pattern) = row.text("C_STRING.pattern") {
         return c_complex(
@@ -1352,7 +1352,7 @@ mod tests {
     }
 
     /// A list member the lenient parsers would DROP is a typed synthesis
-    /// error, never a silently smaller value set (issue #1853): the OPT would
+    /// error, never a silently smaller value set (issue FerroEHR#1853): the OPT would
     /// bake a NARROWER constraint than the row declares, so a value the row
     /// expects to be rejected could be accepted and the red row would accuse
     /// the SUT of the interpreter's omission.

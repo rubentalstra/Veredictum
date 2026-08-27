@@ -5,9 +5,7 @@
 //!
 //! ```text
 //! veredictum emit-schemas --out DIR     write the published JSON-Schema set
-//! veredictum validate --root DIR [--specs DIR]
-//! veredictum run --root DIR --ixit FILE --out DIR [--sut-name N] [--sut-version V] [--statement F]
-//!                [--sign-key FILE]
+//! veredictum validate --root DIR [--specs DIR] [--write-report]
 //!                                       validate an artifact tree (all gates);
 //!                                       --specs enables the SM/spec-ref
 //!                                       resolution checks against the vendored
@@ -15,6 +13,11 @@
 //!                                       committed party statements beside the
 //!                                       root (<root>/../party/*/statement.json)
 //!                                       are swept in for the claim gates.
+//! veredictum run --root DIR --ixit FILE --out DIR [--sut-name N] [--sut-version V] [--statement F]
+//!                [--record-exchanges] [--sign-key FILE]
+//!                                       drive the catalogue against a live SUT
+//!                                       over its ixit topology and write
+//!                                       results.json + the run report
 //! veredictum verdicts --statement F --results F --root DIR --out DIR
 //!                      [--sign-key FILE]
 //!                                       compute the verdicts (pure pipeline)
@@ -41,6 +44,11 @@
 //!                                       maximum sustainable throughput
 //!                                       (exploration only — writes
 //!                                       stress.json, never results.json)
+//! veredictum stress-compare --left FILE --left-label L --right FILE
+//!                           --right-label L --out FILE
+//!                                       render the cross-SUT stress overlay
+//!                                       FROM two committed stress reports,
+//!                                       both directions on equal footing
 //! veredictum aql-probe --root DIR --ixit FILE --out FILE
 //!                      [--corpus-class POC|S|L|R] [--requests N]
 //!                                       the seeded-corpus AQL optimization

@@ -8,10 +8,10 @@
 //! never logged), the statement pick and the filter. What the client can read
 //! back is [`DraftView`], which carries no secret by construction.
 //!
-//! The reachability probe is the ONE console-originated request to a CDR,
-//! carved out explicitly in the crate CLAUDE.md: a diagnostic whose answer is
-//! rendered verbatim, never judged — conformance traffic stays the spawned
-//! instrument's alone (#54).
+//! The reachability probe is the ONE console-originated request to a CDR, and
+//! it is carved out deliberately: a diagnostic whose answer is rendered
+//! verbatim, never judged — conformance traffic stays the spawned instrument's
+//! alone (#54).
 
 use serde::{Deserialize, Serialize};
 
@@ -427,8 +427,8 @@ pub mod read {
     /// The reachability probe.
     ///
     /// ONE GET of the template list with the supplied credentials, the
-    /// answer verbatim. A diagnostic, never a judgement — the carve-out the
-    /// crate CLAUDE.md records.
+    /// answer verbatim. A diagnostic, never a judgement — the one carved-out
+    /// console-originated request to a CDR.
     ///
     /// # Errors
     /// Never: an unreachable server is an answer, not an error.

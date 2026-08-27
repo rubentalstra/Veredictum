@@ -13,7 +13,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use std::collections::BTreeMap;
@@ -828,7 +828,7 @@ impl<'a> HttpDriver<'a> {
                 ),
                 Assertion::Equivalent { to, ignoring } => {
                     // An unresolvable REFERENCE is a defect of the case, not a
-                    // missing commit (#1853): reporting both as "no committed
+                    // missing commit (FerroEHR#1853): reporting both as "no committed
                     // payload" sent triage after the wrong artifact.
                     let expected = match to {
                         EquivalentTarget::Committed => Ok(self.committed.last().cloned()),
@@ -1172,7 +1172,7 @@ fn diff_paths(got: &Value, want: &Value, path: &str, out: &mut Vec<String>) {
 /// Parse an IMF-fixdate `Date` header ("Sun, 06 Nov 1994 08:49:37 GMT") to
 /// epoch milliseconds (RFC 9110 §5.6.7); `None` on any other form.
 ///
-/// NOTE: every `None` here is ABSENCE, not a swallowed defect (#1853) — the
+/// NOTE: every `None` here is ABSENCE, not a swallowed defect (FerroEHR#1853) — the
 /// caller only WIDENS its own commit window with this value, so an unparsable
 /// `Date` leaves the runner-clock window standing rather than skipping a check.
 fn parse_http_date_ms(value: &str) -> Option<i64> {
@@ -1942,7 +1942,7 @@ impl HttpDriver<'_> {
 }
 
 impl HttpDriver<'_> {
-    /// **The ONE request-header construction path** (issue #629): binding
+    /// **The ONE request-header construction path** (issue FerroEHR#629): binding
     /// request headers + format headers + auth + instance extras, for every
     /// request the runner sends — a driven flow step AND precondition
     /// provisioning alike.
@@ -2154,8 +2154,8 @@ impl HttpDriver<'_> {
 }
 
 impl HttpDriver<'_> {
-    /// Execute the wire expectation's declared header matchers (#403,
-    /// `exec/headers.rs`) and body selector (#415, `exec/bodies.rs`) against
+    /// Execute the wire expectation's declared header matchers (FerroEHR#403,
+    /// `exec/headers.rs`) and body selector (FerroEHR#415, `exec/bodies.rs`) against
     /// the exchange. `prefer_conditional`/`error_loose` branch on the
     /// `Prefer` this request actually sent, so the sent value travels with
     /// the negotiated `Accept`.
@@ -2649,7 +2649,7 @@ impl HttpDriver<'_> {
     /// a branch.
     ///
     /// NOTE: `None` is ABSENCE — "this string is not an `OBJECT_VERSION_ID`"
-    /// (#1853); the `Option<Vec<_>>` collect refuses a partly-numeric tree
+    /// (FerroEHR#1853); the `Option<Vec<_>>` collect refuses a partly-numeric tree
     /// outright, and the one caller turns it into a typed, uid-naming error.
     fn version_tree_id(uid: &str) -> Option<Vec<u64>> {
         let (_, tree) = uid.rsplit_once("::")?;
@@ -2868,7 +2868,7 @@ fn pace_commit_capture(step: &FlowStep, vars: &VarStore) {
 }
 
 impl HttpDriver<'_> {
-    /// Per-row synthesized OPT (issue #228): a content case whose
+    /// Per-row synthesized OPT (issue FerroEHR#228): a content case whose
     /// `constraint_context` declares constraint-axis columns commits each row
     /// against a freshly synthesized OPT baking THAT row's constraint. Build it
     /// from the row's cells and upload it (409 tolerated) under the deterministic
@@ -3140,14 +3140,14 @@ impl StepDriver for HttpDriver<'_> {
         let mut assertion_failures =
             self.eval_assertions(case, binding, &step.assertions, &exchange, signing, vars);
         // The expected outcome's declared header matchers and body selector
-        // are executed assertions too (issues #403 + #415 — both were parsed
+        // are executed assertions too (issues FerroEHR#403 + FerroEHR#415 — both were parsed
         // but never evaluated). Evaluated only when the observation IS the
         // expected kind: the declarations belong to that outcome's wire
         // expectation.
         if observation == Observation::Kind(expected)
             && let Some(expectation) = binding.outcome(expected)
         {
-            // The SAME merged scope request building used (#1852): a step
+            // The SAME merged scope request building used (FerroEHR#1852): a step
             // that supplies an identity inline (`with:`) instead of capturing
             // it must be able to pin it in its outcome matchers too.
             // NOTE: a name in `crate::exec::headers::structural_token` outranks
@@ -3618,7 +3618,7 @@ mod tests {
     /// `url_fetch: 4` reaching `${url_fetch?}` emits `?fetch=4`; silently
     /// skipping non-string scalars dropped the parameter and masqueraded as
     /// a SUT failure.
-    /// The #594 regression: an optional query slot whose referenced name IS
+    /// The FerroEHR#594 regression: an optional query slot whose referenced name IS
     /// bound — in the var store as a non-scalar capture (List/Body) — must be
     /// a loud error, never a silent omission (the dropped-bound-parameter
     /// false-green shape). A genuinely unbound optional slot still omits.
@@ -3636,7 +3636,7 @@ mod tests {
         }))
         .unwrap();
         // Bound in the VAR STORE (not the step's with:) as a List — the shape
-        // the pre-#594 guard missed.
+        // the pre-FerroEHR#594 guard missed.
         let mut vars = VarStore::default();
         vars.set(
             CaptureName::parse("url_fetch").unwrap(),
@@ -3766,7 +3766,7 @@ mod tests {
 
         // …and a list capture never EXPANDS a single-valued declaration:
         // repeatability is the binding's decision, not the case's. Since
-        // #594 the refusal is LOUD — the pre-#594 behaviour (silently
+        // FerroEHR#594 the refusal is LOUD — the pre-FerroEHR#594 behaviour (silently
         // omitting the bound parameter) was the dropped-bound-parameter
         // false-green shape; an error preserves this arm's intent (no
         // expansion) without the silent drop.
@@ -4181,7 +4181,7 @@ mod tests {
         let root = HttpDriver::extract_capture(&exchange, &test_binding(), &spec2, &vars2).unwrap();
         assert_eq!(root, "8849182c-82ad-4088-a07f-48ead4180515");
 
-        // The middle segment — the creating system id (#570).
+        // The middle segment — the creating system id (FerroEHR#570).
         let spec3: WireCapture = serde_json::from_value(serde_json::json!({
             "from": "header ETag", "strip": "weak-quotes",
             "transform": "creating-system-id"

@@ -4,7 +4,7 @@
 //! Response-header assertion evaluation.
 //!
 //! This is the executed half of the
-//! catalogue's `outcomes.*.headers` declarations (issue #403: the matchers
+//! catalogue's `outcomes.*.headers` declarations (issue FerroEHR#403: the matchers
 //! were parsed by the binding model but never evaluated, so every header
 //! declaration was documentation, not an assertion).
 //!
@@ -54,7 +54,7 @@
 #![allow(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694); the carriers here are cfg(test)-only, so \
+              exchanges) — not the application (FerroEHR#1694); the carriers here are cfg(test)-only, so \
               #[expect] would be unfulfilled in the non-test build"
 )]
 
@@ -202,7 +202,7 @@ fn judge(
                         "header {name}: pattern {pattern:?} names <{missing}>, which is \
                          neither a captured/with-supplied case variable nor a structural \
                          token (<n>, <system_id>, <versioned_object_uid>, <template_hrid>) — \
-                         refusing the vacuous wildcard (#1852)"
+                         refusing the vacuous wildcard (FerroEHR#1852)"
                     ));
                 }
             };
@@ -316,8 +316,8 @@ pub fn structural_token(name: &str) -> Option<&'static str> {
 /// other name inserts the regex-escaped scalar of the same-named case
 /// variable. Any placeholder that is neither is a LOUD error, never a silent
 /// `.*` wildcard: a matcher like `W/"<versioned_object_uid>::…"` degrading to
-/// a near-tautology is the vacuous-assertion class of #1830, on the
-/// expectation side (#1852).
+/// a near-tautology is the vacuous-assertion class of FerroEHR#1830, on the
+/// expectation side (FerroEHR#1852).
 ///
 /// # Errors
 /// The name of the first placeholder that is neither a case variable nor a
@@ -444,7 +444,7 @@ mod tests {
         let ok = response(&[("etag", "W/\"abc-123::any.system::2\"")]);
         assert!(evaluate(&e, &ok, &ctx(), &vars).is_empty());
         // A different resolved uid fails; the structural tokens (<system_id>,
-        // <n>) resolve to their grammars, not to a `.*` wildcard (#1852).
+        // <n>) resolve to their grammars, not to a `.*` wildcard (FerroEHR#1852).
         let bad = response(&[("etag", "W/\"other-uid::any.system::2\"")]);
         assert_eq!(evaluate(&e, &bad, &ctx(), &vars).len(), 1);
         // The structural grammars are real constraints: an empty system
@@ -458,7 +458,7 @@ mod tests {
     /// The `object_id` segment is the BASE `base_types` master05 §Syntaxes
     /// `uid` — UUID, ISO OID, or reverse-domain internet id — and nothing
     /// else, so a create-time `ETag` whose container id is server-assigned is
-    /// still a real assertion rather than a refusal (#1852).
+    /// still a real assertion rather than a refusal (FerroEHR#1852).
     #[test]
     fn object_id_token_is_the_released_uid_grammar() {
         let e = expectation(&serde_json::json!({
@@ -523,7 +523,7 @@ mod tests {
         }
     }
 
-    /// A structural token OUTRANKS a same-named case variable: the #1852
+    /// A structural token OUTRANKS a same-named case variable: the FerroEHR#1852
     /// regression is a step passing a FULL version uid as the
     /// `versioned_object_uid` PATH argument (which
     /// `operations/composition_get.yaml` expressly permits), which used to be
@@ -569,7 +569,7 @@ mod tests {
         assert_eq!(evaluate(&e, &prefix, &ctx(), &VarStore::default()).len(), 1);
     }
 
-    /// #1852 seeded defect: a placeholder naming neither a case variable nor
+    /// FerroEHR#1852 seeded defect: a placeholder naming neither a case variable nor
     /// a structural token is a loud failure — never a silent `.*` that turns
     /// the matcher into a tautology.
     #[test]
@@ -583,7 +583,7 @@ mod tests {
         let failures = evaluate(&e, &would_pass, &ctx(), &VarStore::default());
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(
-            failures[0].contains("no_such_capture") && failures[0].contains("#1852"),
+            failures[0].contains("no_such_capture") && failures[0].contains("FerroEHR#1852"),
             "the failure names the unresolvable placeholder: {failures:?}"
         );
     }
@@ -605,7 +605,7 @@ mod tests {
     }
 
     /// `optional: true` splits SHOULD-strength PRESENCE from MUST-strength
-    /// FORM (issue #628): the query `ETag` is a SHOULD to emit (overview
+    /// FORM (issue FerroEHR#628): the query `ETag` is a SHOULD to emit (overview
     /// §"`ETag` and Last-Modified") but a MUST to weaken when emitted
     /// (§"Deprecated headers"). An omitted header passes; a malformed one
     /// still fails.
@@ -624,7 +624,7 @@ mod tests {
     }
 
     /// A version-dated rule binds only the parties that declare the release
-    /// dating it (issue #627): the `W/` MUST is "Prior to Release 1.1.0"
+    /// dating it (issue FerroEHR#627): the `W/` MUST is "Prior to Release 1.1.0"
     /// deprecation text, so a 1.0.3 declarant is not judged on it and a
     /// 1.1.0 declarant is — the SAME `applies` grammar and the SAME
     /// `satisfied_by` polarity the case cores use.

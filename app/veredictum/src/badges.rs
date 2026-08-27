@@ -20,7 +20,7 @@
 #![allow(
     clippy::disallowed_types,
     reason = "the JSON carriers here are cfg(test)-only fixtures over the catalogue \
-              artifacts (dev/verification tooling, #1694), so #[expect] would be \
+              artifacts (dev/verification tooling, FerroEHR#1694), so #[expect] would be \
               unfulfilled in the non-test build"
 )]
 
@@ -479,7 +479,7 @@ mod tests {
 
     /// A NOT-EVIDENCED capability does not satisfy its tier, so it is not
     /// counted as if it did — the count uses the same `Passed` predicate
-    /// `required_all_passed` does, which has no excuse arm (#626).
+    /// `required_all_passed` does, which has no excuse arm (FerroEHR#626).
     #[test]
     fn a_not_evidenced_capability_is_not_counted_as_satisfied() {
         let mut caps = all_passed();

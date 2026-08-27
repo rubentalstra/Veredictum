@@ -32,7 +32,9 @@ second Clippy configuration beside the deny-tier lanes in `ci.yml`, so for pure
 Rust it mostly re-reports what those already enforce. Its added value is the
 multi-language sweep the Rust gates never see: the shell under `scripts/**` and
 `.claude/hooks/**`, the workflow YAML, the brand study's HTML and CSS, and
-secret detection. The vendored trees are excluded in
+secret detection. Coverage rides the same lane (#9): the job runs
+`cargo llvm-cov` over the whole workspace, including the console, and imports
+the merged lcov. The vendored trees are excluded in
 `sonar-project.properties`, because acting on a finding inside vendored bytes is
 forbidden here.
 
@@ -46,11 +48,6 @@ which Sonar never sees as shell, so the two cover different files.
 Those 11 findings sit on hooks ported verbatim from FerroEHR, and a style
 rewrite here would silently fork them from their upstream originals. Under the
 precedence above that is a finding to record, not one to act on reflexively.
-
-Rust is analysed first-party (the analyzer runs Clippy itself from the
-workspace manifest, as a second and deliberately independent Clippy
-configuration beside our own deny-tier lanes), and coverage rides the same
-lane, imported as lcov (#9).
 
 ## New Code = since the last release
 

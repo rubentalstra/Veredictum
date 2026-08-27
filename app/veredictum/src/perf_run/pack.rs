@@ -17,13 +17,12 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
-// TODO(#1451): port the benchmark lab's constraint-aware FLAT-leaf value jitter
-// (the retired benchmark lab's renderer, in git history) as a richer stamping mode once the
-// benchmark crate migrates into the runner; time/composer stamping is the
-// committed baseline until then.
+// TODO(#137): stamp compositions with constraint-aware FLAT-leaf value jitter
+// as a richer mode beside time/composer stamping, which is the committed
+// baseline until then.
 
 use std::path::Path;
 

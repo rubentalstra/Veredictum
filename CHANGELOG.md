@@ -97,6 +97,13 @@ version on.
 
 ### Fixed
 
+- **Issue numbers inherited from FerroEHR now say so (#123).** Three
+  `ambiguity-register.schema.json` and `wire-surface.schema.json` descriptions
+  carried bare `#2545`, `#2546` and `#271`, which resolve to unrelated issues
+  on this repository's tracker; they read `FerroEHR#NNNN` now, as do the
+  runner comments and the generated wire-surface coverage report that carried
+  the same ids. Description text only: no schema keyword, type or constraint
+  moved.
 - **`validate --write-report` writes somewhere that exists (#91).** The
   coverage report's path was climbed out of the spec tree
   (`<specs>/../../conformance/coverage-report.md`), which matched the old

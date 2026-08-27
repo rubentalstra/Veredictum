@@ -11,7 +11,7 @@
 #![allow(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694); the carriers here are cfg(test)-only, so \
+              exchanges) — not the application (FerroEHR#1694); the carriers here are cfg(test)-only, so \
               #[expect] would be unfulfilled in the non-test build"
 )]
 
@@ -28,7 +28,7 @@ pub struct AmbiguityEntry {
     pub ambiguity: String,
     /// Where it was verified (spec file/section).
     ///
-    /// Field-format convention (issue #2545, machine-gated by the validate
+    /// Field-format convention (issue FerroEHR#2545, machine-gated by the validate
     /// `spec-ref` check): the field splits into `;`/` + ` fragments; every
     /// fragment opening with a spec component token (`RM`, `BASE`, `AM`,
     /// `QUERY`, `TERM`, `LANG`, `SM`, `CNF`, `ITS-REST`, `ITS-XML`,

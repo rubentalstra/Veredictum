@@ -4,9 +4,9 @@
 //! Response-body selector evaluation.
 //!
 //! This is the executed half of the catalogue's
-//! `outcomes.*.body` declarations (issue #415: the selectors were parsed by
+//! `outcomes.*.body` declarations (issue FerroEHR#415: the selectors were parsed by
 //! the binding model but never evaluated, so every body declaration was
-//! documentation, not an assertion — the same defect issue #403 closed for
+//! documentation, not an assertion — the same defect issue FerroEHR#403 closed for
 //! the header matchers in [`crate::exec::headers`]).
 //!
 //! Evaluation runs ONLY when the step's observation matched the EXPECTED
@@ -83,7 +83,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use std::collections::BTreeMap;

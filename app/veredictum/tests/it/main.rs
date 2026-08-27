@@ -21,6 +21,7 @@ mod artifact_gates;
 mod claim_completeness;
 mod corpus_packs;
 mod defect_rejection;
+mod gpg_interop;
 mod perf_driver;
 mod pipeline_seams;
 mod run_transcript;

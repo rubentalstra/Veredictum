@@ -81,7 +81,13 @@ jobs:
       # documented two-step: it accumulates the profile and merges it into the
       # single lcov the scan imports through `sonar.rust.lcov.reportPaths`
       # (https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/test-coverage/test-coverage-parameters).
-      - run: cargo llvm-cov --no-report nextest --locked --profile ci
+      #
+      # `--workspace` measures the console too (#119): without it the console
+      # crate was neither covered nor counted, while the root manifest's
+      # default-members note says every CI cargo command passes it explicitly.
+      # `--features veredictum-console/ssr` is what compiles the console's
+      # server-side tests, which is where its coverable code lives.
+      - run: cargo llvm-cov --no-report nextest --locked --workspace --features veredictum-console/ssr --profile ci
       - run: cargo llvm-cov report --lcov --output-path lcov.info
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
