@@ -198,15 +198,28 @@ if [[ "$MODE" != curated ]]; then
     | .rows
   ' "$WORK/templates.json" > "$WORK/rows.json"
 
-  jq -r --arg out_dir "$FULL" '.[] | "\(.cid) \($out_dir)/\(.slug).opt"' \
+  # Fetch into a staging directory and swap only after the whole sweep
+  # completes (#40): deleting the committed pack first meant a network failure
+  # or interrupt mid-run left the tree gutted until someone noticed.
+  STAGE="$WORK/full-stage"
+  mkdir -p "$STAGE"
+  jq -r --arg out_dir "$STAGE" '.[] | "\(.cid) \($out_dir)/\(.slug).opt"' \
     "$WORK/rows.json" > "$WORK/jobs.txt"
   echo "==> $(jq 'length' "$WORK/rows.json") templates published by CKM"
 
   # fetch everything; a per-file failure is recorded, never fatal (private
   # incubator resources 404 without a CKM account)
-  find "$FULL" -name '*.opt' -delete
   xargs -P "$JOBS" -n 2 bash "$0" --fetch-one < "$WORK/jobs.txt" \
     | tee "$WORK/full.log"
+
+  # The sweep finished — the swap is safe now. A wholly-empty stage means the
+  # fetch produced nothing (CKM unreachable); refuse rather than empty the pack.
+  if ! compgen -G "$STAGE/*.opt" > /dev/null; then
+    echo "ERROR: the full-library fetch produced zero OPT files — leaving the committed pack untouched" >&2
+    exit 1
+  fi
+  find "$FULL" -name '*.opt' -delete
+  mv "$STAGE"/*.opt "$FULL"/
 
   # Join the fetch log's per-cid verdict onto the rows ONCE, into `classified`,
   # so the provenance file, its tables and the summary line below cannot
