@@ -20,6 +20,7 @@
 <a href="https://crates.io/crates/veredictum"><img src="https://img.shields.io/crates/v/veredictum?logo=rust" alt="crates.io"></a>
 <a href="https://crates.io/crates/veredictum"><img src="https://img.shields.io/crates/d/veredictum?logo=rust&label=crate%20downloads" alt="crate downloads"></a>
 <a href="https://docs.rs/veredictum"><img src="https://img.shields.io/docsrs/veredictum?logo=docsdotrs" alt="docs.rs"></a>
+<a href="https://github.com/rubentalstra/Veredictum/pkgs/container/veredictum"><img src="https://img.shields.io/badge/ghcr.io-veredictum-2496ED.svg?logo=docker&logoColor=white" alt="GHCR"></a>
 <a href="https://github.com/rubentalstra/Veredictum/pkgs/container/veredictum"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.elias.eu.org%2Fapi%2Frubentalstra%2FVeredictum%2Fveredictum&query=downloadCount&label=image%20pulls&logo=github" alt="Image pulls"></a>
 </p>
 
@@ -66,6 +67,18 @@ Veredictum grades openEHR servers. Point it at a running clinical data
 repository (CDR) and it tells you, with a specification citation on every
 finding, which parts of the released openEHR specifications that server
 actually implements, and what load it sustains while doing so.
+
+It ships as two products over one engine:
+
+- **The instrument CLI** — the `veredictum` command, installed from
+  [crates.io](https://crates.io/crates/veredictum) or taken as a signed
+  release binary. Every verdict this repository speaks is a run of it.
+- **The web console** — the container image at
+  [ghcr.io/rubentalstra/veredictum](https://github.com/rubentalstra/Veredictum/pkgs/container/veredictum),
+  a browser frontend that drives the same pinned CLI underneath: connect a
+  CDR, paste the vendor's claim, watch the run live, read the results and
+  the verdicts. The image is the console, never the CLI — a static binary
+  needs no container.
 
 ## What it does
 
@@ -187,8 +200,11 @@ The catalogue and the specification oracle are deliberately not baked into
 the image: the instrument reads every root as a path, and a party may
 legitimately point at their own. The console has no login, so the publish
 flag binds it to loopback; exposing it further is the operator's decision,
-behind their own gate. The console is under construction — image tags
-published before its first release still carry the CLI as the payload.
+behind their own gate. One caveat while the console's first release is
+pending: every image tag published so far predates it and still carries the
+CLI as the payload — the console serves from its first release tag onward,
+and [the console chapter](https://veredictum.eu/docs/console.html) shows
+what it does today.
 
 ### With cargo
 
@@ -196,7 +212,7 @@ Installing from crates.io puts the command on your `PATH`, which is the path
 to take if you already have a catalogue checkout to point it at:
 
 ```bash
-cargo install veredictum --version 0.1.0-alpha.3   # pre-release: name the version
+cargo install veredictum --version 0.1.0-alpha.4   # pre-release: name the version
 veredictum validate --root <catalogue> --specs <spec-tree>
 ```
 

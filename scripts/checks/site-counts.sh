@@ -17,7 +17,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-SURFACES=(website/landing/index.html website/book/src)
+SURFACES=(website/landing/index.html website/book/src README.md ARCHITECTURE.md)
 
 summary="${1:-}"
 if [[ -z "$summary" ]]; then
@@ -54,6 +54,21 @@ check "$cases" '"n">[0-9]+</span><span class="l">spec-cited cases' "cases (fact 
 check "$bindings" '"n">[0-9]+</span><span class="l">operation bindings' "bindings (fact card)"
 check "$statements" '[0-9]+ party statement\(s\)' "party statements"
 check "$outcomes" 'There are [0-9]+ of them' "outcome kinds"
+
+# The install snippets name the published crate version by hand, in several
+# copies; hold every copy to the workspace manifest so a release bump cannot
+# leave a page installing the superseded version.
+crate_version="$(grep -m1 '^version = ' app/veredictum/Cargo.toml | cut -d'"' -f2)"
+while IFS= read -r hit; do
+  [[ -n "$hit" ]] || continue
+  file="${hit%%:*}"
+  n="${hit##*--version }"
+  n="${n%% *}"
+  if [[ "$n" != "$crate_version" ]]; then
+    echo "::error::${file} installs --version ${n}, the workspace is ${crate_version} — update the snippet" >&2
+    failures=$((failures + 1))
+  fi
+done < <(grep -roE -- 'cargo install veredictum[^`<]*--version [0-9a-zA-Z.-]+' "${SURFACES[@]}")
 
 if [[ "$failures" -gt 0 ]]; then
   exit 1

@@ -34,7 +34,7 @@ The binary is on [crates.io](https://crates.io/crates/veredictum). Take this
 path if you want the command on your `PATH`.
 
 ```bash
-cargo install veredictum --locked --version 0.1.0-alpha.3
+cargo install veredictum --locked --version 0.1.0-alpha.4
 veredictum validate --root artifacts --specs specs/openehr
 ```
 
@@ -77,10 +77,12 @@ publish flag above binds it to loopback; exposing it further is the
 operator's decision, behind their own gate.
 
 > [!NOTE]
-> The console is under construction: image tags published before its first
-> release still carry the CLI as the payload, invoked as
+> Every image tag published so far predates the console's first release and
+> still carries the CLI as the payload, invoked as
 > `docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:<tag>
-> validate --root /work/artifacts --specs /work/specs/openehr`.
+> validate --root /work/artifacts --specs /work/specs/openehr`. The console
+> serves from its first release tag onward; [the console
+> chapter](console.md) shows what it does today.
 
 ## From a release binary
 
