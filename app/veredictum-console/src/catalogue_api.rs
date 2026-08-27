@@ -136,10 +136,12 @@ pub mod read {
         u64::try_from(n).unwrap_or(u64::MAX)
     }
 
-    /// Maps the startup state to the landing view. The counts are the SAME
-    /// expressions the CLI's summary line prints, so the two cannot disagree
-    /// (`app/veredictum/src/bin/veredictum.rs`, the validate summary) — the
-    /// integration test holds this mapping.
+    /// Maps the startup state to the landing view.
+    ///
+    /// The counts are the SAME expressions the CLI's summary line prints, so
+    /// the two cannot disagree (`app/veredictum/src/bin/veredictum.rs`, the
+    /// validate summary) — the integration test holds this mapping.
+    #[must_use]
     pub fn instrument_view(state: &ConsoleState) -> InstrumentView {
         match state.catalogue.as_ref() {
             Ok(validation) => InstrumentView::Loaded(InstrumentSummary {
@@ -159,6 +161,9 @@ pub mod read {
     }
 
     /// The chapters, sorted by key, each with its case count.
+    ///
+    /// # Errors
+    /// The verbatim load failure when the catalogue is absent.
     pub fn chapter_rows(state: &ConsoleState) -> Result<Vec<ChapterRow>, String> {
         let validation = state.catalogue.as_ref().as_ref().map_err(Clone::clone)?;
         let mut counts: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
@@ -172,6 +177,9 @@ pub mod read {
     }
 
     /// The chapter's cases, id-sorted, filtered by the id substring `q`.
+    ///
+    /// # Errors
+    /// The verbatim load failure when the catalogue is absent.
     pub fn case_rows(state: &ConsoleState, chapter: &str, q: &str) -> Result<Vec<CaseRow>, String> {
         let validation = state.catalogue.as_ref().as_ref().map_err(Clone::clone)?;
         let mut rows: Vec<CaseRow> = validation
@@ -193,6 +201,9 @@ pub mod read {
 
     /// The full case detail, or `Ok(None)` for an id the catalogue does not
     /// carry — a legitimately absent page, not an error.
+    ///
+    /// # Errors
+    /// The verbatim load failure when the catalogue is absent.
     pub fn case_detail(state: &ConsoleState, id: &str) -> Result<Option<CaseDetail>, String> {
         let validation = state.catalogue.as_ref().as_ref().map_err(Clone::clone)?;
         let Some((path, case)) = validation
