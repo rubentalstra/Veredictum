@@ -125,18 +125,17 @@ fn dropping_the_oracle_only_removes_findings() -> Fallible {
     Ok(())
 }
 
-/// The report path follows whichever spec tree was validated against: two
-/// levels above the component directory, beside the conformance artifacts.
+/// The report path follows the artifact root it describes (#91): the
+/// derivation is total, so a bare relative root still names a location.
 #[test]
-fn the_coverage_report_path_follows_the_spec_tree() {
+fn the_coverage_report_path_follows_the_artifact_root() {
     assert_eq!(
-        catalogue::coverage_report_path(Path::new("/tmp/docs/specs/openehr")),
-        Some(PathBuf::from("/tmp/docs/conformance/coverage-report.md"))
+        catalogue::coverage_report_path(Path::new("/tmp/checkout/artifacts")),
+        PathBuf::from("/tmp/checkout/artifacts/coverage-report.md")
     );
     assert_eq!(
-        catalogue::coverage_report_path(Path::new("openehr")),
-        None,
-        "a path with no grandparent names no report location"
+        catalogue::coverage_report_path(Path::new("artifacts")),
+        PathBuf::from("artifacts/coverage-report.md")
     );
 }
 
