@@ -267,10 +267,14 @@ becomes gating.
 **Milestones are releases.** A milestone is a delivery promise, so an issue
 waiting on something upstream carries `blocked-upstream` and no milestone. A
 release is cut when its milestone reaches zero open issues; the next milestone
-always exists, so triage always has a target. Open today: `v0.0.1` (the
-repository standing on its own — identity, discipline, CI, tracker machinery)
-and `v0.1.0` (the code migration, FerroEHR#2789, deliberately without a due
-date because the date follows the extraction).
+always exists, so triage always has a target. Open today (renumbered
+2026-08-27, owner ruling — the pre-releases run on the 0.1.0-alpha line, so
+v0.1.0 proper is the first STABLE release): `v0.1.0` (the web console over
+the published instrument, #6, with the signed record and the
+release-blocking findings) and `v0.2.0` (the console beyond stable: the
+measured instruments in the browser, #70, plus non-gating catalogue upkeep).
+The closed `v0.1.0-alpha` milestone is the shipped code migration
+(FerroEHR#2789).
 
 **Skills.** `/phase-status` orients, `/next-task` turns an issue into a plan,
 `/phase-done` closes one. Each is trimmed to the machinery that exists here and
