@@ -11,7 +11,7 @@
 # artifact edit.
 #
 # What must NOT be excluded, so a future edit does not quietly break a build:
-# `src/`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml` (the builder stage
+# `app/*/src/`, the manifests, `Cargo.lock`, `rust-toolchain.toml` (the builder stage
 # compiles from them) and `bin/` (the CI target COPYs the prebuilt native binary
 # from there).
 
@@ -37,7 +37,7 @@ verification-pack/
 assets/
 
 # Tests and their fixtures: nothing in the image runs them.
-tests/
+app/veredictum/tests/
 
 # The fuzzing workspace: its own nightly workspace, never a compile input for
 # the image. `**/target/` above already drops its 4 GB target tree; this line

@@ -18,6 +18,20 @@ version on.
 
 ## [Unreleased]
 
+### Changed
+
+- **The repository is restructured: both products live under `app/`.** The
+  instrument crate moved from the repository root to `app/veredictum` and the
+  root manifest is a virtual workspace (#55). Every documented invocation is
+  unchanged — the data trees stayed at the root and `cargo run -- <subcommand>`
+  still means the instrument. The published crate carries the same files as
+  before minus 26 stragglers the old repo-root package had been picking up
+  from the vendored trees (their README and LICENSE files), which were never
+  part of the crate's declared contents.
+- `cargo publish` names its package in both publish lanes: the workspace
+  carries the unpublishable console beside the crate, and the bare form
+  refused on it — the v0.1.0-alpha.4 publish leg failed on exactly that.
+
 ## [0.1.0-alpha.4] - 2026-08-27
 
 ### Added

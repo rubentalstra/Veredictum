@@ -1,5 +1,5 @@
 ---
-paths: ["src/**", "artifacts/**", "party/**", "schemas/**"]
+paths: ["app/veredictum/src/**", "artifacts/**", "party/**", "schemas/**"]
 ---
 
 # Red-run triage (the attribution law)
@@ -40,7 +40,7 @@ a test suite that presumes its own correctness and questions the server.
 | Bin | What it means | Fix path |
 |---|---|---|
 | **SUT** | the server under test violates the spec | a defect report to that CDR's maintainers carrying the reproduced wire exchange and the spec citation. NEVER a change in this repository, and never a catalogue edit that hides it |
-| **Runner machinery** | the SUT behaved correctly but `src/**` misdrove the case or misjudged the response (driver, provisioning, resolver, outcome classification, comparator, verdicts) | fix the runner module; the affected rows were inconclusive, not SUT failures |
+| **Runner machinery** | the SUT behaved correctly but `app/veredictum/src/**` misdrove the case or misjudged the response (driver, provisioning, resolver, outcome classification, comparator, verdicts) | fix the runner module; the affected rows were inconclusive, not SUT failures |
 | **Catalogue artifact** | the hand-authored schedule is wrong versus the spec (case core, operation binding, corpus, vocabulary) | edit the artifact WITH a new spec-cited source for the corrected expectation |
 
 ## The protocol (per red row)

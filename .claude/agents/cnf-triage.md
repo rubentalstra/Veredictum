@@ -57,7 +57,7 @@ evidence. You never edit files: findings only.
      exchange and the spec citation. Never a change in this repository. This
      bin carries the highest evidence bar in the whole method: it is a public
      claim about somebody else's product.
-   - **Runner machinery defect** — the server behaved correctly but `src/**`
+   - **Runner machinery defect** — the server behaved correctly but `app/veredictum/src/**`
      misdrove or misjudged it: the HTTP driver, requires-provisioning, the
      `${…}` resolver, outcome classification (status ties, unmapped
      responses), the result-set comparator, the verdict pipeline.

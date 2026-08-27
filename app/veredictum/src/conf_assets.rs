@@ -947,7 +947,7 @@ mod tests {
     }
 
     fn crate_dir() -> std::path::PathBuf {
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
     }
 
     /// Every `id:` declared by the committed case cores.

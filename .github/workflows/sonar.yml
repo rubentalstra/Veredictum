@@ -101,9 +101,9 @@ jobs:
       - name: Derive sonar.projectVersion from the package version
         run: |
           set -euo pipefail
-          version="$(awk -F'"' '/^\[package\]/{p=1} p && /^version = /{print $2; exit}' Cargo.toml)"
+          version="$(awk -F'"' '/^\[package\]/{p=1} p && /^version = /{print $2; exit}' app/veredictum/Cargo.toml)"
           if [ -z "$version" ]; then
-            echo "::error::no version found under [package] in Cargo.toml"
+            echo "::error::no version found under [package] in app/veredictum/Cargo.toml"
             exit 1
           fi
           echo "sonar.projectVersion=$version" >> sonar-project.properties

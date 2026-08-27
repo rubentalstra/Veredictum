@@ -95,7 +95,7 @@ if unreasoned="$(jq -r '
 fi
 
 gate_ids="$(jq -r '.[] | if type == "object" then .id // empty else empty end' <<<"$ignore_json" | sort)"
-accepted_ids="$(jq -r '(.accepted // [])[].id' <<<"$prose_json" | sort)"
+accepted_ids="$(jq -r '((.accepted // []) + (.informational // []))[].id' <<<"$prose_json" | sort)"
 lockfile_ids="$(jq -r '(.lockfile_only // [])[].id' <<<"$prose_json" | sort)"
 
 fail=0
@@ -104,7 +104,7 @@ note() { echo "vex-generate: $*" >&2; fail=1; }
 # ── the two-way agreement that makes one list impossible to forget ──────────
 while read -r id; do
   [[ -n "$id" ]] || continue
-  note "deny.toml accepts $id but $PROSE has no [[accepted]] entry for it — every accepted advisory needs a published justification"
+  note "deny.toml accepts $id but $PROSE has no [[accepted]] or [[informational]] entry for it — every accepted advisory needs a published justification"
 done < <(comm -23 <(echo "$gate_ids") <(echo "$accepted_ids"))
 
 while read -r id; do
@@ -119,6 +119,18 @@ while read -r id; do
   [[ -n "$id" ]] || continue
   note "$id is listed as [[lockfile_only]] but deny.toml now ignores it — move it to [[accepted]], or drop the ignore"
 done < <(comm -12 <(echo "$gate_ids") <(echo "$lockfile_ids"))
+
+# ── the informational tier carries its reason, and only that ────────────────
+# An unmaintained-class notice is not a vulnerability, so it gets no OpenVEX
+# statement; the entry still needs a crate and a reason a reader can check.
+while read -r entry; do
+  [[ -n "$entry" ]] || continue
+  id="$(jq -r '.id // ""' <<<"$entry")"
+  for field in crate reason; do
+    value="$(jq -r --arg f "$field" '.[$f] // ""' <<<"$entry")"
+    [[ -n "$value" ]] || note "${id:-<no id>}: missing '$field' (informational tier)"
+  done
+done < <(jq -c '(.informational // [])[]' <<<"$prose_json")
 
 # ── vocabulary + completeness of every statement ────────────────────────────
 while read -r entry; do

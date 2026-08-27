@@ -21,7 +21,7 @@ use veredictum::validate::{Context, Finding, validate};
 
 /// This package's directory, which is the repository root.
 fn crate_dir() -> &'static std::path::Path {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+    std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
 /// The vendored spec tree the citation-resolution gates read.

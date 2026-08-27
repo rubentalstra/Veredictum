@@ -11,12 +11,12 @@ use veredictum::validate::{Context, validate};
 /// The repository root. The one package sits at it, so the manifest directory
 /// IS the root.
 fn repo_root() -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
 #[test]
 fn pilot_world_is_clean_under_all_gates() {
-    let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let crate_dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
     let specs = repo_root().join("specs/openehr");
     assert!(
         specs.is_dir(),
@@ -99,7 +99,7 @@ fn pilot_world_is_clean_under_all_gates() {
 fn every_release_dated_header_rule_carries_the_same_floor() {
     use veredictum::model::binding::HeaderMatcher;
 
-    let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let crate_dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
     let loaded = load_root(&crate_dir.join("artifacts")).expect("schema compilation");
 
     let mut dated = 0_usize;

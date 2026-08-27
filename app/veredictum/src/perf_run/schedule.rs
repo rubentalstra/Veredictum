@@ -786,7 +786,7 @@ mod tests {
         // catalogue + class shares at the class-POC parameters must
         // realize the offered 2/s (x the +2% floor margin), never a
         // bunched multiple.
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let root = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
         let catalogue: JourneyCatalogue = serde_saphyr::from_str(
             &std::fs::read_to_string(root.join("artifacts/vocab/journey_catalogue.yaml")).unwrap(),
         )

@@ -13,7 +13,8 @@
 # artifact schemas, verdict semantics, the container image, or anything a party's
 # published record depends on. Each entry below is one of those:
 #
-#   src/            the runner and the CLI, including verdict semantics
+#   app/veredictum/src/   the runner and the CLI, including verdict semantics
+#   app/veredictum-console/src/   the web console the image serves
 #   artifacts/      the catalogue — a case, a binding or a register entry
 #                   changes what a run reports about somebody's server
 #   schemas/        the published JSON Schemas an integrator authors against
@@ -24,7 +25,7 @@
 #   Cargo.lock      that decide what compiles
 #
 # Deliberately NOT in the set, because a changelog entry for them would be noise
-# rather than news: `tests/`, `specs/` (vendored, refreshed only by its own
+# rather than news: the crates' `tests/`, `specs/` (vendored, refreshed only by its own
 # script), `scripts/`, `.github/`, `.claude/`, and prose.
 #
 # Usage:  changelog-entry.sh <base-ref> <head-ref>
@@ -39,7 +40,8 @@ cd "$(dirname "$0")/../.."
 # One regular expression, assembled from the list above so the list is the thing
 # a reader edits.
 readonly USER_VISIBLE_PATHS=(
-  'src/'
+  'app/veredictum/src/'
+  'app/veredictum-console/src/'
   'artifacts/'
   'schemas/'
   'party/'
@@ -47,6 +49,7 @@ readonly USER_VISIBLE_PATHS=(
   '\.dockerignore$'
   'Cargo\.toml$'
   'Cargo\.lock$'
+  'app/[^/]+/Cargo\.toml$'
 )
 
 base="${1:?usage: changelog-entry.sh <base-ref> <head-ref>}"

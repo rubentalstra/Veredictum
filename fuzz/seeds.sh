@@ -181,7 +181,7 @@ seed_artifact_yaml() {
 # rather than from mutations of a statement.
 seed_party_document() {
   link_from party_document party 256k 40 '*.json'
-  link_from party_document examples 256k 5 '*.json'
+  link_from party_document app/veredictum/examples 256k 5 '*.json'
 }
 
 # ── The HDR histogram V2 decoder ───────────────────────────────────────────
@@ -193,7 +193,7 @@ seed_party_document() {
 seed_hdr_v2() {
   local dest="$seeds_root/hdr_v2"
   mkdir -p "$dest"
-  local example="$repo_root/examples/results.example.json"
+  local example="$repo_root/app/veredictum/examples/results.example.json"
   if [[ ! -f "$example" ]]; then
     echo "seeds.sh: missing $example (cargo run --example make_example_results)" >&2
     exit 1

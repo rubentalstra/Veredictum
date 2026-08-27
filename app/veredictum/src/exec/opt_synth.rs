@@ -1411,7 +1411,8 @@ mod tests {
     /// refusal only ever surfaced mid-run as an errored row.
     #[test]
     fn every_committed_content_row_synthesizes() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts");
+        let root =
+            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join("artifacts");
         let loaded = crate::artifacts::load_root(&root).expect("the committed artifact root");
         assert!(
             loaded.errors.is_empty(),

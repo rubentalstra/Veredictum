@@ -9,7 +9,11 @@
 # version (optional), status, justification (OpenVEX vocabulary), impact.
 # [[lockfile_only]] entries document advisories OSV-style lock-file scanners
 # report for crates this feature set never compiles; deny.toml must NOT ignore
-# those (its own header explains why they need no entry).
+# those (its own header explains why they need no entry). [[informational]]
+# entries cover UNMAINTAINED-class RustSec notices deny.toml accepts: they are
+# not vulnerabilities, so no OpenVEX statement is emitted for them — an
+# exploitability claim about a maintenance status would be a category error —
+# but the generator still holds them to the two-way agreement with the gate.
 
 [document]
 id = "https://veredictum.eu/vex/rust-advisories"
@@ -36,4 +40,23 @@ path over public keys. The instrument holds no RSA private key and performs no
 RSA decryption or signing, so there is no secret for the sidechannel to leak.
 No fixed release exists upstream; the deleting event is the rsa 0.10 release,
 taken the day it ships (deny.toml carries the same adjudication as the gate).
+"""
+
+[[informational]]
+id = "RUSTSEC-2024-0436"
+crate = "paste"
+reason = """
+Unmaintained notice, not a vulnerability: `paste` is archived upstream. It is
+a compile-time proc-macro reached only through the console's leptos rendering
+stack (tachys) and contributes no bytes to any shipped binary. Deleting event:
+the leptos stack replacing it (deny.toml carries the same adjudication).
+"""
+
+[[informational]]
+id = "RUSTSEC-2026-0173"
+crate = "proc-macro-error2"
+reason = """
+Unmaintained notice, not a vulnerability: a compile-time proc-macro helper in
+the console's leptos stack, no bytes in any shipped binary. Deleting event:
+the leptos stack dropping it (deny.toml carries the same adjudication).
 """

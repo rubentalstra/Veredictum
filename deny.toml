@@ -35,6 +35,19 @@ ignore = [
   # DELETING EVENT: the rsa 0.10 release, taken the day it ships.
   # https://rustsec.org/advisories/RUSTSEC-2023-0071
   { id = "RUSTSEC-2023-0071", reason = "reached only through pgp 0.20's signature VERIFICATION path: public keys only, no private key material and no decryption in this instrument" },
+  # 2026-08-27: `paste` is archived upstream (unmaintained notice, not a
+  # vulnerability). It is a PROC-MACRO crate reached only through the console's
+  # leptos rendering stack (tachys), so it runs at compile time and contributes
+  # no bytes to any shipped binary. Surfaced by the workspace restructure
+  # (#55): the root-package graph never carried the console's dependencies.
+  # DELETING EVENT: the leptos stack replacing paste (its fork `pastey` is the
+  # announced drop-in), taken at the next leptos pin bump that carries it.
+  { id = "RUSTSEC-2024-0436", reason = "compile-time proc-macro in the console's leptos stack; no code in any shipped binary, and the notice is unmaintained-status, not a vulnerability" },
+  # 2026-08-27: `proc-macro-error2` is unmaintained (same class as above): a
+  # compile-time proc-macro helper in the console's leptos stack, no bytes in
+  # any shipped binary. DELETING EVENT: the leptos stack dropping it, taken at
+  # the next leptos pin bump that carries the migration.
+  { id = "RUSTSEC-2026-0173", reason = "compile-time proc-macro in the console's leptos stack; no code in any shipped binary, and the notice is unmaintained-status, not a vulnerability" },
 ]
 
 [licenses]
