@@ -22,6 +22,7 @@ use veredictum::ixit::{Environment, Ixit};
 use veredictum::perf::{ClassVerdict, JourneyCatalogue, PerformanceCase};
 use veredictum::perf_run::client::{PerfClient, PerfPrincipals};
 use veredictum::perf_run::corpus::{SeededCorpus, seed_scale_ladder, seed_ward};
+use veredictum::perf_run::jitter::LeafConstraints;
 use veredictum::perf_run::pack::{AuxPayloads, FlatPayload, JourneyPack, PackTemplate, TddPayload};
 use veredictum::perf_run::window::{drive_case, rederive_verdict};
 
@@ -317,6 +318,7 @@ fn journey_pack() -> JourneyPack {
         template_id: id.to_owned(),
         opt_xml: "<template/>".to_owned(),
         skeleton: skeleton.clone(),
+        constraints: LeafConstraints::default(),
     };
     JourneyPack {
         templates: vec![

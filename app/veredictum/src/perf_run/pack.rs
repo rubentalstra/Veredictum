@@ -8,11 +8,15 @@
 //! committed skeleton into one arrival's body.
 //!
 //! Payload ground rules: the skeletons are committed artifacts (generated
-//! once from the SUT's example endpoint and vendored byte-identical —
-//! `corpus/templates/ckm/PROVENANCE.md`), so every SUT receives the same
-//! bytes; stamping mutates only the event-context times and the composer
-//! name, deterministically from the arrival's planned instant — variation
-//! never introduces a validation error a conformant server would reject.
+//! once from the SUT's example endpoint and vendored byte-identical), so
+//! every SUT receives the same starting bytes. Stamping then mutates the
+//! event-context times, the composer name, and the numeric leaves whose
+//! permitted range the operational template declares
+//! ([`crate::perf_run::jitter`]), deterministically from the arrival's
+//! planned instant and index — a stamped value is always inside the
+//! constraint the same template imposes on the committed skeleton, so
+//! variation never introduces a validation error a conformant server would
+//! reject.
 
 #![expect(
     clippy::disallowed_types,
@@ -20,16 +24,13 @@
               exchanges) — not the application (FerroEHR#1694)"
 )]
 
-// TODO(#137): stamp compositions with constraint-aware FLAT-leaf value jitter
-// as a richer mode beside time/composer stamping, which is the committed
-// baseline until then.
-
 use std::path::Path;
 
 use serde_json::Value;
 
 use crate::model::corpus::CorpusManifest;
 use crate::perf::JourneyCatalogue;
+use crate::perf_run::jitter::LeafConstraints;
 
 /// The rotating composer pool (staff are modelled as event rates; the
 /// composer label is the only per-arrival identity).
@@ -56,6 +57,9 @@ pub struct PackTemplate {
     pub opt_xml: String,
     /// The committed example composition skeleton.
     pub skeleton: Value,
+    /// The numeric-leaf ranges read out of `opt_xml`, which bound the
+    /// per-arrival jitter `stamped` applies to the skeleton.
+    pub constraints: LeafConstraints,
 }
 
 /// The Simplified-FLAT payload one journey stage commits.
@@ -190,11 +194,14 @@ impl JourneyPack {
             let opt_xml = read(opt_entry.source.as_ref(), &key)?;
             let skeleton: Value = serde_json::from_str(&read(example_entry.source.as_ref(), &key)?)
                 .map_err(|e| format!("example skeleton {key}: {e}"))?;
+            let constraints = LeafConstraints::from_opt(&opt_xml)
+                .map_err(|e| format!("operational template {key}: {e}"))?;
             templates.push(PackTemplate {
                 key,
                 template_id,
                 opt_xml,
                 skeleton,
+                constraints,
             });
         }
         if templates.is_empty() {
@@ -282,9 +289,15 @@ fn staff(arrival: u64) -> &'static str {
 }
 
 /// Stamp a skeleton for one arrival: event-context times to the planned
-/// instant's simulated clock, composer name from the rotating staff pool.
+/// instant's simulated clock, composer name from the rotating staff pool, and
+/// every numeric leaf the operational template gives a readable range redrawn
+/// inside it, so a population varies leaf by leaf instead of committing one
+/// payload N times.
 fn stamped(template: &PackTemplate, offset_s: u64, arrival: u64) -> Value {
     let mut body = template.skeleton.clone();
+    template
+        .constraints
+        .apply(&mut body, &template.key, arrival);
     let time = sim_time(offset_s);
     if let Some(context) = body.get_mut("context") {
         for field in ["start_time", "end_time"] {
@@ -486,6 +499,18 @@ pub(crate) fn tags_body(offset_s: u64) -> Vec<u8> {
 mod tests {
     use super::*;
 
+    /// An operational template declaring one temperature range, in the AM 1.4
+    /// XML shape the CKM exports use
+    /// (`specs/its-xml-schemas/components/AM/Release-1.4/OpenehrProfile.xsd`
+    /// §`C_DV_QUANTITY`).
+    const CELSIUS_OPT: &str = "<template xmlns=\"http://schemas.openehr.org/v1\" \
+         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">\
+         <children xsi:type=\"C_DV_QUANTITY\"><rm_type_name>DV_QUANTITY</rm_type_name>\
+         <list><magnitude><lower_included>true</lower_included>\
+         <upper_included>false</upper_included><lower_unbounded>false</lower_unbounded>\
+         <upper_unbounded>false</upper_unbounded><lower>0</lower><upper>100</upper>\
+         </magnitude><units>Cel</units></list></children></template>";
+
     fn template() -> PackTemplate {
         PackTemplate {
             key: "cnf.ckm.vital_signs".to_owned(),
@@ -499,7 +524,30 @@ mod tests {
                 },
                 "composer": { "_type": "PARTY_IDENTIFIED", "name": "original" }
             }),
+            constraints: LeafConstraints::default(),
         }
+    }
+
+    /// The same template with one constrained temperature leaf and the ranges
+    /// [`CELSIUS_OPT`] declares for it.
+    fn measuring_template() -> PackTemplate {
+        let mut template = template();
+        template.opt_xml = CELSIUS_OPT.to_owned();
+        template.constraints = LeafConstraints::from_opt(CELSIUS_OPT).unwrap();
+        template.skeleton = serde_json::json!({
+            "_type": "COMPOSITION",
+            "context": {
+                "_type": "EVENT_CONTEXT",
+                "start_time": { "_type": "DV_DATE_TIME", "value": "2020-01-01T00:00:00Z" }
+            },
+            "composer": { "_type": "PARTY_IDENTIFIED", "name": "original" },
+            "content": [{
+                "_type": "ELEMENT",
+                "name": { "_type": "DV_TEXT", "value": "Temperature" },
+                "value": { "_type": "DV_QUANTITY", "magnitude": 49.5, "units": "Cel" }
+            }]
+        });
+        template
     }
 
     #[test]
@@ -519,6 +567,69 @@ mod tests {
         assert_ne!(a, c);
     }
 
+    /// One population: the bodies a run commits for arrivals `0..count`.
+    fn population(template: &PackTemplate, count: u64) -> Vec<Vec<u8>> {
+        (0..count)
+            .map(|arrival| composition_body(template, arrival * 60, arrival).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn the_same_seed_renders_the_same_population_byte_for_byte() {
+        let t = measuring_template();
+        assert_eq!(population(&t, 64), population(&t, 64));
+    }
+
+    #[test]
+    fn a_population_no_longer_carries_one_leaf_value_in_every_composition() {
+        let t = measuring_template();
+        let magnitudes: std::collections::BTreeSet<String> = population(&t, 64)
+            .iter()
+            .map(|body| {
+                let value: Value = serde_json::from_slice(body).unwrap();
+                value["content"][0]["value"]["magnitude"].to_string()
+            })
+            .collect();
+        assert!(
+            magnitudes.len() > 32,
+            "64 compositions carried only {} distinct temperatures",
+            magnitudes.len()
+        );
+    }
+
+    #[test]
+    fn every_redrawn_leaf_stays_inside_the_range_the_template_declares() {
+        // The bounds are read first-hand out of CELSIUS_OPT above: magnitude
+        // in [0, 100), the shape the vendored CKM exports use.
+        let t = measuring_template();
+        for body in population(&t, 512) {
+            let value: Value = serde_json::from_slice(&body).unwrap();
+            let magnitude = value["content"][0]["value"]["magnitude"].as_f64().unwrap();
+            assert!(
+                (0.0..100.0).contains(&magnitude),
+                "redrawn magnitude {magnitude} is outside the declared [0, 100)"
+            );
+            assert_eq!(value["content"][0]["value"]["units"], "Cel");
+        }
+    }
+
+    #[test]
+    fn the_jitter_touches_the_numeric_leaf_and_nothing_else_structural() {
+        let t = measuring_template();
+        let stamped_body = composition_body(&t, 0, 3).unwrap();
+        let value: Value = serde_json::from_slice(&stamped_body).unwrap();
+        assert_eq!(value["_type"], "COMPOSITION");
+        assert_eq!(value["content"][0]["_type"], "ELEMENT");
+        assert_eq!(value["content"][0]["name"]["value"], "Temperature");
+        assert_eq!(value["content"][0]["value"]["_type"], "DV_QUANTITY");
+        let keys: Vec<&String> = value["content"][0]["value"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .collect();
+        assert_eq!(keys, vec!["_type", "magnitude", "units"]);
+    }
+
     #[test]
     fn the_contribution_envelope_wraps_one_original_version() {
         let t = template();
@@ -533,6 +644,217 @@ mod tests {
             "532"
         );
         assert_eq!(versions[0]["data"]["_type"], "COMPOSITION");
+    }
+
+    /// The vendored CKM template pack, the payload ground a measured run
+    /// commits.
+    fn ckm_dir() -> std::path::PathBuf {
+        Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("artifacts/corpus/templates/ckm")
+    }
+
+    /// One vendored template loaded exactly as [`JourneyPack::load`] loads it.
+    fn vendored(stem: &str, key: &str, template_id: &str) -> PackTemplate {
+        let dir = ckm_dir();
+        let opt_xml = std::fs::read_to_string(dir.join(format!("{stem}.opt"))).unwrap();
+        let skeleton: Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.join(format!("{stem}.example.json"))).unwrap(),
+        )
+        .unwrap();
+        let constraints = LeafConstraints::from_opt(&opt_xml).unwrap();
+        PackTemplate {
+            key: key.to_owned(),
+            template_id: template_id.to_owned(),
+            opt_xml,
+            skeleton,
+            constraints,
+        }
+    }
+
+    /// Every scalar leaf of a body, keyed by its JSON pointer.
+    fn flatten(value: &Value, at: &str, into: &mut std::collections::BTreeMap<String, String>) {
+        match value {
+            Value::Object(map) => {
+                for (key, child) in map {
+                    flatten(child, &format!("{at}/{key}"), into);
+                }
+            }
+            Value::Array(items) => {
+                for (index, item) in items.iter().enumerate() {
+                    flatten(item, &format!("{at}/{index}"), into);
+                }
+            }
+            other => {
+                into.insert(at.to_owned(), other.to_string());
+            }
+        }
+    }
+
+    /// Every `DV_QUANTITY` leaf of a body as `(units, magnitude)`.
+    fn quantities(value: &Value, into: &mut Vec<(String, f64)>) {
+        match value {
+            Value::Object(map) => {
+                if map.get("_type").and_then(Value::as_str) == Some("DV_QUANTITY")
+                    && let (Some(units), Some(magnitude)) = (
+                        map.get("units").and_then(Value::as_str),
+                        map.get("magnitude").and_then(Value::as_f64),
+                    )
+                {
+                    into.push((units.to_owned(), magnitude));
+                }
+                for (_, child) in map {
+                    quantities(child, into);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    quantities(item, into);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The magnitude ranges `vital-signs.opt` declares, read first-hand out of
+    /// its `C_DV_QUANTITY` list entries: `(units, lower, upper,
+    /// upper_included)`, each the INTERSECTION where the template declares the
+    /// units more than once (`/min` at `[0, 1000)` and `[0, 200]` intersects to
+    /// `[0, 200]`).
+    const VITAL_SIGNS_RANGES: [(&str, f64, f64, bool); 7] = [
+        ("Cel", 0.0, 100.0, false),
+        ("mm[Hg]", 0.0, 1000.0, false),
+        ("kg/m2", 0.0, 1000.0, false),
+        ("cm", 0.0, 1000.0, true),
+        ("kg", 0.0, 1000.0, true),
+        ("g", 0.0, 1_000_000.0, true),
+        ("/min", 0.0, 200.0, true),
+    ];
+
+    #[test]
+    fn the_vendored_vital_signs_population_reproduces_byte_for_byte() {
+        let t = vendored("vital-signs", "cnf.ckm.vital_signs", "Vital signs");
+        assert_eq!(population(&t, 48), population(&t, 48));
+    }
+
+    #[test]
+    fn two_compositions_of_one_vendored_population_differ_in_their_leaves() {
+        let t = vendored("vital-signs", "cnf.ckm.vital_signs", "Vital signs");
+        let of = |arrival: u64| {
+            let body = composition_body(&t, arrival * 60, arrival).unwrap();
+            let value: Value = serde_json::from_slice(&body).unwrap();
+            let mut found = Vec::new();
+            quantities(&value, &mut found);
+            found
+        };
+        let (first, second) = (of(0), of(1));
+        assert_eq!(
+            first.len(),
+            8,
+            "the committed skeleton carries 8 quantities"
+        );
+        assert_ne!(
+            first, second,
+            "two arrivals of one population carried identical quantity leaves"
+        );
+    }
+
+    #[test]
+    fn every_redrawn_vital_sign_is_inside_the_range_the_vendored_opt_declares() {
+        let t = vendored("vital-signs", "cnf.ckm.vital_signs", "Vital signs");
+        for arrival in 0..256_u64 {
+            let body = composition_body(&t, arrival * 60, arrival).unwrap();
+            let value: Value = serde_json::from_slice(&body).unwrap();
+            let mut found = Vec::new();
+            quantities(&value, &mut found);
+            for (units, magnitude) in found {
+                let declared = VITAL_SIGNS_RANGES
+                    .iter()
+                    .find(|(declared_units, _, _, _)| *declared_units == units);
+                let Some(&(_, lower, upper, upper_included)) = declared else {
+                    panic!("arrival {arrival} carried an undeclared unit {units}");
+                };
+                let inside = magnitude >= lower
+                    && (if upper_included {
+                        magnitude <= upper
+                    } else {
+                        magnitude < upper
+                    });
+                assert!(
+                    inside,
+                    "arrival {arrival}: {magnitude} {units} is outside the declared range"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_jitter_moves_magnitudes_and_leaves_every_other_leaf_alone() {
+        let t = vendored("vital-signs", "cnf.ckm.vital_signs", "Vital signs");
+        let mut before = std::collections::BTreeMap::new();
+        flatten(&t.skeleton, "", &mut before);
+        let body = composition_body(&t, 600, 7).unwrap();
+        let stamped_value: Value = serde_json::from_slice(&body).unwrap();
+        let mut after = std::collections::BTreeMap::new();
+        flatten(&stamped_value, "", &mut after);
+        assert_eq!(
+            before.keys().collect::<Vec<_>>(),
+            after.keys().collect::<Vec<_>>(),
+            "stamping added or removed a leaf"
+        );
+        let moved: Vec<&String> = before
+            .iter()
+            .filter(|(pointer, value)| after.get(*pointer) != Some(*value))
+            .map(|(pointer, _)| pointer)
+            .collect();
+        assert!(!moved.is_empty(), "stamping changed nothing at all");
+        for pointer in moved {
+            let expected = pointer.ends_with("/magnitude")
+                || pointer == "/context/start_time/value"
+                || pointer == "/context/end_time/value"
+                || pointer == "/composer/name";
+            assert!(
+                expected,
+                "stamping moved {pointer}, which it must not touch"
+            );
+        }
+    }
+
+    #[test]
+    fn a_template_that_declares_no_readable_range_keeps_its_committed_leaf() {
+        // `generic-lab-test-result.opt` declares `mg/L` with an UNBOUNDED
+        // upper, and its other units carry no magnitude interval at all, so
+        // the honest answer is to leave that leaf where the example put it.
+        let t = vendored(
+            "generic-lab-test-result",
+            "cnf.ckm.lab_result",
+            "Generic lab test result example simple",
+        );
+        for arrival in 0..16_u64 {
+            let body = composition_body(&t, arrival * 60, arrival).unwrap();
+            let value: Value = serde_json::from_slice(&body).unwrap();
+            let mut found = Vec::new();
+            quantities(&value, &mut found);
+            assert_eq!(found, vec![("mg/L".to_owned(), 10.0)]);
+        }
+    }
+
+    #[test]
+    fn every_vendored_pack_template_reads_its_constraints() {
+        let mut read = 0_usize;
+        for entry in std::fs::read_dir(ckm_dir()).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "opt") {
+                continue;
+            }
+            let opt_xml = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                LeafConstraints::from_opt(&opt_xml).is_ok(),
+                "{} is not readable as an operational template",
+                path.display()
+            );
+            read += 1;
+        }
+        assert!(read >= 16, "the pack shrank to {read} templates");
     }
 
     #[test]

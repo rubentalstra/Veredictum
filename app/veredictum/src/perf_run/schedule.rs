@@ -192,14 +192,7 @@ impl ShareSequencer {
 /// FNV-1a over the schedule seed + indices — the deterministic draw for
 /// uniform stage offsets.
 fn fnv1a(parts: &[u64]) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325 ^ SCHEDULE_SEED;
-    for part in parts {
-        for byte in part.to_le_bytes() {
-            hash ^= u64::from(byte);
-            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-        }
-    }
-    hash
+    crate::perf_run::fnv1a(SCHEDULE_SEED, parts)
 }
 
 /// A stage offset realized for one (journey instance, stage, repetition).
@@ -621,6 +614,7 @@ mod tests {
                 template_id: "Vital signs".to_owned(),
                 opt_xml: "<template/>".to_owned(),
                 skeleton: serde_json::json!({"_type": "COMPOSITION"}),
+                constraints: crate::perf_run::jitter::LeafConstraints::default(),
             }],
             aux: AuxPayloads::default(),
         }
@@ -809,6 +803,7 @@ mod tests {
                         template_id: key.clone(),
                         opt_xml: String::new(),
                         skeleton: serde_json::json!({"_type": "COMPOSITION"}),
+                        constraints: crate::perf_run::jitter::LeafConstraints::default(),
                     });
                 }
             }
