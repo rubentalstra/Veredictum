@@ -16,22 +16,22 @@ The four counts are the catalogue's own: case cores, operation bindings, party
 statements, and validate findings. A findings count above zero means the
 catalogue itself needs attention before any server is graded.
 
-![The console landing in light mode](img/landing-light.png)
-![The console landing in dark mode](img/landing-dark.png)
+![The console landing in light mode](console/img/landing-light.png)
+![The console landing in dark mode](console/img/landing-dark.png)
 
 ## The catalogue explorer
 
 Chapters first, each with the number of cases it carries. The search and page
 state live in the URL, so a view is shareable and survives a refresh.
 
-![The chapter list in light mode](img/catalogue-light.png)
-![The chapter list in dark mode](img/catalogue-dark.png)
+![The chapter list in light mode](console/img/catalogue-light.png)
+![The chapter list in dark mode](console/img/catalogue-dark.png)
 
 One chapter lists its cases: the identifier, the kind, and the test purpose.
 One behaviour per case, so a red row names one defect.
 
-![A chapter's case listing in light mode](img/chapter-light.png)
-![A chapter's case listing in dark mode](img/chapter-dark.png)
+![A chapter's case listing in light mode](console/img/chapter-light.png)
+![A chapter's case listing in dark mode](console/img/chapter-dark.png)
 
 ## One case in full
 
@@ -40,5 +40,5 @@ expectation stands on, the operation bindings that realize it on the wire, and
 the corpus fixtures it uses. The citation list is the point: an expectation is
 refuted by a better reading of the cited text, and by nothing else.
 
-![A case detail in light mode](img/case-light.png)
-![A case detail in dark mode](img/case-dark.png)
+![A case detail in light mode](console/img/case-light.png)
+![A case detail in dark mode](console/img/case-dark.png)
