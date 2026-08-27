@@ -94,6 +94,11 @@ sync_tree "$WORK/src/Reference/CKM_2013_12_09" "$CKM_PAIRS_DEST/ckm-2013-12-09"
   adl_count=$(find "$root" -name '*.adl' -print | wc -l | tr -d ' ')
   adls_count=$(find "$root" -name '*.adls' -print | wc -l | tr -d ' ')
   paired_count=$(comm -12 <(hrids '*.adl') <(hrids '*.adls') | wc -l | tr -d ' ')
+  # The pairing is not total, so the record carries the shortfall in both
+  # directions rather than leaving it to be inferred from the three counts.
+  # An HRID is unique within each dialect, so these subtractions are exact.
+  adls_only=$((adls_count - paired_count))
+  adl_only=$((adl_count - paired_count))
 
   {
     printf '# ADL 2 archetype pack (with ADL 1.4 twins) — provenance\n\n'
@@ -132,9 +137,8 @@ PROSE
     printf -- '- archetypes present in BOTH dialects: **%s**\n\n' "$paired_count"
     cat <<'PROSE'
 The dual-dialect pairing is the value here: the same clinical archetype
-in 1.4 and in 2, as published upstream — an INDEPENDENT reference for
-the conversion path and matched inputs for the DEFINITION API's ADL 1.4
-and ADL 2 wire cases.
+in 1.4 and in 2, as published upstream, which is an INDEPENDENT
+reference for the conversion path.
 
 | RM class | ADL 2 files |
 |---|---|
@@ -145,6 +149,24 @@ PROSE
       | sed 's|.*/||; s|\..*$||' \
       | sort | uniq -c | sort -k1,1nr -k2,2 \
       | while read -r count cls; do printf '| %s | %s |\n' "$cls" "$count"; done
+    printf '\n## What exercises this pack\n\n'
+    cat <<'PROSE'
+`tests/it/corpus_packs.rs` reads every file in the tree and pins
+what this instrument can check first-hand: the two dialect counts
+above, the `adl_version` each file declares, the archetype id
+inside each file against the name it is stored under, and the
+pairing itself. This instrument ships no ADL parser, so nothing
+here reads an archetype body.
+
+The pairing is not total, and the gate pins the exact shortfall:
+PROSE
+    printf -- '\n- ADL 2 files with no ADL 1.4 twin: **%s**\n' "$adls_only"
+    printf -- '- ADL 1.4 files with no ADL 2 twin: **%s**\n\n' "$adl_only"
+    cat <<'PROSE'
+A wire battery driving the pairs through the DEFINITION API would
+exercise the pack further. That is catalogue work: no case sources
+a file from this tree today.
+PROSE
     printf '\nNever hand-edit a vendored fixture; re-run this script and bump the pin.\n'
   } > "$CKM_PAIRS_DEST/PROVENANCE.md"
 

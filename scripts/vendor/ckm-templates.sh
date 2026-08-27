@@ -234,10 +234,25 @@ if [[ "$MODE" != curated ]]; then
     echo "by CKM itself as an Operational Template and vendored verbatim by"
     echo "\`scripts/vendor/ckm-templates.sh\` on $STAMP."
     echo
-    echo "This is the BREADTH pack: real-world OPT 1.4 shapes for the reader /"
-    echo "WebTemplate builder gates. The curated hospital-simulation journey"
-    echo "pack is the parent directory (its own \`PROVENANCE.md\`); the slugs here"
-    echo "are derived from CKM display names and are NOT a naming contract."
+    echo "This is the BREADTH pack: every OPT 1.4 shape CKM publishes, kept for"
+    echo "the reach it gives over real-world template structure. The curated"
+    echo "hospital-simulation journey pack is the parent directory (its own"
+    echo "\`PROVENANCE.md\`); the slugs here are derived from CKM display names"
+    echo "and are NOT a naming contract."
+    echo
+    echo "## What exercises this pack"
+    echo
+    echo "\`tests/it/corpus_packs.rs\` reads every file in the tree and pins what"
+    echo "this instrument can check first-hand: the vendored count against the"
+    echo "inventory below, the file names against the Vendored table below, and"
+    echo "each export parsed to end of input as a well-formed XML document whose"
+    echo "root element is an openEHR \`template\` carrying a non-empty"
+    echo "\`template_id\`. This instrument ships no OPT reader and no WebTemplate"
+    echo "builder, so nothing here interprets a template body."
+    echo
+    echo "A wire battery uploading the library through the DEFINITION API would"
+    echo "exercise the pack further. That is catalogue work: no case sources a"
+    echo "file from this tree today."
     echo
     echo "## Licensing"
     echo
