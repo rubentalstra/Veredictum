@@ -1729,7 +1729,9 @@ catalogue, **capability matrix**):
    verdict-bearing capability it lists `Failed` (which is why `capabilities`
    stays minimal and coverage moves to `exercises`, §8.3). Capability
    evidence: `Passed` (≥1 case ran, none failed) / `Failed` /
-   `NotEvidenced` / `NoCases` (a printed coverage bound). Profile verdicts
+   `Inconclusive` / `NotEvidenced` / `NotClaimed` (the printed coverage
+   bounds; the former `Unrealized`/`NoCases` states are unrepresentable
+   since the #626 ratchet). Profile verdicts
    per the capability matrix: CORE/STANDARD = all required capabilities
    `Passed`; OPTIONS = any. `report_only`-disposition cases (AMB-5, AMB-29)
    report but never gate.
