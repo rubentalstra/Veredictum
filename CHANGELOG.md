@@ -20,6 +20,16 @@ version on.
 
 ### Added
 
+- **The console's read surfaces (#64).** The instrument landing shows the
+  catalogue's own numbers — case cores, bindings, party statements, findings
+  — read once at startup through the published lib, from the same
+  expressions the validate summary prints (held by a test), with the mounts
+  named and a full-screen explanation when no catalogue is mounted
+  (`VEREDICTUM_ROOT` / `VEREDICTUM_SPECS`; the image defaults them to the
+  documented `/work` mount). The catalogue explorer walks chapters → cases →
+  one case in full: the test purpose, every spec citation verbatim, the
+  realizing bindings with their realized/unrealized state, and the corpus
+  references — filter, search and paging all in the URL.
 - **The console's shell and design system (#63).** The sidebar chrome — the
   seal, one entry per surface, the engine pin and a dark-mode toggle in the
   footer — around every routed page, in the brand palette as semantic design

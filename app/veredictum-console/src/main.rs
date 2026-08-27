@@ -7,6 +7,14 @@
 //! workspace stays green; the shipped binary is always the `ssr` shape
 //! (`bin-features` in `Cargo.toml`).
 //!
+//! Startup diagnostics go to stderr — the binary entry point relaxes the
+//! print lints at its own root, the same adjudication as the instrument's
+//! CLI (`app/veredictum/src/bin/veredictum.rs`).
+#![allow(
+    clippy::print_stderr,
+    reason = "the server binary's startup diagnostics belong on stderr, where an operator tailing the container sees them; library code stays restricted"
+)]
+
 //! Container duties live here because the image is distroless: the binary is
 //! PID 1 (exec-form ENTRYPOINT), so it must handle SIGTERM itself for
 //! `docker stop` to end it gracefully instead of by SIGKILL after the grace
@@ -38,16 +46,38 @@ async fn main() -> anyhow::Result<()> {
     let leptos_options = conf.leptos_options;
     let routes = generate_route_list(App);
 
+    // The catalogue loads ONCE, before the listener binds: every request
+    // shares the same startup read, and a missing mount is a first-class
+    // state the screens explain rather than a crash (#64).
+    let state = veredictum_console::state::ConsoleState::load();
+    if let Err(reason) = state.catalogue.as_ref() {
+        // Named on stderr too, so an operator tailing the container sees it
+        // without opening the UI. The body never reaches a log — this is a
+        // load diagnostic about a mount, not SUT data.
+        eprintln!(
+            "veredictum-console: no catalogue at {}: {reason}",
+            state.root.display()
+        );
+    }
+
     let app = axum::Router::new()
         // The liveness endpoint the container HEALTHCHECK and any
         // orchestrator probe read. Deliberately outside the Leptos route
         // tree: it must answer even if the WASM bundle or the app shell is
         // broken, because it claims only "the server accepts connections".
         .route("/healthz", axum::routing::get(|| async { "ok" }))
-        .leptos_routes(&leptos_options, routes, {
-            let leptos_options = leptos_options.clone();
-            move || shell(leptos_options.clone())
-        })
+        .leptos_routes_with_context(
+            &leptos_options,
+            routes,
+            {
+                let state = state.clone();
+                move || leptos::prelude::provide_context(state.clone())
+            },
+            {
+                let leptos_options = leptos_options.clone();
+                move || shell(leptos_options.clone())
+            },
+        )
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptos_options);
 
