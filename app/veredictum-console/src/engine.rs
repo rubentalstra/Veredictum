@@ -496,9 +496,36 @@ pub fn verdicts_args(spec: &VerdictsSpec) -> Vec<std::ffi::OsString> {
     args
 }
 
+/// Returns a value's published token: the lib's own serialization, without
+/// its JSON quotes.
+///
+/// The console mirrors no vocabulary of its own, so a token on a surface is
+/// the engine's spelling of the engine's value. A serialization failure is
+/// returned, never absorbed: a blank token on a results row or a seal card
+/// is a wrong answer nobody can see.
+///
+/// # Errors
+/// The value's `serde_json` failure, verbatim.
+pub fn token<T: serde::Serialize>(value: &T) -> Result<String, serde_json::Error> {
+    Ok(serde_json::to_string(value)?.trim_matches('"').to_owned())
+}
+
+/// Returns an optional value's published token, absent for an absent value.
+///
+/// # Errors
+/// The value's `serde_json` failure, verbatim.
+pub fn opt_token<T: serde::Serialize>(
+    value: Option<&T>,
+) -> Result<Option<String>, serde_json::Error> {
+    value.map(token).transpose()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Credential, ENGINE_VERSION, RunSpec, Secret, VerdictsSpec, args, verdicts_args};
+    use super::{
+        Credential, ENGINE_VERSION, RunSpec, Secret, VerdictsSpec, args, opt_token, token,
+        verdicts_args,
+    };
 
     /// The manifest's crates.io pin and [`ENGINE_VERSION`] are one fact in
     /// two places; this is the lock between them.
@@ -652,6 +679,41 @@ mod tests {
             !rendered.iter().any(|a| a.contains("passphrase")),
             "{rendered:?}"
         );
+    }
+
+    /// The console renders the engine's spelling, so a token is locked to the
+    /// lib's own serialization rather than to a mirrored table.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+    )]
+    #[test]
+    fn a_token_is_the_libs_own_spelling_without_its_quotes() -> Result<(), serde_json::Error> {
+        assert_eq!(
+            token(&veredictum::party::OutcomeStatus::NotApplicable)?,
+            "not_applicable"
+        );
+        assert_eq!(token(&veredictum::vocab::Tier::SecBasic)?, "SEC-BASIC");
+        assert_eq!(token(&veredictum::vocab::FormatName::WtFlat)?, "wt-flat");
+        assert_eq!(
+            token(&veredictum::perf::ClassVerdict::NotEarned)?,
+            "not-earned"
+        );
+        Ok(())
+    }
+
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+    )]
+    #[test]
+    fn an_absent_value_carries_no_token() -> Result<(), serde_json::Error> {
+        assert_eq!(
+            opt_token(Some(&veredictum::vocab::FormatName::Wt))?.as_deref(),
+            Some("wt")
+        );
+        assert_eq!(opt_token::<veredictum::vocab::FormatName>(None)?, None);
+        Ok(())
     }
 
     #[test]

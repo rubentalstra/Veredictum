@@ -137,16 +137,8 @@ pub mod read {
         DocumentView, ExchangeView, FailedRowView, ResultDetail, ResultRow, ResultsScreen,
         TranscriptView, VerdictsScreen,
     };
+    use crate::engine::{opt_token, token};
     use crate::state::ConsoleState;
-
-    /// A serde token without its quotes — the lib's own vocabulary, never a
-    /// mirrored one.
-    fn token<T: serde::Serialize>(value: &T) -> String {
-        serde_json::to_string(value)
-            .unwrap_or_default()
-            .trim_matches('"')
-            .to_owned()
-    }
 
     /// The finished job's results record, through the published lib.
     fn finished_results(
@@ -167,14 +159,21 @@ pub mod read {
     }
 
     /// Maps one outcome to its table row.
-    fn row_of(outcome: &veredictum::party::OutcomeRecord) -> ResultRow {
-        ResultRow {
+    ///
+    /// The status is the lib's own infallible token; the optional format is
+    /// read through the engine's serialization and its failure travels, so a
+    /// row can never render a blank format that reads as "none declared".
+    ///
+    /// # Errors
+    /// The format token's `serde_json` failure, verbatim.
+    fn row_of(outcome: &veredictum::party::OutcomeRecord) -> Result<ResultRow, serde_json::Error> {
+        Ok(ResultRow {
             case: outcome.case.to_string(),
-            format: outcome.format.as_ref().map(token),
-            status: token(&outcome.status),
+            format: opt_token(outcome.format.as_ref())?,
+            status: outcome.status.token().to_owned(),
             rows: format!("{}/{}", outcome.rows_driven, outcome.rows_total),
             reason: outcome.reason.clone(),
-        }
+        })
     }
 
     /// The red-first ordering: failures, then errors, then the rest, id-tied.
@@ -205,16 +204,17 @@ pub mod read {
             .outcomes
             .iter()
             .map(|outcome| {
-                let row = row_of(outcome);
+                let row = row_of(outcome)?;
                 match row.status.as_str() {
                     "passed" => tallies.0 += 1,
                     "failed" => tallies.1 += 1,
                     "errored" => tallies.2 += 1,
                     _ => tallies.3 += 1,
                 }
-                row
+                Ok(row)
             })
-            .collect();
+            .collect::<Result<Vec<ResultRow>, serde_json::Error>>()
+            .map_err(|e| format!("a result row did not render: {e}"))?;
         red_first(&mut rows);
         Ok(Some(ResultsScreen {
             sut: format!("{} {}", results.sut.name, results.sut.version),
@@ -343,12 +343,16 @@ pub mod read {
         format: Option<&str>,
     ) -> Result<TranscriptView, serde_json::Error> {
         let transcript: wire::Transcript = serde_json::from_str(body)?;
-        let exchanges = transcript
-            .cases
-            .iter()
-            .find(|entry| {
-                entry.case == case && entry.format.as_ref().map(token).as_deref() == format
-            })
+        // The format token can fail to render, so the match is scanned rather
+        // than closed over: a `find` predicate has nowhere to put the error.
+        let mut matched = None;
+        for entry in &transcript.cases {
+            if entry.case == case && opt_token(entry.format.as_ref())?.as_deref() == format {
+                matched = Some(entry);
+                break;
+            }
+        }
+        let exchanges = matched
             .map(|entry| {
                 entry
                     .exchanges
@@ -384,10 +388,18 @@ pub mod read {
         let Some((results, results_path)) = finished_results(state)? else {
             return Ok(None);
         };
-        let Some(outcome) = results.outcomes.iter().find(|outcome| {
-            outcome.case.to_string() == case
-                && outcome.format.as_ref().map(token).as_deref() == format
-        }) else {
+        // Scanned rather than closed over, for the reason `narrow` gives: the
+        // format token's failure has nowhere to go inside a `find` predicate.
+        let mut matched = None;
+        for outcome in &results.outcomes {
+            let held = opt_token(outcome.format.as_ref())
+                .map_err(|e| format!("a recorded format did not render: {e}"))?;
+            if outcome.case.to_string() == case && held.as_deref() == format {
+                matched = Some(outcome);
+                break;
+            }
+        }
+        let Some(outcome) = matched else {
             return Ok(None);
         };
         let (test_purpose, spec_refs) = match state.catalogue.as_ref() {
@@ -403,7 +415,7 @@ pub mod read {
             Err(_) => (None, Vec::new()),
         };
         Ok(Some(ResultDetail {
-            row: row_of(outcome),
+            row: row_of(outcome).map_err(|e| format!("a result row did not render: {e}"))?,
             citation: outcome.citation.clone(),
             failing_step: outcome.failing_step,
             failed_rows: outcome
@@ -452,14 +464,16 @@ pub mod read {
                 .report
                 .profiles
                 .iter()
-                .map(|(tier, verdict)| (token(tier), token(verdict)))
-                .collect(),
+                .map(|(tier, verdict)| Ok((token(tier)?, token(verdict)?)))
+                .collect::<Result<Vec<(String, String)>, serde_json::Error>>()
+                .map_err(|e| format!("a profile verdict did not render: {e}"))?,
             capabilities: judgement
                 .report
                 .capabilities
                 .iter()
-                .map(|(name, evidence)| (name.to_string(), token(evidence)))
-                .collect(),
+                .map(|(name, evidence)| Ok((name.to_string(), token(evidence)?)))
+                .collect::<Result<Vec<(String, String)>, serde_json::Error>>()
+                .map_err(|e| format!("a capability verdict did not render: {e}"))?,
             documents: judgement
                 .documents
                 .iter()

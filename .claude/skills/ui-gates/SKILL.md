@@ -38,10 +38,12 @@ leptosfmt --check app/veredictum-console/src
 cargo clippy -p veredictum-console --all-targets --features ssr
 cargo clippy -p veredictum-console --lib --target wasm32-unknown-unknown --no-default-features --features hydrate
 
-# 3. Tests — the workspace suite, plus the ssr shape once ssr-gated test
-#    modules exist (a featureless run silently skips every
-#    #[cfg(feature = "ssr")] module)
-cargo nextest run
+# 3. Tests — BOTH invocations CI runs. The workspace pass compiles the
+#    console featureless, which silently skips every
+#    #[cfg(feature = "ssr")] module, so the ssr pass is the one that runs
+#    the server-side readers' tests at all
+cargo nextest run --locked --workspace
+cargo nextest run --locked -p veredictum-console --features ssr
 
 # 4. Full build (server bin + WASM + assets) — only when the change
 #    touches the build surface (Cargo.toml, styles, assets, features);
