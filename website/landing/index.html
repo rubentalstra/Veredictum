@@ -281,23 +281,26 @@
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">Quick start</span>
-        <h2>Install it, then check the catalogue</h2>
-        <p>The catalogue and the vendored specification oracle are 347 MB of
-          data that no registry accepts, so the instrument reads both as paths
-          you pass it and the repository is where they live.</p>
+        <h2>Two products, one engine</h2>
+        <p>The <code>veredictum</code> CLI installs from crates.io or a signed
+          release binary; the container image is the web console, a browser
+          frontend over the same pinned CLI. The catalogue and the vendored
+          specification oracle are over 300&nbsp;MB of data that no registry
+          accepts, so both products read them as paths into a clone of the
+          repository.</p>
       </div>
       <figure class="code">
-        <figcaption>With cargo</figcaption>
+        <figcaption>The CLI, with cargo</figcaption>
         <pre><code><span class="cmt"># A pre-release needs its version named.</span>
-<span class="p">$</span> cargo install veredictum --locked --version 0.1.0-alpha.3
+<span class="p">$</span> cargo install veredictum --locked --version 0.1.0-alpha.4
 <span class="p">$</span> veredictum validate --root artifacts --specs specs/openehr</code></pre>
       </figure>
       <figure class="code">
-        <figcaption>With Docker</figcaption>
-        <pre><code><span class="cmt"># Mount the clone at /work. The entrypoint is the instrument itself,</span>
-<span class="cmt"># so the arguments are the ordinary subcommands.</span>
-<span class="p">$</span> docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:&lt;tag&gt; \
-      validate --root /work/artifacts --specs /work/specs/openehr</code></pre>
+        <figcaption>The web console, with Docker</figcaption>
+        <pre><code><span class="cmt"># The image is the web console — a browser frontend that drives the</span>
+<span class="cmt"># same pinned CLI. It has no login, so keep it on loopback.</span>
+<span class="p">$</span> docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD:/work" \
+      ghcr.io/rubentalstra/veredictum:&lt;tag&gt;</code></pre>
       </figure>
       <p class="after-code">Prebuilt binaries for x86_64 and aarch64 Linux are
         attached to each release, every one with a checksum, a CycloneDX
@@ -317,7 +320,7 @@
         <a class="link-card" href="./docs/"><b>Documentation</b><span>Installation, the command surface, the method, catalogue authoring</span></a>
         <a class="link-card" href="https://github.com/rubentalstra/Veredictum" rel="noopener"><b>GitHub</b><span>The source, the catalogue and the vendored specification oracle</span></a>
         <a class="link-card" href="https://crates.io/crates/veredictum" rel="noopener"><b>crates.io</b><span>The binary and the library, published as one crate</span></a>
-        <a class="link-card" href="https://github.com/rubentalstra/Veredictum/pkgs/container/veredictum" rel="noopener"><b>Container image</b><span>ghcr.io/rubentalstra/veredictum, multi-architecture</span></a>
+        <a class="link-card" href="https://github.com/rubentalstra/Veredictum/pkgs/container/veredictum" rel="noopener"><b>The web console image</b><span>ghcr.io/rubentalstra/veredictum — the browser frontend, multi-architecture</span></a>
         <a class="link-card" href="https://github.com/rubentalstra/Veredictum/releases" rel="noopener"><b>Releases</b><span>Binaries, checksums, SBOMs and Sigstore bundles</span></a>
         <a class="link-card" href="https://doi.org/10.5281/zenodo.22113258" rel="noopener"><b>Archived record</b><span>The Zenodo concept DOI, 10.5281/zenodo.22113258</span></a>
       </div>
