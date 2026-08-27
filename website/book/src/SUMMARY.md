@@ -8,3 +8,4 @@
 - [The web console](console.md)
 - [The conformance method](methodology.md)
 - [Authoring the catalogue](catalogue.md)
+- [Glossary](glossary.md)
