@@ -1,4 +1,4 @@
-# CNF version-signing test keys (OpenPGP, RFC 4880)
+# CNF version-signing test keys (OpenPGP, RFC 9580)
 
 **Test-only key material** for the openPGP-posture half of every conformance
 run. Not a secret: it exists so the composed SUT can sign VERSIONs with a known
@@ -7,13 +7,18 @@ key (RM common `master06-change_control_package.adoc` §Digital Signature — th
 signature is generated per the openPGP standard). Never use these keys for
 anything real.
 
+The RM's own wording names IETF RFC 4880, and the catalogue's SIG-VERSION
+cases quote it that way. Everything describing what this repository verifies
+cites RFC 9580 instead: it obsoletes RFC 4880, and it is the revision the
+pinned `pgp` crate implements.
+
 - `cnf-signing.sec.asc` — the armored OpenPGP **secret** key (no passphrase).
   Mounted into the pgp-posture deployment (`docker/sut-signing-pgp.yml`) as
   `FERROEHR__SIGNING__KEY_PATH`; that deployment signs each committed VERSION
   with it.
 - `cnf-signing.pub.asc` — the armored OpenPGP **public** key. Inlined into the
   `sut_pgp` instance's own `signing` block (`party/ferroehr/ixit.json`); the
-  runner verifies `ORIGINAL_VERSION.signature` against it (RFC 4880 detached
+  runner verifies `ORIGINAL_VERSION.signature` against it (RFC 9580 detached
   signature over the agreed canonical form: RFC 8785 JCS of the version minus
   `signature`).
 

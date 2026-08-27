@@ -50,7 +50,7 @@ pub enum SigningMode {
         #[serde(default)]
         prefix: String,
     },
-    /// openPGP (RFC 4880): a detached armored signature over the canonical
+    /// openPGP (RFC 9580): a detached armored signature over the canonical
     /// bytes, verified against the declared public key.
     Pgp {
         /// The armored public key the detached signature is verified against.
@@ -74,7 +74,7 @@ pub fn canonical_form(envelope: &Value) -> Result<String, String> {
 /// Whether `signature` verifies over the reconstructed canonical form of
 /// `envelope` under `mode`.
 ///
-/// Digest mode recomputes and compares; pgp mode verifies the RFC 4880
+/// Digest mode recomputes and compares; pgp mode verifies the RFC 9580
 /// detached signature against the declared key.
 ///
 /// # Errors
@@ -110,7 +110,7 @@ fn recompute_digest(bytes: &[u8], algorithm: &str, encoding: &str) -> Result<Str
     }
 }
 
-/// Verify an RFC 4880 detached signature over `bytes` against an armored
+/// Verify an RFC 9580 detached signature over `bytes` against an armored
 /// public key.
 ///
 /// # Errors
@@ -120,6 +120,9 @@ fn verify_pgp(
     signature_armored: &str,
     public_key_armored: &str,
 ) -> Result<bool, String> {
+    // NOTE: RFC 9580 obsoletes RFC 4880 and is what `pgp` 0.20 implements, so
+    // it is this verifier's citation; the RM's own wording naming RFC 4880 is
+    // quoted only where the catalogue states the requirement.
     use pgp::composed::{Deserializable as _, DetachedSignature, SignedPublicKey};
 
     let (key, _) = SignedPublicKey::from_string(public_key_armored)
