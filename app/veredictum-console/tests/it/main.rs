@@ -13,6 +13,8 @@ mod e2e_console;
 #[cfg(feature = "ssr")]
 mod engine_gate;
 #[cfg(feature = "ssr")]
+mod export_gate;
+#[cfg(feature = "ssr")]
 mod read_surfaces;
 #[cfg(feature = "ssr")]
 mod run_live;

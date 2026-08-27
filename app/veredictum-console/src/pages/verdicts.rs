@@ -8,18 +8,22 @@
 //! the same lib function.
 
 use leptos::prelude::{
-    AddAnyAttr, ClassAttribute, CollectView, ElementChild, IntoAny, IntoView, Resource, Suspend,
-    Suspense, component, view,
+    Action, AddAnyAttr, ClassAttribute, CollectView, ElementChild, Get, IntoAny, IntoView,
+    OnAttribute, PropAttribute, Resource, RwSignal, Set, Suspend, Suspense, Transition, component,
+    view,
 };
 use leptos_meta::Title;
 use leptos_router::components::A;
 
 use crate::components::data_table::{TABLE, TABLE_WRAP, TD, TH};
 use crate::components::empty_state::EmptyState;
-use crate::components::field::BTN_SECONDARY;
+use crate::components::field::{BTN_PRIMARY, BTN_SECONDARY};
 use crate::components::format_view::{Pane, inline_error};
 use crate::components::page_header::{Crumb, PageHeader};
-use crate::components::surface::{CARD_PAD, CARD_TITLE};
+use crate::components::surface::{CARD_PAD, CARD_TITLE, WELL};
+use crate::components::toast::{self, Intent, MessageBar};
+use crate::export_api::fns::{fetch_export, prepare_export};
+use crate::export_api::{DOWNLOAD_PATH, ExportScreen, ExportSummary};
 use crate::pages::run::steps;
 use crate::record_api::VerdictsScreen;
 use crate::record_api::fns::fetch_verdicts;
@@ -101,6 +105,11 @@ pub fn Verdicts() -> impl IntoView {
                 }
             })}
         </Suspense>
+        // OUTSIDE the Suspense on purpose: this section owns a resource, and
+        // a Suspend closure re-runs on every notification of what it awaits,
+        // re-creating everything inside it — which diverges the server's and
+        // the client's resource id spaces and breaks hydration (rules §4).
+        <Export />
     }
 }
 
@@ -189,9 +198,207 @@ fn judged_view(
         <section class="mt-2">
             <h2 class=format!("{CARD_TITLE} mt-4")>"The rendered documents"</h2>
             <p class="text-sm text-ink-muted">
-                "Byte-for-byte the bodies the command line writes — the same pure function produced them. The signed export bundle is under construction (#68)."
+                "Byte-for-byte the bodies the command line writes — the same pure function produced them."
             </p>
             {panes}
         </section>
+    }
+}
+
+/// S8 — the export section: one step that seals the record and renders what a
+/// party publishes beside it.
+///
+/// Private, so the crate's `must_use_candidate` relaxation does not apply:
+/// that lint reads public items only.
+#[component]
+fn Export() -> impl IntoView {
+    let state = Resource::new(|| (), |()| fetch_export());
+    // The inline bar sits BESIDE the toast, never instead of it: a transient
+    // success with a silent failure below the fold reads as "nothing
+    // happened" (the crate CLAUDE.md doctrine).
+    let note = RwSignal::new(None::<Result<String, String>>);
+    let running = RwSignal::new(false);
+    // The sanctioned dispatch-continuation shape: the click is the event, the
+    // answer lands in the action's own async block (rules §2). The sealed
+    // bundle itself is never mirrored into a second signal — the resource is
+    // refetched and stays the one reader of that fact, so nothing writes a
+    // render-visible signal from inside a Suspend.
+    let prepare = Action::new(move |(): &()| async move {
+        running.set(true);
+        match prepare_export().await {
+            Ok(summary) => {
+                let body = format!(
+                    "{} sealed as record {}, signed {}.",
+                    summary.sut, summary.digest_prefix, summary.signed_at
+                );
+                toast::success("Export prepared", &body);
+                note.set(Some(Ok(body)));
+                state.refetch();
+            }
+            Err(e) => {
+                let body = e.to_string();
+                toast::error("The export was refused", &body);
+                note.set(Some(Err(body)));
+            }
+        }
+        running.set(false);
+    });
+
+    view! {
+        <section class=format!("{CARD_PAD} mt-4")>
+            <h2 class=CARD_TITLE>"Export the signed record"</h2>
+            <p class="mb-3 text-sm text-ink-muted">
+                "The engine seals the rendered documents with a digest manifest and a detached signature. Beside them the console writes the seal card, the badge and a self-contained report, each carrying the record digest so the artwork names the bytes it certifies."
+            </p>
+            // A Transition rather than a Suspense: the refetch after a
+            // successful seal keeps the section's content in place instead of
+            // flashing the fallback (rules §6).
+            <Transition fallback=|| {
+                view! { <p class="text-sm text-ink-muted">"Reading the export state…"</p> }
+            }>
+                {move || Suspend::new(async move {
+                    match state.await {
+                        Ok(screen) => export_view(screen, prepare, running).into_any(),
+                        Err(e) => inline_error(&e.to_string()).into_any(),
+                    }
+                })}
+            </Transition>
+            {move || {
+                note.get()
+                    .map(|outcome| {
+                        let (intent, message) = match outcome {
+                            Ok(body) => (Intent::Success, body),
+                            Err(body) => (Intent::Error, body),
+                        };
+                        view! {
+                            <div class="mt-3">
+                                <MessageBar intent=intent message=message />
+                            </div>
+                        }
+                    })
+            }}
+        </section>
+    }
+}
+
+/// The section's state before, or without, a prepared bundle.
+fn export_view(
+    screen: ExportScreen,
+    prepare: Action<(), ()>,
+    running: RwSignal<bool>,
+) -> impl IntoView + use<> {
+    match screen {
+        ExportScreen::Prepared(summary) => prepared_view(&summary).into_any(),
+        ExportScreen::Ready => {
+            view! {
+                <button
+                    type="button"
+                    class=BTN_PRIMARY
+                    prop:disabled=move || running.get()
+                    on:click=move |_| {
+                        prepare.dispatch(());
+                    }
+                >
+                    {move || if running.get() { "Sealing…" } else { "Prepare the export" }}
+                </button>
+            }
+                .into_any()
+        }
+        ExportScreen::NoKey { missing } => {
+            view! {
+                <div class=WELL>
+                    <p class="text-sm text-ink">
+                        "No signing posture is configured, so nothing here can be sealed."
+                    </p>
+                    <p class="mt-1 text-sm text-ink-muted">
+                        "Mount an armored OpenPGP key pair and name it: "
+                        <span class="font-mono text-xs">{missing.join(", ")}</span>
+                        ". The secret key seals the bundle; the public key is what the console checks its own seal against, because it never prints a signing time it has not verified."
+                    </p>
+                </div>
+            }
+                .into_any()
+        }
+        ExportScreen::NoStatement => {
+            view! {
+                <p class="text-sm text-ink-muted">
+                    "The run was driven without a statement, so there is no claim to certify. Pick one at the Scope step and run again."
+                </p>
+            }
+                .into_any()
+        }
+        ExportScreen::NoRun => {
+            view! {
+                <p class="text-sm text-ink-muted">
+                    "An export certifies a finished run; there is none yet."
+                </p>
+            }
+                .into_any()
+        }
+    }
+}
+
+/// The prepared bundle: what was sealed, the download, and the snippets.
+fn prepared_view(summary: &ExportSummary) -> impl IntoView + use<> {
+    let sealed_rows = summary
+        .sealed_files
+        .iter()
+        .map(|name| {
+            view! { <li class="font-mono text-xs text-ink">{name.clone()}</li> }
+        })
+        .collect_view();
+    let presentation_rows = summary
+        .presentation_files
+        .iter()
+        .map(|name| {
+            view! { <li class="font-mono text-xs text-ink">{name.clone()}</li> }
+        })
+        .collect_view();
+    view! {
+        <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div class=WELL>
+                <h3 class="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    "What was sealed"
+                </h3>
+                <dl class="mt-2 space-y-1 text-sm">
+                    <dt class="text-ink-muted">"Record digest"</dt>
+                    <dd class="break-all font-mono text-xs text-ink">{summary.digest.clone()}</dd>
+                    <dt class="text-ink-muted">"Signer fingerprint"</dt>
+                    <dd class="break-all font-mono text-xs text-ink">
+                        {summary.fingerprint.clone()}
+                    </dd>
+                    <dt class="text-ink-muted">"Signing time"</dt>
+                    <dd class="font-mono text-xs text-ink">{summary.signed_at.clone()}</dd>
+                </dl>
+                <h3 class="mt-3 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    "In the manifest"
+                </h3>
+                <ul class="mt-1 space-y-0.5">{sealed_rows}</ul>
+                <h3 class="mt-3 text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    "Beside it, outside the manifest"
+                </h3>
+                <ul class="mt-1 space-y-0.5">{presentation_rows}</ul>
+            </div>
+            <div class=WELL>
+                <h3 class="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                    "Publish it"
+                </h3>
+                // A server-owned axum route, so the anchor is external: after
+                // hydration the client router would otherwise intercept it
+                // and 404 a route it does not own (rules §4).
+                <a href=DOWNLOAD_PATH rel="external" class=format!("{BTN_PRIMARY} mt-2")>
+                    "Download the bundle"
+                </a>
+                <p class="mt-3 text-sm text-ink-muted">
+                    "The snippets point at "
+                    <span class="font-mono text-xs">"record-badge.svg"</span>
+                    " beside wherever you publish the record; change the path to your own hosting."
+                </p>
+                <div class="mt-2 space-y-2">
+                    <Pane label="badge · markdown" body=summary.badge_markdown.clone() />
+                    <Pane label="badge · html" body=summary.badge_html.clone() />
+                </div>
+            </div>
+        </div>
     }
 }

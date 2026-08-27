@@ -20,6 +20,32 @@ version on.
 
 ### Added
 
+- **The console exports a signed record, and anyone can check one (#68).** The
+  verdicts screen gains one step that hands the finished run to the pinned
+  instrument's own `verdicts --sign-key`: the rendered documents, a digest
+  manifest over them, and a detached OpenPGP signature over that manifest. The
+  console seals nothing itself. Beside the sealed set it renders three files a
+  party publishes, each carrying the record digest prefix that ties it to the
+  signed bytes — the brand's seal card with its three slots filled from the
+  record, a compact badge SVG with copy-paste markdown and HTML snippets, and
+  a self-contained HTML report of the results and verdicts surfaces whose
+  footer carries the full digest, the signer fingerprint and the signing time.
+  All three are pure functions of the record, so the same bundle reproduces
+  the same bytes. The whole bundle downloads as one archive.
+- **`/verify` is a public record check (#68).** No run, no server and no
+  account: upload a bundle and the published library recomputes every digest
+  its manifest names and checks the detached signature. A tampered file names
+  itself. The upload is a plain HTML form posting to a server route, so it
+  works with no JavaScript at all; uploaded bundles are transient and swept on
+  a short timer. The honesty box renders on every outcome — a valid signature
+  proves integrity and origin since signing, not the run's conditions, not the
+  system under test's identity claims, not the catalogue's coverage — and the
+  page prints the `veredictum verify-record` equivalent beside it, so nobody
+  has to trust the console to check the console.
+- **The export surfaces carry the openEHR trademark acknowledgment and the
+  independence disclaimer visibly (#94).** The seal card renders it in its
+  caption area and the report in its footer, because those are what a party
+  publishes.
 - **`run --record-exchanges` persists the wire (#96).** The flag writes
   `transcript.json` beside `results.json`: per case, in send order, the
   request line, request headers and request body, and the response status,
@@ -39,6 +65,18 @@ version on.
   it, and the results drawer renders each recorded exchange as request and
   response panes. A run driven without the flag says so where the wire would
   be.
+
+### Changed
+
+- **The console reads two new environment variables.** `VEREDICTUM_SIGN_KEY`
+  names the armored OpenPGP secret key the export seals with, and
+  `VEREDICTUM_VERIFY_KEY` names the public half. Both are optional and both
+  unset is a first-class state the surfaces explain rather than an error. The
+  export asks for the public key too because it verifies its own bundle before
+  stating who signed it and when: it never prints a signing time it has not
+  checked. A passphrase reaches the spawned instrument through
+  `VEREDICTUM_SIGN_PASSPHRASE` and its child environment only — never a
+  signal, a file, a command line, or a log line.
 
 ### Fixed
 

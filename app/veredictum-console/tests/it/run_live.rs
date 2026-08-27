@@ -200,6 +200,8 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
             filter: None,
             record_exchanges: false,
         }))),
+        sign_key: None,
+        verify_key: None,
         jobs: JobSlot::default(),
     };
     let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
@@ -338,6 +340,8 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
             filter: None,
             record_exchanges: false,
         }))),
+        sign_key: None,
+        verify_key: None,
         jobs: JobSlot::default(),
     };
 

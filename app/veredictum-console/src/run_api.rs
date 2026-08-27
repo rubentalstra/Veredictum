@@ -381,6 +381,13 @@ pub mod read {
         let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
         let out_dir = state.out.join(format!("console-job-{id}"));
         std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
+        // A run into this directory invalidates any export of it (#68). The
+        // job counter restarts with the console process while the output
+        // mount persists, so a fresh run CAN land on an older run's
+        // directory — and a sealed bundle left there certifies the documents
+        // of the run before it. Leaving it would let the export surface
+        // present one run's signature as another run's record.
+        crate::export_api::prepare::invalidate(&out_dir)?;
         let ixit_path = out_dir.join("ixit.json");
         std::fs::write(&ixit_path, ixit_document(draft))
             .map_err(|e| format!("{}: {e}", ixit_path.display()))?;

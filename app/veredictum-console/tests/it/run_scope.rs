@@ -54,6 +54,8 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
         ),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        sign_key: None,
+        verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
     };
     let preview = veredictum_console::run_api::read::scope_preview(&state, SCOPE_FILTER)
@@ -125,6 +127,8 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
         out: "out".into(),
         catalogue: std::sync::Arc::new(Err(String::from("unused"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        sign_key: None,
+        verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
     };
     veredictum_console::run_api::read::save_connection(
@@ -186,6 +190,8 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
             filter: None,
             record_exchanges: false,
         }))),
+        sign_key: None,
+        verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
     }
 }

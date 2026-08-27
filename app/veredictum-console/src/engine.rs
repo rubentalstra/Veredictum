@@ -92,6 +92,26 @@ pub struct RunSpec {
     pub record_exchanges: bool,
 }
 
+/// What to judge and seal, mirroring the `veredictum verdicts` CLI surface
+/// one to one — this type ADDS nothing to it, which is the point of the seam.
+///
+/// The passphrase is deliberately absent: [`Engine::verdicts`] reads it from
+/// the console's own environment at spawn time and puts it in the child's,
+/// so it never lands in a struct anything could print or serialize.
+#[derive(Debug)]
+pub struct VerdictsSpec {
+    /// The party statement the run was graded against.
+    pub statement: PathBuf,
+    /// The party results the run produced.
+    pub results: PathBuf,
+    /// The artifact root the judgement reads.
+    pub root: PathBuf,
+    /// The directory the rendered documents and the sealed set land in.
+    pub out_dir: PathBuf,
+    /// The armored secret key that seals the bundle, when one is mounted.
+    pub sign_key: Option<PathBuf>,
+}
+
 /// One line of the running engine's own output, as it happens.
 #[derive(Debug)]
 pub enum Line {
@@ -144,6 +164,13 @@ pub enum Error {
         /// Why it could not be read.
         #[source]
         source: std::io::Error,
+    },
+    /// The judgement subcommand exited non-zero; the field is the engine's
+    /// own diagnostic, verbatim.
+    #[error("the engine refused the judgement: {diagnostic}")]
+    Judgement {
+        /// What the engine printed, trimmed.
+        diagnostic: String,
     },
     /// The results document did not parse as the published record.
     #[error("the results document at {path} does not parse as the published record: {source}")]
@@ -207,6 +234,42 @@ impl Engine {
     pub fn run(&self, spec: &RunSpec, on_line: impl FnMut(Line)) -> Result<Finished, Error> {
         let running = self.spawn(spec)?;
         running.stream(on_line)
+    }
+
+    /// Renders and seals the judgement documents by running the pinned
+    /// binary's `verdicts` subcommand to completion.
+    ///
+    /// The sealing itself is the engine's (`veredictum::record`), never the
+    /// console's: this call supplies the key path and reads back what the
+    /// binary wrote. The passphrase is read from
+    /// [`crate::state::SIGN_PASSPHRASE_ENV`] here and set on the child only,
+    /// so it reaches no console state, no file and no log line.
+    ///
+    /// # Errors
+    /// [`Error::Execute`] when the process cannot run, and
+    /// [`Error::Judgement`] carrying the engine's own diagnostic when it
+    /// exits non-zero.
+    pub fn verdicts(&self, spec: &VerdictsSpec) -> Result<(), Error> {
+        let mut command = std::process::Command::new(&self.binary);
+        command
+            .args(verdicts_args(spec))
+            .stdin(std::process::Stdio::null());
+        if let Ok(passphrase) = std::env::var(crate::state::SIGN_PASSPHRASE_ENV) {
+            command.env(crate::state::SIGN_PASSPHRASE_ENV, passphrase);
+        }
+        let output = command.output().map_err(Error::Execute)?;
+        if output.status.success() {
+            return Ok(());
+        }
+        // stderr first, because the engine's refusals print there; stdout is
+        // the fallback for a binary that reported on the other stream.
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let diagnostic = if stderr.is_empty() {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        } else {
+            stderr
+        };
+        Err(Error::Judgement { diagnostic })
     }
 
     /// Spawns one run and hands back the handle that streams it — the split
@@ -411,9 +474,31 @@ pub fn args(spec: &RunSpec) -> Vec<std::ffi::OsString> {
     args
 }
 
+/// Assembles the exact `veredictum verdicts` argument vector for a spec —
+/// pure, so the mapping the export gate relies on is itself unit-tested.
+#[must_use]
+pub fn verdicts_args(spec: &VerdictsSpec) -> Vec<std::ffi::OsString> {
+    let mut args: Vec<std::ffi::OsString> = vec![
+        "verdicts".into(),
+        "--statement".into(),
+        spec.statement.clone().into(),
+        "--results".into(),
+        spec.results.clone().into(),
+        "--root".into(),
+        spec.root.clone().into(),
+        "--out".into(),
+        spec.out_dir.clone().into(),
+    ];
+    if let Some(key) = &spec.sign_key {
+        args.push("--sign-key".into());
+        args.push(key.clone().into());
+    }
+    args
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Credential, ENGINE_VERSION, RunSpec, Secret, args};
+    use super::{Credential, ENGINE_VERSION, RunSpec, Secret, VerdictsSpec, args, verdicts_args};
 
     /// The manifest's crates.io pin and [`ENGINE_VERSION`] are one fact in
     /// two places; this is the lock between them.
@@ -492,6 +577,80 @@ mod tests {
             !rendered(&spec).contains(&String::from("--record-exchanges")),
             "{:?}",
             rendered(&spec)
+        );
+    }
+
+    #[test]
+    fn the_judgement_argument_vector_mirrors_the_cli_surface() {
+        let spec = VerdictsSpec {
+            statement: "out/console-job-1/statement.json".into(),
+            results: "out/console-job-1/results.json".into(),
+            root: "artifacts".into(),
+            out_dir: "out/console-job-1/export".into(),
+            sign_key: Some("keys/cnf-signing.sec.asc".into()),
+        };
+        let rendered: Vec<String> = verdicts_args(&spec)
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            rendered,
+            [
+                "verdicts",
+                "--statement",
+                "out/console-job-1/statement.json",
+                "--results",
+                "out/console-job-1/results.json",
+                "--root",
+                "artifacts",
+                "--out",
+                "out/console-job-1/export",
+                "--sign-key",
+                "keys/cnf-signing.sec.asc",
+            ]
+        );
+    }
+
+    /// No key mounted means no `--sign-key`, so the engine renders the
+    /// documents unsealed rather than being handed an empty path.
+    #[test]
+    fn the_judgement_vector_omits_the_key_when_none_is_mounted() {
+        let spec = VerdictsSpec {
+            statement: "s.json".into(),
+            results: "r.json".into(),
+            root: "artifacts".into(),
+            out_dir: "export".into(),
+            sign_key: None,
+        };
+        let rendered: Vec<String> = verdicts_args(&spec)
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !rendered.contains(&String::from("--sign-key")),
+            "{rendered:?}"
+        );
+    }
+
+    /// The passphrase never becomes a command-line argument: it is visible to
+    /// every process on the host there, which is why the CLI takes it from
+    /// the environment.
+    #[test]
+    fn the_judgement_vector_never_carries_a_passphrase() {
+        let spec = VerdictsSpec {
+            statement: "s.json".into(),
+            results: "r.json".into(),
+            root: "artifacts".into(),
+            out_dir: "export".into(),
+            sign_key: Some("k.asc".into()),
+        };
+        let rendered: Vec<String> = verdicts_args(&spec)
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !rendered.iter().any(|a| a.contains("passphrase")),
+            "{rendered:?}"
         );
     }
 
