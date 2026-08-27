@@ -2,7 +2,7 @@
 # `ATTESTATION.reason` whose code is a REAL openEHR code but belongs to the
 # wrong group.
 #
-# RM common UML/classes/org.openehr.rm.common.attestation.adoc §Invariants,
+# RM UML/classes/attestation.adoc §Invariants,
 # verbatim: "__Reason_valid__: `(reason.generating_type.is_equal
 # (“DV_CODED_TEXT”) implies terminology (Terminology_id_openehr).
 # has_code_for_group_id (Group_id_attestation_reason, reason.defining_code))`".

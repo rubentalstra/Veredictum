@@ -4,7 +4,7 @@
 # accepted and readable back.
 #
 # WHAT THE ENVELOPE CARRIES, and why: RM common
-# UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes makes
+# UML/classes/audit_details.adoc §Attributes makes
 # `change_type` (DV_CODED_TEXT, "Coded using the openEHR Terminology  audit
 # change type  group") and `committer` (PARTY_PROXY) both `1..1`; TERM
 # SupportTerminology codesets/openehr_terminology-vocabularies.adoc §Audit

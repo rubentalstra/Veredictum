@@ -1,5 +1,5 @@
 # DEMOGRAPHIC ARCHETYPE VALIDATION — the ROLE arm of the cardinality family:
-# RM demographic UML/classes/org.openehr.rm.demographic.role.adoc §Invariants,
+# RM UML/classes/role.adoc §Invariants,
 # `Capabilities_valid: capabilities /= Void implies not capabilities.empty`.
 # The attribute (0..1 List<CAPABILITY>) exists only on ROLE, so this rule is
 # unreachable through the PERSON route family — the case addresses the ROLE

@@ -15,7 +15,7 @@
 # persist) would answer 200 and still be wrong — step 3 is what catches that.
 #
 # The read-back is a plain get_ehr_status, so the assertion is on the stored
-# resource rather than on the update's own echo: RM ehr ehr_status.adoc
+# resource rather than on the update's own echo: RM UML/classes/ehr_status.adoc
 # §Attributes types other_details as an ITEM_STRUCTURE, and the ELEMENT value
 # planted by the binding is addressed through it.
 #

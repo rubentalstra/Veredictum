@@ -2,7 +2,7 @@
 # ORIGINAL_VERSION, not this system's wrapper around it.
 #
 # Two independent grounds, both first-hand:
-#   * RM ehr_extract UML/classes/org.openehr.rm.ehr_extract.x_versioned_object.adoc
+#   * RM UML/classes/x_versioned_object.adoc
 #     §Attributes types `versions` as `List<ORIGINAL_VERSION<T>>` — an
 #     IMPORTED_VERSION is not an admissible member of an EXTRACT's versions
 #     list, so the export must unwrap.
@@ -30,7 +30,7 @@ test_purpose: >-
   and never this system's IMPORTED_VERSION wrapper.
 description: "Re-exporting an imported EHR reproduces the received ORIGINAL_VERSION"
 spec_refs:
-  - "RM ehr_extract UML/classes/org.openehr.rm.ehr_extract.x_versioned_object.adoc"
+  - "RM UML/classes/x_versioned_object.adoc"
   - "RM common master06-change_control §Copying"
   - "RM common master06-change_control §Committal and Audits"
   - "SM openehr_platform §I_EHR_EXTRACT_SERVICE.export_ehrs"

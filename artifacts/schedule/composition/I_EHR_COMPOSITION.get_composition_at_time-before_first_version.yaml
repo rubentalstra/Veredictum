@@ -1,7 +1,7 @@
 # The lower edge of the bare-route at-time branch, pinned to a FIXED instant:
 # below the first commit there is no version of this COMPOSITION.
 #
-# RM common versioned_object.adoc §Functions guards the accessor with
+# RM UML/classes/versioned_object.adoc §Functions guards the accessor with
 # `Pre: has_version_at_time (a_time)` — below the first commit the
 # precondition is false, so there is no VERSION whose data the route could
 # serve — and ITS-REST overview Requests_and_responses.md §HTTP status codes

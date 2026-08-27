@@ -1,7 +1,7 @@
 # A present-but-empty `CONTACT.addresses` is refused on the ROLE create route.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM `UML/classes/org.openehr.rm.demographic.contact.adoc` §Attributes types
+# RM `UML/classes/contact.adoc` §Attributes types
 # `CONTACT.addresses: List<ADDRESS>` at 1..1 — a MANDATORY list. The class
 # declares no non-empty invariant of its own; the mandatory multiplicity is
 # the whole bound, so a present-but-EMPTY list is the one shape the bound

@@ -11,7 +11,7 @@
 # `versioned_object_uid`)." The sentence pins ONE part to the container and
 # leaves the other two as the rest of the identifier — so a uid agreeing only
 # on the pinned part is a different identifier, naming no version this service
-# holds. RM common versioned_object.adoc guards the accessor with `Pre:
+# holds. RM UML/classes/versioned_object.adoc guards the accessor with `Pre:
 # has_version_id (a_ver_id)`, false here, and ITS-REST overview
 # Requests_and_responses.md §HTTP status codes assigns that state its row:
 # "404 | Not Found | The origin service did not find the target resource or is

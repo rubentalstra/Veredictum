@@ -6,15 +6,15 @@
 # participation took place, if it is used in an observational context (i.e.
 # recording facts about the past); or the intended time interval of the
 # participation when used in future contexts, such as EHR Instructions" (RM
-# common UML/classes/org.openehr.rm.common.participation.adoc §Attributes).
+# common UML/classes/participation.adoc §Attributes).
 # `DV_INTERVAL` inherits BASE `Interval<T>`, whose four boundary booleans
 # (`lower_unbounded`/`upper_unbounded`/`lower_included`/`upper_included`) are
-# each `1..1` (BASE UML/classes/org.openehr.base.foundation_types.interval.adoc
+# each `1..1` (BASE UML/classes/interval.adoc
 # §Attributes), so a ONE-SIDED interval is a first-class value of the
 # attribute, not a degenerate encoding of a missing one.
 #
 # WHY BOTH SHAPES AND BOTH DEPTHS: the payload carries a BOUNDED interval on
-# `EVENT_CONTEXT.participations[0]` (RM ehr event_context.adoc §Attributes) and
+# `EVENT_CONTEXT.participations[0]` (RM UML/classes/event_context.adoc §Attributes) and
 # an OPEN-ENDED one — lower bound only, `upper_unbounded: true` with
 # `upper_included: false` per `Upper_included_valid`
 # (`upper_unbounded implies not upper_included`) — on the interior EVALUATION's

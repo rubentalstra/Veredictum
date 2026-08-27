@@ -17,8 +17,8 @@ test_purpose: >-
 description: "commit a composition carrying a fully-trimmed DV_MULTIMEDIA + DV_PARSABLE"
 spec_refs:
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_multimedia.adoc §Attributes (uri, data, media_type, compression_algorithm, integrity_check, integrity_check_algorithm, thumbnail, size) + org.openehr.rm.data_types.dv_encapsulated.adoc §Attributes (charset, language)"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_parsable.adoc §Invariants (Formalism_valid satisfied: text/html)"
+  - "RM UML/classes/dv_multimedia.adoc §Attributes (uri, data, media_type, compression_algorithm, integrity_check, integrity_check_algorithm, thumbnail, size) + dv_encapsulated.adoc §Attributes (charset, language)"
+  - "RM UML/classes/dv_parsable.adoc §Invariants (Formalism_valid satisfied: text/html)"
 applies: { rm: ">=1.0.2" }
 requires:
   server: any

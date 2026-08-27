@@ -21,7 +21,7 @@ description: "commit a composition carrying DV_PARAGRAPH + legacy formatting + h
 spec_refs:
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
   - "RM data_types/master05-text_package.adoc §Formatting and Hyperlinking (DV_PARAGRAPH remains legal, and should be supported in at least a basic way; the legacy CSS form remains legal; hyperlink deprecated at RM 1.0.4)"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_paragraph.adoc §Invariants (Items_valid: not items.is_empty)"
+  - "RM UML/classes/dv_paragraph.adoc §Invariants (Items_valid: not items.is_empty)"
 applies: { rm: ">=1.0.2" }
 requires:
   server: any

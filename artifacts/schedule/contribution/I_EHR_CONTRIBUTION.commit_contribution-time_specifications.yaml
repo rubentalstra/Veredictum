@@ -17,7 +17,7 @@ description: "commit a composition carrying periodic + general time specificatio
 spec_refs:
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
   - "RM data_types/master08-time_specification_package.adoc §Phase-linked Time Specification Syntax (the [interval]/(difference)@alignment example) + §General Time Specification Syntax (a phase_linked_time_spec is a GTS factor)"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_periodic_time_specification.adoc §Invariants (Value_valid satisfied: formalism HL7:PIVL)"
+  - "RM UML/classes/dv_periodic_time_specification.adoc §Invariants (Value_valid satisfied: formalism HL7:PIVL)"
 applies: { rm: ">=1.0.2" }
 requires:
   server: any

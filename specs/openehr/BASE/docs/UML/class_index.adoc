@@ -12,8 +12,6 @@
 [.xcode]
 * link:/releases/BASE/{base_release}/base_types.html#_basic_definitions_class[BASIC_DEFINITIONS^]
 [.xcode]
-* link:/releases/BASE/{base_release}/base_types.html#_code_phrase_class[CODE_PHRASE^]
-[.xcode]
 * link:/releases/BASE/{base_release}/base_types.html#_env_interface[Env^]
 [.xcode]
 * link:/releases/BASE/{base_release}/base_types.html#_generic_id_class[GENERIC_ID^]
@@ -62,6 +60,8 @@
 
 ==== Package foundation_types
 
+[.xcode]
+* link:/releases/BASE/{base_release}/foundation_types.html#_args_class[ARGS^]
 [.xcode]
 * link:/releases/BASE/{base_release}/foundation_types.html#_any_class[Any^]
 [.xcode]
@@ -118,6 +118,8 @@
 * link:/releases/BASE/{base_release}/foundation_types.html#_point_interval_class[Point_interval^]
 [.xcode]
 * link:/releases/BASE/{base_release}/foundation_types.html#_proper_interval_class[Proper_interval^]
+[.xcode]
+* link:/releases/BASE/{base_release}/foundation_types.html#_result_class[RESULT^]
 [.xcode]
 * link:/releases/BASE/{base_release}/foundation_types.html#_routine_class[ROUTINE^]
 [.xcode]

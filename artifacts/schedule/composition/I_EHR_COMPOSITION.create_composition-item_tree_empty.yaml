@@ -4,7 +4,7 @@
 # in exactly the way the sibling CLUSTER case makes it easy to become.
 #
 # WHY IT IS VALID, first-hand: RM
-# `UML/classes/org.openehr.rm.data_structures.item_tree.adoc` §Attributes types
+# `UML/classes/item_tree.adoc` §Attributes types
 # `ITEM_TREE.items` at **0..1** and its Meaning column says so outright — "The
 # items comprising the `ITEM_TREE`. Can include **0 or more** CLUSTERs and/or 0
 # or more individual ELEMENTs." The class declares NO invariants section at

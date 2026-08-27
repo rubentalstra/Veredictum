@@ -15,7 +15,7 @@
 # THE PAIR IS OTHERWISE IDENTICAL. Both payloads carry `cnf-subject-11` in
 # namespace `cnf`; only `type` differs, PERSON in step 1 and ORGANISATION in
 # step 2. Both values are legal — BASE
-# UML/classes/org.openehr.base.base_types.party_ref.adoc §Invariants
+# UML/classes/party_ref.adoc §Invariants
 # `Type_validity`: `type.is_equal("PERSON") or type.is_equal("ORGANISATION") or
 # … or type.is_equal("ACTOR")` — so a rejection cannot be blamed on an invalid
 # payload, and a change in `type` is exactly the one variable under test.

@@ -1,0 +1,22 @@
+=== BMM_TYPED_FEATURE Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*__BMM_TYPED_FEATURE (abstract)__*
+
+h|*Description*
+2+a|A typed entity that is a feature within a context, and which may therefore be Void, i.e. 'nullable'.
+
+h|*Inherit*
+2+|`<<_bmm_typed_class,BMM_TYPED>>`
+
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*0..1*
+|*is_nullable*: `link:/releases/BASE/{base_release}/foundation_types.html#_boolean_class[Boolean^] +
+{default{nbsp}={nbsp}false}`
+a|True if this element can be null (Void) at execution time. May be interpreted as optionality in subtypes..
+|===

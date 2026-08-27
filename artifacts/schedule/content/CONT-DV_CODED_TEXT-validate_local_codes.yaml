@@ -9,7 +9,7 @@ description: "DV_CODED_TEXT against a local-codes C_CODE_PHRASE ([ABC, OPQ] @ lo
 spec_refs:
   - "CNF platform_test_schedule master17.2 \u00a7CONT-DV_CODED_TEXT-validate_local_codes"
   - "RM data_types \u00a7DV_CODED_TEXT"
-  - "RM data_types dv_text.adoc \u00a7Invariants (Valid_value: not value.is_empty)"
+  - "RM UML/classes/dv_text.adoc \u00a7Invariants (Valid_value: not value.is_empty)"
   - "AM AOM1.4 \u00a7C_CODE_PHRASE"
 constraint_context:
   template: cnf.tpl.dv_coded_text_c_code_phrase

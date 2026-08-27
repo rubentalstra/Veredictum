@@ -1,10 +1,10 @@
 # DEMOGRAPHIC ARCHETYPE VALIDATION — the archetype-root rule.
 #
 # A PARTY is UNCONDITIONALLY an archetype root: RM demographic
-# UML/classes/org.openehr.rm.demographic.party.adoc §Invariants declares
+# UML/classes/party.adoc §Invariants declares
 # `Is_archetype_root: is_archetype_root` with no antecedent, exactly as
 # COMPOSITION, ENTRY, EHR_STATUS and EHR_ACCESS do. RM common
-# UML/classes/org.openehr.rm.common.locatable.adoc §Invariants then fixes what
+# UML/classes/locatable.adoc §Invariants then fixes what
 # that costs the instance: `Archetyped_valid: is_archetype_root xor
 # archetype_details = Void` — a root whose ARCHETYPED block is absent
 # satisfies neither side of the xor, so it is not a legal PARTY.

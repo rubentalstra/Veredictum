@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CodeSystem xmlns="http://hl7.org/fhir">
   <url value="https://specifications.openehr.org/fhir/codesystem-participation_function"/>
-  <version value="3.1.0"/>
+  <version value="3.0.0"/>
   <name value="participation_function"/>
   <title value="Participation Function"/>
   <status value="active"/>
   <experimental value="false"/>
-  <date value="2024-08-22"/>
+  <date value="2023-06-26"/>
   <publisher value="openEHR International"/>
   <contact>
     <name value="openEHR TERM specifications"/>
     <telecom>
       <system value="url"/>
-      <value value="https://specifications.openehr.org/releases/TERM/Release-3.1.0"/>
+      <value value="https://specifications.openehr.org/releases/TERM/Release-3.0.0"/>
     </telecom>
   </contact>
   <caseSensitive value="true"/>
@@ -32,10 +32,6 @@
     <designation>
       <language value="pt"/>
       <value value="desconhecido"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="未知"/>
     </designation>
   </concept>
 </CodeSystem>

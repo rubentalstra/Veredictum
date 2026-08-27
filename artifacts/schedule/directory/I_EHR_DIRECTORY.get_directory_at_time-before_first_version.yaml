@@ -1,7 +1,7 @@
 # The lower edge of the directory at-time branch, pinned to a FIXED instant:
 # below the first commit there is no version of this directory.
 #
-# RM common versioned_object.adoc §Functions guards the accessor with
+# RM UML/classes/versioned_object.adoc §Functions guards the accessor with
 # `Pre: has_version_at_time (a_time)` — below the first commit the precondition
 # is false, so there is no VERSION whose data the route could serve — and the
 # operation's own 404 response file says the same from the wire side: "`404 Not

@@ -9,7 +9,7 @@
 # NOT an SM interface. The vendored SM defines no revision-history operation on
 # any interface (grep across specs/openehr/SM/docs/ = zero hits; the
 # abstract counterpart is RM common
-# UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions
+# UML/classes/versioned_object.adoc §Functions
 # `revision_history`), while the release publishes three revision-history reads
 # — one per versioned family. Case cores speak SM operations only, so without
 # the pinned NON_SM_REST_OPERATIONS table (src/validate.rs)
@@ -32,7 +32,7 @@
 # versioning or unique state identifiers" (overview Requests_and_responses.md
 # §"ETag and Last-Modified"); a REVISION_HISTORY is a projection of a
 # container's audit trail — RM common
-# UML/classes/org.openehr.rm.common.revision_history.adoc gives it no `uid` and
+# UML/classes/revision_history.adoc gives it no `uid` and
 # no identity of its own — and the released `200_REVISION_HISTORY.yaml` declares
 # only `Content-Type`. Declaring either header would invent an obligation the
 # release does not state (the same reasoning the ITEM_TAG bindings carry); not

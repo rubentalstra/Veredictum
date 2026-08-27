@@ -44,7 +44,7 @@ exercises: [Versioning]
 profiles: [OPTIONS]
 guards:
   - "DEMOGRAPHIC API is DEVELOPMENT-stage in ITS-REST 1.1.0 — CNF profiles (Demographic Persistence, OPTIONS); ITS-REST demographic (DEVELOPMENT lifecycle)"
-  - "authored from the ITS-REST overview committal-header section + RM common master06 §Incomplete Content; master10 (DEMOGRAPHIC) is a stalled schedule stub — a coverage guide only, not the authority"
+  - "authored from the ITS-REST overview committal-header section + RM common master06 §Version Lifecycle (the incomplete-content rules); master10 (DEMOGRAPHIC) is a stalled schedule stub — a coverage guide only, not the authority"
 test_purpose: >-
   A client-supplied lifecycle_state of 553|incomplete| on the `openehr-version`
   committal header is merged into the VERSION a direct party create commits,
@@ -52,7 +52,7 @@ test_purpose: >-
 description: "Commit a PARTY with a client-supplied VERSION lifecycle_state (direct route)"
 spec_refs:
   - "ITS-REST overview Requests_and_responses §openehr-version and openehr-audit-details"
-  - "RM common §change_control (master06 §Version Lifecycle / §Incomplete Content)"
+  - "RM common §change_control (master06 §Version Lifecycle (which carries the incomplete-content rules in the released text))"
   - "RM demographic master02 §Versioning Semantics (every Party is stored in its own Version container)"
   - "TERM SupportTerminology §Version Lifecycle State"
   - "SM openehr_platform §I_DEMOGRAPHIC_SERVICE.create_party"

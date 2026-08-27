@@ -183,7 +183,7 @@ Coded terms are ubiquitous in medical and clinical information, and are likely t
     [terminology_id::code]
 ----
 
-where `terminology_id` is an alphanumeric name, optionally followed by a version in parentheses, and `code` is a string. The allowed characters in each part are described in the grammar.
+where `terminology_id` is an alphanumeric name, optionally following by a version in parentheses, and `code` is a string. The allowed characters in each part are described in the grammaar.
 
 Examples from clinical data:
 
@@ -195,7 +195,7 @@ Examples from clinical data:
 
 == Lists of Built-in Types
 
-Data of any primitive type can occur singly or in lists, which are shown as comma-separated lists of items, all of the same type, such as in the following examples:
+Data of any primitive type can occur singly or in lists, which are shown as comma-separated lists of item, all of the same type, such as in the following examples:
 
 ----
     "cyan", "magenta", "yellow", "black"    -- printer's colours

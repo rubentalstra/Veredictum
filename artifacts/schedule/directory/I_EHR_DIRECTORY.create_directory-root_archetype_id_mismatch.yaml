@@ -3,7 +3,7 @@
 # (every slot decodes to its declared RM type) and fails the archetype-root
 # identity rule, `responses/422.yaml`'s "could be converted to a resource,
 # but there are semantic validation errors" branch. Ground: RM common
-# UML/classes/org.openehr.rm.common.locatable.adoc §Attributes
+# UML/classes/locatable.adoc §Attributes
 # (`archetype_node_id` … "at archetype root points, this is the archetype
 # identifier") + §Invariants Archetyped_valid; SM i_ehr_directory.adoc
 # §create_directory Pre_content_valid over SM i_validity_checker.adoc

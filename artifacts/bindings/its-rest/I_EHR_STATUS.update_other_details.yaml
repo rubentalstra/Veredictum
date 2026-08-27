@@ -11,10 +11,10 @@
 # The ITEM_TREE lives HERE rather than in the case because a patched body's
 # `set` takes a literal value: this binding IS the SM operation's payload, the
 # same way the sibling bindings fix `true`/`false`. Its shape is the released
-# one: RM ehr ehr_status.adoc §Attributes types other_details as an
+# one: RM UML/classes/ehr_status.adoc §Attributes types other_details as an
 # `ITEM_STRUCTURE` and describes it as "Any other details of the EHR summary
 # object, in the form of an archetyped `ITEM_STRUCTURE`" — archetyped, hence an
-# archetype root carrying `archetype_details` (RM common locatable.adoc
+# archetype root carrying `archetype_details` (RM UML/classes/locatable.adoc
 # `Archetyped_valid`: is_archetype_root xor archetype_details = Void) — and
 # ITEM_STRUCTURE is abstract, so the concrete `_type` is mandatory: ITS-REST
 # overview Resources.md §"JSON Format", the `_type` attribute "should be used

@@ -2,7 +2,7 @@
 # its sibling Basic_validity case cannot reach.
 #
 # THE INVARIANT, verbatim (RM common
-# UML/classes/org.openehr.rm.common.party_identified.adoc §Invariants):
+# UML/classes/party_identified.adoc §Invariants):
 # "__Name_valid__: `name /= Void implies not name.is_empty`". This payload
 # SATISFIES `Basic_validity` — `name` is present, so the "at least one of
 # name, identifier or external_ref" test passes — and fails only on emptiness.
@@ -15,7 +15,7 @@
 # together fix which invariant fired.
 #
 # WHY THE COMMITTER SEAT: `AUDIT_DETAILS.committer` is a `PARTY_PROXY` at
-# `1..1` (RM common UML/classes/org.openehr.rm.common.audit_details.adoc
+# `1..1` (RM UML/classes/audit_details.adoc
 # §Attributes) and the ITS-REST commit DTO types it the same way
 # (specifications/schemas/common/UpdateAudit.yaml: `committer: PartyProxy`,
 # `required`). The audit object sits beside the committed content, so a server

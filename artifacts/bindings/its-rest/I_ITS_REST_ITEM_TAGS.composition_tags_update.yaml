@@ -91,7 +91,7 @@
 #    satisfies schemas/common/UpdateItemTag.yaml and then breaks an ITEM_TAG
 #    RM invariant (`Inv_key_valid`: "not key.is_empty and key.is_justified";
 #    `Inv_value_valid`: "value /= Void implies not value.is_empty" — RM
-#    UML/classes/org.openehr.rm.common.item_tag.adoc §Invariants) is not a
+#    UML/classes/item_tag.adoc §Invariants) is not a
 #    syntactic defect, so the declared 400 ("could not be parsed or is
 #    invalid ... syntactically invalid ... content") does not describe it;
 #    the docs text's own status table does — Requests_and_responses.md §"HTTP

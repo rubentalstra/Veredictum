@@ -1,7 +1,7 @@
 # LOCATABLE.Archetype_node_id_valid on a node type outside the
 # ENTRY / CLUSTER / ELEMENT set.
 #
-# RM common UML/classes/org.openehr.rm.common.locatable.adoc §Invariants states
+# RM UML/classes/locatable.adoc §Invariants states
 # the rule verbatim: `Archetype_node_id_valid: not archetype_node_id.is_empty`.
 # `archetype_node_id` is 1..1 (§Attributes) and LOCATABLE is the root of every
 # archetypable RM class (§Description), so the invariant binds EVERY concrete

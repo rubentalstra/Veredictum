@@ -35,7 +35,7 @@ cnf.opt.invalid.cluster_items_cardinality_widened:
   validity:
     verdict: invalid
     defect: "the CLUSTER node's `items` C_MULTIPLE_ATTRIBUTE states cardinality {0..3}, wider on the lower side than the reference model's CLUSTER.items List<ITEM> [1..*] — it admits an empty CLUSTER the RM forbids"
-    spec_ref: "AM AOM2 master04.5-constraint_model-class_definitions.adoc §VCACA (\"the cardinality of an attribute must conform, i.e. be the same or narrower, to the cardinality of the corresponding attribute in the underlying information model\"); master08-validation.adoc §Validate Definition (\"check that cardinality in C_ATTRIBUTE is valid with respect to RM (VCACA)\"); RM UML/classes/org.openehr.rm.data_structures.cluster.adoc §Attributes (items: List<ITEM> [1..*])"
+    spec_ref: "AM AOM2 master04.5-constraint_model-class_definitions.adoc §VCACA (\"the cardinality of an attribute must conform, i.e. be the same or narrower, to the cardinality of the corresponding attribute in the underlying information model\"); master08-validation.adoc §Validate Definition (\"check that cardinality in C_ATTRIBUTE is valid with respect to RM (VCACA)\"); RM UML/classes/cluster.adoc §Attributes (items: List<ITEM> [1..*])"
   template_id: "cnf.opt.invalid.cluster_items_cardinality_widened"
   provenance: "authored 2026-08-02 from the openEHR CNF Robot minimal_evaluation.opt skeleton (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin) with three targeted edits: the data-slot node retyped ITEM_TREE -> CLUSTER (the RM class whose items carries a cardinality lower bound of 1), its items existence raised to 1..1 so the artefact carries no VCAEX defect, and the items cardinality interval restated as the FINITE {0..3}. A STATED interval is the case VCACA can decide; the fully-open {0..*} that real published OPTs carry states no cardinality override at all (AOM 1.4 makes C_MULTIPLE_ATTRIBUTE.cardinality mandatory where AOM2 makes it optional and \"only set if it overrides the underlying reference model\", and cADL's open constraint means \"any value permitted by the underlying information model\" - ADL1.4 master05-cadl.adoc §'Any' Constraints), so it is accepted. This row pins the refusal so a server that skips VCACA's numeric arm fails it"
 cnf.opt.invalid.multiple_elements:
@@ -118,7 +118,7 @@ cnf.composition.minimal_event.missing_mandatory:
   validity:
     verdict: invalid
     defect: "two mandatory single-valued attributes are absent: COMPOSITION.composer [1..1] at the root and ENTRY.subject [1..1] on the contained EVALUATION"
-    spec_ref: "RM UML/classes/org.openehr.rm.composition.composition.adoc §Attributes (composer 1..1) + org.openehr.rm.composition.content.entry.entry.adoc §Attributes (subject 1..1); RM common master06-change_control_package.adoc §Incomplete Content (the shape a 553|incomplete| commit — and ONLY a 553 commit — admits: \"mandatory attributes may be absent\")"
+    spec_ref: "RM UML/classes/composition.adoc §Attributes (composer 1..1) + entry.adoc §Attributes (subject 1..1); RM common master06-change_control_package.adoc §Incomplete Content (the shape a 553|incomplete| commit — and ONLY a 553 commit — admits: \"mandatory attributes may be absent\")"
   template_id: "minimal_evaluation.en.v1"
   provenance: "authored 2026-08-03 from cnf.composition.minimal_event.v1 by DELETING two mandatory attributes and nothing else — the twin that pins both directions of RM common master06 §Incomplete Content: refused under 532|complete| and accepted under 553|incomplete|"
 cnf.composition.minimal_event.missing_mandatory_and_wrong_category:
@@ -128,7 +128,7 @@ cnf.composition.minimal_event.missing_mandatory_and_wrong_category:
   validity:
     verdict: invalid
     defect: "the same two absent mandatory attributes as cnf.composition.minimal_event.missing_mandatory PLUS a COMPOSITION.category code (999) that is not a member of the openEHR composition category terminology group — data that is WRONG, not merely missing"
-    spec_ref: "RM common master06-change_control_package.adoc §Incomplete Content (\"All other validity requirements must be satisfied. In other words, in an incomplete commit, data may be missing, but it may not be wrong.\"); RM UML/classes/org.openehr.rm.composition.composition.adoc §Invariants (Category_validity)"
+    spec_ref: "RM common master06-change_control_package.adoc §Incomplete Content (\"All other validity requirements must be satisfied. In other words, in an incomplete commit, data may be missing, but it may not be wrong.\"); RM UML/classes/composition.adoc §Invariants (Category_validity)"
   template_id: "minimal_evaluation.en.v1"
   provenance: "authored 2026-08-03 from cnf.composition.minimal_event.missing_mandatory by replacing the category code with one outside the openEHR group — the twin that pins the LIMIT of the incomplete relaxation: still refused at 553|incomplete|"
 cnf.composition.minimal_event.v2:
@@ -166,7 +166,7 @@ cnf.composition.minimal_event.foreign_uid:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_evaluation.en.v1"
-  provenance: "derived 2026-07-27 from cnf.composition.minimal_event.v2 by populating LOCATABLE.uid with a fixed OBJECT_VERSION_ID naming a DIFFERENT version container (11111111-1111-4111-8111-111111111111::cnf.example.org::1). The payload is intrinsically VALID — LOCATABLE.uid is 0..1 (RM common locatable.adoc §Attributes) and the value is a well-formed OBJECT_VERSION_ID (BASE base_types master05 §Identification) — so the only defect a server can find is RELATIONAL: the body's implied version container (ITS-REST overview Resources.md §Identifier types: the COMPOSITION identifier 'implies that the VERSIONED_OBJECT identifier is …') contradicts the container the request URL addresses"
+  provenance: "derived 2026-07-27 from cnf.composition.minimal_event.v2 by populating LOCATABLE.uid with a fixed OBJECT_VERSION_ID naming a DIFFERENT version container (11111111-1111-4111-8111-111111111111::cnf.example.org::1). The payload is intrinsically VALID — LOCATABLE.uid is 0..1 (RM UML/classes/locatable.adoc §Attributes) and the value is a well-formed OBJECT_VERSION_ID (BASE base_types master05 §Identification) — so the only defect a server can find is RELATIONAL: the body's implied version container (ITS-REST overview Resources.md §Identifier types: the COMPOSITION identifier 'implies that the VERSIONED_OBJECT identifier is …') contradicts the container the request URL addresses"
 cnf.composition.minimal_event.invalid_structure:
   source: fixtures/composition/minimal_event.invalid_structure.json
   format: canonical-json
@@ -184,7 +184,7 @@ cnf.composition.minimal_event.root_archetype_id_mismatch:
   validity:
     verdict: invalid
     defect: "the root archetype_node_id is not the stringified archetype_details.archetype_id"
-    spec_ref: "RM common locatable.adoc §Attributes (archetype_node_id: \"At an archetype root point, the value of this attribute is always the stringified form of the archetype_id found in the archetype_details object\"); RM common master03-archetyped_package.adoc §The LOCATABLE Class"
+    spec_ref: "RM UML/classes/locatable.adoc §Attributes (archetype_node_id: \"At an archetype root point, the value of this attribute is always the stringified form of the archetype_id found in the archetype_details object\"); RM common master03-archetyped_package.adoc §The LOCATABLE Class"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-01 from cnf.composition.minimal_event.v1 by changing the root archetype_node_id to openEHR-EHR-COMPOSITION.other.v1 while leaving the ARCHETYPED block naming openEHR-EHR-COMPOSITION.minimal.v1 — one string changed, so the refusal isolates the root node-id identity rule; the invalid twin of the valid cnf.composition.minimal_event.v1"
 cnf.composition.minimal_event.links_empty:
@@ -194,7 +194,7 @@ cnf.composition.minimal_event.links_empty:
   validity:
     verdict: invalid
     defect: "LOCATABLE.links is present as an empty list at the COMPOSITION root"
-    spec_ref: "RM common locatable.adoc §Invariants (Links_valid: links /= Void implies not links.is_empty)"
+    spec_ref: "RM UML/classes/locatable.adoc §Invariants (Links_valid: links /= Void implies not links.is_empty)"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-01 from cnf.composition.minimal_event.v1 by adding an explicit empty links list at the root; everything else valid, so the refusal isolates Links_valid"
 cnf.composition.minimal_event.links.v1:
@@ -203,7 +203,7 @@ cnf.composition.minimal_event.links.v1:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_evaluation.en.v1"
-  provenance: "derived 2026-08-01 from cnf.composition.minimal_event.v1 by attaching one COMPLETE LINK at the COMPOSITION root and a second on the interior EVALUATION — the accepting twin of cnf.composition.minimal_event.links_empty and of cnf.composition.minimal_event.link_target_bad_scheme. LOCATABLE.links is 0..1 List<LINK> (RM common locatable.adoc §Attributes: \"Links to other archetyped structures ... Links may be to structures in other compositions\"), inherited by every LOCATABLE, so the two depths prove the rule is applied at the resource root AND below it; each member carries all three 1..1 LINK attributes (RM common link.adoc §Attributes) with an ehr:// DV_EHR_URI target (RM data_types dv_ehr_uri.adoc §Invariants, Scheme_valid)"
+  provenance: "derived 2026-08-01 from cnf.composition.minimal_event.v1 by attaching one COMPLETE LINK at the COMPOSITION root and a second on the interior EVALUATION — the accepting twin of cnf.composition.minimal_event.links_empty and of cnf.composition.minimal_event.link_target_bad_scheme. LOCATABLE.links is 0..1 List<LINK> (RM UML/classes/locatable.adoc §Attributes: \"Links to other archetyped structures ... Links may be to structures in other compositions\"), inherited by every LOCATABLE, so the two depths prove the rule is applied at the resource root AND below it; each member carries all three 1..1 LINK attributes (RM UML/classes/link.adoc §Attributes) with an ehr:// DV_EHR_URI target (RM UML/classes/dv_ehr_uri.adoc §Invariants, Scheme_valid)"
 cnf.composition.minimal_event.link_target_bad_scheme:
   source: fixtures/composition/minimal_event.link_target_bad_scheme.json
   format: canonical-json
@@ -211,7 +211,7 @@ cnf.composition.minimal_event.link_target_bad_scheme:
   validity:
     verdict: invalid
     defect: "the interior ENTRY's LINK target is an http:// URI, not an ehr:// one"
-    spec_ref: "RM data_types UML/classes/org.openehr.rm.data_types.dv_ehr_uri.adoc §Invariants (Scheme_valid: scheme.is_equal (Ehr_scheme)); RM data_types master10-uri_package.adoc §Definitions (Ehr_scheme: String = \"ehr\"); RM common link.adoc §Attributes (target: DV_EHR_URI, 1..1)"
+    spec_ref: "RM UML/classes/dv_ehr_uri.adoc §Invariants (Scheme_valid: scheme.is_equal (Ehr_scheme)); RM data_types master10-uri_package.adoc §Definitions (Ehr_scheme: String = \"ehr\"); RM UML/classes/link.adoc §Attributes (target: DV_EHR_URI, 1..1)"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-01 from cnf.composition.minimal_event.links.v1 by changing the ENTRY-level LINK target scheme from ehr to http and nothing else — one character class changed, so the refusal isolates DV_EHR_URI.Scheme_valid, and placing it on the interior ENTRY (not the root) also proves the check reaches below the resource root; the invalid twin of the valid cnf.composition.minimal_event.links.v1"
 cnf.composition.minimal_event.participation_time:
@@ -220,7 +220,7 @@ cnf.composition.minimal_event.participation_time:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "minimal_evaluation.en.v1"
-  provenance: "derived 2026-08-02 from cnf.composition.minimal_event.v1 by giving the EVENT_CONTEXT participation a BOUNDED time and adding one ENTRY-level other_participations member with an OPEN-ENDED one. PARTICIPATION.time is 0..1 DV_INTERVAL<DV_DATE_TIME> (RM common UML/classes/org.openehr.rm.common.participation.adoc §Attributes: \"The time interval during which the participation took place\"), and BASE UML/classes/org.openehr.base.foundation_types.interval.adoc §Attributes makes all four boundary booleans 1..1, so a one-sided interval is a first-class value; the open-ended member sets upper_unbounded true with upper_included false per Upper_included_valid (`upper_unbounded implies not upper_included`). ENTRY.other_participations is 0..1 List<PARTICIPATION> (RM common UML/classes/org.openehr.rm.composition.entry.adoc §Attributes: \"Other participations at `ENTRY` level\"), its single member carrying the mandatory function (plain DV_TEXT, so Function_valid's generating_type antecedent does not hold) and performer"
+  provenance: "derived 2026-08-02 from cnf.composition.minimal_event.v1 by giving the EVENT_CONTEXT participation a BOUNDED time and adding one ENTRY-level other_participations member with an OPEN-ENDED one. PARTICIPATION.time is 0..1 DV_INTERVAL<DV_DATE_TIME> (RM UML/classes/participation.adoc §Attributes: \"The time interval during which the participation took place\"), and BASE UML/classes/interval.adoc §Attributes makes all four boundary booleans 1..1, so a one-sided interval is a first-class value; the open-ended member sets upper_unbounded true with upper_included false per Upper_included_valid (`upper_unbounded implies not upper_included`). ENTRY.other_participations is 0..1 List<PARTICIPATION> (RM UML/classes/entry.adoc §Attributes: \"Other participations at `ENTRY` level\"), its single member carrying the mandatory function (plain DV_TEXT, so Function_valid's generating_type antecedent does not hold) and performer"
 cnf.composition.minimal_event.participation_function_out_of_group:
   source: fixtures/composition/minimal_event.participation_function_out_of_group.json
   format: canonical-json
@@ -228,7 +228,7 @@ cnf.composition.minimal_event.participation_function_out_of_group:
   validity:
     verdict: invalid
     defect: "PARTICIPATION.function is a DV_CODED_TEXT whose defining_code 240 is in the attestation reason group, not the participation function group"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.participation.adoc §Invariants (Function_valid: function.generating_type.is_equal (\"DV_CODED_TEXT\") implies terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_participation_function, function.defining_code)); TERM SupportTerminology §Vocabularies (participation function: 253 unknown)"
+    spec_ref: "RM UML/classes/participation.adoc §Invariants (Function_valid: function.generating_type.is_equal (\"DV_CODED_TEXT\") implies terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_participation_function, function.defining_code)); TERM SupportTerminology §Vocabularies (participation function: 253 unknown)"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-02 from cnf.composition.minimal_event.v1 by replacing the plain DV_TEXT context.participations[0].function with a DV_CODED_TEXT carrying openEHR code 240. The _type tag is load-bearing: Function_valid is guarded by a generating_type antecedent, so the plain DV_TEXT the valid fixture carries is unconstrained and only a DV_CODED_TEXT reaches the group check. 240|signed| is a REAL openEHR code — of the attestation reason group — so a server that checked only that the code exists would accept it"
 cnf.composition.minimal_event.performer_relationship_out_of_group:
@@ -238,7 +238,7 @@ cnf.composition.minimal_event.performer_relationship_out_of_group:
   validity:
     verdict: invalid
     defect: "the PARTY_RELATED participation performer's relationship defining_code 240 is in the attestation reason group, not the subject relationship group"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.party_related.adoc §Invariants (Relationship_valid: terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_subject_relationship, relationship.defining_code)); TERM SupportTerminology §Vocabularies (subject relationship)"
+    spec_ref: "RM UML/classes/party_related.adoc §Invariants (Relationship_valid: terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_subject_relationship, relationship.defining_code)); TERM SupportTerminology §Vocabularies (subject relationship)"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-02 from cnf.composition.minimal_event.v1 by changing context.participations[0].performer.relationship.defining_code.code_string from the in-group 10|mother| to 240 and nothing else — so the valid fixture IS the accepting twin and the refusal can only be about group membership. Unlike the sibling participation-function rule, Relationship_valid carries no generating_type antecedent (relationship is declared DV_CODED_TEXT at 1..1), so every PARTY_RELATED on the wire is bound; placing it on a PARTY_PROXY slot inside content also proves the check reaches a polymorphic slot value"
 cnf.composition.minimal_event.subject_external_ref.v1:
@@ -247,7 +247,7 @@ cnf.composition.minimal_event.subject_external_ref.v1:
   rm_versions: [">=1.0.2"]
   validity:
     verdict: valid
-    spec_ref: "RM common master04-generic_package.adoc §PARTY_SELF and Referring to the Patient from the EHR (third scheme: \"Setting the external_ref in every instance of PARTY_SELF\"; \"All three schemes are supported by the openEHR model\"); BASE base_types UML/classes/org.openehr.base.base_types.party_ref.adoc §Invariants (Type_validity admits \"PERSON\")"
+    spec_ref: "RM common master04-generic_package.adoc §PARTY_SELF and Referring to the Patient from the EHR (third scheme: \"Setting the external_ref in every instance of PARTY_SELF\"; \"All three schemes are supported by the openEHR model\"); BASE UML/classes/party_ref.adoc §Invariants (Type_validity admits \"PERSON\")"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-01 from cnf.composition.minimal_event.v1 by giving the interior EVALUATION's PARTY_SELF subject a COMPLETE external_ref PARTY_REF (HIER_OBJECT_ID id + namespace + type PERSON, the shape the ehr_status.with_subject fixtures carry) and changing nothing else — the accepting fixture for the THIRD of the three PARTY_SELF referral schemes master04 §PARTY_SELF names, the two others already being covered by minimal_event.v1 (external_ref set nowhere) and the ehr_status.with_subject family (set once in EHR_STATUS.subject)"
 cnf.composition.minimal_event.item_node_id_empty:
@@ -257,7 +257,7 @@ cnf.composition.minimal_event.item_node_id_empty:
   validity:
     verdict: invalid
     defect: "the content ITEM_TREE carries an empty archetype_node_id"
-    spec_ref: "RM common locatable.adoc §Invariants (Archetype_node_id_valid: not archetype_node_id.is_empty), inherited by every concrete LOCATABLE descendant"
+    spec_ref: "RM UML/classes/locatable.adoc §Invariants (Archetype_node_id_valid: not archetype_node_id.is_empty), inherited by every concrete LOCATABLE descendant"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-01 from cnf.composition.minimal_event.v1 by emptying the EVALUATION.data ITEM_TREE archetype_node_id (at0001 -> \"\"); everything else valid, so the refusal isolates the inherited Archetype_node_id_valid on a node type outside the ENTRY/CLUSTER/ELEMENT set"
 cnf.composition.minimal_event.feeder_audit.v1:
@@ -274,7 +274,7 @@ cnf.composition.minimal_event.feeder_audit.change_type:
   validity:
     verdict: invalid
     defect: "a FEEDER_AUDIT carrying a change_type member — the attribute RM common master03 §Structural Correspondence instructs a converter to set, which the FEEDER_AUDIT class model does not define (its five attributes carry no change_type)"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.feeder_audit.adoc §Attributes; RM common master03-archetyped_package.adoc §Structural Correspondence"
+    spec_ref: "RM UML/classes/feeder_audit.adoc §Attributes; RM common master03-archetyped_package.adoc §Structural Correspondence"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-21 (the #2531 register re-adjudication) from cnf.composition.minimal_event.feeder_audit.v1 with exactly one addition: feeder_audit.change_type = 252|synthesis| as DV_CODED_TEXT — the shape a client following the released instruction literally would send"
 cnf.composition.minimal_event.feeder_empty_system_id:
@@ -284,7 +284,7 @@ cnf.composition.minimal_event.feeder_empty_system_id:
   validity:
     verdict: invalid
     defect: "a FEEDER_AUDIT_DETAILS whose mandatory system_id is the empty string"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.feeder_audit_details.adoc §Invariants System_id_valid (not system_id.is_empty)"
+    spec_ref: "RM UML/classes/feeder_audit_details.adoc §Invariants System_id_valid (not system_id.is_empty)"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-20 (issue #2493) from cnf.composition.minimal_event.feeder_audit.v1 with exactly one defect: every FEEDER_AUDIT_DETAILS system_id emptied"
 cnf.composition.minimal_event.feeder_audit.v2:
@@ -371,7 +371,7 @@ cnf.composition.minimal_event.unknown_key_root:
   validity:
     verdict: invalid
     defect: "the COMPOSITION root carries `not_an_rm_attribute`, a member the RM does not declare on COMPOSITION"
-    spec_ref: "ITS-REST overview Resources.md §XML Format / §JSON Format (the payload must validate against the published ITS schemas; the ITS-XML schemas are wildcard-free); RM ehr (COMPOSITION attribute set, org.openehr.rm.composition.composition.adoc §Attributes)"
+    spec_ref: "ITS-REST overview Resources.md §XML Format / §JSON Format (the payload must validate against the published ITS schemas; the ITS-XML schemas are wildcard-free); RM ehr (COMPOSITION attribute set, composition.adoc §Attributes)"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-02 from cnf.composition.minimal_event.v1 by adding one undeclared member at the document ROOT — the strict-reader refusal class (#1695), isolated to the root position"
 cnf.composition.minimal_event.unknown_key_nested:
@@ -381,7 +381,7 @@ cnf.composition.minimal_event.unknown_key_nested:
   validity:
     verdict: invalid
     defect: "a nested ELEMENT carries `not_an_rm_attribute`, a member the RM does not declare on ELEMENT"
-    spec_ref: "ITS-REST overview Resources.md §XML Format / §JSON Format (the payload must validate against the published ITS schemas; the ITS-XML schemas are wildcard-free); RM data_structures (ELEMENT attribute set, org.openehr.rm.data_structures.element.adoc §Attributes)"
+    spec_ref: "ITS-REST overview Resources.md §XML Format / §JSON Format (the payload must validate against the published ITS schemas; the ITS-XML schemas are wildcard-free); RM data_structures (ELEMENT attribute set, element.adoc §Attributes)"
   template_id: "minimal_evaluation.en.v1"
   provenance: "derived 2026-08-02 from cnf.composition.minimal_event.v1 by adding one undeclared member on a NESTED ELEMENT — the strict-reader refusal class (#1695), isolated to a deep position so the refusal must name the path, not only the key"
 cnf.composition.lab_result.cluster_no_items:
@@ -391,7 +391,7 @@ cnf.composition.lab_result.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the specimen CLUSTER carries no items — CLUSTER.items is List<ITEM> [1..*]"
-    spec_ref: "RM data_structures (CLUSTER.items 1..*, org.openehr.rm.data_structures.cluster.adoc §Attributes)"
+    spec_ref: "RM data_structures (CLUSTER.items 1..*, cluster.adoc §Attributes)"
   template_id: "Generic lab test result example simple"
   provenance: "derived 2026-08-01 from cnf.ckm.lab_result.example (the CKM cid 1013.26.408 template's committed example skeleton) by deleting the single CLUSTER node's items member — the wire-reachable representative of the mandatory 1..* container family (#1461)"
 cnf.composition.unknown_template:
@@ -480,7 +480,7 @@ cnf.ehr_status.with_subject.g:
 # The type-insensitivity PAIR: two EHR_STATUS payloads whose subject
 # external_ref carries the SAME id and namespace and DIFFERS ONLY in
 # PARTY_REF.type. Both types are legal — BASE
-# UML/classes/org.openehr.base.base_types.party_ref.adoc §Invariants
+# UML/classes/party_ref.adoc §Invariants
 # `Type_validity` admits exactly PERSON / ORGANISATION / GROUP / AGENT / ROLE /
 # PARTY / ACTOR — so the pair isolates the conflict key from payload validity.
 cnf.ehr_status.with_subject.l:
@@ -694,14 +694,14 @@ cnf.composition.minimal_persistent.v1:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM UML/classes/dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE UML/classes/time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.minimal_persistent.v2:
   source: fixtures/composition/minimal_persistent.v2.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; leaf value updated for the v2 content state; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; leaf value updated for the v2 content state; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM UML/classes/dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE UML/classes/time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.minimal_persistent.invalid_structure:
   source: fixtures/composition/minimal_persistent.invalid_structure.json
   format: canonical-json
@@ -736,14 +736,14 @@ cnf.composition.persistent.v1:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM UML/classes/dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE UML/classes/time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.persistent.v2:
   source: fixtures/contribution/composition.persistent.v2.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
-  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; leaf value updated for the v2 content state; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-22; leaf value updated for the v2 content state; normalized to the literal RM ENTRY Is_archetype_root invariant (archetype_details added at archetype-id nodes; the upstream instance predates that strictness); DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM UML/classes/dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE UML/classes/time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.ehr_status.minimal:
   source: fixtures/contribution/ehr_status.minimal.json
   format: canonical-json
@@ -810,21 +810,21 @@ cnf.composition.coded_text_on_text:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "obs_admin.en.v2"
-  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official obs_admin.contribution.altdvcodedtext.json (versions[0].data — a DV_CODED_TEXT instance on the OPT's DV_TEXT node at0004, the master08 B.2.f row) and normalized to the literal RM ENTRY Is_archetype_root invariant; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official obs_admin.contribution.altdvcodedtext.json (versions[0].data — a DV_CODED_TEXT instance on the OPT's DV_TEXT node at0004, the master08 B.2.f row) and normalized to the literal RM ENTRY Is_archetype_root invariant; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM UML/classes/dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE UML/classes/time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.null_flavour:
   source: fixtures/contribution/composition.obs_admin.null_flavour.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "obs_admin.en.v2"
-  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official obs_admin.contribution.null_flavour.json (versions[0].data — empty ELEMENT.value with null_flavour |no information|, the master08 B.2.g row; RM data_structures ELEMENT Inv_null_flavour_indicated holds) and normalized to the literal RM ENTRY Is_archetype_root invariant; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); extracted 2026-07-24 from the official obs_admin.contribution.null_flavour.json (versions[0].data — empty ELEMENT.value with null_flavour |no information|, the master08 B.2.g row; RM data_structures ELEMENT Inv_null_flavour_indicated holds) and normalized to the literal RM ENTRY Is_archetype_root invariant; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM UML/classes/dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE UML/classes/time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 cnf.composition.persistent_2.v1:
   source: fixtures/contribution/composition.persistent_2.v1.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "persistent_minimal_2.en.v1"
-  provenance: "derived 2026-07-24 from cnf.composition.persistent.v1 by re-pointing archetype_details.template_id to persistent_minimal_2.en.v1 (the official persistent_minimal_2.opt shares the identical archetype set, so the instance stays conformant) — the second-persistent-OPT member of the master08 multi-version combination B; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM data_types dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE foundation_types time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
+  provenance: "derived 2026-07-24 from cnf.composition.persistent.v1 by re-pointing archetype_details.template_id to persistent_minimal_2.en.v1 (the official persistent_minimal_2.opt shares the identical archetype set, so the instance stays conformant) — the second-persistent-OPT member of the master08 multi-version combination B; DV_DATE_TIME offsets normalized 2026-07-29 from the basic-format `+0000` to the extended `+00:00`: RM UML/classes/dv_date_time.adoc's invariant `Value_valid: valid_iso8601_date_time (value)` admits only `YYYY-MM-DDThh:mm:ss[(,|.)s+][Z|±hh[:mm]]` (extended) or `YYYYMMDDThhmmss[(,|.)s+][Z|±hh[mm]]` (compact) (BASE UML/classes/time_definitions.adoc §valid_iso8601_date_time), so an extended date/time carrying the compact offset matches neither alternative. The COMMA decimal sign is UNTOUCHED — BASE iso8601_date_time.adoc states the value form as `…ss[(,|.)sss]…` and declares `is_decimal_sign_comma()`, so a comma fraction is explicitly legal. Register AMB-171 carries the residual offset-form reading (upstream #1608)"
 # Corpus additions for the CNF master09 (DIRECTORY) schedule cases.
 # NOTE: FOLDER payloads / provisioned directory trees — real canonical FOLDER
 # structures (openEHR CNF Robot corpus, re-adjudicated to spec-text-only
@@ -874,7 +874,7 @@ cnf.directory.invalid.missing_name:
   validity:
     verdict: invalid
     defect: "RM: a FOLDER without a name — LOCATABLE.name is 1..1"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.locatable.adoc §Attributes (name: DV_TEXT, 1..1)"
+    spec_ref: "RM UML/classes/locatable.adoc §Attributes (name: DV_TEXT, 1..1)"
   provenance: "derived 2026-07-28 from cnf.directory.root_only by removing the mandatory LOCATABLE.name, leaving the payload well-formed JSON with exactly ONE defect — the RM-invalid FOLDER ground the create/update directory rejection cases need"
 # The LINK twins on a directory FOLDER. LOCATABLE.links is 0..1 List<LINK> and
 # every member is a LINK, whose meaning/type/target are each 1..1 — so the
@@ -885,7 +885,7 @@ cnf.directory.root_with_link:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "derived 2026-08-01 from cnf.directory.root_only by adding one complete LOCATABLE.links member — a LINK carrying all three 1..1 attributes with an ehr:// DV_EHR_URI target (RM common UML/classes/org.openehr.rm.common.link.adoc §Attributes)"
+  provenance: "derived 2026-08-01 from cnf.directory.root_only by adding one complete LOCATABLE.links member — a LINK carrying all three 1..1 attributes with an ehr:// DV_EHR_URI target (RM UML/classes/link.adoc §Attributes)"
 cnf.directory.invalid.link_missing_meaning:
   source: fixtures/directory/link_missing_meaning.json
   format: canonical-json
@@ -893,7 +893,7 @@ cnf.directory.invalid.link_missing_meaning:
   validity:
     verdict: invalid
     defect: "RM: a LINK without its meaning — LINK.meaning is 1..1"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.link.adoc §Attributes (meaning: DV_TEXT, 1..1)"
+    spec_ref: "RM UML/classes/link.adoc §Attributes (meaning: DV_TEXT, 1..1)"
   provenance: "derived 2026-08-01 from cnf.directory.root_with_link by removing the mandatory LINK.meaning, leaving the payload well-formed JSON with exactly ONE defect — the invalid twin of the accepted LINK"
 # The FOLDER.details slot twins. `details` is typed ITEM_STRUCTURE (abstract;
 # concrete subtypes ITEM_TREE / ITEM_LIST / ITEM_SINGLE / ITEM_TABLE), so a
@@ -908,7 +908,7 @@ cnf.directory.invalid.details_not_item_structure:
   validity:
     verdict: invalid
     defect: "RM: a FOLDER whose details is a DV_TEXT — FOLDER.details is typed ITEM_STRUCTURE"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.folder.adoc §Attributes (details: ITEM_STRUCTURE, 0..1); RM common master05-directory_package.adoc §Overview"
+    spec_ref: "RM UML/classes/folder.adoc §Attributes (details: ITEM_STRUCTURE, 0..1); RM common master05-directory_package.adoc §Overview"
   provenance: "derived 2026-08-01 from cnf.directory.root_only by adding a `details` carrying a DV_TEXT instead of one of the four concrete ITEM_STRUCTURE subtypes, leaving the payload well-formed JSON with exactly ONE defect — the invalid twin of cnf.directory.v2's populated ITEM_TREE details"
 # The FOLDER.items twins. `items` is `0..1 List<OBJECT_REF>` — the reference
 # slot the whole directory abstraction rests on: "A FOLDER instance contains
@@ -926,7 +926,7 @@ cnf.directory.with_items:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "derived 2026-08-01 from cnf.directory.root_only by adding two sibling FOLDERs whose `items` lists carry OBJECT_REFs (RM common UML/classes/org.openehr.rm.common.folder.adoc §Attributes: items: List<OBJECT_REF>, 0..1): ONE target (1e0a7f34-…) is referenced from BOTH siblings — the multiple-classification shape RM common master05-directory_package.adoc §Overview and RM ehr master04-ehr_package.adoc §Folders describe — beside one distinct second target (7c4d2b81-…). Re-adjudicated 2026-08-18 (issue #1951, register AMB-211): the refs moved from namespace `local` to `my.system.id` — the FOREIGN namespace the CNF Robot corpus's own directory fixtures carry — because the free-standing-ids ground (BASE object_ref.adoc: the target 'may exist locally or be maintained outside the current namespace') describes DISTRIBUTED references, and this server's own-design extension refuses a reference that claims THIS system and does not resolve (the refusal twin is cnf.directory.invalid.local_dangling_item). Foreign-namespace ids stand free exactly as before"
+  provenance: "derived 2026-08-01 from cnf.directory.root_only by adding two sibling FOLDERs whose `items` lists carry OBJECT_REFs (RM UML/classes/folder.adoc §Attributes: items: List<OBJECT_REF>, 0..1): ONE target (1e0a7f34-…) is referenced from BOTH siblings — the multiple-classification shape RM common master05-directory_package.adoc §Overview and RM ehr master04-ehr_package.adoc §Folders describe — beside one distinct second target (7c4d2b81-…). Re-adjudicated 2026-08-18 (issue #1951, register AMB-211): the refs moved from namespace `local` to `my.system.id` — the FOREIGN namespace the CNF Robot corpus's own directory fixtures carry — because the free-standing-ids ground (BASE object_ref.adoc: the target 'may exist locally or be maintained outside the current namespace') describes DISTRIBUTED references, and this server's own-design extension refuses a reference that claims THIS system and does not resolve (the refusal twin is cnf.directory.invalid.local_dangling_item). Foreign-namespace ids stand free exactly as before"
 cnf.directory.invalid.root_archetype_id_mismatch:
   source: fixtures/directory/root_archetype_id_mismatch.json
   format: canonical-json
@@ -934,7 +934,7 @@ cnf.directory.invalid.root_archetype_id_mismatch:
   validity:
     verdict: invalid
     defect: "RM: a root FOLDER whose archetype_node_id (openEHR-EHR-FOLDER.generic.v1) contradicts its archetype_details.archetype_id (openEHR-EHR-FOLDER.other.v1) — an archetype root carries its archetype identifier AS its node id"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.locatable.adoc §Attributes (archetype_node_id) + §Invariants Archetyped_valid"
+    spec_ref: "RM UML/classes/locatable.adoc §Attributes (archetype_node_id) + §Invariants Archetyped_valid"
   provenance: "derived 2026-08-04 from cnf.directory.root_only by adding an ARCHETYPED archetype_details whose archetype_id names a DIFFERENT archetype than the root archetype_node_id, leaving the payload well-formed and convertible with exactly ONE semantic defect — the 422-class twin beside the seam's 400-class fixtures"
 cnf.directory.invalid.items_by_value:
   source: fixtures/directory/items_by_value.json
@@ -943,7 +943,7 @@ cnf.directory.invalid.items_by_value:
   validity:
     verdict: invalid
     defect: "RM: a FOLDER whose items member is a COMPOSITION by value — FOLDER.items is typed List<OBJECT_REF>"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.folder.adoc §Attributes (items: List<OBJECT_REF>, 0..1); RM common master05-directory_package.adoc §Overview; RM ehr master04-ehr_package.adoc §Folders (\"Folder structures do not contain Compositions, only references to them\")"
+    spec_ref: "RM UML/classes/folder.adoc §Attributes (items: List<OBJECT_REF>, 0..1); RM common master05-directory_package.adoc §Overview; RM ehr master04-ehr_package.adoc §Folders (\"Folder structures do not contain Compositions, only references to them\")"
   provenance: "derived 2026-08-01 from cnf.directory.root_only by adding an `items` list whose single member is the corpus's own valid COMPOSITION cnf.composition.minimal_persistent.v1 embedded BY VALUE, leaving the payload well-formed JSON with exactly ONE defect — the member is a full RM-valid COMPOSITION, so the only thing wrong with it is that it sits in the reference slot instead of an OBJECT_REF to it; the accepting twin is cnf.directory.with_items"
 cnf.directory.invalid.local_dangling_item:
   source: fixtures/directory/local_dangling_item.json
@@ -952,12 +952,12 @@ cnf.directory.invalid.local_dangling_item:
   validity:
     verdict: invalid
     defect: "Extension (register AMB-211): an items OBJECT_REF claiming THIS system (namespace `local`) whose target resolves to no versioned object in the EHR — a this-system reference must resolve; the RM/BASE shape itself is valid, so this fixture is invalid only against the registered own-design boundary"
-    spec_ref: "BASE base_types UML/classes/org.openehr.base.base_types.object_ref.adoc §Description (the distributed-referencing ground covers foreign/unknown namespaces); RM common UML/classes/org.openehr.rm.common.folder.adoc §Attributes (items: List<OBJECT_REF>); SM UML/classes/i_validity_checker.adoc §content_valid (reaches only RM-class structural validity) — the refusal itself is spec-silent, adjudicated in register AMB-211"
+    spec_ref: "BASE UML/classes/object_ref.adoc §Description (the distributed-referencing ground covers foreign/unknown namespaces); RM UML/classes/folder.adoc §Attributes (items: List<OBJECT_REF>); SM UML/classes/i_validity_checker.adoc §content_valid (reaches only RM-class structural validity) — the refusal itself is spec-silent, adjudicated in register AMB-211"
   provenance: "authored 2026-08-18 (issue #1951) as the REFUSAL twin the AMB-211 re-adjudication requires: cnf.directory.root_only plus one items OBJECT_REF in namespace `local` (HIER_OBJECT_ID 3d0c9a52-…, a uid nothing on the SUT holds) — the reference claims the committing system and cannot resolve there. The accepting twins are the re-namespaced foreign-reference fixtures (with_items, versioned_id_items, wide_id_items); the resolvable-local acceptance is pinned by app/ferroehr/tests/it/directory_item_refs.rs, since a repository-allocated uid cannot appear in a static fixture"
 # The FOLDER.items ID-WIDTH pair. cnf.directory.with_items covers the ordinary
 # HIER_OBJECT_ID reference; these two cover the rest of the width the released
 # sources admit in that slot, so the accepted width is ASSERTED rather than
-# incidental. BASE base_types UML/classes/org.openehr.base.base_types.object_ref.adoc
+# incidental. BASE UML/classes/object_ref.adoc
 # §Attributes types `id` as `OBJECT_ID` (1..1) — the abstract root of the
 # six-member concrete family (HIER_OBJECT_ID, OBJECT_VERSION_ID, ARCHETYPE_ID,
 # TEMPLATE_ID, TERMINOLOGY_ID, GENERIC_ID; see each class table's *Inherit*
@@ -971,13 +971,13 @@ cnf.directory.versioned_id_items:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "derived 2026-08-02 from cnf.directory.root_only by adding an `items` list whose single member is a `local`/COMPOSITION OBJECT_REF carrying a THREE-PART OBJECT_VERSION_ID — the version-pinned reference form BASE base_types UML/classes/org.openehr.base.base_types.object_version_id.adoc §Description defines (lexical form `object_id '::' creating_system_id '::' version_tree_id`) and the released ITS-REST specifications/schemas/base_types/ObjectRef.yaml carries as its OWN example; the id value is that example's value verbatim (fb458d9c-1323-42bc-b7f8-787f3660a0b5::openEHRSys.example.com::1, type COMPOSITION). Re-adjudicated 2026-08-18 (issue #1951, register AMB-211): namespace moved from `local` to `openEHRSys.example.com` — the creating system the example's own id names — because this server's own-design extension refuses a this-system reference that does not resolve here; as a FOREIGN reference the target need not exist (BASE object_ref.adoc §Description: 'may exist locally or be maintained outside the current namespace')"
+  provenance: "derived 2026-08-02 from cnf.directory.root_only by adding an `items` list whose single member is a `local`/COMPOSITION OBJECT_REF carrying a THREE-PART OBJECT_VERSION_ID — the version-pinned reference form BASE UML/classes/object_version_id.adoc §Description defines (lexical form `object_id '::' creating_system_id '::' version_tree_id`) and the released ITS-REST specifications/schemas/base_types/ObjectRef.yaml carries as its OWN example; the id value is that example's value verbatim (fb458d9c-1323-42bc-b7f8-787f3660a0b5::openEHRSys.example.com::1, type COMPOSITION). Re-adjudicated 2026-08-18 (issue #1951, register AMB-211): namespace moved from `local` to `openEHRSys.example.com` — the creating system the example's own id names — because this server's own-design extension refuses a this-system reference that does not resolve here; as a FOREIGN reference the target need not exist (BASE object_ref.adoc §Description: 'may exist locally or be maintained outside the current namespace')"
 cnf.directory.wide_id_items:
   source: fixtures/directory/wide_id_items.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "derived 2026-08-02 from cnf.directory.root_only by adding an `items` list whose single member is an OBJECT_REF whose id is a GENERIC_ID — the widest member of the OBJECT_ID family, 'Generic identifier type for identifiers whose format is otherwise unknown to openEHR' with its mandatory 1..1 `scheme` (BASE base_types UML/classes/org.openehr.base.base_types.generic_id.adoc §Description + §Attributes). `type` is `ANY`, which BASE object_ref.adoc §Attributes states outright for this case: 'The type name ANY can be used to indicate that any type is accepted (e.g. if the type is unknown)'. This is the fixture that makes the accepted id width assertable beyond the two subtypes the released OAS enumerates (register AMB-186). Re-adjudicated 2026-08-18 (issue #1951, register AMB-211): namespace moved from `local` to `legacy.pas.example.org` — a GENERIC_ID names a scheme openEHR does not model, which is exactly the foreign-system situation, and this server's own-design extension refuses a this-system reference that does not resolve here"
+  provenance: "derived 2026-08-02 from cnf.directory.root_only by adding an `items` list whose single member is an OBJECT_REF whose id is a GENERIC_ID — the widest member of the OBJECT_ID family, 'Generic identifier type for identifiers whose format is otherwise unknown to openEHR' with its mandatory 1..1 `scheme` (BASE UML/classes/generic_id.adoc §Description + §Attributes). `type` is `ANY`, which BASE object_ref.adoc §Attributes states outright for this case: 'The type name ANY can be used to indicate that any type is accepted (e.g. if the type is unknown)'. This is the fixture that makes the accepted id width assertable beyond the two subtypes the released OAS enumerates (register AMB-186). Re-adjudicated 2026-08-18 (issue #1951, register AMB-211): namespace moved from `local` to `legacy.pas.example.org` — a GENERIC_ID names a scheme openEHR does not model, which is exactly the foreign-system situation, and this server's own-design extension refuses a this-system reference that does not resolve here"
 # Corpus additions for the CNF master17.3 (content, quantity data types)
 # schedule cases. Same entry schema as MANIFEST.yaml; the validate harness
 # concatenates this into MANIFEST.yaml at integration (never edit
@@ -1017,7 +1017,7 @@ cnf.tpl.scale_list:
   rm_versions: [">=1.1.0"]
   validity: { verdict: valid }
   template_id: "cnf.tpl.scale_list"
-  provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per CONT-DV_SCALE-validate_constraint (AM 1.4 C_COMPLEX_OBJECT over DV_SCALE with a C_REAL value list AND a C_CODE_PHRASE code_list at0005/at0006 on symbol.defining_code — DV_SCALE.symbol is 1..1 per RM data_types UML/classes/org.openehr.rm.data_types.dv_scale.adoc, so the value set is a value|symbol tuple set and the case's no-matching-symbol row needs both halves; C_DV_SCALE absent from AM 1.4); validated against the SUT 2026-07-21"
+  provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per CONT-DV_SCALE-validate_constraint (AM 1.4 C_COMPLEX_OBJECT over DV_SCALE with a C_REAL value list AND a C_CODE_PHRASE code_list at0005/at0006 on symbol.defining_code — DV_SCALE.symbol is 1..1 per RM UML/classes/dv_scale.adoc, so the value set is a value|symbol tuple set and the case's no-matching-symbol row needs both halves; C_DV_SCALE absent from AM 1.4); validated against the SUT 2026-07-21"
 cnf.tpl.count_open:
   source: templates/count_open.opt
   format: opt-xml
@@ -1708,7 +1708,7 @@ cnf.ehr_status.invalid.missing-archetype-details:
   validity:
     verdict: invalid
     defect: "RM: an archetype root without archetype_details violates LOCATABLE.Archetyped_valid"
-    spec_ref: "RM common locatable.adoc (Archetyped_valid: is_archetype_root xor archetype_details = Void) + RM ehr ehr_status.adoc (Is_archetype_root)"
+    spec_ref: "RM UML/classes/locatable.adoc (Archetyped_valid: is_archetype_root xor archetype_details = Void) + RM UML/classes/ehr_status.adoc (Is_archetype_root)"
   provenance: "authored 2026-07-26 for the #379 audit's Archetyped_valid enforcement (#423)"
 cnf.ehr_status.invalid.invalid-other-details:
   source: fixtures/ehr/invalid/ehr_status.invalid_other_details.json
@@ -1717,7 +1717,7 @@ cnf.ehr_status.invalid.invalid-other-details:
   validity:
     verdict: invalid
     defect: "other_details carries no _type discriminator on the abstract ITEM_STRUCTURE slot"
-    spec_ref: "ITS-REST specifications/docs/overview/Resources.md §JSON Format (_type 'should be used to specify the RM type whenever polymorphism is involved, or when the underlying definition in RM type is abstract') + RM ehr ehr_status.adoc (other_details: ITEM_STRUCTURE, abstract per RM data_structures master04-item_structure_package §Class Descriptions)"
+    spec_ref: "ITS-REST specifications/docs/overview/Resources.md §JSON Format (_type 'should be used to specify the RM type whenever polymorphism is involved, or when the underlying definition in RM type is abstract') + RM UML/classes/ehr_status.adoc (other_details: ITEM_STRUCTURE, abstract per RM data_structures master04-item_structure_package §Class Descriptions)"
   provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence; re-authored 2026-08-04 to carry the declared defect (it previously omitted archetype_details and no other_details at all — the Archetyped_valid defect its sibling fixture already owns)"
 cnf.ehr_status.invalid.empty-rm-version:
   source: fixtures/ehr/invalid/ehr_status.empty_rm_version.json
@@ -1726,7 +1726,7 @@ cnf.ehr_status.invalid.empty-rm-version:
   validity:
     verdict: invalid
     defect: "RM: the ARCHETYPED block carries an empty rm_version — Rm_version_valid"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.archetyped.adoc §Invariants (Rm_version_valid: not rm_version.is_empty)"
+    spec_ref: "RM UML/classes/archetyped.adoc §Invariants (Rm_version_valid: not rm_version.is_empty)"
   provenance: "authored 2026-08-01 by emptying ARCHETYPED.rm_version on the otherwise-valid minimal EHR_STATUS — a defect BELOW the root, which only a whole-instance RM class-invariant pass reaches"
 # Corpus additions for the Security / Signing (SEC-BASIC + Signing) schedule
 # cases. Merged into corpus/MANIFEST.yaml by the validate harness; same entry
@@ -1826,7 +1826,7 @@ cnf.demographic.person.invalid:
   validity:
     verdict: invalid
     defect: "identities is empty — PARTY requires at least one PARTY_IDENTITY"
-    spec_ref: "RM demographic party.adoc §Invariants (Identities_valid: not identities.is_empty; identities 1..1 List<PARTY_IDENTITY>)"
+    spec_ref: "RM UML/classes/party.adoc §Invariants (Identities_valid: not identities.is_empty; identities 1..1 List<PARTY_IDENTITY>)"
   provenance: "authored 2026-07-21 from the RM demographic class model — a PERSON violating §PARTY Identities_valid (empty identities list)"
 cnf.demographic.person.client_uid:
   source: fixtures/demographic/person.client_uid.json
@@ -1853,7 +1853,7 @@ cnf.demographic.person.round_trip_relationship.foreign_source:
   validity:
     verdict: invalid
     defect: "the inline PARTY_RELATIONSHIP's `source` names a DIFFERENT party's version container (3b6c9f18-0000-4000-8000-0000000005ff) than the body's own uid (object_id 3b6c9f18-0000-4000-8000-0000000005c1) — a relationship stored as the data of a party it is not sourced at"
-    spec_ref: "RM demographic UML/classes/org.openehr.rm.demographic.party.adoc §Invariants (Relationships_validity: 'relationships /= Void implies (not relationships.is_empty and then relationships.for_all (r | r.source = self)'); RM demographic master02-demographic_package.adoc §Party Relationships (relationships are stored as part of the data of the PARTY designated as the source)"
+    spec_ref: "RM UML/classes/party.adoc §Invariants (Relationships_validity: 'relationships /= Void implies (not relationships.is_empty and then relationships.for_all (r | r.source = self)'); RM demographic master02-demographic_package.adoc §Party Relationships (relationships are stored as part of the data of the PARTY designated as the source)"
   provenance: "authored 2026-08-03 as the invalid twin of cnf.demographic.person.round_trip_relationship — byte-identical except the relationship's source container id, so the refusal it pins is the source-identity arm alone and nothing else"
 # The other four concrete PARTY subtypes. The five released route quintets are
 # byte-identical to each other, so these carry the KIND-PARITY spot rows
@@ -1922,7 +1922,7 @@ cnf.demographic.party_relationship.root_identity_mismatch:
   validity:
     verdict: invalid
     defect: "the archetype root's node_id and its archetype_details.archetype_id disagree — construction-valid, refused by the semantic pass"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.locatable.adoc §Attributes (archetype_node_id: at an archetype root, the stringified archetype_details.archetype_id)"
+    spec_ref: "RM UML/classes/locatable.adoc §Attributes (archetype_node_id: at an archetype root, the stringified archetype_details.archetype_id)"
   provenance: "authored 2026-08-03 from party_relationship.v1 — the semantic (422-class) twin restoring validation_failed coverage after the structural cases moved to the 400 parse class (owner ruling 2026-08-03)"
 cnf.demographic.role.root_identity_mismatch:
   source: fixtures/demographic/role.root_identity_mismatch.json
@@ -1931,7 +1931,7 @@ cnf.demographic.role.root_identity_mismatch:
   validity:
     verdict: invalid
     defect: "the archetype root's node_id and its archetype_details.archetype_id disagree — construction-valid, refused by the semantic pass"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.locatable.adoc §Attributes (archetype_node_id: at an archetype root, the stringified archetype_details.archetype_id)"
+    spec_ref: "RM UML/classes/locatable.adoc §Attributes (archetype_node_id: at an archetype root, the stringified archetype_details.archetype_id)"
   provenance: "authored 2026-08-03 from party_relationship.v1 — the semantic (422-class) twin restoring validation_failed coverage after the structural cases moved to the 400 parse class (owner ruling 2026-08-03)"
 cnf.demographic.person.no_archetype_details:
   source: fixtures/demographic/person.no_archetype_details.json
@@ -1940,7 +1940,7 @@ cnf.demographic.person.no_archetype_details:
   validity:
     verdict: invalid
     defect: "archetype_details is absent on a PARTY, which is unconditionally an archetype root"
-    spec_ref: "RM demographic party.adoc §Invariants (Is_archetype_root: is_archetype_root) + RM common locatable.adoc §Invariants (Archetyped_valid: is_archetype_root xor archetype_details = Void)"
+    spec_ref: "RM UML/classes/party.adoc §Invariants (Is_archetype_root: is_archetype_root) + RM UML/classes/locatable.adoc §Invariants (Archetyped_valid: is_archetype_root xor archetype_details = Void)"
   provenance: "authored 2026-07-28 from the RM class model — cnf.demographic.person.v1 with the ARCHETYPED block removed; everything else valid, so the refusal isolates the archetype-root rule"
 cnf.demographic.person.archetype_node_id_mismatch:
   source: fixtures/demographic/person.archetype_node_id_mismatch.json
@@ -1949,7 +1949,7 @@ cnf.demographic.person.archetype_node_id_mismatch:
   validity:
     verdict: invalid
     defect: "the root archetype_node_id is not the stringified archetype_details.archetype_id"
-    spec_ref: "RM common locatable.adoc §archetype_node_id (\"At an archetype root point, the value of this attribute is always the stringified form of the archetype_id found in the archetype_details object\") + RM demographic party.adoc §Invariants (Is_archetype_root)"
+    spec_ref: "RM UML/classes/locatable.adoc §archetype_node_id (\"At an archetype root point, the value of this attribute is always the stringified form of the archetype_id found in the archetype_details object\") + RM UML/classes/party.adoc §Invariants (Is_archetype_root)"
   provenance: "authored 2026-07-28 from the RM class model — cnf.demographic.person.v1 with the root archetype_node_id changed to a different archetype id; everything else valid"
 cnf.demographic.person.contacts_empty:
   source: fixtures/demographic/person.contacts_empty.json
@@ -1958,7 +1958,7 @@ cnf.demographic.person.contacts_empty:
   validity:
     verdict: invalid
     defect: "contacts is present as an empty list"
-    spec_ref: "RM demographic party.adoc §Invariants (Contacts_valid: contacts /= Void implies not contacts.is_empty)"
+    spec_ref: "RM UML/classes/party.adoc §Invariants (Contacts_valid: contacts /= Void implies not contacts.is_empty)"
   provenance: "authored 2026-07-28 from the RM class model — cnf.demographic.person.v1 with an explicit empty contacts list; everything else valid"
 cnf.demographic.person.relationships_empty:
   source: fixtures/demographic/person.relationships_empty.json
@@ -1967,7 +1967,7 @@ cnf.demographic.person.relationships_empty:
   validity:
     verdict: invalid
     defect: "relationships is present as an empty list"
-    spec_ref: "RM demographic party.adoc §Invariants (Relationships_validity: relationships /= Void implies (not relationships.is_empty and then relationships.for_all (r | r.source = self)))"
+    spec_ref: "RM UML/classes/party.adoc §Invariants (Relationships_validity: relationships /= Void implies (not relationships.is_empty and then relationships.for_all (r | r.source = self)))"
   provenance: "authored 2026-08-04 from the RM class model — cnf.demographic.person.v1 with an explicit empty relationships list; everything else valid. Closes the coverage gap beside the contacts_empty / roles_empty / capabilities_empty siblings: PARTY carries the same optional-list invariant arm on relationships and had no refusal case"
 cnf.demographic.person.roles_empty:
   source: fixtures/demographic/person.roles_empty.json
@@ -1976,7 +1976,7 @@ cnf.demographic.person.roles_empty:
   validity:
     verdict: invalid
     defect: "roles is present as an empty list"
-    spec_ref: "RM demographic actor.adoc §Invariants (Roles_valid: roles /= Void implies not roles.is_empty)"
+    spec_ref: "RM UML/classes/actor.adoc §Invariants (Roles_valid: roles /= Void implies not roles.is_empty)"
   provenance: "authored 2026-07-28 from the RM class model — cnf.demographic.person.v1 with an explicit empty roles list; everything else valid"
 cnf.demographic.role.capabilities_empty:
   source: fixtures/demographic/role.capabilities_empty.json
@@ -1985,7 +1985,7 @@ cnf.demographic.role.capabilities_empty:
   validity:
     verdict: invalid
     defect: "capabilities is present as an empty list"
-    spec_ref: "RM demographic role.adoc §Invariants (Capabilities_valid: capabilities /= Void implies not capabilities.empty)"
+    spec_ref: "RM UML/classes/role.adoc §Invariants (Capabilities_valid: capabilities /= Void implies not capabilities.empty)"
   provenance: "authored 2026-07-28 from the RM class model — cnf.demographic.role.v1 with an explicit empty capabilities list; everything else valid. ROLE is the only concrete PARTY subtype carrying this invariant"
 cnf.demographic.person.identity_details_wrong_type:
   source: fixtures/demographic/person.identity_details_wrong_type.json
@@ -1994,7 +1994,7 @@ cnf.demographic.person.identity_details_wrong_type:
   validity:
     verdict: invalid
     defect: "PARTY_IDENTITY.details carries a DV_TEXT where the model declares an ITEM_STRUCTURE"
-    spec_ref: "RM demographic party_identity.adoc §Attributes (details: ITEM_STRUCTURE, 1..1)"
+    spec_ref: "RM UML/classes/party_identity.adoc §Attributes (details: ITEM_STRUCTURE, 1..1)"
   provenance: "authored 2026-07-28 from the RM class model — cnf.demographic.person.v1 with the identity's ITEM_TREE replaced by a DV_TEXT; the wrong-value-type probe of the demographic content validator"
 cnf.demographic.person.identity_details_missing:
   source: fixtures/demographic/person.identity_details_missing.json
@@ -2003,7 +2003,7 @@ cnf.demographic.person.identity_details_missing:
   validity:
     verdict: invalid
     defect: "PARTY_IDENTITY carries no details, which the model declares mandatory"
-    spec_ref: "RM demographic party_identity.adoc §Attributes (details: ITEM_STRUCTURE, 1..1)"
+    spec_ref: "RM UML/classes/party_identity.adoc §Attributes (details: ITEM_STRUCTURE, 1..1)"
   provenance: "authored 2026-07-28 from the RM class model — cnf.demographic.person.v1 with the identity's mandatory details attribute removed"
 cnf.demographic.person.archetyped_full:
   source: fixtures/demographic/person.archetyped_full.json
@@ -2055,7 +2055,7 @@ cnf.messaging.ehr_extract.imported_reexport:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "authored 2026-08-02 (#1679) as an identity-disjoint sibling of cnf.messaging.ehr_extract.v1 for the re-export case: after import, an export must reproduce the wrapped ORIGINAL_VERSION verbatim (RM ehr_extract x_versioned_object.adoc §Attributes types versions as List<ORIGINAL_VERSION<T>>; master06 §Copying keeps it 'a faithful copy of its original'), so the fixture's SOURCE contribution uid is what the re-export must still carry"
+  provenance: "authored 2026-08-02 (#1679) as an identity-disjoint sibling of cnf.messaging.ehr_extract.v1 for the re-export case: after import, an export must reproduce the wrapped ORIGINAL_VERSION verbatim (RM UML/classes/x_versioned_object.adoc §Attributes types versions as List<ORIGINAL_VERSION<T>>; master06 §Copying keeps it 'a faithful copy of its original'), so the fixture's SOURCE contribution uid is what the re-export must still carry"
 cnf.messaging.ehr_extract.folder:
   source: fixtures/messaging/ehr_extract.folder.json
   format: canonical-json
@@ -2069,7 +2069,7 @@ cnf.messaging.ehr_extract.masked_with_item:
   validity:
     verdict: invalid
     defect: "an OPENEHR_CONTENT_ITEM declaring is_masked true while its item is present"
-    spec_ref: "RM UML/classes/org.openehr.rm.ehr_extract.extract_content_item.adoc §Invariants Item_validity (is_masked xor item /= Void)"
+    spec_ref: "RM UML/classes/extract_content_item.adoc §Invariants Item_validity (is_masked xor item /= Void)"
   provenance: "derived 2026-08-20 from cnf.messaging.ehr_extract.folder with exactly one defect: is_masked flipped to true while the item stays — the xor's both-sides state"
 cnf.messaging.ehr_extract.append_trunk_v1:
   source: fixtures/messaging/ehr_extract.append_trunk_v1.json
@@ -2156,7 +2156,7 @@ cnf.messaging.ehr_extract.invalid:
   validity:
     verdict: invalid
     defect: "mandatory attributes absent — EXTRACT requires time_created, system_id and sequence_nr (none present)"
-    spec_ref: "RM ehr_extract extract.adoc §Attributes (time_created 1..1, system_id 1..1, sequence_nr 1..1) + §Invariants (Sequence_nr_valid: sequence_nr >= 1)"
+    spec_ref: "RM UML/classes/extract.adoc §Attributes (time_created 1..1, system_id 1..1, sequence_nr 1..1) + §Invariants (Sequence_nr_valid: sequence_nr >= 1)"
   provenance: "an invalid EXTRACT authored against the RM ehr_extract IM (§EXTRACT) — carries none of the mandatory time_created / system_id / sequence_nr. Kept verbatim through the #659 wave; what changed is that it is now really posted, and its owning case expects the malformed-payload branch (400) the defect actually describes rather than the semantic-validation one"
 cnf.messaging.extract_spec.empty_manifest:
   source: fixtures/messaging/extract_spec.empty_manifest.json
@@ -2165,8 +2165,8 @@ cnf.messaging.extract_spec.empty_manifest:
   validity:
     verdict: invalid
     defect: "manifest.entities present and empty — EXTRACT_MANIFEST.entities is 1..*"
-    spec_ref: "RM ehr_extract UML/classes/org.openehr.rm.ehr_extract.extract_manifest.adoc §Attributes (entities 1..1 List<EXTRACT_ENTITY_MANIFEST>; the RM 1.2.0/1.1.0/1.0.4 BMM gives EXTRACT_MANIFEST.entities cardinality {lower: 1, upper_unbounded})"
-  provenance: "authored 2026-07-29 (#659), replacing the documentary cnf.messaging.extract_spec.v1 whose single manifest entity named neither ehr_id nor subject_id (an entity the receiver cannot locate — RM ehr_extract extract_entity_manifest.adoc). RE-ADJUDICATED 2026-08-03 (phase-close triage): the 2026-07-29 claim that an empty entity list is 'the shape that makes an export fulfilled-with-no-content' read only the attribute prose and never the multiplicity — the BMM declares EXTRACT_MANIFEST.entities with item-cardinality lower bound 1 in every published generation, so this shape is an RM-invalid EXTRACT_SPEC and its case is the refusal twin (the -by_spec sibling, one entity, is the acceptance twin). The by-spec case builds its own populated spec inline, because a manifest entity must name the EHR the runner minted and a corpus entry carries no reference substitution"
+    spec_ref: "RM UML/classes/extract_manifest.adoc §Attributes (entities 1..1 List<EXTRACT_ENTITY_MANIFEST>; the RM 1.2.0/1.1.0/1.0.4 BMM gives EXTRACT_MANIFEST.entities cardinality {lower: 1, upper_unbounded})"
+  provenance: "authored 2026-07-29 (#659), replacing the documentary cnf.messaging.extract_spec.v1 whose single manifest entity named neither ehr_id nor subject_id (an entity the receiver cannot locate — RM UML/classes/extract_entity_manifest.adoc). RE-ADJUDICATED 2026-08-03 (phase-close triage): the 2026-07-29 claim that an empty entity list is 'the shape that makes an export fulfilled-with-no-content' read only the attribute prose and never the multiplicity — the BMM declares EXTRACT_MANIFEST.entities with item-cardinality lower bound 1 in every published generation, so this shape is an RM-invalid EXTRACT_SPEC and its case is the refusal twin (the -by_spec sibling, one entity, is the acceptance twin). The by-spec case builds its own populated spec inline, because a manifest entity must name the EHR the runner minted and a corpus entry carries no reference substitution"
 cnf.messaging.tdd.v1:
   source: fixtures/messaging/tdd.v1.xml
   format: canonical-xml
@@ -2322,7 +2322,7 @@ cnf.adl2.opt.flat_a:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   template_id: "openEHR-EHR-COMPOSITION.cnf_adl2_flat_a.v1.0.0"
-  provenance: "authored 2026-07-24 spine-first as the ADL2 template for the FLAT-over-ADL2 commit cases: its content is a use_archetype fill of cnf.adl2.archetype.count_a (AOM2 master06 §Templates — an ENTRY under content must be an archetype root, RM composition entry.adoc §Invariants Is_archetype_root; the constraint under test lives in the filled archetype)"
+  provenance: "authored 2026-07-24 spine-first as the ADL2 template for the FLAT-over-ADL2 commit cases: its content is a use_archetype fill of cnf.adl2.archetype.count_a (AOM2 master06 §Templates — an ENTRY under content must be an archetype root, RM UML/classes/entry.adoc §Invariants Is_archetype_root; the constraint under test lives in the filled archetype)"
 cnf.adl2.opt.flat_b:
   source: fixtures/adl2/opt/flat_parity_b.adls
   format: adl2-text
@@ -2930,9 +2930,9 @@ cnf.audit.description_coded:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "authored 2026-08-02 to pin the CODED spelling of AUDIT_DETAILS.description, which RM common UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes types DV_TEXT (0..1) — a class whose DV_CODED_TEXT subtype carries a defining_code — and which ITS-REST schemas/common/UpdateAudit.yaml types UDvText (schemas/common/UDvText.yaml: oneOf DV_TEXT, DV_CODED_TEXT). The code is archetype-local (terminology_id `local`), the form an archetyped reason-for-committal takes; no openEHR terminology group binds this attribute, so membership is not asserted — only that the whole coded value survives"
+  provenance: "authored 2026-08-02 to pin the CODED spelling of AUDIT_DETAILS.description, which RM UML/classes/audit_details.adoc §Attributes types DV_TEXT (0..1) — a class whose DV_CODED_TEXT subtype carries a defining_code — and which ITS-REST schemas/common/UpdateAudit.yaml types UDvText (schemas/common/UDvText.yaml: oneOf DV_TEXT, DV_CODED_TEXT). The code is archetype-local (terminology_id `local`), the form an archetyped reason-for-committal takes; no openEHR terminology group binds this attribute, so membership is not asserted — only that the whole coded value survives"
 # COMMITTER corpus — the `AUDIT_DETAILS.committer` seat. RM common
-# UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes types it a
+# UML/classes/audit_details.adoc §Attributes types it a
 # `PARTY_PROXY` at 1..1, and the released commit DTO agrees (ITS-REST
 # specifications/schemas/common/UpdateAudit.yaml: `committer: PartyProxy`,
 # listed under `required`, whose `PartyProxy` discriminator maps
@@ -2944,7 +2944,7 @@ cnf.audit.committer_related:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "authored 2026-08-02 as the accepting twin of cnf.audit.committer_related_out_of_group: a PARTY_RELATED committer — legal because PARTY_RELATED inherits PARTY_IDENTIFIED, itself a PARTY_PROXY (RM common UML/classes/org.openehr.rm.common.party_related.adoc §Inherit), and the class exists for exactly this need (\"Use where the relationship between the party and the subject of the record must be known\") — carrying the in-group 10|mother| so Relationship_valid holds. Without it the refusal twin would also pass on a server that rejected every PARTY_RELATED committer, certifying over-rejection as conformance"
+  provenance: "authored 2026-08-02 as the accepting twin of cnf.audit.committer_related_out_of_group: a PARTY_RELATED committer — legal because PARTY_RELATED inherits PARTY_IDENTIFIED, itself a PARTY_PROXY (RM UML/classes/party_related.adoc §Inherit), and the class exists for exactly this need (\"Use where the relationship between the party and the subject of the record must be known\") — carrying the in-group 10|mother| so Relationship_valid holds. Without it the refusal twin would also pass on a server that rejected every PARTY_RELATED committer, certifying over-rejection as conformance"
 cnf.audit.committer_related_out_of_group:
   source: fixtures/audit/committer_related_out_of_group.json
   format: canonical-json
@@ -2952,7 +2952,7 @@ cnf.audit.committer_related_out_of_group:
   validity:
     verdict: invalid
     defect: "the PARTY_RELATED committer's relationship defining_code 240 is in the attestation reason group, not the subject relationship group"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.party_related.adoc §Invariants (Relationship_valid: terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_subject_relationship, relationship.defining_code)); TERM SupportTerminology §Vocabularies (subject relationship)"
+    spec_ref: "RM UML/classes/party_related.adoc §Invariants (Relationship_valid: terminology (Terminology_id_openehr).has_code_for_group_id (Group_id_subject_relationship, relationship.defining_code)); TERM SupportTerminology §Vocabularies (subject relationship)"
   provenance: "derived 2026-08-02 from cnf.audit.committer_related by changing the relationship code from 10|mother| to 240 and nothing else, so the refusal isolates group membership. 240|signed| is a REAL openEHR code — of the attestation reason group — so a server that checked only that the code exists would accept it"
 cnf.audit.committer_no_identity:
   source: fixtures/audit/committer_no_identity.json
@@ -2961,7 +2961,7 @@ cnf.audit.committer_no_identity:
   validity:
     verdict: invalid
     defect: "the PARTY_IDENTIFIED committer carries none of name, identifiers or external_ref"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.party_identified.adoc §Invariants (Basic_validity: name /= Void or identifiers /= Void or external_ref /= Void); §Description (\"There must be at least one of name, identifier or external_ref present\")"
+    spec_ref: "RM UML/classes/party_identified.adoc §Invariants (Basic_validity: name /= Void or identifiers /= Void or external_ref /= Void); §Description (\"There must be at least one of name, identifier or external_ref present\")"
   provenance: "authored 2026-08-02 as the Basic_validity refusal on the committer seat: a bare PARTY_IDENTIFIED. Its accepting twin is the committer every other contribution case commits with — the runner's default PARTY_IDENTIFIED carrying a name — so this payload differs from an accepted one only by the absence of all three identifying attributes"
 cnf.audit.committer_empty_name:
   source: fixtures/audit/committer_empty_name.json
@@ -2970,7 +2970,7 @@ cnf.audit.committer_empty_name:
   validity:
     verdict: invalid
     defect: "the PARTY_IDENTIFIED committer's name is the empty string"
-    spec_ref: "RM common UML/classes/org.openehr.rm.common.party_identified.adoc §Invariants (Name_valid: name /= Void implies not name.is_empty)"
+    spec_ref: "RM UML/classes/party_identified.adoc §Invariants (Name_valid: name /= Void implies not name.is_empty)"
   provenance: "authored 2026-08-02 as the Name_valid twin of cnf.audit.committer_no_identity: this payload SATISFIES Basic_validity (name is present) and fails only on emptiness, so the two fixtures fix which invariant fired. Absence and emptiness are different states — name is 0..1 String (§Attributes: \"Optional human-readable name (in String form)\"), so omitting it is legal whenever another identifying attribute is present, while an empty string is a party that claims a name and supplies none"
 # ATTESTATION corpus — the `666|attestation|` wire family. RM common
 # master06-change_control_package.adoc §Contributions makes an attestation a
@@ -3009,13 +3009,13 @@ cnf.attestation.description_coded:
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "authored 2026-08-02 as the CODED-description twin of cnf.attestation.witnessed: an ATTESTATION inherits AUDIT_DETAILS.description, which RM common UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes types DV_TEXT (0..1) and which org.openehr.rm.common.attestation.adoc inherits unchanged, so the DV_CODED_TEXT subtype with its defining_code is a representable value there too (ITS-REST schemas/common/UpdateAttestation.yaml extends UpdateAudit, whose description is UDvText: oneOf DV_TEXT, DV_CODED_TEXT). The code is archetype-local (terminology_id `local`) — no openEHR terminology group binds this attribute, so only the SURVIVAL of the whole coded value is asserted, never membership. Its reason stays the group-bound 648|witnessed| the sibling valid fixtures carry, so a refusal can only be about the description"
+  provenance: "authored 2026-08-02 as the CODED-description twin of cnf.attestation.witnessed: an ATTESTATION inherits AUDIT_DETAILS.description, which RM UML/classes/audit_details.adoc §Attributes types DV_TEXT (0..1) and which attestation.adoc inherits unchanged, so the DV_CODED_TEXT subtype with its defining_code is a representable value there too (ITS-REST schemas/common/UpdateAttestation.yaml extends UpdateAudit, whose description is UDvText: oneOf DV_TEXT, DV_CODED_TEXT). The code is archetype-local (terminology_id `local`) — no openEHR terminology group binds this attribute, so only the SURVIVAL of the whole coded value is asserted, never membership. Its reason stays the group-bound 648|witnessed| the sibling valid fixtures carry, so a refusal can only be about the description"
 cnf.attestation.attested_view:
   source: fixtures/attestation/attested_view.json
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
-  provenance: "authored 2026-08-02 as the ATTESTED-VIEW twin of cnf.attestation.witnessed — the one ATTESTATION attribute carrying an encapsulated binary: RM common UML/classes/org.openehr.rm.common.attestation.adoc §Attributes types attested_view a DV_MULTIMEDIA at 0..1 (\"Optional visual representation of content attested e.g. screen image\"), and ITS-REST specifications/schemas/common/UpdateAttestation.yaml declares the same member. The value is INLINE (a 70-byte PNG as base64 `data`) with the mandatory media_type image/png from the openEHR `media types` code set — \"interface for the IANA MIME types code set\" (RM data_types UML/classes/org.openehr.rm.data_types.dv_multimedia.adoc §Attributes; TERM SupportTerminology §Code Sets) — and the matching size, so Media_type_valid, Not_empty (`is_inline or is_external`) and Size_valid all hold on a tiny payload. Its reason stays the group-bound 648|witnessed| the sibling valid fixtures carry, so a refusal can only be about the attested_view"
+  provenance: "authored 2026-08-02 as the ATTESTED-VIEW twin of cnf.attestation.witnessed — the one ATTESTATION attribute carrying an encapsulated binary: RM UML/classes/attestation.adoc §Attributes types attested_view a DV_MULTIMEDIA at 0..1 (\"Optional visual representation of content attested e.g. screen image\"), and ITS-REST specifications/schemas/common/UpdateAttestation.yaml declares the same member. The value is INLINE (a 70-byte PNG as base64 `data`) with the mandatory media_type image/png from the openEHR `media types` code set — \"interface for the IANA MIME types code set\" (RM UML/classes/dv_multimedia.adoc §Attributes; TERM SupportTerminology §Code Sets) — and the matching size, so Media_type_valid, Not_empty (`is_inline or is_external`) and Size_valid all hold on a tiny payload. Its reason stays the group-bound 648|witnessed| the sibling valid fixtures carry, so a refusal can only be about the attested_view"
 cnf.attestation.invalid.no_reason:
   source: fixtures/attestation/invalid.no_reason.json
   format: canonical-json
@@ -3046,7 +3046,7 @@ cnf.attestation.invalid.empty_items:
 # The ORIGINAL_VERSION serialization vector: a committed version carrying BOTH
 # objects of the master04 §Attestation pending-then-signed pattern in its
 # `attestations` list (ORIGINAL_VERSION.attestations, RM common
-# UML/classes/org.openehr.rm.common.original_version.adoc §Attributes). Both
+# UML/classes/original_version.adoc §Attributes). Both
 # representations are codec-derived and gated against each other by
 # crates/openehr-its/tests/it/attested_version.rs.
 cnf.version.attested:
@@ -3070,7 +3070,7 @@ cnf.composition.lab_result.cluster_items_empty:
   validity:
     verdict: invalid
     defect: "the OPT-constrained analyte CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "re-authored 2026-08-20 (issue #1937, replacing the minimal_event derivative whose grafted at0900 CLUSTER the OPT refused as a second defect) from cnf.ckm.lab_result.example with exactly one edit: the OPT-constrained analyte CLUSTER's items emptied — the fill-the-list body IS cnf.ckm.lab_result.example itself, which commits green, so exactly one defect remains"
 cnf.composition.history_open.paragraph_items_empty:
   source: fixtures/composition/history_open.paragraph_items_empty.json
@@ -3079,7 +3079,7 @@ cnf.composition.history_open.paragraph_items_empty:
   validity:
     verdict: invalid
     defect: "the DV_PARAGRAPH's items list is present but empty"
-    spec_ref: "RM data_types dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container) + §Invariants Items_valid (not items.is_empty)"
+    spec_ref: "RM UML/classes/dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container) + §Invariants Items_valid (not items.is_empty)"
   provenance: "re-authored 2026-08-20 (issue #1937, replacing the minimal_event derivative whose grafted at0902 node the OPT refused as a second defect) from cnf.composition.history_open.deprecated_text_forms with exactly one edit: the DV_PARAGRAPH's items emptied — no OPT anywhere constrains a DV_PARAGRAPH (the deprecated type appears in no corpus template), so the open ITEM_STRUCTURE slot is the one archetype-admissible host, and the fill-the-list body IS deprecated_text_forms itself, which commits green"
 cnf.composition.minimal_event.composer_identifiers_empty:
   source: fixtures/composition/minimal_event.composer_identifiers_empty.json
@@ -3088,7 +3088,7 @@ cnf.composition.minimal_event.composer_identifiers_empty:
   validity:
     verdict: invalid
     defect: "the composer PARTY_IDENTIFIED's identifiers list is present but empty"
-    spec_ref: "RM common party_identified.adoc §Invariants (Identifiers_valid: identifiers /= Void implies not identifiers.is_empty)"
+    spec_ref: "RM UML/classes/party_identified.adoc §Invariants (Identifiers_valid: identifiers /= Void implies not identifiers.is_empty)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.composition.minimal_event.v1 with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.person.cluster_no_items:
   source: fixtures/demographic/person.cluster_no_items.json
@@ -3097,7 +3097,7 @@ cnf.demographic.person.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.person.v1 with an added CLUSTER in PARTY_IDENTITY.details with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.person.paragraph_no_items:
   source: fixtures/demographic/person.paragraph_no_items.json
@@ -3106,7 +3106,7 @@ cnf.demographic.person.paragraph_no_items:
   validity:
     verdict: invalid
     defect: "the DV_PARAGRAPH's items list is present but empty"
-    spec_ref: "RM data_types dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.person.v1 with an added DV_PARAGRAPH leaf in PARTY_IDENTITY.details with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.person.identities_empty:
   source: fixtures/demographic/person.identities_empty.json
@@ -3115,7 +3115,7 @@ cnf.demographic.person.identities_empty:
   validity:
     verdict: invalid
     defect: "identities is present as an empty list"
-    spec_ref: "RM demographic party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
+    spec_ref: "RM UML/classes/party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.person.v1 with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.person.contact_addresses_empty:
   source: fixtures/demographic/person.contact_addresses_empty.json
@@ -3124,7 +3124,7 @@ cnf.demographic.person.contact_addresses_empty:
   validity:
     verdict: invalid
     defect: "the CONTACT's addresses list is present but empty"
-    spec_ref: "RM demographic contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.person.v1 with one CONTACT added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.agent.identities_empty:
   source: fixtures/demographic/agent.identities_empty.json
@@ -3133,7 +3133,7 @@ cnf.demographic.agent.identities_empty:
   validity:
     verdict: invalid
     defect: "identities is present as an empty list"
-    spec_ref: "RM demographic party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
+    spec_ref: "RM UML/classes/party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.agent.v1 with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.agent.contact_addresses_empty:
   source: fixtures/demographic/agent.contact_addresses_empty.json
@@ -3142,7 +3142,7 @@ cnf.demographic.agent.contact_addresses_empty:
   validity:
     verdict: invalid
     defect: "the CONTACT's addresses list is present but empty"
-    spec_ref: "RM demographic contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.agent.v1 with one CONTACT added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.group.identities_empty:
   source: fixtures/demographic/group.identities_empty.json
@@ -3151,7 +3151,7 @@ cnf.demographic.group.identities_empty:
   validity:
     verdict: invalid
     defect: "identities is present as an empty list"
-    spec_ref: "RM demographic party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
+    spec_ref: "RM UML/classes/party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.group.v1 with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.group.contact_addresses_empty:
   source: fixtures/demographic/group.contact_addresses_empty.json
@@ -3160,7 +3160,7 @@ cnf.demographic.group.contact_addresses_empty:
   validity:
     verdict: invalid
     defect: "the CONTACT's addresses list is present but empty"
-    spec_ref: "RM demographic contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.group.v1 with one CONTACT added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.organisation.identities_empty:
   source: fixtures/demographic/organisation.identities_empty.json
@@ -3169,7 +3169,7 @@ cnf.demographic.organisation.identities_empty:
   validity:
     verdict: invalid
     defect: "identities is present as an empty list"
-    spec_ref: "RM demographic party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
+    spec_ref: "RM UML/classes/party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.organisation.v1 with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.organisation.contact_addresses_empty:
   source: fixtures/demographic/organisation.contact_addresses_empty.json
@@ -3178,7 +3178,7 @@ cnf.demographic.organisation.contact_addresses_empty:
   validity:
     verdict: invalid
     defect: "the CONTACT's addresses list is present but empty"
-    spec_ref: "RM demographic contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.organisation.v1 with one CONTACT added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.role.identities_empty:
   source: fixtures/demographic/role.identities_empty.json
@@ -3187,7 +3187,7 @@ cnf.demographic.role.identities_empty:
   validity:
     verdict: invalid
     defect: "identities is present as an empty list"
-    spec_ref: "RM demographic party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
+    spec_ref: "RM UML/classes/party.adoc §Attributes (identities: List<PARTY_IDENTITY>, 1..1) + §Invariants (Identities_valid: not identities.is_empty)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.role.v1 with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.demographic.role.contact_addresses_empty:
   source: fixtures/demographic/role.contact_addresses_empty.json
@@ -3196,7 +3196,7 @@ cnf.demographic.role.contact_addresses_empty:
   validity:
     verdict: invalid
     defect: "the CONTACT's addresses list is present but empty"
-    spec_ref: "RM demographic contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/contact.adoc §Attributes (addresses: List<ADDRESS>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.demographic.role.v1 with one CONTACT added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.directory.cluster_no_items:
   source: fixtures/directory/cluster_no_items.json
@@ -3205,7 +3205,7 @@ cnf.directory.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.directory.root_only with a details ITEM_TREE added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.directory.paragraph_no_items:
   source: fixtures/directory/paragraph_no_items.json
@@ -3214,7 +3214,7 @@ cnf.directory.paragraph_no_items:
   validity:
     verdict: invalid
     defect: "the DV_PARAGRAPH's items list is present but empty"
-    spec_ref: "RM data_types dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.directory.root_only with a details ITEM_TREE added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.ehr_status.cluster_no_items:
   source: fixtures/ehr/invalid/ehr_status.cluster_no_items.json
@@ -3223,7 +3223,7 @@ cnf.ehr_status.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.ehr_status.with_subject with an other_details ITEM_TREE added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.ehr_status.paragraph_no_items:
   source: fixtures/ehr/invalid/ehr_status.paragraph_no_items.json
@@ -3232,7 +3232,7 @@ cnf.ehr_status.paragraph_no_items:
   validity:
     verdict: invalid
     defect: "the DV_PARAGRAPH's items list is present but empty"
-    spec_ref: "RM data_types dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.ehr_status.with_subject with an other_details ITEM_TREE added with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.messaging.ehr_extract.cluster_no_items:
   source: fixtures/messaging/ehr_extract.cluster_no_items.json
@@ -3241,7 +3241,7 @@ cnf.messaging.ehr_extract.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.messaging.ehr_extract.v1 (fresh identities) with an other_details ITEM_TREE on the imported EHR_STATUS with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.messaging.ehr_extract.paragraph_no_items:
   source: fixtures/messaging/ehr_extract.paragraph_no_items.json
@@ -3250,7 +3250,7 @@ cnf.messaging.ehr_extract.paragraph_no_items:
   validity:
     verdict: invalid
     defect: "the DV_PARAGRAPH's items list is present but empty"
-    spec_ref: "RM data_types dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/dv_paragraph.adoc §Attributes (items: List<DV_TEXT>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.messaging.ehr_extract.v1 (fresh identities) with an other_details ITEM_TREE on the imported EHR_STATUS with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.messaging.ehr_extract.manifest_no_entities:
   source: fixtures/messaging/ehr_extract.manifest_no_entities.json
@@ -3259,7 +3259,7 @@ cnf.messaging.ehr_extract.manifest_no_entities:
   validity:
     verdict: invalid
     defect: "the EXTRACT_MANIFEST's entities list is present but empty"
-    spec_ref: "RM ehr_extract extract_manifest.adoc §Attributes (entities: List<EXTRACT_ENTITY_MANIFEST>, 1..1 — a mandatory list)"
+    spec_ref: "RM UML/classes/extract_manifest.adoc §Attributes (entities: List<EXTRACT_ENTITY_MANIFEST>, 1..1 — a mandatory list)"
   provenance: "authored 2026-08-04 for the #1858 empty-mandatory-list matrix — cnf.messaging.ehr_extract.v1 (fresh identities) with exactly one list emptied; everything else valid. One defect per fixture: the case it drives names one thing"
 cnf.composition.minimal_event.item_tree_empty:
   source: fixtures/composition/minimal_event.item_tree_empty.json
@@ -3289,7 +3289,7 @@ cnf.demographic.agent.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "authored 2026-08-04 for the #1858 matrix's UPDATE half — cnf.demographic.agent.v1 with one empty CLUSTER added in PARTY_IDENTITY.details; everything else valid. One defect per fixture"
 cnf.demographic.group.cluster_no_items:
   source: fixtures/demographic/group.cluster_no_items.json
@@ -3298,7 +3298,7 @@ cnf.demographic.group.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "authored 2026-08-04 for the #1858 matrix's UPDATE half — cnf.demographic.group.v1 with one empty CLUSTER added in PARTY_IDENTITY.details; everything else valid. One defect per fixture"
 cnf.demographic.organisation.cluster_no_items:
   source: fixtures/demographic/organisation.cluster_no_items.json
@@ -3307,7 +3307,7 @@ cnf.demographic.organisation.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "authored 2026-08-04 for the #1858 matrix's UPDATE half — cnf.demographic.organisation.v1 with one empty CLUSTER added in PARTY_IDENTITY.details; everything else valid. One defect per fixture"
 cnf.demographic.role.cluster_no_items:
   source: fixtures/demographic/role.cluster_no_items.json
@@ -3316,7 +3316,7 @@ cnf.demographic.role.cluster_no_items:
   validity:
     verdict: invalid
     defect: "the CLUSTER's items list is present but empty"
-    spec_ref: "RM data_structures cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
+    spec_ref: "RM UML/classes/cluster.adoc §Attributes (items: List<ITEM>, 1..1 with cardinality 1..* — the BMM-declared mandatory non-empty container; the released OAS Clstr.yaml declares required: [items] with no minItems, so the OAS is NOT the ground for refusing [])"
   provenance: "authored 2026-08-04 for the #1858 matrix's UPDATE half — cnf.demographic.role.v1 with one empty CLUSTER added in PARTY_IDENTITY.details; everything else valid. One defect per fixture"
 cnf.opt.invalid.description_empty_lifecycle_state:
   source: fixtures/opt/invalid/description_empty_lifecycle_state.opt
@@ -3325,7 +3325,7 @@ cnf.opt.invalid.description_empty_lifecycle_state:
   validity:
     verdict: invalid
     defect: "the description's lifecycle_state is the empty string"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.resource_description.adoc §Invariants Lifecycle_state_valid (not lifecycle_state.is_empty)"
+    spec_ref: "RM UML/classes/resource_description.adoc §Invariants Lifecycle_state_valid (not lifecycle_state.is_empty)"
   provenance: "derived 2026-08-19 from cnf.opt.obs_inst with exactly one edit: <lifecycle_state> emptied, so the RM ch.8 row is the only defect"
 cnf.opt.invalid.description_empty_purpose:
   source: fixtures/opt/invalid/description_empty_purpose.opt
@@ -3334,7 +3334,7 @@ cnf.opt.invalid.description_empty_purpose:
   validity:
     verdict: invalid
     defect: "the description detail's purpose is the empty string"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.resource_description_item.adoc §Invariants Purpose_valid (not purpose.is_empty)"
+    spec_ref: "RM UML/classes/resource_description_item.adoc §Invariants Purpose_valid (not purpose.is_empty)"
   provenance: "derived 2026-08-19 from cnf.opt.obs_inst with exactly one edit: the en detail's <purpose> emptied"
 cnf.opt.invalid.description_item_language_not_in_code_set:
   source: fixtures/opt/invalid/description_item_language_not_in_code_set.opt
@@ -3343,7 +3343,7 @@ cnf.opt.invalid.description_item_language_not_in_code_set:
   validity:
     verdict: invalid
     defect: "the description detail's language zz-none is not in the openEHR languages code set"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.resource_description_item.adoc §Invariants Language_valid (code_set(Code_set_id_languages).has_code(language))"
+    spec_ref: "RM UML/classes/resource_description_item.adoc §Invariants Language_valid (code_set(Code_set_id_languages).has_code(language))"
   provenance: "derived 2026-08-19 from cnf.opt.obs_inst with exactly one edit: the en detail's language code_string swapped to zz-none"
 cnf.opt.invalid.template_language_not_in_code_set:
   source: fixtures/opt/invalid/template_language_not_in_code_set.opt
@@ -3352,7 +3352,7 @@ cnf.opt.invalid.template_language_not_in_code_set:
   validity:
     verdict: invalid
     defect: "the template's own language zz-none is not in the openEHR languages code set"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.authored_resource.adoc §Invariants Original_language_valid (code_set(Code_set_id_languages).has_code(original_language.as_string)); the OPT root is AUTHORED_RESOURCE-shaped (ITS-XML v1 AM Template.xsd, the OPERATIONAL_TEMPLATE annotation)"
+    spec_ref: "RM UML/classes/authored_resource.adoc §Invariants Original_language_valid (code_set(Code_set_id_languages).has_code(original_language.as_string)); the OPT root is AUTHORED_RESOURCE-shaped (ITS-XML v1 AM Template.xsd, the OPERATIONAL_TEMPLATE annotation)"
   provenance: "derived 2026-08-19 from cnf.opt.obs_inst with exactly one edit: the root language code_string swapped to zz-none"
 cnf.opt.invalid.controlled_without_revision_history:
   source: fixtures/opt/invalid/controlled_without_revision_history.opt
@@ -3361,7 +3361,7 @@ cnf.opt.invalid.controlled_without_revision_history:
   validity:
     verdict: invalid
     defect: "is_controlled is true while no revision_history is carried"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.authored_resource.adoc §Invariants Revision_history_valid (is_controlled xor revision_history = Void)"
+    spec_ref: "RM UML/classes/authored_resource.adoc §Invariants Revision_history_valid (is_controlled xor revision_history = Void)"
   provenance: "derived 2026-08-19 from cnf.opt.obs_inst with exactly one edit: <is_controlled>true</is_controlled> inserted before <description>, no revision_history added"
 cnf.opt.invalid.description_duplicate_detail_language:
   source: fixtures/opt/invalid/description_duplicate_detail_language.opt
@@ -3370,7 +3370,7 @@ cnf.opt.invalid.description_duplicate_detail_language:
   validity:
     verdict: invalid
     defect: "two description details carry the same language en — details realize a Hash keyed by language, so a duplicate key is unrepresentable in the model"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.resource_description.adoc §Attributes (details: Hash<String, RESOURCE_DESCRIPTION_ITEM> keyed by language code) + §Invariants Details_valid"
+    spec_ref: "RM UML/classes/resource_description.adoc §Attributes (details: Hash<String, RESOURCE_DESCRIPTION_ITEM> keyed by language code) + §Invariants Details_valid"
   provenance: "derived 2026-08-19 from cnf.opt.obs_inst with exactly one edit: the en <details> block duplicated verbatim"
 cnf.opt.invalid.description_without_original_author:
   source: fixtures/opt/invalid/description_without_original_author.opt
@@ -3379,7 +3379,7 @@ cnf.opt.invalid.description_without_original_author:
   validity:
     verdict: invalid
     defect: "the description carries no original_author"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.resource_description.adoc §Attributes (original_author 1..1) + §Invariants Original_author_valid (not original_author.is_empty)"
+    spec_ref: "RM UML/classes/resource_description.adoc §Attributes (original_author 1..1) + §Invariants Original_author_valid (not original_author.is_empty)"
   provenance: "derived 2026-08-19 from cnf.opt.obs_inst with exactly one edit: the <original_author> element removed"
 cnf.opt.invalid.description_without_details:
   source: fixtures/opt/invalid/description_without_details.opt
@@ -3388,7 +3388,7 @@ cnf.opt.invalid.description_without_details:
   validity:
     verdict: invalid
     defect: "the description carries no details"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.resource_description.adoc §Attributes (details 1..1) + §Invariants Details_valid (not details.is_empty)"
+    spec_ref: "RM UML/classes/resource_description.adoc §Attributes (details 1..1) + §Invariants Details_valid (not details.is_empty)"
   provenance: "derived 2026-08-19 from cnf.opt.obs_inst with exactly one edit: the <details> block removed"
 cnf.archetype.adl14.translation_restates_original:
   source: fixtures/archetypes/adl14.medication.v1.translation_restates_original.adl
@@ -3397,7 +3397,7 @@ cnf.archetype.adl14.translation_restates_original:
   validity:
     verdict: invalid
     defect: "a translations entry re-states the original language en"
-    spec_ref: "RM UML/classes/org.openehr.rm.common.authored_resource.adoc §Invariants Translations_valid (not translations.has(orginal_language.code_string) — the spec's own spelling); the RM resource package governs AOM 1.4 meta-data (RM common master08-resource_package.adoc front-matter NOTE)"
+    spec_ref: "RM UML/classes/authored_resource.adoc §Invariants Translations_valid (not translations.has(orginal_language.code_string) — the spec's own spelling); the RM resource package governs AOM 1.4 meta-data (RM common master08-resource_package.adoc front-matter NOTE)"
   provenance: "derived 2026-08-19 from cnf.archetype.adl14.medication with exactly one edit: an [\"en\"] entry inserted into the existing translations section"
 cnf.composition.null_family.value_and_flavour:
   source: fixtures/contribution/composition.obs_admin.null_family.value_and_flavour.json
@@ -3406,7 +3406,7 @@ cnf.composition.null_family.value_and_flavour:
   validity:
     verdict: invalid
     defect: "the at0004 ELEMENT carries BOTH a value and a null_flavour"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_structures.element.adoc §Invariants Inv_null_flavour_indicated (is_null() xor null_flavour = Void)"
+    spec_ref: "RM UML/classes/element.adoc §Invariants Inv_null_flavour_indicated (is_null() xor null_flavour = Void)"
   template_id: "obs_admin.en.v2"
   provenance: "derived 2026-08-20 from cnf.composition.null_flavour with exactly one edit: a template-legal DV_TEXT value added to the null ELEMENT, so the xor is the only defect"
 cnf.composition.null_family.orphan_null_reason:
@@ -3416,7 +3416,7 @@ cnf.composition.null_family.orphan_null_reason:
   validity:
     verdict: invalid
     defect: "a null_reason on a VALUED at0004 ELEMENT (is_null() is false)"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_structures.element.adoc §Invariants Inv_null_reason_valid (null_reason /= Void implies is_null())"
+    spec_ref: "RM UML/classes/element.adoc §Invariants Inv_null_reason_valid (null_reason /= Void implies is_null())"
   template_id: "obs_admin.en.v2"
   provenance: "derived 2026-08-20 from cnf.composition.obs_admin.coded_text_on_text with exactly one edit: a null_reason added beside the present value"
 cnf.composition.null_family.out_of_group_flavour:
@@ -3426,7 +3426,7 @@ cnf.composition.null_family.out_of_group_flavour:
   validity:
     verdict: invalid
     defect: "the null ELEMENT's null_flavour code 999 is outside the openEHR null flavours group"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_structures.element.adoc §Invariants Inv_null_flavour_valid (terminology(Terminology_id_openehr).has_code_for_group_id(Group_id_null_flavour, null_flavour.defining_code))"
+    spec_ref: "RM UML/classes/element.adoc §Invariants Inv_null_flavour_valid (terminology(Terminology_id_openehr).has_code_for_group_id(Group_id_null_flavour, null_flavour.defining_code))"
   template_id: "obs_admin.en.v2"
   provenance: "derived 2026-08-20 from cnf.composition.null_flavour with exactly one edit: the 271 code swapped to the out-of-group 999 (value text adjusted to avoid a rubric mismatch masking the group defect)"
 cnf.opt.history_open.v1:
@@ -3450,7 +3450,7 @@ cnf.composition.history_open.mixed_structures:
   validity:
     verdict: invalid
     defect: "the two events carry different ITEM_STRUCTURE subtypes in data (ITEM_TREE then ITEM_LIST) in one HISTORY"
-    spec_ref: "RM data_structures/master06-history_package.adoc §Basic Semantics (the generic types force the type of the data in each Event to be the same) + UML/classes/org.openehr.rm.data_structures.history.adoc (HISTORY<T>: each Event in the events of a given instance is of the same structural type)"
+    spec_ref: "RM data_structures/master06-history_package.adoc §Basic Semantics (the generic types force the type of the data in each Event to be the same) + UML/classes/history.adoc (HISTORY<T>: each Event in the events of a given instance is of the same structural type)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 from cnf.composition.history_open.interval_events with exactly one defect: aperiodic, two POINT_EVENTs whose data subtypes diverge — the open ITEM_STRUCTURE slot admits each event individually, so the same-type rule is the only violation"
 cnf.composition.history_open.out_of_group_math_function:
@@ -3460,7 +3460,7 @@ cnf.composition.history_open.out_of_group_math_function:
   validity:
     verdict: invalid
     defect: "the INTERVAL_EVENT's math_function code 999 is outside the openEHR event math function group"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_structures.interval_event.adoc §Invariants Math_function_validity (terminology(Terminology_id_openehr).has_code_for_group_id(Group_id_event_math_function, math_function.defining_code))"
+    spec_ref: "RM UML/classes/interval_event.adoc §Invariants Math_function_validity (terminology(Terminology_id_openehr).has_code_for_group_id(Group_id_event_math_function, math_function.defining_code))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 from cnf.composition.history_open.interval_events with exactly one defect: aperiodic, the single INTERVAL_EVENT's math_function swapped to the out-of-group 999 (rubric adjusted so the group defect is the only finding)"
 cnf.composition.history_open.off_period_offset:
@@ -3470,7 +3470,7 @@ cnf.composition.history_open.off_period_offset:
   validity:
     verdict: invalid
     defect: "a periodic (PT5M) HISTORY carries an event at +7 min — 420 s is not a whole multiple of the 300 s period"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_structures.history.adoc §Invariants Period_consistency (is_periodic implies events.for_all(e | e.offset.to_seconds.mod(period.to_seconds) = 0))"
+    spec_ref: "RM UML/classes/history.adoc §Invariants Period_consistency (is_periodic implies events.for_all(e | e.offset.to_seconds.mod(period.to_seconds) = 0))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 from cnf.composition.history_open.interval_events with exactly one defect: the period kept at PT5M and the second event retimed to 08:07:00 (both events POINT_EVENTs of the same ITEM_TREE shape, so the off-period offset is the only violation)"
 cnf.composition.history_open.empty_identifier_id:
@@ -3480,7 +3480,7 @@ cnf.composition.history_open.empty_identifier_id:
   validity:
     verdict: invalid
     defect: "an ELEMENT valued DV_IDENTIFIER whose mandatory id is the empty string"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_identifier.adoc §Invariants Id_valid (not id.is_empty)"
+    spec_ref: "RM UML/classes/dv_identifier.adoc §Invariants Id_valid (not id.is_empty)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2474) from cnf.composition.history_open.interval_events with exactly one defect: aperiodic, one POINT_EVENT whose single ELEMENT value is a DV_IDENTIFIER with id \"\" — the open ITEM_STRUCTURE slot admits the element, so Id_valid is the only violation (the missing-id branch is already pinned by the CONT-DV_IDENTIFIER matrix's rm_schema row; this is the present-but-empty twin)"
 cnf.composition.history_open.deprecated_text_forms:
@@ -3497,7 +3497,7 @@ cnf.composition.history_open.empty_formatting:
   validity:
     verdict: invalid
     defect: "a DV_TEXT with a present-but-empty formatting string"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_text.adoc §Invariants Formatting_valid (formatting /= void implies not formatting.is_empty)"
+    spec_ref: "RM UML/classes/dv_text.adoc §Invariants Formatting_valid (formatting /= void implies not formatting.is_empty)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2476) from cnf.composition.history_open.interval_events with exactly one defect: one DV_TEXT ELEMENT whose formatting is \"\""
 cnf.composition.history_open.bad_encoding:
@@ -3507,7 +3507,7 @@ cnf.composition.history_open.bad_encoding:
   validity:
     verdict: invalid
     defect: "a DV_TEXT whose encoding code bogus-charset is no member of the character sets code set"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_text.adoc §Invariants Encoding_valid (encoding /= Void implies code_set(Code_set_id_character_sets).has_code(encoding))"
+    spec_ref: "RM UML/classes/dv_text.adoc §Invariants Encoding_valid (encoding /= Void implies code_set(Code_set_id_character_sets).has_code(encoding))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2476) from cnf.composition.history_open.interval_events with exactly one defect: one DV_TEXT ELEMENT carrying encoding IANA_character-sets::bogus-charset"
 cnf.composition.history_open.bad_match:
@@ -3517,7 +3517,7 @@ cnf.composition.history_open.bad_match:
   validity:
     verdict: invalid
     defect: "a TERM_MAPPING whose match character # is outside < = > ?"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.term_mapping.adoc §Invariants Match_valid (is_valid_match_code: c = '>' or c = '=' or c = '<' or c = '?')"
+    spec_ref: "RM UML/classes/term_mapping.adoc §Invariants Match_valid (is_valid_match_code: c = '>' or c = '=' or c = '<' or c = '?')"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2476) from cnf.composition.history_open.interval_events with exactly one defect: one DV_TEXT ELEMENT carrying a single mapping whose match is '#' (the target CODE_PHRASE is well-formed, so the match code is the only violation)"
 cnf.composition.history_open.empty_code_string:
@@ -3527,7 +3527,7 @@ cnf.composition.history_open.empty_code_string:
   validity:
     verdict: invalid
     defect: "a mapping target CODE_PHRASE whose code_string is the empty string"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.code_phrase.adoc §Invariants Code_string_valid (not code_string.is_empty)"
+    spec_ref: "RM UML/classes/code_phrase.adoc §Invariants Code_string_valid (not code_string.is_empty)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2476) from cnf.composition.history_open.interval_events with exactly one defect: one DV_TEXT ELEMENT carrying a single well-formed mapping (match '=') whose target code_string is \"\" — the target path carries no terminology-group check, so Code_string_valid is the only violation"
 cnf.composition.history_open.quantity_rich:
@@ -3544,7 +3544,7 @@ cnf.composition.history_open.bad_magnitude_status:
   validity:
     verdict: invalid
     defect: "a DV_QUANTITY whose magnitude_status !! is outside = < > <= >= ~"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_quantified.adoc §Invariants Magnitude_status_valid (valid_magnitude_status)"
+    spec_ref: "RM UML/classes/dv_quantified.adoc §Invariants Magnitude_status_valid (valid_magnitude_status)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478) from cnf.composition.history_open.interval_events with exactly one defect: magnitude_status \"!!\""
 cnf.composition.history_open.accuracy_zero_percent:
@@ -3554,7 +3554,7 @@ cnf.composition.history_open.accuracy_zero_percent:
   validity:
     verdict: invalid
     defect: "a DV_QUANTITY with accuracy 0 while accuracy_is_percent is true"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_amount.adoc §Invariants Accuracy_is_percent_validity (accuracy = 0 implies not accuracy_is_percent)"
+    spec_ref: "RM UML/classes/dv_amount.adoc §Invariants Accuracy_is_percent_validity (accuracy = 0 implies not accuracy_is_percent)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — accuracy 0.0 with accuracy_is_percent true (0 is a valid percentage, so Accuracy_validity stays quiet)"
 cnf.composition.history_open.accuracy_percent_out_of_range:
@@ -3564,7 +3564,7 @@ cnf.composition.history_open.accuracy_percent_out_of_range:
   validity:
     verdict: invalid
     defect: "a DV_QUANTITY whose percent accuracy 250 is outside 0..100"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_amount.adoc §Invariants Accuracy_validity (accuracy_is_percent implies valid_percentage(accuracy))"
+    spec_ref: "RM UML/classes/dv_amount.adoc §Invariants Accuracy_validity (accuracy_is_percent implies valid_percentage(accuracy))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — accuracy 250.0 with accuracy_is_percent true (non-zero, so Accuracy_is_percent_validity stays quiet)"
 cnf.composition.history_open.fraction_non_integral:
@@ -3574,7 +3574,7 @@ cnf.composition.history_open.fraction_non_integral:
   validity:
     verdict: invalid
     defect: "a pk_fraction DV_PROPORTION whose numerator 1.5 is not integral"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_proportion.adoc §Invariants Fraction_validity ((type = pk_fraction or type = pk_integer_fraction) implies is_integral)"
+    spec_ref: "RM UML/classes/dv_proportion.adoc §Invariants Fraction_validity ((type = pk_fraction or type = pk_integer_fraction) implies is_integral)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — type 3 with numerator 1.5 (Is_integral_validity is register-excluded as the same defect, so the core reports Fraction_validity once)"
 cnf.composition.history_open.unitary_bad_denominator:
@@ -3584,7 +3584,7 @@ cnf.composition.history_open.unitary_bad_denominator:
   validity:
     verdict: invalid
     defect: "a pk_unitary DV_PROPORTION whose denominator is 2, not 1"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_proportion.adoc §Invariants Unitary_validity (type = pk_unitary implies denominator = 1)"
+    spec_ref: "RM UML/classes/dv_proportion.adoc §Invariants Unitary_validity (type = pk_unitary implies denominator = 1)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — type 1 with denominator 2.0"
 cnf.composition.history_open.percent_bad_denominator:
@@ -3594,7 +3594,7 @@ cnf.composition.history_open.percent_bad_denominator:
   validity:
     verdict: invalid
     defect: "a pk_percent DV_PROPORTION whose denominator is 500, not 100"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_proportion.adoc §Invariants Percent_validity (type = pk_percent implies denominator = 100)"
+    spec_ref: "RM UML/classes/dv_proportion.adoc §Invariants Percent_validity (type = pk_percent implies denominator = 100)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — type 2 with denominator 500.0"
 cnf.composition.history_open.zero_denominator:
@@ -3604,7 +3604,7 @@ cnf.composition.history_open.zero_denominator:
   validity:
     verdict: invalid
     defect: "a DV_PROPORTION whose denominator is 0.0"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_proportion.adoc §Invariants Valid_denominator (denominator /= 0.0)"
+    spec_ref: "RM UML/classes/dv_proportion.adoc §Invariants Valid_denominator (denominator /= 0.0)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — type 0 (ratio, any values legal) with denominator 0.0"
 cnf.composition.history_open.bad_normal_status:
@@ -3614,7 +3614,7 @@ cnf.composition.history_open.bad_normal_status:
   validity:
     verdict: invalid
     defect: "a DV_QUANTITY whose normal_status code XX is no member of the normal statuses code set"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_ordered.adoc §Invariants Normal_status_validity (code_set(Code_set_id_normal_statuses).has_code(normal_status))"
+    spec_ref: "RM UML/classes/dv_ordered.adoc §Invariants Normal_status_validity (code_set(Code_set_id_normal_statuses).has_code(normal_status))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — normal_status openehr_normal_statuses::XX"
 cnf.composition.history_open.status_range_inconsistent:
@@ -3624,7 +3624,7 @@ cnf.composition.history_open.status_range_inconsistent:
   validity:
     verdict: invalid
     defect: "a DV_QUANTITY of magnitude 50 declaring normal_status N beside a normal_range 100..200 that does not contain it"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_ordered.adoc §Invariants Normal_range_and_status_consistency ((normal_range /= Void and normal_status /= Void) implies (normal_status.code_string.is_equal(N) xor not normal_range.has(self)))"
+    spec_ref: "RM UML/classes/dv_ordered.adoc §Invariants Normal_range_and_status_consistency ((normal_range /= Void and normal_status /= Void) implies (normal_status.code_string.is_equal(N) xor not normal_range.has(self)))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — the N status contradicts the out-of-range value (the status code is set-valid and the range limits are comparable and ordered, so the consistency xor is the only violation)"
 cnf.composition.history_open.nonsimple_reference_range:
@@ -3634,7 +3634,7 @@ cnf.composition.history_open.nonsimple_reference_range:
   validity:
     verdict: invalid
     defect: "an other_reference_ranges entry whose range lower limit itself carries a normal_range (a non-simple limit)"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.reference_range.adoc §Invariants Range_is_simple ((range.lower_unbounded or else range.lower.is_simple) and (range.upper_unbounded or else range.upper.is_simple))"
+    spec_ref: "RM UML/classes/reference_range.adoc §Invariants Range_is_simple ((range.lower_unbounded or else range.lower.is_simple) and (range.upper_unbounded or else range.upper.is_simple))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2478): exactly one defect — the critical range's lower DV_QUANTITY carries its own (internally consistent, contained) normal_range, so Range_is_simple is the only violation"
 cnf.composition.history_open.time_specifications:
@@ -3651,7 +3651,7 @@ cnf.composition.history_open.periodic_bad_formalism:
   validity:
     verdict: invalid
     defect: "a DV_PERIODIC_TIME_SPECIFICATION whose value.formalism is HL7:GTS, not HL7:PIVL or HL7:EIVL"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_periodic_time_specification.adoc §Invariants Value_valid (value.formalism.is_equal(HL7:PIVL) or value.formalism.is_equal(HL7:EIVL))"
+    spec_ref: "RM UML/classes/dv_periodic_time_specification.adoc §Invariants Value_valid (value.formalism.is_equal(HL7:PIVL) or value.formalism.is_equal(HL7:EIVL))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2480) from cnf.composition.history_open.time_specifications with exactly one defect: the periodic specification's formalism swapped to HL7:GTS (the parsable value itself stays well-formed, so Value_valid is the only violation)"
 cnf.composition.history_open.encapsulated_rich:
@@ -3668,7 +3668,7 @@ cnf.composition.history_open.bad_compression:
   validity:
     verdict: invalid
     defect: "a DV_MULTIMEDIA whose compression_algorithm code brotli is no member of the compression algorithms code set"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_multimedia.adoc §Invariants Compression_algorithm_validity (code_set(Code_set_id_compression_algorithms).has_code(compression_algorithm))"
+    spec_ref: "RM UML/classes/dv_multimedia.adoc §Invariants Compression_algorithm_validity (code_set(Code_set_id_compression_algorithms).has_code(compression_algorithm))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2482) from cnf.composition.history_open.encapsulated_rich with exactly one defect: the compression code swapped to brotli, the other optionals removed"
 cnf.composition.history_open.orphan_integrity_check:
@@ -3678,7 +3678,7 @@ cnf.composition.history_open.orphan_integrity_check:
   validity:
     verdict: invalid
     defect: "a DV_MULTIMEDIA carrying integrity_check bytes with no integrity_check_algorithm"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_multimedia.adoc §Invariants Integrity_check_validity (integrity_check /= Void implies integrity_check_algorithm /= Void)"
+    spec_ref: "RM UML/classes/dv_multimedia.adoc §Invariants Integrity_check_validity (integrity_check /= Void implies integrity_check_algorithm /= Void)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2482): exactly one defect — the algorithm deleted while the check bytes stay"
 cnf.composition.history_open.bad_integrity_algorithm:
@@ -3688,7 +3688,7 @@ cnf.composition.history_open.bad_integrity_algorithm:
   validity:
     verdict: invalid
     defect: "a DV_MULTIMEDIA whose integrity_check_algorithm code CRC32 is no member of the integrity check algorithms code set"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_multimedia.adoc §Invariants Integrity_check_algorithm_validity (code_set(Code_set_id_integrity_check_algorithms).has_code(integrity_check_algorithm))"
+    spec_ref: "RM UML/classes/dv_multimedia.adoc §Invariants Integrity_check_algorithm_validity (code_set(Code_set_id_integrity_check_algorithms).has_code(integrity_check_algorithm))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2482): exactly one defect — the algorithm code swapped to CRC32 (the check bytes stay, so Integrity_check_validity holds)"
 cnf.composition.history_open.empty_formalism:
@@ -3698,7 +3698,7 @@ cnf.composition.history_open.empty_formalism:
   validity:
     verdict: invalid
     defect: "a DV_PARSABLE whose mandatory formalism is the empty string"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_parsable.adoc §Invariants Formalism_valid (not formalism.is_empty)"
+    spec_ref: "RM UML/classes/dv_parsable.adoc §Invariants Formalism_valid (not formalism.is_empty)"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2482): exactly one defect — formalism \"\" on an otherwise well-formed parsable"
 cnf.composition.history_open.bad_charset:
@@ -3708,7 +3708,7 @@ cnf.composition.history_open.bad_charset:
   validity:
     verdict: invalid
     defect: "a DV_PARSABLE whose charset code bogus-charset is no member of the character sets code set"
-    spec_ref: "RM UML/classes/org.openehr.rm.data_types.dv_encapsulated.adoc §Invariants Charset_valid (code_set(Code_set_id_character_sets).has_code(charset))"
+    spec_ref: "RM UML/classes/dv_encapsulated.adoc §Invariants Charset_valid (code_set(Code_set_id_character_sets).has_code(charset))"
   template_id: "history_open.en.v1"
   provenance: "derived 2026-08-20 (issue #2482): exactly one defect — the charset code swapped to bogus-charset (language removed so the charset is the only code-set probe)"
 cnf.opt.history_open_cat.v1:
@@ -3746,7 +3746,7 @@ cnf.composition.maximal.bad_ism_state:
   validity:
     verdict: invalid
     defect: "an ISM_TRANSITION whose current_state code 999 is outside the instruction states group"
-    spec_ref: "RM UML/classes/org.openehr.rm.composition.ism_transition.adoc §Invariants Current_state_valid (has_code_for_group_id(Group_id_instruction_states, current_state.defining_code))"
+    spec_ref: "RM UML/classes/ism_transition.adoc §Invariants Current_state_valid (has_code_for_group_id(Group_id_instruction_states, current_state.defining_code))"
   template_id: "test_all_types.en.v1"
   provenance: "derived 2026-08-20 (issue #2488) from cnf.composition.maximal with exactly one defect: the state code 526 swapped to 999 (the maximal OPT leaves the ISM state archetype-open, so the terminology invariant is the only violation)"
 cnf.composition.maximal.bad_ism_transition:
@@ -3756,7 +3756,7 @@ cnf.composition.maximal.bad_ism_transition:
   validity:
     verdict: invalid
     defect: "an ISM_TRANSITION whose transition code 999 is outside the instruction transitions group"
-    spec_ref: "RM UML/classes/org.openehr.rm.composition.ism_transition.adoc §Invariants Transition_valid (transition /= Void implies has_code_for_group_id(Group_id_instruction_transitions, transition.defining_code))"
+    spec_ref: "RM UML/classes/ism_transition.adoc §Invariants Transition_valid (transition /= Void implies has_code_for_group_id(Group_id_instruction_transitions, transition.defining_code))"
   template_id: "test_all_types.en.v1"
   provenance: "derived 2026-08-20 (issue #2488): exactly one defect — an out-of-group transition added to the otherwise-valid ISM_TRANSITION"
 cnf.composition.maximal.empty_action_archetype_id:
@@ -3766,7 +3766,7 @@ cnf.composition.maximal.empty_action_archetype_id:
   validity:
     verdict: invalid
     defect: "an ACTIVITY whose mandatory action_archetype_id is the empty string"
-    spec_ref: "RM UML/classes/org.openehr.rm.composition.activity.adoc §Invariants Action_archetype_id_valid (not action_archetype_id.is_empty)"
+    spec_ref: "RM UML/classes/activity.adoc §Invariants Action_archetype_id_valid (not action_archetype_id.is_empty)"
   template_id: "test_all_types.en.v1"
   provenance: "derived 2026-08-20 (issue #2488): exactly one defect — action_archetype_id \"\""
 cnf.composition.maximal.empty_activity_id:
@@ -3776,6 +3776,6 @@ cnf.composition.maximal.empty_activity_id:
   validity:
     verdict: invalid
     defect: "an INSTRUCTION_DETAILS whose mandatory activity_id is the empty string"
-    spec_ref: "RM UML/classes/org.openehr.rm.composition.instruction_details.adoc §Invariants Activity_path_valid (not activity_id.is_empty)"
+    spec_ref: "RM UML/classes/instruction_details.adoc §Invariants Activity_path_valid (not activity_id.is_empty)"
   template_id: "test_all_types.en.v1"
   provenance: "derived 2026-08-20 (issue #2488): exactly one defect — an otherwise-valid instruction_details (well-formed LOCATABLE_REF instruction_id) added to the ACTION with activity_id \"\""

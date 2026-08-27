@@ -61,10 +61,6 @@ are generally not assigned by the computing infrastructure that uses them - that
 computing system, such identifiers are no different from other characteristics of the entity,
 such as names or addresses.
 
-Note: Some messaging standards make use of a "time validity" or similar attribute on identifier datatypes. 
-The recommended way of representing validity timespans of identifiers in openEHR is to model this using archetypes
-and templates so that regional or use-case specific needs can be better represented.
-
 === Design
 
 The model defined here in the `DV_IDENTIFIER` class allows the recording of three things as part of identifying an item of interest:
@@ -81,10 +77,10 @@ See the {openehr_rm_support}#_identification_package[Support IM specification^] 
 
 == Class Descriptions
 
-include::{uml_export_dir}/classes/{pkg}data_value.adoc[]
+include::{uml_export_dir}/classes/data_value.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}dv_boolean.adoc[]
+include::{uml_export_dir}/classes/dv_boolean.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}dv_state.adoc[]
+include::{uml_export_dir}/classes/dv_state.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}dv_identifier.adoc[]
+include::{uml_export_dir}/classes/dv_identifier.adoc[]

@@ -1,6 +1,6 @@
 # DEMOGRAPHIC ARCHETYPE VALIDATION — the mandatory-attribute arm.
 #
-# RM demographic UML/classes/org.openehr.rm.demographic.party_identity.adoc
+# RM UML/classes/party_identity.adoc
 # §Attributes declares `1..1 details: ITEM_STRUCTURE`. An identity without it
 # has no value at all — the class exists to carry that structure — so a PARTY
 # whose identity omits it is not a legal instance of the model the demographic

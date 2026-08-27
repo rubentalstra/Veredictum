@@ -3,7 +3,7 @@
 #
 # WHAT MAKES THE HEADER INVALID (one defect, so a red row names one thing):
 # `openehr-item-tag: key=" padded "`. RM common
-# UML/classes/org.openehr.rm.common.item_tag.adoc §Invariants declares
+# UML/classes/item_tag.adoc §Invariants declares
 # `Inv_key_valid: not key.is_empty and key.is_justified`, and the same file's
 # Meaning column for `key` says what that means: "May not be empty or contain
 # leading or trailing whitespace". The FOLDER body is the valid
@@ -48,7 +48,7 @@ test_purpose: >-
   with no directory.
 description: "An invalid wrapper tag refuses the commit and creates nothing"
 spec_refs:
-  - "RM common item_tag.adoc §Invariants (Inv_key_valid)"
+  - "RM UML/classes/item_tag.adoc §Invariants (Inv_key_valid)"
   - "ITS-REST overview Requests_and_responses §openehr-item-tag and openehr-version-item-tag"
   - "ITS-REST overview Requests_and_responses §HTTP status codes"
 applies: { rm: ">=1.0.2", its_rest: ">=1.1.0" }   # ITEM_TAGs are Release-1.1.0 behaviour — ITS-REST overview Amendment_record.md §Release-1.1.0 (SPECITS-77)

@@ -8,7 +8,7 @@ test_purpose: "A committed DV_EHR_URI is accepted iff value is present and its s
 description: "DV_EHR_URI open: the scheme='ehr' invariant"
 spec_refs:
   - "CNF platform_test_schedule master17.7 \u00a7CONT-DV_EHR_URI-validate_open"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_ehr_uri.adoc \u00a7Invariants (Scheme_valid: scheme.is_equal(Ehr_scheme))"
+  - "RM UML/classes/dv_ehr_uri.adoc \u00a7Invariants (Scheme_valid: scheme.is_equal(Ehr_scheme))"
   - "AM AOM1.4 \u00a7C_STRING"
 constraint_context:
   template: cnf.tpl.dv_ehr_uri_open

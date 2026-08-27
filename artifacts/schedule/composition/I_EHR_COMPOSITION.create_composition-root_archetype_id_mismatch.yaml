@@ -1,6 +1,6 @@
 # THE ROOT NODE-ID IDENTITY RULE on the composition surface.
 #
-# RM common UML/classes/org.openehr.rm.common.locatable.adoc §Attributes fixes
+# RM UML/classes/locatable.adoc §Attributes fixes
 # the value of `archetype_node_id` at a root verbatim: "At an archetype root
 # point, the value of this attribute is always the stringified form of the
 # `_archetype_id_` found in the `_archetype_details_` object." RM common

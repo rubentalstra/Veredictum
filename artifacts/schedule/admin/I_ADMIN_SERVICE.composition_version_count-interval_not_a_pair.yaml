@@ -1,6 +1,6 @@
 # `time_interval` carries the SM `Interval<Iso8601_date_time>`
 # (i_admin_service.adoc) as the `<lower>/<upper>` bound PAIR — an Interval is
-# two bounds (BASE org.openehr.base.foundation_types.interval.adoc §Attributes:
+# two bounds (BASE interval.adoc §Attributes:
 # `lower`, `upper`, each optional for an open side). A value naming a single
 # instant with no separator is therefore not an Interval, and which bound it
 # was meant to be is unknowable: reading it as either one would answer over a

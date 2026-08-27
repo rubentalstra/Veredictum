@@ -1,0 +1,21 @@
+=== BMM_ACTION_TABLE Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*BMM_ACTION_TABLE*
+
+h|*Description*
+2+a|Multi-branch conditional statement structure
+
+h|*Inherit*
+2+|`<<_bmm_statement_class,BMM_STATEMENT>>`
+
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1*
+|*items*: `link:/releases/BASE/{base_release}/foundation_types.html#_list_class[List^]<<<_bmm_conditional_action_class,BMM_CONDITIONAL_ACTION>>>`
+a|Decision branches.
+|===

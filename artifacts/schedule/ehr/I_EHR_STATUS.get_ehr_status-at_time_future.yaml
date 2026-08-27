@@ -1,7 +1,7 @@
 # The upper edge of the at-time branch: an instant AFTER the newest commit
 # still names a version — the newest one — and is answered, not refused.
 #
-# No released text states this: RM common versioned_object.adoc gives only
+# No released text states this: RM UML/classes/versioned_object.adoc gives only
 # `version_at_time (a_time): VERSION` with `Pre: has_version_at_time (a_time)`
 # and never says whether a version's extancy interval closes at the next
 # commit or runs open-ended. Register AMB-70 carries the adjudicated fixed

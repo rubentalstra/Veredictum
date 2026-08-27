@@ -3,7 +3,7 @@
 # it holds.
 #
 # Three of the four facts are normative RM, quoted from RM common
-# UML/classes/org.openehr.rm.common.versioned_object.adoc §Attributes:
+# UML/classes/versioned_object.adoc §Attributes:
 #   * the served object is a VERSIONED_COMPOSITION (ITS-REST overview
 #     Resources.md §Resources names it first among the "versioned entities:
 #     VERSIONED_COMPOSITION, VERSIONED_EHR_STATUS, etc.");

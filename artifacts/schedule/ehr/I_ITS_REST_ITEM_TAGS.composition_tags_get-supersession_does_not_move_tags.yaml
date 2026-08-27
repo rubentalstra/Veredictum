@@ -5,7 +5,7 @@
 # THE GROUND, and exactly how far it reaches. `ITEM_TAG.target` is
 # `UID_BASED_ID[1..1]` — "Identifier of target, which may be a
 # `VERSIONED_OBJECT<T>` or a `VERSION<T>`" (RM
-# UML/classes/org.openehr.rm.common.item_tag.adoc §Attributes) — so a tag has
+# UML/classes/item_tag.adoc §Attributes) — so a tag has
 # exactly ONE target and the two arities name different things: the container
 # that outlives its versions, or one immutable version. The released reads are
 # defined against that target: composition_tags_get.yaml retrieves "the list of

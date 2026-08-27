@@ -1,5 +1,5 @@
 # DEMOGRAPHIC ARCHETYPE VALIDATION — the ACTOR arm of the same cardinality
-# family: RM demographic UML/classes/org.openehr.rm.demographic.actor.adoc
+# family: RM UML/classes/actor.adoc
 # §Invariants, `Roles_valid: roles /= Void implies not roles.is_empty`. The
 # attribute (0..1 List<PARTY_REF>) is declared on ACTOR, not PARTY, so this
 # rule binds the ACTOR subtypes (PERSON / ORGANISATION / GROUP / AGENT) and

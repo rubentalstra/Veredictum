@@ -1,0 +1,29 @@
+=== EL_SELF_REF Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*EL_SELF_REF*
+
+h|*Description*
+2+a|Special meta-type used to represent a reference that may appear in any routine, pre- or post-condition, or invariant, and resolves to the current object within which feature references are scoped; corresponds to 'self', 'this' or 'Current' in various programming languages.
+
+h|*Inherit*
+2+|`<<_el_instance_ref_class,EL_INSTANCE_REF>>`
+
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1*
+|*type*: `<<_bmm_type_class,BMM_TYPE>>`
+a|Type of the current scoping instance, inferred from expression context.
+h|*Functions*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1 +
+(effected)*
+|*eval_type* (): `<<_bmm_type_class,BMM_TYPE>>`
+a|Return `_type_`.
+|===

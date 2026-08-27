@@ -4,7 +4,7 @@
 # `ctx/participation_*` keys set EVENT_CONTEXT.participations (ITS-REST
 # simplified_formats master06 §Participation), and the RM types
 # `PARTICIPATION.function` a DV_TEXT at 1..1
-# (RM/docs/UML/classes/org.openehr.rm.common.participation.adoc §Attributes:
+# (RM/docs/UML/classes/participation.adoc §Attributes:
 # "The function of the Party in this participation"). master06 §Participation
 # supplies `participation_function:<i>` in every example it gives — for both the
 # compact and the expanded identifier form — and says nothing about omitting it,

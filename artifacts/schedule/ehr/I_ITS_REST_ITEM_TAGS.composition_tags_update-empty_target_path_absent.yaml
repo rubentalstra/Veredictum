@@ -7,7 +7,7 @@
 # §openehr-item-tag and openehr-version-item-tag), so if `""` and absent were
 # two values they would be two tags under one key. The two released artifacts
 # model it differently: RM
-# UML/classes/org.openehr.rm.common.item_tag.adoc types `target_path` as
+# UML/classes/item_tag.adoc types `target_path` as
 # `String[0..1]` — absent means no path — with invariants on `key` and `value`
 # only and none forbidding an empty path, while SIX of the seven released
 # example schemas write `target_path: ""` outright

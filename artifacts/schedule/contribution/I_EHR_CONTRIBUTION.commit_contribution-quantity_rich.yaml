@@ -20,8 +20,8 @@ test_purpose: >-
 description: "commit a composition carrying a fully-trimmed DV_QUANTITY + a percent DV_PROPORTION"
 spec_refs:
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_quantity.adoc §Attributes (magnitude, precision, units, units_system, units_display_name) + org.openehr.rm.data_types.dv_ordered.adoc §Attributes (normal_status, normal_range, other_reference_ranges)"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_proportion.adoc §Invariants (Percent_validity satisfied: type = pk_percent, denominator = 100)"
+  - "RM UML/classes/dv_quantity.adoc §Attributes (magnitude, precision, units, units_system, units_display_name) + dv_ordered.adoc §Attributes (normal_status, normal_range, other_reference_ranges)"
+  - "RM UML/classes/dv_proportion.adoc §Invariants (Percent_validity satisfied: type = pk_percent, denominator = 100)"
 applies: { rm: ">=1.0.2" }
 requires:
   server: any

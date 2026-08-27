@@ -16,11 +16,11 @@
 # attribute allows the original content item itself to be either included
 # inline or pointed to." FEEDER_AUDIT_DETAILS.other_details is "Optional
 # attribute to carry any custom meta-data. May be archetyped."
-# (docs/UML/classes/org.openehr.rm.common.feeder_audit_details.adoc
+# (docs/UML/classes/feeder_audit_details.adoc
 # §Attributes), so an ITEM_TREE there is the modelled shape, not an extension.
 #
 # The payload populates every attribute the RM defines on FEEDER_AUDIT — the
-# five of docs/UML/classes/org.openehr.rm.common.feeder_audit.adoc §Attributes
+# five of docs/UML/classes/feeder_audit.adoc §Attributes
 # (originating_system_item_ids, feeder_system_item_ids, original_content,
 # originating_system_audit, feeder_system_audit) minus feeder_system_item_ids,
 # which the interior instance is deliberately without so the two audits differ.

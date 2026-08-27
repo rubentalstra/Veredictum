@@ -1,10 +1,10 @@
 # DEMOGRAPHIC ARCHETYPE VALIDATION — the root node-id identity rule.
 #
-# RM common UML/classes/org.openehr.rm.common.locatable.adoc §archetype_node_id
+# RM UML/classes/locatable.adoc §archetype_node_id
 # fixes the value at a root verbatim: "At an archetype root point, the value of
 # this attribute is always the stringified form of the `_archetype_id_` found
 # in the `_archetype_details_` object." RM demographic
-# UML/classes/org.openehr.rm.demographic.party.adoc §Invariants makes every
+# UML/classes/party.adoc §Invariants makes every
 # PARTY such a root (`Is_archetype_root: is_archetype_root`, no antecedent), so
 # a PARTY whose root archetype_node_id names a DIFFERENT archetype than its own
 # ARCHETYPED block contradicts the model: the two archetype identities of one

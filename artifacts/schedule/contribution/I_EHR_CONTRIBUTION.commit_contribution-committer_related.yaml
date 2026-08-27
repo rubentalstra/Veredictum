@@ -4,9 +4,9 @@
 # WHY THIS CASE EXISTS: the refusal twin alone would also pass on a server
 # that rejected EVERY PARTY_RELATED committer, which would certify
 # over-rejection as conformance. `AUDIT_DETAILS.committer` is a `PARTY_PROXY`
-# at `1..1` (RM common UML/classes/org.openehr.rm.common.audit_details.adoc
+# at `1..1` (RM UML/classes/audit_details.adoc
 # §Attributes) and PARTY_RELATED is one of its subtypes (RM common
-# UML/classes/org.openehr.rm.common.party_related.adoc §Inherit:
+# UML/classes/party_related.adoc §Inherit:
 # PARTY_IDENTIFIED, itself a PARTY_PROXY) — "Proxy type for identifying a
 # party and its relationship to the subject of the record. Use where the
 # relationship between the party and the subject of the record must be known"

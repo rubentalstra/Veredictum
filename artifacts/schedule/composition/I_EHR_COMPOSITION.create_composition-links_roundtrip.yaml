@@ -10,14 +10,14 @@
 # back with them intact.
 #
 # WHAT THE RM REQUIRES: `LOCATABLE.links` is `0..1 List<LINK>` (RM common
-# UML/classes/org.openehr.rm.common.locatable.adoc §Attributes: "Links to other
+# UML/classes/locatable.adoc §Attributes: "Links to other
 # archetyped structures (data whose root object inherits from `ARCHETYPED`, such
 # as `ENTRY`, `SECTION` and so on). Links may be to structures in other
 # compositions"), and every LOCATABLE inherits it. Each member carries all three
 # 1..1 LINK attributes — `meaning: DV_TEXT`, `type: DV_TEXT`,
 # `target: DV_EHR_URI` (…common.link.adoc §Attributes) — with an `ehr://` target
 # satisfying `DV_EHR_URI.Scheme_valid` (RM data_types
-# UML/classes/org.openehr.rm.data_types.dv_ehr_uri.adoc §Invariants).
+# UML/classes/dv_ehr_uri.adoc §Invariants).
 #
 # WHY TWO DEPTHS: the sibling directory case
 # (I_EHR_DIRECTORY.create_directory-folder_with_link) exercises links on a

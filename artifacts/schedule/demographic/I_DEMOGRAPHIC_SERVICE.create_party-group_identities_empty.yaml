@@ -1,7 +1,7 @@
 # A present-but-empty `PARTY.identities` is refused on the GROUP create route.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM `UML/classes/org.openehr.rm.demographic.party.adoc` §Attributes types
+# RM `UML/classes/party.adoc` §Attributes types
 # `PARTY.identities: List<PARTY_IDENTITY>` at 1..1, and §Invariants states
 # `Identities_valid: not identities.is_empty` outright, so a present-but-EMPTY list is the one shape the bound
 # forbids — the way to say "none" is to omit an optional container, never

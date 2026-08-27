@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CodeSystem xmlns="http://hl7.org/fhir">
   <url value="https://specifications.openehr.org/fhir/codesystem-participation_mode"/>
-  <version value="3.1.0"/>
+  <version value="3.0.0"/>
   <name value="participation_mode"/>
   <title value="Participation Mode"/>
   <status value="active"/>
   <experimental value="false"/>
-  <date value="2024-08-22"/>
+  <date value="2023-06-26"/>
   <publisher value="openEHR International"/>
   <contact>
     <name value="openEHR TERM specifications"/>
     <telecom>
       <system value="url"/>
-      <value value="https://specifications.openehr.org/releases/TERM/Release-3.1.0"/>
+      <value value="https://specifications.openehr.org/releases/TERM/Release-3.0.0"/>
     </telecom>
   </contact>
   <caseSensitive value="true"/>
@@ -33,10 +33,6 @@
       <language value="pt"/>
       <value value="não especificado"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="未明确说明"/>
-    </designation>
   </concept>
   <concept>
     <code value="216"/>
@@ -52,10 +48,6 @@
     <designation>
       <language value="pt"/>
       <value value="comunicação cara-a-cara"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="面对面沟通"/>
     </designation>
   </concept>
   <concept>
@@ -73,10 +65,6 @@
       <language value="pt"/>
       <value value="comunicação interpretada cara-a-cara"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="配备口译的面对面沟通"/>
-    </designation>
   </concept>
   <concept>
     <code value="217"/>
@@ -92,10 +80,6 @@
     <designation>
       <language value="pt"/>
       <value value="assinatura (cara-a-cara)"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="签名 (面对面)"/>
     </designation>
   </concept>
   <concept>
@@ -113,10 +97,6 @@
       <language value="pt"/>
       <value value="audiovisual ao vivo; videoconferência; videofone"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="现场视听、视频会议、视频电话"/>
-    </designation>
   </concept>
   <concept>
     <code value="198"/>
@@ -132,10 +112,6 @@
     <designation>
       <language value="pt"/>
       <value value="videoconferência"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="视频会议"/>
     </designation>
   </concept>
   <concept>
@@ -153,10 +129,6 @@
       <language value="pt"/>
       <value value="videofone"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="可视电话"/>
-    </designation>
   </concept>
   <concept>
     <code value="218"/>
@@ -172,10 +144,6 @@
     <designation>
       <language value="pt"/>
       <value value="assinatura por vídeo"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="视频签名"/>
     </designation>
   </concept>
   <concept>
@@ -193,10 +161,6 @@
       <language value="pt"/>
       <value value="comunicação interpretada por vídeo"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="配备口译的视频沟通"/>
-    </designation>
   </concept>
   <concept>
     <code value="194"/>
@@ -212,10 +176,6 @@
     <designation>
       <language value="pt"/>
       <value value="audiovisual assíncrono; vídeo gravado"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="异步视听、录制的视频"/>
     </designation>
   </concept>
   <concept>
@@ -233,10 +193,6 @@
       <language value="pt"/>
       <value value="vídeo gravado"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="录制的视频"/>
-    </designation>
   </concept>
   <concept>
     <code value="202"/>
@@ -252,10 +208,6 @@
     <designation>
       <language value="pt"/>
       <value value="apenas áudio em directo; telefone; telefone por internet; teleconferência"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="纯现场音频、电话、互联网电话、电话会议"/>
     </designation>
   </concept>
   <concept>
@@ -273,10 +225,6 @@
       <language value="pt"/>
       <value value="telefone"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="电话"/>
-    </designation>
   </concept>
   <concept>
     <code value="203"/>
@@ -292,10 +240,6 @@
     <designation>
       <language value="pt"/>
       <value value="teleconferência"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="电话会议"/>
     </designation>
   </concept>
   <concept>
@@ -313,10 +257,6 @@
       <language value="pt"/>
       <value value="telefone por internet"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="互联网电话"/>
-    </designation>
   </concept>
   <concept>
     <code value="222"/>
@@ -332,10 +272,6 @@
     <designation>
       <language value="pt"/>
       <value value="áudio interpretado"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="配备口译的纯音频"/>
     </designation>
   </concept>
   <concept>
@@ -353,10 +289,6 @@
       <language value="pt"/>
       <value value="áudio assíncrono; ditado; correio de voz"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="异步纯音频、口述、语音邮件"/>
-    </designation>
   </concept>
   <concept>
     <code value="200"/>
@@ -372,10 +304,6 @@
     <designation>
       <language value="pt"/>
       <value value="ditado"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="口述"/>
     </designation>
   </concept>
   <concept>
@@ -393,10 +321,6 @@
       <language value="pt"/>
       <value value="correio de voz"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="语音邮件"/>
-    </designation>
   </concept>
   <concept>
     <code value="212"/>
@@ -412,10 +336,6 @@
     <designation>
       <language value="pt"/>
       <value value="apenas texto em directo; chat na Internet; chat por SMS; nota escrita interactiva"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="纯实时文本、互联网聊天、短信聊天、交互式书面笔记"/>
     </designation>
   </concept>
   <concept>
@@ -433,10 +353,6 @@
       <language value="pt"/>
       <value value="chat por internet"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="互联网聊天"/>
-    </designation>
   </concept>
   <concept>
     <code value="214"/>
@@ -452,10 +368,6 @@
     <designation>
       <language value="pt"/>
       <value value="chat por SMS"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="短信聊天"/>
     </designation>
   </concept>
   <concept>
@@ -473,10 +385,6 @@
       <language value="pt"/>
       <value value="nota escrita interactiva"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="交互式书面笔记"/>
-    </designation>
   </concept>
   <concept>
     <code value="206"/>
@@ -492,10 +400,6 @@
     <designation>
       <language value="pt"/>
       <value value="texto assíncrono; correio electrónico; fax; carta; nota manuscrita; mensagem SMS"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="异步文本、电子邮件、传真、信件、手写笔记、短信"/>
     </designation>
   </concept>
   <concept>
@@ -513,10 +417,6 @@
       <language value="pt"/>
       <value value="nota manuscrita"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="手写笔记"/>
-    </designation>
   </concept>
   <concept>
     <code value="210"/>
@@ -532,10 +432,6 @@
     <designation>
       <language value="pt"/>
       <value value="carta impressa/datilografada"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="打印/打字形成的信件"/>
     </designation>
   </concept>
   <concept>
@@ -553,10 +449,6 @@
       <language value="pt"/>
       <value value="email"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="电子邮件"/>
-    </designation>
   </concept>
   <concept>
     <code value="208"/>
@@ -572,10 +464,6 @@
     <designation>
       <language value="pt"/>
       <value value="fax/telefax"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="传真/电传"/>
     </designation>
   </concept>
   <concept>
@@ -593,10 +481,6 @@
       <language value="pt"/>
       <value value="texto traduzido"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="经过翻译的文本"/>
-    </designation>
   </concept>
   <concept>
     <code value="209"/>
@@ -612,10 +496,6 @@
     <designation>
       <language value="pt"/>
       <value value="mensagem SMS"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="短信"/>
     </designation>
   </concept>
   <concept>
@@ -633,10 +513,6 @@
       <language value="pt"/>
       <value value="fisicamente presente"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="亲自到场"/>
-    </designation>
   </concept>
   <concept>
     <code value="220"/>
@@ -652,10 +528,6 @@
     <designation>
       <language value="pt"/>
       <value value="fisicamente remoto"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="亲自远程"/>
     </designation>
   </concept>
 </CodeSystem>

@@ -8,7 +8,7 @@
 # `archetype_node_id` says `openEHR-EHR-FOLDER.generic.v1`. An archetype root
 # (`is_archetype_root`: `archetype_details /= Void`) must carry its
 # archetype id AS its node id — RM common
-# UML/classes/org.openehr.rm.common.locatable.adoc §Attributes
+# UML/classes/locatable.adoc §Attributes
 # (`archetype_node_id` … "at archetype root points, this is the archetype
 # identifier") + §Invariants Archetyped_valid.
 #

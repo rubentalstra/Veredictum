@@ -14,7 +14,7 @@ The following sections describe various types of ODIN artefact.
 
 == Embedded Fragment
 
-Fragments of ODIN text can appear embedded within other artefacts. A fragment typically includes no object identifiers nor schema identifier since both of these are assumed to be inferred from the surrounding context. A typical fragment has the following appearance:
+Fragments of ODIN text can appear embedded within other artefacts. A fragment typically includes no object identiers nor schema identifier since both of these are assumed to be inferred from the surrounding context. A typical fragment has the following appearance:
 
 [source, odin]
 --------
@@ -43,7 +43,7 @@ An ODIN document is considered a standalone artefact whose contents can take var
 
 === Implicit Object Document
 
-A document containing only an embedded fragment such as shown above is considered to be an 'implicit' object document, and its contents are assumed to consist of values of various object properties. This format is a degenerate form of the 'anonymous' object document but so common and useful it is treated as a legal ODIN form.
+A document containing only an embedded fragment such as shown above is considered to be an 'implict' object document, and its contents are assumed to consist of values of various object properties. This format is a degenerate form of the 'anonymous' object document but so common and useful it is treated as a legal ODIN form.
 
 Implicit object documents are commonly used to serialise models, such as information model schemas, application configuration files and so on. The usual assumption is that the filename and/or ODIN content will identify the artefact sufficiently for tools to know what its information model is.
 

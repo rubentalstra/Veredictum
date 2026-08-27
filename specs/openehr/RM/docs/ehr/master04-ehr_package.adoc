@@ -47,7 +47,7 @@ Other EHR-wide meta-data may be recorded in the archetyped part of this object, 
 
 === Compositions
 
-The main data of the EHR is found in its Compositions, i.e. instances of the `COMPOSITION` class in the RM. Composition is based on the notion of a unit of information resulting from the interaction of a healthcare agent (subject or healthcare professional) with the EHR. It is designed to satisfy the following needs, which include the well-known ACID characteristics of transactions cite:[Gray_Reuter1993].
+The main data of the EHR is found in its Compositions, i.e. instances of the `COMPOSITION` class in the RM. Composition is based on the notion of a unit of information resulting from the interaction of a healthcare agent (subject or healthcare professional) with the EHR. It is designed to satisfy the following needs, which include the well-known ACID characteristics of transactions citenp:[Gray_Reuter1993].
 
 * _durability_: the need for a persistent unit of information committal in the record;
 * _atomicity_: the need for a minimal unit of integrity for clinical information, corresponding to a minimal unit for committal, transmission and security;
@@ -57,7 +57,7 @@ The main data of the EHR is found in its Compositions, i.e. instances of the `CO
 * _modification_: the need for users to be able to modify EHR contents, in order to correct errors or update previously recorded information (e.g. current medications, family history); and
 * _traceability_: the need to record adequate auditing information at committal, in order to provide clinical and legal traceability.
 
-The Composition concept originated from the 'Transaction' concept of the GEHR project cite:[GEHR_Del_4], cite:[GEHR_Del_7], cite:[GEHR_Del_8], cite:[GEHR1995]. In openEHR, it was renamed to 'Composition' (the name of the equivalent concept in {iso_13606-1}[ISO 13606-1^]), and it has been expanded and more formally defined in openEHR in two ways. Firstly, the idea of a unit of committal has been formalised by the openEHR model of change control (see the {openehr_rm_common}[openEHR Common Information Model]); how this applies to the EHR and Compositions is described below.
+The Composition concept originated from the 'Transaction' concept of the GEHR project citenp:[GEHR_Del_4], citenp:[GEHR_Del_7], citenp:[GEHR_Del_8], citenp:[GEHR1995]. In openEHR, it was renamed to 'Composition' (the name of the equivalent concept in {iso_13606-1}[ISO 13606-1^]), and it has been expanded and more formally defined in openEHR in two ways. Firstly, the idea of a unit of committal has been formalised by the openEHR model of change control (see the {openehr_rm_common}[openEHR Common Information Model]); how this applies to the EHR and Compositions is described below.
 
 Secondly, the informational purpose of a Composition is not just to capture data from a passing clinical event such as a patient contact, but also to track longitudinal significant patient state, such as problems, allergies and medications. Accordingly, openEHR Compositions are temporally classified using a small number of broad categories recorded in the `COMPOSITION._category_` attribute. Categories include _event_, _episodic_ and _persistent_. From a scientific realist ontological point of view, the kind of information recorded in a persistent Composition approximates a description of some _continuant_ aspect of the patient (see citenp:[BFO_Arp_Smith_Spear], citenp:[Sowa2000]). This is in contrast with event Compositions, which record _occurrents_, i.e. events or states that occurred or were true at some moment in time. The episodic category corresponds to information that is relevant for the period of time of a care episode.
 
@@ -95,9 +95,7 @@ Over time, the number of event Compositions is likely to far outstrip the number
 
 ==== Episodic Compositions
 
-Compositions may be classified as _episodic_ if they contain information relevant to an ongoing care situation spanning sigificant time, such as pregnancy and birth, major surgery and recovery etc. During a specific episode of care, Event Compositions will still be used to record normal clinical events, particularly routine observations. However, assessments, summaries and care plans specific to the condition being treated may be committed in Compositions with `_category_` set to `episodic` to indicate that they should be treated as having a persistent-like quality i.e updated as as single instance source-of-truth, but only maintained as such for a defined period or set of conditions and not for the entire life of the patient. An example is a Problem list that is maintained as a continuously updated single instance during a hospital admission but only for the duration of that admission. If the patient is re-admitted, a new instance of an Episodic Composition is then created and continually updated for that admission.
-
-Since episodic Compositions are typically regarded as no longer relevant once the episode of care is considered complete, it may be useful to mark them as such. This may be done for a Composition whose owning Version is in the lifecycle state `completed` by setting the owning `ORIGINAL_VERSION._lifecycle_state_` to the `inactive` state. If the owning Version is in the `incomplete` state, it may be `abandoned`. Version lifecycle transitions are described in detail in the {openehr_rm_common}#_version_lifecycle[openEHR Common Information Model^].
+Compositions may be classified as _episodic_ if they contain information relevant to an ongoing care situation spanning sigificant time, such as pregnancy and birth, major surgery and recovery etc. During a specific episode of care, Event Compositions will still be used to record normal clinical events, particularly routine observations. However, assessments, summaries and care plans specific to the condition being treated may be committed in Compositions with `_category_` set to `episodic` to indicate that they should be treated as having a persistent-like quality i.e updated as as single instance source-of-truth, but only maintained as such for a defined period or set of conditions and not for the entire life of the patient. An example might be a Problem list which is maintained as a continuously updated single instance during a hospital admission but only for the duration of that admission. If the patient is re-admitted, a new instance of an Episodic Composition is then created and continually updated for that admission.
 
 === Folders
 
@@ -129,28 +127,6 @@ This structure separates out Compositions on the basis of likely access by appli
 Neither the Folder names nor the Composition names illustrated above are part of the openEHR EHR reference model: all such details are provided by archetypes; hence, EHR structures based on completely different conceptions of division of information, or even different types of medicine are equally possible.
 
 The Folder hierarchy in each member of the `_folders_` attribute is maintained in its own versioned object, ensuring that changes to the indexing structure are versioned over time in the same way as changes to the EHR content itself.
-
-[#tags]
-=== Tags
-
-Items in the EHR may be tagged using openEHR _tags_, which are lightweight annotations that may be used to thematically classify previously committed data items for convenient subsequent retrieval. They are described in detail in the {openehr_rm_common}#_tags_package[Common IM Tags section^].
-
-[.text-center]
-.Tagging in the EHR
-image::{diagrams_uri}/tags_example.svg[id=tags_example, align="center"]
-
-Tags are associated with an EHR via the `EHR._tags_` attribute, but have no direct association with the objects they annotate. This has the following consequences:
-
-* they may be added at any time with respect to the commit time of the content they annotate, including much later;
-* they do not constitute part of the content they annotate;
-* accordingly, where they annotate versioned content, they do not cause re-versioning of the content;
-* a distinct tag instance is used to represent each use of the tag.
-
-The last point implies that if there is a tag "clin-proj-27a" and it is used on 13 EHR content items, there will be 13 separate tag instances with `key = "clin-proj-27a"`. If one is modified or deleted, it has no effect on the others.
-
-According to the model, all tags reside within one logical list, i.e.  `EHR._tags_`. No grouping is used. In order to achieve efficient access of all tags with the same key, indexing would be required.
-
-The primary use of tags post-creation is in querying, and their use is supported directly in the {openehr_query_aql}[openEHR AQL query language^] such that a query mentioning a tag (either by key, or key/value pair if applicable) will return all items of any RM type annotated by the tag in question.
 
 == Change Control in the EHR
 
@@ -281,17 +257,15 @@ It is previous informational states with which we are concerned for medico-legal
 
 == Class Descriptions
 
-include::{uml_export_dir}/classes/{pkg}ehr.adoc[]
+include::{uml_export_dir}/classes/ehr.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}versioned_ehr_access.adoc[]
+include::{uml_export_dir}/classes/versioned_ehr_access.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}ehr_access.adoc[]
+include::{uml_export_dir}/classes/ehr_access.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}access_control_settings.adoc[]
+include::{uml_export_dir}/classes/versioned_ehr_status.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}versioned_ehr_status.adoc[]
+include::{uml_export_dir}/classes/ehr_status.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}ehr_status.adoc[]
-
-include::{uml_export_dir}/classes/{pkg}versioned_composition.adoc[]
+include::{uml_export_dir}/classes/versioned_composition.adoc[]
 

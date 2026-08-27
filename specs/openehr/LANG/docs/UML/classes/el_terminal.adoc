@@ -1,0 +1,19 @@
+=== EL_TERMINAL Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*__EL_TERMINAL (abstract)__*
+
+h|*Description*
+2+a|Expression terminal entity, representing one of:
+
+* a reference to a literal value of any type;
+* a reference to an instance of any instantiable type, i.e. variable, property or constant;
+* an agent, i.e. a delayed function call;
+* a function call.
+
+h|*Inherit*
+2+|`<<_el_simple_class,EL_SIMPLE>>`
+
+|===

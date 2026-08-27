@@ -1,0 +1,22 @@
+=== BMM_INDEXED_CONTAINER_VALUE Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*BMM_INDEXED_CONTAINER_VALUE*
+
+h|*Description*
+2+a|Meta-type for literals whose concrete type is an indexed container, i.e. Hash table, Map etc.
+
+h|*Inherit*
+2+|`<<_bmm_container_value_class,BMM_CONTAINER_VALUE>>`
+
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1 +
+(redefined)*
+|*type*: `<<_bmm_indexed_container_type_class,BMM_INDEXED_CONTAINER_TYPE>>`
+a|Declared or inferred static type of the entity.
+|===

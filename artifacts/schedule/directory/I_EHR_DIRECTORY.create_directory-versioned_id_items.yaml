@@ -4,9 +4,9 @@
 # parts intact.
 #
 # WHY THIS IS A REQUIRED BEHAVIOUR. RM common
-# UML/classes/org.openehr.rm.common.folder.adoc §Attributes types `items` as
+# UML/classes/folder.adoc §Attributes types `items` as
 # `List<OBJECT_REF>` (0..1), and BASE base_types
-# UML/classes/org.openehr.base.base_types.object_ref.adoc §Attributes types the
+# UML/classes/object_ref.adoc §Attributes types the
 # member's `id` as `OBJECT_ID` (1..1) — the abstract root, not one chosen
 # subtype. OBJECT_VERSION_ID is a concrete member of that family (its own class
 # table's *Inherit* row: `UID_BASED_ID`, which inherits `OBJECT_ID`) and is

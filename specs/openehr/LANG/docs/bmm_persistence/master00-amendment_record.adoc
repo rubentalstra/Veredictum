@@ -4,19 +4,12 @@
 |===
 |Issue|Details|Raiser|Completed
 
-4+^h|*LANG Release 1.1.0 (unreleased)*
-
-|[[latest_issue]]2.4.0
-|{spec_tickets}/SPECLANG-16[SPECLANG-16^]: Add support for functions and other missing features in P_BMM: add `P_BMM_FUNCTION` and the `P_BMM_FUNCTION_PARAMETER` family (`P_BMM_SINGLE_FUNCTION_PARAMETER`, `P_BMM_SINGLE_FUNCTION_PARAMETER_OPEN`, `P_BMM_CONTAINER_FUNCTION_PARAMETER`, `P_BMM_GENERIC_FUNCTION_PARAMETER`), `P_BMM_CONSTANT` and `P_BMM_INTERFACE`; add `_functions_`, `_constants_` and `_invariants_` to `P_BMM_CLASS`, `_item_documentations_` to `P_BMM_ENUMERATION`, and `_bmm_version_` and `_includes_` to `P_BMM_SCHEMA`.
-|S Iancu
-|[[latest_issue_date]]31 May 2026
-
 4+^h|*LANG Release 1.0.0*
 
-|2.3.0
+|[[latest_issue]]2.3.0
 |{spec_tickets}/SPECLANG-2[SPECLANG-2^]. Add Basic Meta-Model (BMM) spec to BASE component.
 |openEHR SEC
-|04 Sep 2019
+|[[latest_issue_date]]04 Sep 2019
 
 |
 |Add `P_BMM_INDEXED_CONTAINER_TYPE`, `P_BMM_INDEXED_CONTAINER_PROPERTY` to support indexed containers like `Hash<K, V>`.

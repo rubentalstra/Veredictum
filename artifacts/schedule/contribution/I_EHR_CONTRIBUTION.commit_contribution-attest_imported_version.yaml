@@ -1,7 +1,7 @@
 # The REFUSAL half of the `VERSIONED_OBJECT.commit_attestation` precondition:
 # a `666|attestation|` member naming an IMPORTED_VERSION target is refused.
 #
-# RM common UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions,
+# RM UML/classes/versioned_object.adoc §Functions,
 # verbatim: `commit_attestation(…) Pre: has_version_id(a_ver_id) and
 # is_original_version(a_ver_id)` — "Add a new attestation to a specified
 # original version. Attestations can only be added to Original versions." The
@@ -29,7 +29,7 @@ test_purpose: >-
 description: "Attesting an IMPORTED_VERSION via CONTRIBUTION is refused"
 spec_refs:
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
-  - "RM common UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions (commit_attestation Pre: has_version_id and is_original_version; 'Attestations can only be added to Original versions')"
+  - "RM UML/classes/versioned_object.adoc §Functions (commit_attestation Pre: has_version_id and is_original_version; 'Attestations can only be added to Original versions')"
   - "RM common §change_control (master06 §Copying — 'the ORIGINAL_VERSION instance is never modified')"
   - "TERM SupportTerminology §attestation reason (648 witnessed)"
 applies: { rm: ">=1.0.2" }

@@ -10,11 +10,11 @@ A common question about ODIN is why it is needed, when there is already XML? To 
 * not using the confusing XML notion of 'attributes' and 'elements' to represent what are essentially object properties;
 * requiring roughly half the space of the equivalent XML.
 
-This does not prevent ODIN documents being converted to XML and indeed the conversion to XML instance is rather straightforward.
+This does not prevent ODIN documents being converted to XML and indeed the conversion to XML instance is rather straighforward.
 
 === Expression of ODIN in XML
 
-The ODIN syntax maps relatively easily to XML instances. It is important to realise that developers using XML often develop different mappings for object-oriented data, due to the fact that XML does not have systematic object-oriented semantics. This is particularly the case where containers such as lists and sets such as 'employees: List<Person>' are mapped to XML; many implementors have to invent additional tags such as 'employee' to make the mapping appear visually correct. The particular mapping chosen here is designed to be a faithful reflection of the semantics of the object-oriented data, and does not try to take into account the visual aesthetics of the XML. The result is that Xpath expressions are the same for ODIN and XML, and also correspond to what one would expect based on an underlying object model.
+The ODIN syntax maps relatively easily to XML instance. It is important to realise that developers using XML often develop different mappings for object-oriented data, due to the fact that XML does not have systematic object-oriented semantics. This is particularly the case where containers such as lists and sets such as 'employees: List<Person>' are mapped to XML; many implementors have to invent additional tags such as 'employee' to make the mapping appear visually correct. The particular mapping chosen here is designed to be a faithful reflection of the semantics of the object-oriented data, and does not try take into account visual aesthetics of the XML. The result is that Xpath expressions are the same for ODIN and XML, and also correspond to what one would expect based on an underlying object model.
 
 The main elements of the mapping are as follows.
 

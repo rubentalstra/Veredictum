@@ -41,7 +41,7 @@
 #     responses/200_VERSIONED_PARTY.yaml and '404' -> responses/404.yaml, so
 #     no other branch exists.
 #   - the served object's shape: RM common
-#     UML/classes/org.openehr.rm.common.versioned_object.adoc §Attributes
+#     UML/classes/versioned_object.adoc §Attributes
 #     (`uid`: HIER_OBJECT_ID, "Unique identifier of this version container in
 #     the form of a UID with no extension"; `owner_id`: OBJECT_REF 1..1;
 #     `time_created`: DV_DATE_TIME 1..1).

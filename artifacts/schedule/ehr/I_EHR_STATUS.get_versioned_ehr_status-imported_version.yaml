@@ -29,7 +29,7 @@ test_purpose: >-
 description: "Get the IMPORTED_VERSION envelope of a cloned EHR's EHR_STATUS version"
 spec_refs:
   - "RM common §change_control (master06 §Copying — the IMPORTED_VERSION wrapper; Case 1, the whole-EHR clone)"
-  - "RM common UML/classes/org.openehr.rm.common.imported_version.adoc (§Attributes: item only)"
+  - "RM UML/classes/imported_version.adoc (§Attributes: item only)"
   - "RM ehr §ehr (master04 §EHR Status — EHR.ehr_status 1..1)"
   - "SM openehr_platform §I_EHR_STATUS.get_versioned_ehr_status"
 applies: { rm: ">=1.0.2" }

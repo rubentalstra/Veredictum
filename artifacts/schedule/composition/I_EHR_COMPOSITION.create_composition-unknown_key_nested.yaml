@@ -29,7 +29,7 @@ test_purpose: >-
 description: "Reject an undeclared member on a nested ELEMENT"
 spec_refs:
   - "ITS-REST overview Resources.md §XML Format / §JSON Format (the payload must validate against the published ITS schemas)"
-  - "RM data_structures §ELEMENT (org.openehr.rm.data_structures.element.adoc §Attributes)"
+  - "RM data_structures §ELEMENT (element.adoc §Attributes)"
   - "SM openehr_platform §I_EHR_COMPOSITION.create_composition"
 applies: { rm: ">=1.0.2" }
 requires:

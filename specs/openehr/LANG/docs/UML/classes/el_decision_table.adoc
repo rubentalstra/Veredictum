@@ -1,0 +1,25 @@
+=== EL_DECISION_TABLE Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*__EL_DECISION_TABLE (abstract)__*
+
+h|*Description*
+2+a|Complex expression structure representing a logical decision table.
+
+h|*Inherit*
+2+|`<<_el_expression_class,EL_EXPRESSION>>`
+
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1*
+|*else*: `<<_el_expression_class,EL_EXPRESSION>>`
+a|Result expression of the chain if no member of `_items_` succeeds in evaluation.
+
+h|*1..1*
+|*items*: `link:/releases/BASE/{base_release}/foundation_types.html#_list_class[List^]<<<_el_decision_branch_class,EL_DECISION_BRANCH>>>`
+a|Members of the chain, equivalent to branches in an if/then/else chain and cases in a case statement.
+|===

@@ -4,50 +4,14 @@
 |===
 |Issue|Details|Raiser|Completed
 
-4+^h|*TERM Release 3.1.0 (unreleased)*
-
-|[[latest_issue]]3.1.3
-|{spec_tickets}/SPECTERM-34[SPECTERM-34]: Added Chinese translation of the openehr_terminology.xml.
-|L Zhang
-|[[latest_issue_date]]22 Aug 2024
-
-|
-|{spec_tickets}/SPECTERM-33[SPECTERM-33]: Added UCUM unit [drp] (drop) to the volume properties in PropertyUnitData.xml.
-|B Littleton, +
-S Ljosland Bakke
-|20 Aug 2024
-
-|3.1.2
-|{spec_tickets}/SPECTERM-28[SPECTERM-28]: Added ml/m2 and l/min/m2 to units in PropertyUnitData.xml (fixes {spec_tickets}/SPECPR-410[SPECPR-410^] and {spec_tickets}/SPECPR-412[SPECPR-412^]).
-|S Kohler, +
-S Ljosland Bakke
-|7 Apr 2024
-
-|3.1.1
-|{spec_tickets}/SPECTERM-27[SPECTERM-27]: Added J/cm2, hPa, kgf/m² and other fixing other errors in PropertyUnitData.xml.
-|S Ljosland Bakke
-|20 Mar 2024
-
-|3.1.0
-|{spec_tickets}/SPECTERM-26[SPECTERM-26]: Adding support for missing DICOM media types.
-|Chaya, +
-I McNicoll, +
-S Iancu
-|19 Sep 2023
-
-|
-|{spec_tickets}/SPECPR-425[SPECPR-425]: Corrected typo for unit "kiloVolt" in PropertyUnitData.xml.
-|S Ljosland Bakke
-|19 Sep 2023
-
 4+^h|*TERM Release 3.0.0*
 
-|3.0.0
+|[[latest_issue]]3.0.0
 |{spec_tickets}/SPECTERM-23[SPECTERM-23]: Improving translations.
 |S Kobayashi, +
  V Pereira, +
  D Bosca
-|26 Jun 2023
+|[[latest_issue_date]]26 Jun 2023
 
 |
 |{spec_tickets}/SPECTERM-25[SPECTERM-25]: Adding "format conversion" and "restoration" new types to the audit_change_type group.

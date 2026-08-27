@@ -1,10 +1,10 @@
 # A CODED commit-audit description survives the commit whole.
 #
-# RM common UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes
+# RM UML/classes/audit_details.adoc §Attributes
 # types `description` a `DV_TEXT` at 0..1 ("Reason for committal. This may be
 # used to qualify the value in the `_change_type_` field"), and `DV_CODED_TEXT`
 # is a `DV_TEXT` subtype carrying a `defining_code` (RM data_types
-# UML/classes/org.openehr.rm.data_types.dv_coded_text.adoc). The released wire
+# UML/classes/dv_coded_text.adoc). The released wire
 # says the same: ITS-REST specifications/schemas/common/UpdateAudit.yaml types
 # `description` as `UDvText`, whose schema (schemas/common/UDvText.yaml) is a
 # `oneOf` over DV_TEXT and DV_CODED_TEXT.

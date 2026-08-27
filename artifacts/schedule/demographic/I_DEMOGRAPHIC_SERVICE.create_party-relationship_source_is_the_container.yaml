@@ -14,7 +14,7 @@
 #     `OBJECT_VERSION_IDs`, which would denote particular versions".
 #
 # `PARTY.Relationships_validity` (`relationships.for_all (r | r.source = self)`,
-# UML/classes/org.openehr.rm.demographic.party.adoc §Invariants) relates those
+# UML/classes/party.adoc §Invariants) relates those
 # two: `r.source` denotes the party, and the party is the continuant the
 # container identifies. The join is the `object_id` part of the version id —
 # BASE master05-identification_package.adoc §Syntaxes, `object_version_id =

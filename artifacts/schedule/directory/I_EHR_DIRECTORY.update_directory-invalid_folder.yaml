@@ -2,7 +2,7 @@
 # directory is left on its last accepted version.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM common UML/classes/org.openehr.rm.common.locatable.adoc §Attributes types
+# RM UML/classes/locatable.adoc §Attributes types
 # `name: DV_TEXT` at 1..1, and FOLDER is a LOCATABLE — the fixture is
 # cnf.directory.root_only with exactly that attribute removed, so it stays
 # well-formed JSON and keeps its mandatory `archetype_node_id`.

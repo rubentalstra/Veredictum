@@ -1,0 +1,64 @@
+=== BMM_SIGNATURE Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*BMM_SIGNATURE*
+
+h|*Description*
+2+a|Non-entity meta-type that expresses the type structure of any referenceable element of a model. Consists of potential `_arguments_` and `_result_`, with constraints in descendants determining the exact form.
+
+h|*Inherit*
+2+|`<<_bmm_effective_type_class,BMM_EFFECTIVE_TYPE>>`
+
+h|*Constants*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1*
+|*base_name*: `link:/releases/BASE/{base_release}/foundation_types.html#_string_class[String^]{nbsp}={nbsp}"Signature"`
+a|Base name (built-in).
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*0..1*
+|*argument_types*: `<<_bmm_tuple_type_class,BMM_TUPLE_TYPE>>`
+a|Type of arguments in the signature, if any; represented as a type-tuple (list of arbitrary types).
+
+h|*0..1*
+|*result_type*: `<<_bmm_type_class,BMM_TYPE>>`
+a|Result type of signature, if any.
+h|*Functions*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1 +
+(effected)*
+|*type_base_name* (): `link:/releases/BASE/{base_release}/foundation_types.html#_string_class[String^]` +
+ +
+__Post_result__: `Result.is_equal (base_name())`
+a|Return `_base_name_`.
+
+h|*1..1 +
+(effected)*
+|*is_abstract* (): `link:/releases/BASE/{base_release}/foundation_types.html#_boolean_class[Boolean^]`
+a|Result = `False`.
+
+h|*1..1 +
+(effected)*
+|*is_primitive* (): `link:/releases/BASE/{base_release}/foundation_types.html#_boolean_class[Boolean^]`
+a|Result = `True`.
+
+h|*1..1 +
+(effected)*
+|*type_name* (): `link:/releases/BASE/{base_release}/foundation_types.html#_string_class[String^]` +
+ +
+__Post_result__: `Result.is_equal (base_name())`
+a|Return `_base_name_`
+
+h|*1..1 +
+(effected)*
+|*flattened_type_list* (): `link:/releases/BASE/{base_release}/foundation_types.html#_list_class[List^]<link:/releases/BASE/{base_release}/foundation_types.html#_string_class[String^]>`
+a|Return the logical set (i.e. unique items) consisting of `_argument_types.flattened_type_list_()` and `_result_type.flattened_type_list_()`.
+|===

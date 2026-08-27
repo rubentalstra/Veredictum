@@ -35,7 +35,7 @@
 #  - the REVISION_HISTORY still holds exactly ONE item — the machine proof that
 #    no version was created — whose `audits` now carry the commit audit AND the
 #    attestation (RM common
-#    UML/classes/org.openehr.rm.common.revision_history_item.adoc §Attributes:
+#    UML/classes/revision_history_item.adoc §Attributes:
 #    `audits` is "The audits for this version … there may also be further
 #    attestations");
 #  - the ORIGINAL_VERSION envelope serves the completed ATTESTATION in its

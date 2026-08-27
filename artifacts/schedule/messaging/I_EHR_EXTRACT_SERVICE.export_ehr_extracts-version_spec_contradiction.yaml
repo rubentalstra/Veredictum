@@ -21,7 +21,7 @@ test_purpose: >-
   invariant and selects nothing a version can carry.
 description: "EXTRACT_SPEC with a self-contradictory version_spec refused (the export seam)"
 spec_refs:
-  - "RM UML/classes/org.openehr.rm.ehr_extract.extract_version_spec.adoc §Invariants (Includes_revision_history_valid: not include_data implies include_revision_history)"
+  - "RM UML/classes/extract_version_spec.adoc §Invariants (Includes_revision_history_valid: not include_data implies include_revision_history)"
   - "SM openehr_platform §I_EHR_EXTRACT_SERVICE.export_ehr_extracts"
 applies: { rm: ">=1.0.2" }
 requires:

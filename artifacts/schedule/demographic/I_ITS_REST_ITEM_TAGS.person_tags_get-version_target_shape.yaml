@@ -1,7 +1,7 @@
 # A VERSION-addressed PARTY tag carries `target` as the bare OBJECT_VERSION_ID
 # of the addressed VERSION — the other form of the one RM shape rule.
 #
-# GROUND: RM common item_tag.adoc §Attributes, `target`: `1..1 UID_BASED_ID`,
+# GROUND: RM UML/classes/item_tag.adoc §Attributes, `target`: `1..1 UID_BASED_ID`,
 # "Identifier of target, which may be a `VERSIONED_OBJECT<T>` or a
 # `VERSION<T>`". ITS-REST names the same form as the request addressing: "an
 # OBJECT_VERSION_ID identifier taken from VERSION.uid.value (i.e. a

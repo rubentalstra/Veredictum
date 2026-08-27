@@ -3,7 +3,7 @@
 # creation starts a version tree; it cannot have a predecessor.
 #
 # The RULE is RM, an invariant (RM common
-# UML/classes/org.openehr.rm.common.version.adoc, VERSION
+# UML/classes/version.adoc, VERSION
 # §Invariants — `Preceding_version_uid_validity`): the preceding version uid is
 # valid only for a version that HAS one, i.e. one that is not the first of its
 # tree. master06 §Contributions states the same change-kind law from the audit
