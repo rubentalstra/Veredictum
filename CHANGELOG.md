@@ -18,7 +18,24 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.6] - 2026-08-27
+
+### Fixed
+
+- **The release pipeline locates the dependency SBOM instead of assuming its
+  depth (#109 aftermath).** cargo-cyclonedx writes the instrument's SBOM
+  beside its crate manifest, except when the workspace member's version
+  matches a published crates.io version, when it writes to the workspace
+  root — both observed first-hand. The binaries lane searched a fixed depth,
+  found nothing at the alpha.5 cut, and both binary legs failed; it now
+  searches both locations and excludes the console crate's SBOMs by path.
+
 ## [0.1.0-alpha.5] - 2026-08-27
+
+This cut never published: the release pipeline's SBOM step failed on both
+binary legs (the fix is 0.1.0-alpha.6's entry), the draft release was
+withheld by its own asset gate, and no crate or binary shipped. The signed
+tag stands; 0.1.0-alpha.6 ships the same tree plus the pipeline fix.
 
 ### Changed
 
@@ -565,7 +582,8 @@ version on.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.5...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.6...HEAD
+[0.1.0-alpha.6]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
