@@ -267,6 +267,19 @@ if [[ "$MODE" != curated ]]; then
     echo "exercise the pack further. That is catalogue work: no case sources a"
     echo "file from this tree today."
     echo
+    echo "## Refresh policy (#41)"
+    echo
+    echo "This pack is unpinnable by construction: CKM is a live server with no"
+    echo "version handle, so every re-run of the vendor script can produce a"
+    echo "different tree. The policy is DELIBERATE refresh only — the script is"
+    echo "re-run on purpose, in its own pull request whose subject says it is a"
+    echo "refresh, never as a side effect of another change (a re-run mixed"
+    echo "corpus drift into an unrelated gates PR once, 2026-08-27). The"
+    echo "corpus-pack gate pins the count and the file set, so an accidental"
+    echo "re-run fails loudly instead of drifting silently. No scheduled"
+    echo "refetch lane exists, on purpose: the pack's value is breadth, not"
+    echo "freshness, and a stale-by-weeks snapshot serves that fully."
+    echo
     echo "## Licensing"
     echo
     echo "CKM publishes no repository-level license; each OPT embeds its source"

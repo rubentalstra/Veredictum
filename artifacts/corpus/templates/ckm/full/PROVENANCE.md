@@ -2,7 +2,7 @@
 
 Every template the official openEHR CKM (`https://ckm.openehr.org/ckm/rest/v1`) publishes, exported
 by CKM itself as an Operational Template and vendored verbatim by
-`scripts/vendor/ckm-templates.sh` on 2026-08-27T00:19:00Z.
+`scripts/vendor/ckm-templates.sh` on 2026-08-27T00:49:55Z.
 
 This is the BREADTH pack: every OPT 1.4 shape CKM publishes, kept for
 the reach it gives over real-world template structure. The curated
@@ -23,6 +23,19 @@ builder, so nothing here interprets a template body.
 A wire battery uploading the library through the DEFINITION API would
 exercise the pack further. That is catalogue work: no case sources a
 file from this tree today.
+
+## Refresh policy (#41)
+
+This pack is unpinnable by construction: CKM is a live server with no
+version handle, so every re-run of the vendor script can produce a
+different tree. The policy is DELIBERATE refresh only — the script is
+re-run on purpose, in its own pull request whose subject says it is a
+refresh, never as a side effect of another change (a re-run mixed
+corpus drift into an unrelated gates PR once, 2026-08-27). The
+corpus-pack gate pins the count and the file set, so an accidental
+re-run fails loudly instead of drifting silently. No scheduled
+refetch lane exists, on purpose: the pack's value is breadth, not
+freshness, and a stale-by-weeks snapshot serves that fully.
 
 ## Licensing
 
