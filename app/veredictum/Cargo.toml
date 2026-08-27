@@ -95,11 +95,11 @@ base64 = "0.23"
 uuid = { version = "1", features = ["v4", "v5", "v7", "serde", "fast-rng"] }
 # Version-signature verification (SIG-VERSION cases): reconstruct the agreed
 # signed canonical form (RFC 8785 JCS of the ORIGINAL_VERSION minus signature),
-# recompute the digest (digest mode), or verify the RFC 4880 detached signature
+# recompute the digest (digest mode), or verify the RFC 9580 detached signature
 # (pgp mode). Spec: RM common master06 §Digital Signature.
 serde_jcs = "0.2.0"
 sha2 = "0.11.0"
-# rPGP — pure-Rust OpenPGP (RFC 4880/9580). `default-features = false` drops the
+# rPGP — pure-Rust OpenPGP (RFC 9580). `default-features = false` drops the
 # bzip2 (libbz2-rs-sys) dependency: a detached signature needs no compression,
 # and that crate fails the cargo-deny license gate.
 pgp = { version = "0.20.0", default-features = false }

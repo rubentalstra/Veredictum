@@ -4,8 +4,8 @@
 //! The claim-completeness battery (issue #622): the four gates that make a
 //! hollow certification claim unrepresentable are each proven by SEEDING the
 //! violation into a copy of the production world and asserting the gate
-//! fires. A gate with no failing case is a wish, not a rule
-//! (`.claude/rules/reliability.md`).
+//! fires. A gate that has never been seen to fail proves nothing — no openEHR
+//! spec governs that bar, it is our own design.
 //!
 //! The world here is BOTH committed halves — the artifact tree AND the party
 //! statements beside it — because every one of these gates is a relation

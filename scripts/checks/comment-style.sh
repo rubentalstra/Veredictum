@@ -19,6 +19,13 @@
 #   5. essay budget        a plain `//` comment run is at most $RUN_MAX lines;
 #                          longer prose belongs in doc comments, the PR
 #                          description, or the tracker — not in code.
+#   6. internal citations  no `.claude/` path anywhere in a hand-written .rs
+#                          file: code cites the vendored spec text or official
+#                          external documentation, never an internal document
+#                          (root CLAUDE.md rule 11). Whole-file rather than
+#                          comment-only, because an `#[expect(reason = "…")]`
+#                          string is read as justification exactly like a
+#                          comment.
 #
 # Usage:
 #   scripts/checks/comment-style.sh --all               # whole tree
@@ -160,6 +167,13 @@ for f in "${files[@]}"; do
   ' "$f")"
   if [[ -n "$out" ]]; then
     printf '%s\n' "$out" | sed "s|^|$f|"
+    fail=1
+  fi
+
+  internal="$(grep -n '\.claude/' "$f" || true)"
+  if [[ -n "$internal" ]]; then
+    printf '%s\n' "$internal" \
+      | sed -E "s|^([0-9]+):.*|$f:\1: internal-document citation — cite the vendored openEHR spec text or official external documentation, never a \.claude/ path (CLAUDE.md rule 11)|"
     fail=1
   fi
 done

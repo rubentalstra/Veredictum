@@ -1788,9 +1788,12 @@ a realized binding's outcome/format branch, or a cross-cutting header/
 negotiation/error-family element) with neither a covering case nor an
 adjudicated `vocab/wire_surface.yaml` exception. Silence is not coverage;
 coverage only ratchets up. `veredictum validate --specs … --write-report`
-refreshes the deterministic per-interface/per-binding coverage report at a
-path derived from the spec tree (`<specs>/../../conformance/coverage-report.md`);
-FerroEHR's committed copy lives in its own `docs/conformance/`.
+refreshes the deterministic per-interface/per-binding coverage report at
+`<root>/coverage-report.md`, beside the artifact families it measures, so the
+report follows the tree it describes rather than wherever the specs happen to
+be mounted. This repository does not commit its own copy: nothing re-runs the
+flag on a catalogue change, and a stale coverage record is worse than a
+regenerated one.
 
 The **claim-completeness gates** (issue FerroEHR#622) close the same loop on the CLAIM
 side, so a certification claim can never be hollow. `validate` sweeps the

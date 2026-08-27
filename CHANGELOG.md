@@ -18,6 +18,19 @@ version on.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`validate --write-report` writes somewhere that exists (#91).** The
+  coverage report's path was climbed out of the spec tree
+  (`<specs>/../../conformance/coverage-report.md`), which matched the old
+  mono-repo layout and, at this one, resolved to a repository-root
+  `conformance/` directory that has never existed. The report is now derived
+  from the artifact root it describes and lands at
+  `<ROOT>/coverage-report.md`, so it follows the catalogue rather than
+  wherever the specs happen to be mounted. `coverage_report_path` takes the
+  artifact root and returns a plain `PathBuf`, since the derivation can no
+  longer fail.
+
 ## [0.1.0-alpha.6] - 2026-08-27
 
 ### Fixed

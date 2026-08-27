@@ -6,7 +6,9 @@
 //!
 //! Every number and every text here comes from the published lib's typed
 //! model — the console re-parses nothing. Serialized types carry fixed-size
-//! integers only (`.claude/rules/leptos-ui.md` §1: WASM is 32-bit).
+//! integers only: a pointer-sized `usize` crossing the 32-bit WASM to 64-bit
+//! server boundary deserializes wrong
+//! (<https://book.leptos.dev/server/25_server_functions.html>).
 
 use serde::{Deserialize, Serialize};
 
@@ -351,9 +353,10 @@ pub mod fns {
     //! The suppression covers what the macro expands: `unused_async` (the
     //! server-fn contract requires async whether or not a body awaits) and
     //! `missing_docs` (the macro mints an argument struct whose fields cannot
-    //! carry doc comments). Both fire only in SOME expansions, which is the
-    //! allow-over-expect case (.claude/rules/reliability.md); module-scoped,
-    //! signed off in the pull request.
+    //! carry doc comments). Both fire only in SOME expansions, so `#[expect]`
+    //! would itself warn through `unfulfilled_lint_expectations` in the quiet
+    //! ones (<https://doc.rust-lang.org/rustc/lints/levels.html#expect>);
+    //! module-scoped, signed off in the pull request.
     #![allow(
         clippy::unused_async,
         missing_docs,

@@ -6,13 +6,15 @@
 //! claim/coverage completeness gates, the vendored corpus packs, defect-fixture
 //! rejection, the measured-performance driver, and the self-verification pack.
 //!
-//! One binary per crate, split into topic modules
-//! (`.claude/rules/testing.md` §One integration-test binary per crate).
+//! One binary per crate, split into topic modules: Cargo compiles and links
+//! every top-level `tests/*.rs` as its own crate
+//! (<https://doc.rust-lang.org/cargo/reference/cargo-targets.html#integration-tests>),
+//! so one binary saves the link waste while nextest still runs each test in
+//! its own process.
 
 #![expect(
     clippy::disallowed_types,
-    reason = "test fixtures and wire assertions are raw JSON by the testing rule \
-              (.claude/rules/testing.md §Test-fixture construction)"
+    reason = "an independently authored wire input catches codec bugs a typed-then-serialized value cannot, so fixtures and wire assertions are raw JSON"
 )]
 
 mod artifact_gates;

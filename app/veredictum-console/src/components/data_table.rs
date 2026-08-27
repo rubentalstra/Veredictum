@@ -4,9 +4,10 @@
 //! The listing-table kit: the ONE table shell every listing screen uses.
 //!
 //! Table classes, the loading skeleton, the page size and the pagination
-//! footer. Page state lives in the URL (`?page=`), so a listing is shareable
-//! and refresh-safe (`.claude/rules/leptos-ui.md` §9); the row math is pure
-//! and unit-tested.
+//! footer. Page state lives in the URL (`?page=`), so a listing is shareable,
+//! refresh-safe and works without WASM loaded
+//! (<https://book.leptos.dev/router/20_form.html>); the row math is pure and
+//! unit-tested.
 
 use leptos::prelude::{
     AddAnyAttr, ClassAttribute, CollectView, ElementChild, IntoView, Memo, StyleAttribute, With,
@@ -35,8 +36,10 @@ pub const TD: &str = "border-t border-edge px-3 py-2 text-ink";
 /// Reads the 1-based page number from the URL's `?page=`.
 ///
 /// A private-helper read on purpose: calling `use_query_map()` directly in a
-/// `#[component]` body trips the `must_use_candidate` toolchain trap
-/// (`.claude/rules/leptos-ui.md` §2).
+/// `#[component]` body stops `clippy::must_use_candidate`
+/// (<https://rust-lang.github.io/rust-clippy/master/index.html#must_use_candidate>)
+/// firing on that fn, turning the component's own `#[expect]` of it into an
+/// `unfulfilled_lint_expectations` build failure.
 #[must_use]
 pub fn page_from_url() -> Memo<usize> {
     let query = use_query_map();

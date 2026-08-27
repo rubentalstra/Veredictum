@@ -83,9 +83,14 @@ history carries it. A comment describes the code as it IS.
 ## Enforcement register
 
 - `scripts/checks/comment-style.sh` — block comments, TODO(#N) form, banned
-  marker vocabulary, NOTE ≤ 3 lines, `//` runs ≤ 8 lines. Runs per-edit via
-  the `rust_fmt_clippy.sh` PostToolUse hook, and per-PR through the `--all`
-  step in the CI guards job.
+  marker vocabulary, NOTE ≤ 3 lines, `//` runs ≤ 8 lines, and no `.claude/`
+  path anywhere in a hand-written `.rs` file (root `CLAUDE.md` rule 11: code
+  cites the vendored spec text or official external documentation, never an
+  internal document). That last check reads the whole file rather than only
+  comment lines, because an `#[expect(reason = "…")]` string is read as
+  justification exactly like a comment. Runs per-edit via the
+  `rust_fmt_clippy.sh` PostToolUse hook, and per-PR through the `--all` step
+  in the CI guards job.
 - `clippy::too_long_first_doc_paragraph` (nursery cherry-pick, CI
   `-D warnings`) — the RFC 1574 summary line.
 - Doc lints, all live: `doc_markdown`,

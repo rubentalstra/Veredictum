@@ -55,9 +55,9 @@ pub(crate) fn fixture_sut() -> Result<u16, std::io::Error> {
 /// Writes the gate's ixit: every instance at the fixture SUT, the `sut`
 /// principal on Basic credentials whose env-var NAMES the document carries
 /// and whose VALUES only the spawned run's environment will hold. Raw bytes
-/// on purpose (`.claude/rules/testing.md` §Fixture construction: a wire
-/// input independently authored catches codec bugs) — and the lib's `Ixit`
-/// is deserialize-only, so raw is also the only honest way to author one.
+/// on purpose: an independently authored wire input catches codec bugs a
+/// typed-then-serialized value cannot, and the lib's `Ixit` is
+/// deserialize-only, so raw is also the only honest way to author one.
 pub(crate) fn write_ixit(dir: &Path, port: u16) -> Result<PathBuf, std::io::Error> {
     let document = format!(
         r#"{{
@@ -88,7 +88,7 @@ const GATE_FILTER: &str = "I_EHR_SERVICE.create_ehr-main";
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
 )]
 #[test]
 fn a_console_run_and_a_cli_run_emit_identical_documents() -> Result<(), Box<dyn std::error::Error>>
