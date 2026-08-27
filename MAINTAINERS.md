@@ -36,17 +36,19 @@ written down is an inventory nobody can hand over.
 |---|---|---|---|---|
 | The GitHub account `rubentalstra` | everything: the repository, releases, issues, settings, labels | live | the maintainer | none. The repository is user-owned, so GitHub's account-recovery process is the only route, and it is between GitHub and the account holder |
 | The OpenPGP commit- and tag-signing key | the verified signature on every commit and every release tag | live | the maintainer, on his own hardware | none. The private key is not escrowed. A successor would publish a new key and re-establish trust from a signed statement on the repository; historical signatures stay verifiable regardless |
-| `GITHUB_TOKEN` (ephemeral, per workflow run) | the GitHub release, and the GHCR container image once the release lane lands | arrives with the release pipeline (#12) | GitHub, minted per run; nothing is stored | not applicable. There is no credential to lose |
-| Zenodo | the archived release deposit and its concept DOI | not connected yet. [`CITATION.cff`](CITATION.cff) and [`.zenodo.json`](.zenodo.json) are in the tree ready for the first release | the Zenodo account linked to the GitHub account, once linked | tied to GitHub account recovery |
-| crates.io | nothing today. Whether the runner binary or its schema types publish as crates is an open decision on the migration issue | undecided | not established | not applicable until it exists |
-| A documentation domain | nothing today. The docs-site decision is open on the migration issue | undecided | not established | not applicable until it exists |
+| `GITHUB_TOKEN` (ephemeral, per workflow run) | the GitHub release and the GHCR container image (`ghcr.io/rubentalstra/veredictum`) | live — the release pipeline (#12) has cut three alphas with it | GitHub, minted per run; nothing is stored | not applicable. There is no credential to lose |
+| Zenodo | the archived release deposit and its concept DOI (10.5281/zenodo.22113258) | live — connected and proven at v0.0.1-alpha.1 (version DOI 10.5281/zenodo.22113259) | the Zenodo account linked to the GitHub account | tied to GitHub account recovery |
+| crates.io | the [`veredictum`](https://crates.io/crates/veredictum) crate | live — publishes via Trusted Publishing (OIDC, `publish-crates.yml`, the `crates-io` environment); no stored token | the crates.io account linked to the GitHub account, plus the per-workflow Trusted Publisher configuration | tied to GitHub account recovery; the Trusted Publisher config is re-creatable by any crate owner |
+| The `veredictum.eu` domain | the landing page and the documentation site (GitHub Pages, #33) | live | the maintainer's DNS registrar account | none beyond the registrar's own recovery; the Pages site itself follows the repository |
 
 **The honest reading of that table:** every identity that exists today
-terminates at one person's GitHub account or one person's hardware. Nothing here
-distributes authority, and no mitigation is available to a one-person project
-without a legal entity behind it. When the release lane lands, ephemeral
-per-run tokens will remove the *stored secret* risk without changing that
-sentence.
+terminates at one person's GitHub account, one person's hardware, or one
+person's registrar login. Nothing here distributes authority, and no
+mitigation is available to a one-person project without a legal entity behind
+it. The publishing paths themselves store no secret — the release lane and
+the crate publish both run on per-run tokens (ephemeral `GITHUB_TOKEN`,
+crates.io Trusted Publishing OIDC) — which removes the stored-secret risk
+without changing that sentence.
 
 ## If the maintainer is unavailable
 

@@ -134,13 +134,37 @@ finding.
 | Secret scanning, validity checks | enabled | **disabled** | the difference between "rotate this eventually" and "this credential is live right now" |
 | Private vulnerability reporting | enabled | enabled | the reporting route this document points at |
 | Dependabot security updates | enabled | enabled | advisory-driven bumps, exempt from the update cooldowns in [`.github/dependabot.yml`](.github/dependabot.yml) |
-| Ruleset on `main` | active: no deletion, no force-push, signed commits, pull request required | **active** (ruleset 21570979: squash-only, the `conclusion` status check required; repository-admin bypass for recovery) | every commit is now enforced-signed, and every change reaches `main` through a pull request |
+| Ruleset on `main` | active: no deletion, no force-push, signed commits, pull request required, required checks strict | **active** (ruleset 21570979: squash-only, the `conclusion` status check required with `strict_required_status_checks_policy: true` — enabled 2026-08-26, #26; repository-admin bypass for recovery) | every commit is enforced-signed, every change reaches `main` through a pull request, and a PR must be current with `main` before merging so `conclusion` judges the merged tree, never a stale one |
 | Immutable releases | enabled: published assets and tags frozen; a bad cut is repaired by a new version, never a retag | **enabled** (owner, 2026-08-26) | the v0.0.1-alpha.1 release predates the toggle and stays mutable-metadata; everything after is frozen at publish |
 | Ruleset on `refs/tags/v*` | active: no tag deletion, no non-fast-forward update, signatures required | **active** (ruleset 21571001, no bypass) | the release pipeline publishes off a raw tag push, so the window in which a tag drives a build is protected: the tag cannot be moved or deleted, and it has to be signed |
 | `crates-io` environment | reviewer approval required; only refs that may publish | **active**: reviewer `rubentalstra`, `main` and `v*` tags | the crate publish is the one irreversible leg — a crates.io version can be yanked, never replaced — so it waits for a human and runs last |
 
-Six of those rows do not match yet. They are listed with their real state rather
-than as intentions, and each is closed by the migration work that makes it
-meaningful. The two secret-scanning sub-settings are accepted-and-ignored by
-`PATCH /repos/{owner}/{repo}` (the request returns `200` and changes nothing),
-so they have to be switched on in Settings, Code security, Secret Protection.
+Two of those rows do not match yet (both secret-scanning sub-settings). They
+are listed with their real state rather than as intentions. Those two are
+accepted-and-ignored by `PATCH /repos/{owner}/{repo}` (the request returns
+`200` and changes nothing), so they have to be switched on in Settings, Code
+security, Secret Protection.
+
+### The Scorecard Branch-Protection warns, adjudicated (#26)
+
+Scorecard scores Branch-Protection 3/10 on `main`. Each warn was adjudicated
+first-hand rather than chased as a number, and the standing dispositions are:
+
+- **`'up-to-date branches' is disabled` — fixed** (the strict-checks enable in
+  the ruleset row above, 2026-08-26).
+- **`does not require approvers` / `codeowners review not required` /
+  `'last push approval' disabled` — deliberately unmet, single-maintainer
+  class.** Each requires a second human: with one maintainer, requiring an
+  approver deadlocks every pull request, because an author cannot approve
+  their own. These flip the day the project has a second maintainer
+  ([GOVERNANCE.md § Becoming a maintainer](GOVERNANCE.md#becoming-a-maintainer)
+  carries the re-open note), and not before. No fake reviewer accounts, ever.
+- **`'apply to administrators' disabled` — deliberately kept, with the trade
+  named.** The repository-admin bypass is the recovery valve, and its
+  justification is measured, not hypothetical: during the 2026-08-26 GitHub
+  Actions outage, required checks could not report, and without the bypass
+  `main` would have been unmergeable for the duration by construction
+  (squash-only plus the required `conclusion` check). The bypass is used only
+  for recovery and outage cases, and every use is visible in the audit log.
+  Re-adjudicate when a second maintainer exists — two admins halve the
+  single-account risk the bypass concentrates.
