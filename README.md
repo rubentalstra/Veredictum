@@ -91,6 +91,13 @@ Three further subcommands share the same catalogue and recordings
 discipline: `perf` measures a hospital-simulation workload against the
 performance-class thresholds, `stress` finds the knee of the throughput
 curve under stepped load, and `aql-probe` explores a server's AQL behaviour.
+
+`run` and `verdicts` take `--sign-key`, which seals the documents they emit
+with a SHA-256 digest manifest and a detached OpenPGP signature over it.
+`verify-record` recomputes every digest and checks that signature against a
+public key you supply, so a published record is tamper-evident to anyone who
+has the key. The bundle is ordinary files, so `gpg --verify` and `sha256sum`
+answer the same questions without this tool.
 `veredictum --help` lists everything.
 
 ## Why an independent instrument

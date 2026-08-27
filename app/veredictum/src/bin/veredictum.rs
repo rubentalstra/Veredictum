@@ -7,6 +7,7 @@
 //! veredictum emit-schemas --out DIR     write the published JSON-Schema set
 //! veredictum validate --root DIR [--specs DIR]
 //! veredictum run --root DIR --ixit FILE --out DIR [--sut-name N] [--sut-version V] [--statement F]
+//!                [--sign-key FILE]
 //!                                       validate an artifact tree (all gates);
 //!                                       --specs enables the SM/spec-ref
 //!                                       resolution checks against the vendored
@@ -15,9 +16,17 @@
 //!                                       root (<root>/../party/*/statement.json)
 //!                                       are swept in for the claim gates.
 //! veredictum verdicts --statement F --results F --root DIR --out DIR
+//!                      [--sign-key FILE]
 //!                                       compute the verdicts (pure pipeline)
 //!                                       and write the report/statement/
-//!                                       certificate + verdicts.json
+//!                                       certificate + verdicts.json. With
+//!                                       --sign-key, seal the bundle with
+//!                                       record-manifest.json + .asc
+//! veredictum verify-record --record DIR --key FILE
+//!                                       recompute every digest a sealed
+//!                                       bundle's manifest names and verify
+//!                                       its detached signature against an
+//!                                       armored public key
 //! veredictum perf --root DIR --ixit FILE --results FILE --class POC|S|L|R
 //!                 [--hours 1|2|4|6|8|12] [--seed-workers N]
 //!                                       the measured class run (conformance-
@@ -82,7 +91,11 @@ use veredictum::pipeline::measured::{
     MeasuredEvent, MeasuredRequest, ProbeRequest, StressRequest, SustainedWindow, run_aql_probe,
     run_measured, run_stress,
 };
-use veredictum::pipeline::{Error, RenderedFile, ensure_parent_dir, to_json_document, write_file};
+use veredictum::pipeline::{RenderedFile, ensure_parent_dir, to_json_document, write_file};
+use veredictum::record::{
+    DigestOutcome, HONESTY_LINE, MANIFEST_FILE, RecordedFile, SIGNATURE_FILE, SignatureOutcome,
+    seal, verify_bundle,
+};
 
 #[derive(Parser)]
 #[command(
@@ -129,6 +142,16 @@ enum Command {
         /// time (ISO/IEC 9646 test selection) instead of driven.
         #[arg(long)]
         statement: Option<PathBuf>,
+        /// An armored OpenPGP secret key — when supplied, the emitted
+        /// documents are sealed with `record-manifest.json` and its detached
+        /// signature, which `verify-record` and `gpg --verify` both check.
+        #[arg(long)]
+        sign_key: Option<PathBuf>,
+        /// The passphrase unlocking `--sign-key`. Supply it through the
+        /// environment: a passphrase on the command line is visible to every
+        /// process on the host.
+        #[arg(long, env = "VEREDICTUM_SIGN_PASSPHRASE", hide_env_values = true)]
+        sign_passphrase: Option<String>,
     },
     /// Validate one artifact tree through every machine gate.
     Validate {
@@ -315,11 +338,42 @@ enum Command {
         /// Output directory for the rendered documents + verdicts.json.
         #[arg(long)]
         out: PathBuf,
+        /// An armored OpenPGP secret key — when supplied, the rendered
+        /// documents are sealed with `record-manifest.json` and its detached
+        /// signature, which `verify-record` and `gpg --verify` both check.
+        #[arg(long)]
+        sign_key: Option<PathBuf>,
+        /// The passphrase unlocking `--sign-key`. Supply it through the
+        /// environment: a passphrase on the command line is visible to every
+        /// process on the host.
+        #[arg(long, env = "VEREDICTUM_SIGN_PASSPHRASE", hide_env_values = true)]
+        sign_passphrase: Option<String>,
+    },
+    /// Verify a sealed bundle: recompute every digest its record manifest
+    /// names, and check the detached signature over that manifest.
+    VerifyRecord {
+        /// The bundle directory holding the emitted documents, the record
+        /// manifest and its detached signature.
+        #[arg(long)]
+        record: PathBuf,
+        /// The armored OpenPGP public key the signature is checked against.
+        #[arg(long)]
+        key: PathBuf,
     },
 }
 
+/// The optional signing posture a document-emitting command was invoked with.
+///
+/// The passphrase never leaves this struct: no `Debug`, and nothing prints it.
+struct Signing {
+    /// The armored secret key file, when one was supplied.
+    key: Option<PathBuf>,
+    /// The passphrase unlocking that key, when it needs one.
+    passphrase: Option<String>,
+}
+
 /// Report a seam's failure and stop with the runner-error code.
-fn fail(e: &Error) -> ExitCode {
+fn fail<E: std::fmt::Display>(e: &E) -> ExitCode {
     eprintln!("{e}");
     ExitCode::from(2)
 }
@@ -369,15 +423,23 @@ fn main() -> ExitCode {
             sut_version,
             filter,
             statement,
-        } => run_command(&RunRequest {
-            root: &root,
-            ixit: &ixit,
-            out_dir: &out,
-            sut_name: &sut_name,
-            sut_version: &sut_version,
-            filter: filter.as_deref(),
-            statement: statement.as_deref(),
-        }),
+            sign_key,
+            sign_passphrase,
+        } => run_command(
+            &RunRequest {
+                root: &root,
+                ixit: &ixit,
+                out_dir: &out,
+                sut_name: &sut_name,
+                sut_version: &sut_version,
+                filter: filter.as_deref(),
+                statement: statement.as_deref(),
+            },
+            &Signing {
+                key: sign_key,
+                passphrase: sign_passphrase,
+            },
+        ),
         Command::Validate {
             root,
             specs,
@@ -455,6 +517,8 @@ fn main() -> ExitCode {
             results,
             root,
             out,
+            sign_key,
+            sign_passphrase,
         } => verdicts_command(
             &JudgementRequest {
                 statement: &statement,
@@ -462,7 +526,12 @@ fn main() -> ExitCode {
                 root: &root,
             },
             &out,
+            &Signing {
+                key: sign_key,
+                passphrase: sign_passphrase,
+            },
         ),
+        Command::VerifyRecord { record, key } => verify_record_command(&record, &key),
     }
 }
 
@@ -504,12 +573,102 @@ fn validate_command(root: &Path, specs: Option<&Path>, write_report: bool) -> Ex
     }
 }
 
-fn verdicts_command(request: &JudgementRequest<'_>, out: &Path) -> ExitCode {
+/// Seal the documents a command just emitted, when a signing key was supplied.
+///
+/// The manifest and its detached signature are written beside the documents
+/// they cover, so the bundle stays ordinary files.
+fn seal_emitted(out: &Path, files: &[RecordedFile<'_>], signing: &Signing) -> Result<(), ExitCode> {
+    let Some(key_path) = signing.key.as_deref() else {
+        return Ok(());
+    };
+    let sealed = match seal(files, key_path, signing.passphrase.as_deref()) {
+        Ok(sealed) => sealed,
+        Err(e) => return Err(fail(&e)),
+    };
+    emit(
+        out,
+        &[
+            RenderedFile {
+                name: MANIFEST_FILE.to_owned(),
+                body: sealed.manifest,
+            },
+            RenderedFile {
+                name: SIGNATURE_FILE.to_owned(),
+                body: sealed.signature,
+            },
+        ],
+    )
+}
+
+/// The bundle-relative name a pipeline-produced path carries.
+fn record_name(path: &Path) -> Result<&str, ExitCode> {
+    let Some(name) = path.file_name().and_then(std::ffi::OsStr::to_str) else {
+        eprintln!("cannot name {} in the record manifest", path.display());
+        return Err(ExitCode::from(2));
+    };
+    Ok(name)
+}
+
+fn verify_record_command(record: &Path, key: &Path) -> ExitCode {
+    let verification = match verify_bundle(record, key) {
+        Ok(verification) => verification,
+        Err(e) => return fail(&e),
+    };
+    match &verification.signature {
+        SignatureOutcome::Accepted(signed) => {
+            println!("signer fingerprint {}", signed.signer_fingerprint);
+            println!("signed at          {}", signed.signed_at);
+        }
+        SignatureOutcome::Rejected => println!(
+            "signature          REJECTED — no component of {} verified {MANIFEST_FILE}",
+            key.display()
+        ),
+    }
+    println!(
+        "instrument         {} {}",
+        verification.instrument.name, verification.instrument.version
+    );
+    for file in &verification.files {
+        match &file.outcome {
+            DigestOutcome::Matches => println!("  ok         {} {}", file.digest, file.name),
+            DigestOutcome::Mismatch { recomputed } => println!(
+                "  MISMATCH   {} {} (recomputed {recomputed})",
+                file.digest, file.name
+            ),
+            DigestOutcome::Missing => println!("  MISSING    {} {}", file.digest, file.name),
+            DigestOutcome::Unreadable { message } => {
+                println!("  UNREADABLE {} {} ({message})", file.digest, file.name);
+            }
+        }
+    }
+    println!("{HONESTY_LINE}");
+    if verification.is_clean() {
+        ExitCode::SUCCESS
+    } else {
+        for finding in verification.findings() {
+            eprintln!("record: {finding}");
+        }
+        ExitCode::from(1)
+    }
+}
+
+fn verdicts_command(request: &JudgementRequest<'_>, out: &Path, signing: &Signing) -> ExitCode {
     let judgement = match judge(request) {
         Ok(judgement) => judgement,
         Err(e) => return fail(&e),
     };
     if let Err(code) = emit(out, &judgement.documents) {
+        return code;
+    }
+    let sealed: Vec<RecordedFile<'_>> = judgement
+        .documents
+        .iter()
+        .map(|file| RecordedFile {
+            name: &file.name,
+            body: file.body.as_bytes(),
+        })
+        .collect();
+    if let Err(code) = seal_emitted(out, &sealed, signing) {
         return code;
     }
     for finding in &judgement.report.review {
@@ -686,7 +845,7 @@ fn perf_command(
     }
 }
 
-fn run_command(request: &RunRequest<'_>) -> ExitCode {
+fn run_command(request: &RunRequest<'_>, signing: &Signing) -> ExitCode {
     let warn = |warning: RunWarning<'_>| match warning {
         RunWarning::CarriedMeasurements {
             count,
@@ -717,6 +876,27 @@ fn run_command(request: &RunRequest<'_>) -> ExitCode {
     };
     if let Err(e) = write_file(&outcome.exceptions_path, &exceptions) {
         return fail(&e);
+    }
+    let names = match (
+        record_name(&outcome.results_path),
+        record_name(&outcome.exceptions_path),
+    ) {
+        (Ok(results), Ok(exceptions)) => [results, exceptions],
+        (Err(code), _) | (_, Err(code)) => return code,
+    };
+    let [results_name, exceptions_name] = names;
+    let sealed = [
+        RecordedFile {
+            name: results_name,
+            body: document.as_bytes(),
+        },
+        RecordedFile {
+            name: exceptions_name,
+            body: exceptions.as_bytes(),
+        },
+    ];
+    if let Err(code) = seal_emitted(request.out_dir, &sealed, signing) {
+        return code;
     }
     println!(
         "{} case-records: {} passed / {} failed / {} errored / {} n-a; interpreter coverage {:.1}% ({} exceptions); wrote {}",

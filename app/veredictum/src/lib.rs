@@ -37,6 +37,7 @@ pub mod perf_assets;
 pub mod perf_run;
 pub mod pipeline;
 pub mod probe;
+pub mod record;
 pub mod refgrammar;
 pub mod render;
 pub mod run;

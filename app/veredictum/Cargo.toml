@@ -103,6 +103,10 @@ sha2 = "0.11.0"
 # bzip2 (libbz2-rs-sys) dependency: a detached signature needs no compression,
 # and that crate fails the cargo-deny license gate.
 pgp = { version = "0.20.0", default-features = false }
+# The RNG the signed run record's detached-signature call takes. NOT rand 0.10:
+# `pgp 0.20`'s signing call wants an RNG from rand 0.8's rand_core generation,
+# so the types must come from that major or they do not unify.
+rand = "0.8"
 # The SMART lane's per-step token mint: a CDR is a SMART resource server and
 # never issues tokens (ITS-REST docs/smart_app_launch/master06-authentication
 # §Supported Authentication Flows), and the conformance stack runs no
@@ -112,10 +116,6 @@ jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
 
 [dev-dependencies]
 assert_fs = "1"
-# NOT rand 0.10. `pgp 0.20`'s signing call takes an RNG from rand 0.8's
-# rand_core generation, so the types must come from that major or they do not
-# unify. A deliberate pin, not drift.
-rand = "0.8"
 
 [lints]
 workspace = true
