@@ -26,3 +26,4 @@ apply" part so a future session can act on it without re-deriving it.
 - [Console UI direction](console-ui-direction.md) — FerroEHR shell + Veredictum
   palette, everything-in-the-UI, signed verifiable records; design record #61,
   engine signing #62
+- [Subagent worktree isolation](subagent-worktree-isolation.md) — parallel implementers need isolation:worktree; shared checkout mixes authorship; REST over GraphQL when agents saturate gh

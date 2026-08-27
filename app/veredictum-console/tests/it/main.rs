@@ -9,6 +9,8 @@
 //! its own process.
 
 #[cfg(feature = "ssr")]
+mod captures;
+
 mod e2e_console;
 #[cfg(feature = "ssr")]
 mod engine_gate;

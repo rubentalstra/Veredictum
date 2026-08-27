@@ -838,6 +838,8 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
     // would leave a draft behind for whichever journey nextest runs next.
     let clean_url = export_and_verify(&h).await;
 
+    // The dark pass re-walks the finished run's surfaces: the job state
+    // persists, so each page renders the same record in the other theme.
     h.enable_dark().await;
     h.goto("/run/verdicts").await;
     h.capture("verdicts-dark").await;
@@ -845,6 +847,15 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
     h.wait_xpath("//h2[contains(., 'The check')]").await;
     h.wait_xpath("//h2[contains(., 'What this proves')]").await;
     h.capture("verify-dark").await;
+    h.goto("/run/scope").await;
+    h.wait_xpath("//h1[contains(., 'Scope')]").await;
+    h.capture("scope-dark").await;
+    h.goto("/run/live").await;
+    h.wait_xpath("//span[contains(., 'finished')]").await;
+    h.capture("live-dark").await;
+    h.goto("/run/results").await;
+    h.wait_xpath("//h1[contains(., 'Results')]").await;
+    h.capture("results-dark").await;
 
     h.assert_console_clean(&[]).await;
     h.finish().await;
