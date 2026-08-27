@@ -11,14 +11,18 @@ PERMANENT (owner rulings 2026-07-22 + 2026-07-23, carried across the split).
 Never delete it, and never file it under a plans directory: it is not
 delete-on-implementation working material. It is the owner's curated document
 and it is still being worked on — adapt names and paths when the tree moves,
-never reword the content.
+never reword the content. One owner-directed exception is recorded: the
+2026-08-27 correction pass (below) re-verified the checkable claims and
+rewrote what had stalled; the design substance was corrected where wrong.
 
 Spec-facing citations in CODE still point at `specs/openehr/` per the citation
 rules. This file is the design record, not a code-citable oracle.
 
 WHAT THE SPLIT CHANGED, and nothing else: `cnf-runner` is `veredictum`; the
-paths that were under `tools/cnf-runner/` are this repository's root-mapped
-ones (`artifacts/`, `schemas/`, `src/`, `party/`, `verification-pack/`);
+paths that were under `tools/cnf-runner/` map to this repository's trees —
+after the #55 restructure the code is `app/veredictum/` (a virtual workspace
+root; the console is `app/veredictum-console/`) and the data trees stay
+root-mapped (`artifacts/`, `schemas/`, `party/`, `verification-pack/`);
 `specs/openehr/` is `specs/openehr/`. References belonging to the
 FerroEHR repository — its issue numbers, its committed conformance baselines —
 are qualified as such, because they do not resolve here. FerroEHR named as a
@@ -32,10 +36,14 @@ the machine-readable conformance schedule, the pure verdict pipeline, the
 profiles and certificate, and the measured performance-class model. Every
 claim was verified 2026-07-21 against the sources in the Appendix (source
 register), through repeated independent audit rounds (openEHR spec
-conformance, ISO, legal/regulatory, internal consistency,
-implementability). Built by the CNF 2.0 reference runner
-(`veredictum` — this repository); a party's measured artifacts are emitted to
-the output directory a run is given.*
+conformance, ISO, legal/regulatory, internal consistency, implementability),
+and the checkable claims were re-verified 2026-08-27 against this repository
+and its tracker. The reference runner is shipped: `veredictum`, published on
+crates.io (0.1.0-alpha.4 at the re-verification), with signed releases, the
+container image (carrying the web console, #6), the docs site, and a
+catalogue of 1103 case cores and 247 operation bindings that passes every
+validate gate. A party's measured artifacts are emitted to the output
+directory a run is given.*
 
 ---
 
@@ -84,11 +92,12 @@ SM-anchors/ITS-executes split, tech profiles, and the global ID scheme are
 the 2021–2022 community's work. The deltas are five: one-file-per-case data
 with generated prose; CI enforcement of the derivation chain; computable
 Statement/results schemas with mechanically computed verdicts; the
-governance/resourcing charter; and the ISO/EHDS grounding. FerroEHR's ECC
-(394 cases, both wire formats, machine-computed verdicts on the CNF profiles
-model) is the working draft and one reference implementation — explicitly
-not "the standard": the standard is community-owned, vendor-neutral, and
-multi-harness by construction.
+governance/resourcing charter; and the ISO/EHDS grounding. The working
+implementation is this repository's published instrument (1103 case cores,
+247 operation bindings, both wire formats, machine-computed verdicts on the
+CNF profiles model; grown from FerroEHR's ECC draft of 394 cases) — and it
+is explicitly not "the standard": the standard is community-owned,
+vendor-neutral, and multi-harness by construction.
 
 ## 3. Evidence base — state of the official CNF component (2026-07-21)
 
@@ -103,7 +112,7 @@ vendored snapshot `specs/openehr/CNF/` @ `33251d2a`.
 |---|---|---|---|
 | Conformance Guide | DEVELOPMENT | 0.6.0, 08-Jan-2022 (`guide/master00-amendment_record.adoc`) | Methodology sound (SUT model, the specs→runnable-tests "square", API-vs-content test split). **Assessment layer all `TBD`**: `guide/master05-assessment.adoc` §Tooling, §Test Execution Report, §Conformance Statement, §Conformance Certification. "Platform Clients" scope: bare `TBD`. |
 | Platform Conformance Test Schedule | DEVELOPMENT | 0.8.6, 24-Mar-2022 (`platform_test_schedule/master00-amendment_record.adoc`) | See chapter map below. Minimum RM pinned 1.0.2 (`master03-overview.adoc`), behind RM 1.1.0/1.2.0. |
-| Platform Profiles | DEVELOPMENT | 2022 | CORE / STANDARD / OPTIONS capability matrix (`profiles/master03-profiles.adoc`) — usable as-is; this repo's ECC implements it verbatim. |
+| Platform Profiles | DEVELOPMENT | 2022 | CORE / STANDARD / OPTIONS capability matrix (`profiles/master03-profiles.adoc`) — usable as-is; this repository's capability matrix (`artifacts/vocab/capability_matrix.yaml`) implements it verbatim. |
 | Conformance Certificate | DEVELOPMENT | 2021 | A **fictional worked example** ("BestEHR 2.4", "ACME EHR systems LLC", dated 2017; `certificate/master03-certificate.adoc`). No issuance procedure, assessor accreditation, validity period, or revocation anywhere. The book advertises BASIC-SEC/BASIC-PRIV ratings for which no defining test cases exist. |
 
 ### 3.2 Test Schedule chapter map
@@ -228,7 +237,7 @@ ISO/IEC 17067* rather than home-grown.
 | CNF 2.0 concept | International term to adopt | Standard to cite |
 |---|---|---|
 | The machine-readable Test Schedule | **Abstract Test Suite (ATS)**; per-case **test purposes** | ISO/IEC 9646-1/-2 (ITU-T X.290/X.291) |
-| A concrete runner (Robot, ECC, Spock…) | **Executable Test Suite (ETS)** realized by a **Means of Testing** | ISO/IEC 9646-4/-5 |
+| A concrete runner (veredictum, Robot, Spock…) | **Executable Test Suite (ETS)** realized by a **Means of Testing** | ISO/IEC 9646-4/-5 |
 | The computable Conformance Statement | **Implementation Conformance Statement (ICS)** from a normative **proforma**; legally a **first-party attestation / supplier's declaration of conformity** | ISO/IEC 9646-7; ISO/IEC 17050-1; ISO/IEC 17000 |
 | Evidence linked to a statement | **Supporting documentation** (traceability, availability, retention) | ISO/IEC 17050-2 |
 | Deployment parameters to run against a live SUT (base URL, auth, template-id policy…) | **IXIT** (Implementation eXtra Information for Testing) | ISO/IEC 9646-1 (ITU-T X.292) |
@@ -382,6 +391,16 @@ Honest implications:
    the Robot suites are STALLED structural guides (which behaviours to cover),
    never the correctness oracle — this framework earns its authority from the
    released components, which is precisely why it is the first *enforceable* CNF.
+   **The honest state of the vendored oracle (audited 2026-08-27, #78):** only
+   QUERY and ITS-REST are pinned to release tags today; RM, BASE, AM, TERM, SM,
+   ITS-XML, ITS-JSON and LANG are pinned to their `master` development heads
+   (each tree's `PROVENANCE.md` records its ref). That gap between the claim
+   and the pins is release-blocking for v0.1.0. Issue #78 makes the oracle
+   generation explicit and selectable: a stable set of released tags as the
+   DEFAULT, the development set as the deliberate second option, and the
+   record naming which generation a verdict was spoken against. An instrument
+   whose authority claim and whose oracle bytes disagree is the defect class
+   it exists to catch in others, so the record states the gap plainly.
 2. **SM anchors semantics; ITS bindings execute — structurally.** Every case
    is a protocol-neutral core (SM operation / content constraint, spec
    citations, pre/postconditions, logical outcomes); wire specifics live in
@@ -1669,8 +1688,8 @@ deployment topology — mandatory for performance runs, §8.14).
 Single-instance platform cases use the default instance `sut`; Enterprise
 dual-instance cases (§11.11) address `source`/`target` via the flow `on:`
 selector (§8.3); performance verdicts bind to the environment. One file
-drives any runner against any SUT topology. (ECC's `SutDescriptor` is the
-donated draft.)
+drives any runner against any SUT topology. (The ECC's `SutDescriptor` was
+the donated draft; the shipped contract is `schemas/ixit.schema.json`.)
 
 ### 8.11 ICS-driven selection and verdict computation
 
@@ -1755,9 +1774,9 @@ capability-vs-tier consistency against the Profiles matrix; reference and
 sentinel grammar checks (`${…}` forms, `absent`/`provided`/`null`);
 decision-table literals parse against the published grammar;
 prose regeneration succeeds. This is the mechanism that lets the repo accept
-community PRs without a bottleneck maintainer — and it is ECC's
-coverage-guard discipline (`tools/conformance/tests/coverage.rs`),
-generalized.
+community PRs without a bottleneck maintainer — the ECC coverage-guard
+discipline, generalized; it runs here as `validate`'s gates plus the
+integration suite (`app/veredictum/tests/`).
 
 The **`surface-coverage` gate** (issue FerroEHR#271) closes the loop on breadth: it
 enumerates the spec-defined wire surface from the RELEASED sources only — the
@@ -1766,9 +1785,10 @@ wire branches, never the OAS — and fails on any behaviour (an SM operation,
 a realized binding's outcome/format branch, or a cross-cutting header/
 negotiation/error-family element) with neither a covering case nor an
 adjudicated `vocab/wire_surface.yaml` exception. Silence is not coverage;
-coverage only ratchets up. `veredictum validate --specs …` refreshes the
-deterministic per-interface/per-binding coverage report at
-FerroEHR's `docs/conformance/coverage-report.md`.
+coverage only ratchets up. `veredictum validate --specs … --write-report`
+refreshes the deterministic per-interface/per-binding coverage report at a
+path derived from the spec tree (`<specs>/../../conformance/coverage-report.md`);
+FerroEHR's committed copy lives in its own `docs/conformance/`.
 
 The **claim-completeness gates** (issue FerroEHR#622) close the same loop on the CLAIM
 side, so a certification claim can never be hollow. `validate` sweeps the
@@ -1931,15 +1951,16 @@ precedent of anchoring load to a countable base unit with a per-unit rate):
 
 The latency budget is the **standard per-operation SLO of p99 ≤ 1 s,
 uniform across classes** — the same SLO the committed knee-ladder
-methodology already defines sustainability by (`docs/benchmarks/*/KNEE.md`:
-"SLO p99 ≤ 1 s, error ≤ 0.1%"). The 2017 page's user counts and screen
-latencies are recorded as lineage only. Procurers who need tighter tails or
-the read-heavy band ceiling tighten per tender via the §10 template
-parameters. Corpus sizes are the 2017 D-row scale ladder. Feasibility is
-evidenced by the committed measurement artifacts (`docs/benchmarks/`,
-regenerated per release, never hand-typed): FerroEHR sustains a
-631.5 req/s knee at p99 204.7 ms and upstream EHRbase 475.0 req/s
-(`ferroehr/KNEE.md`, `ehrbase/KNEE.md`) on 8-core consumer hardware —
+methodology already defines sustainability by (FerroEHR's
+`docs/benchmarks/*/KNEE.md`: "SLO p99 ≤ 1 s, error ≤ 0.1%"). The 2017
+page's user counts and screen latencies are recorded as lineage only.
+Procurers who need tighter tails or the read-heavy band ceiling tighten per
+tender via the §10 template parameters. Corpus sizes are the 2017 D-row
+scale ladder. Feasibility is evidenced by FerroEHR's committed measurement
+artifacts (its `docs/benchmarks/`, regenerated per release, never
+hand-typed): FerroEHR sustains a 631.5 req/s knee at p99 204.7 ms and
+upstream EHRbase 475.0 req/s (its `ferroehr/KNEE.md`, `ehrbase/KNEE.md`) on
+8-core consumer hardware —
 the class-L floor (150/s) is comfortably attainable — a consumer laptop
 already sustains 4× it — and the class-R floor (1,500/s) is a
 server/scaled-deployment target bracketed by NHS Spine's published peak,
@@ -1978,10 +1999,11 @@ Rules:
   functional profile — the 2017 multi-dimensional certificate
   (Functional | Performance | Security per §8.15, with Enterprise following §11.11).
 - **Reference methodology**: seeded workload generators + the knee-finding
-  and sustained-run procedure of a published benchmark harness (this repo's
-  `tools/benchmark` is the donated working draft); any runner reproducing
-  the workload definition and emitting the measurement schema qualifies —
-  harness independence holds here too.
+  and sustained-run procedure of a published benchmark harness (FerroEHR's
+  `tools/benchmark` was the donated working draft; the methodology ships
+  here as the `perf` and `stress` instruments under `app/veredictum/src/`);
+  any runner reproducing the workload definition and emitting
+  the measurement schema qualifies — harness independence holds here too.
 
 **The journey decomposition (2026-07-22, the hospital simulation — FerroEHR#240).**
 The measured workload evolved from the flat four-operation mix into
@@ -2032,8 +2054,9 @@ family:
 | **Anonymous EHRs** | An EHR is creatable and fully operable with no demographic identity attached. | Profiles book §Non-Functional (existing CORE capability) |
 | **Version-signature integrity** *(applies when the Signing capability is claimed — Profiles: STANDARD, not SEC-BASIC-required)* | Committed VERSIONs carry a verifiable `signature`: produced over the canonical form of the version data, verifiable against the declared key material, with the version lineage (`preceding_version_uid` chain) intact — the digital signing chain. Verification behaviour is conformance; algorithm strength and key management are not (§6.3). | RM common §change_control (`ORIGINAL_VERSION.signature`); Profiles book §Non-Functional (Signing) |
 
-Signing thereby gets its concrete conformance point (this repo's SIG case
-area + PGP signing sidecar are the donated seed). The
+Signing thereby gets its concrete conformance point (the committed SIG case
+family, 13 cases under `artifacts/schedule/security/`, with the PGP
+verification machinery in the runner). The
 **statement-declared posture** (never wire verdicts): transport/at-rest
 encryption configuration and id-pseudonymisation-on-export — the 2017
 D-row's "encryption? id pseudonymisation?" aspects — declared in the
@@ -2171,9 +2194,9 @@ once §8.3 makes cases enumerable files:
    (spec-grounded rules marked [spec]; the four points the specs are silent
    on carried as [legislated] proposed defaults) — U5's gate is SEC
    ratification of the [legislated] points, not de-novo design. Seed
-   material: this repo's 25 QRY + 8 SQR + 4 AQT case
-   designs (each carrying AQL 1.1 citations) and EHRbase's AQL conformance
-   corpus ([ehrbase/conformance-testing-documentation](https://github.com/ehrbase/conformance-testing-documentation),
+   material: the ECC-era 25 QRY + 8 SQR + 4 AQT case designs, grown into
+   this repository's query chapter (`artifacts/schedule/query/`, each case
+   carrying AQL 1.1 citations), and EHRbase's AQL conformance corpus ([ehrbase/conformance-testing-documentation](https://github.com/ehrbase/conformance-testing-documentation),
    SELECT/WHERE/ORDER BY/LIMIT/FROM/parameter suites).
 2. **The maximal-coverage template round-trip** (the 2017 "template
    injection test"): one template exercising ALL RM types (every DV_* incl.
@@ -2268,10 +2291,11 @@ the difference between "nice idea, same risk" and "resourced program".
   be — and a sponsoring vendor is never the sole adjudicator of its own
   sponsored cases: sponsored work is scoped to case authorship reviewed
   against spec text by non-sponsor maintainers.
-- **Commitments in hand**: FerroEHR commits the pilot engineering (§14).
-  The upstream ask explicitly requests matching co-commitments — a second
-  vendor's engineering time and 2–3 maintainer volunteers — before the SEC
-  agenda item, so the SEC decides on a resourced plan, not a hope.
+- **Commitments in hand**: the pilot engineering is delivered — this
+  repository's published instrument (§14.2). The upstream ask explicitly
+  requests matching co-commitments — a second vendor's engineering time and
+  2–3 maintainer volunteers — before the SEC agenda item, so the SEC decides
+  on a resourced plan, not a hope.
 - **Impartiality by structure**: openEHR International is scheme owner and
   registrar only. It never tests, never certifies (rung 3 is delegated to
   accredited bodies; rung 1 is administrative). A spec author grading its own
@@ -2287,8 +2311,8 @@ the difference between "nice idea, same risk" and "resourced program".
 3. **SEC agenda item**: adopt-the-format decision, the maintainer-group
    charter, the AQL chapter blessed as the pilot.
 4. **Execution**: the §14.1 PR series; the registry the moment two products
-   publish (FerroEHR volunteers; upstream EHRbase, already assessed by ECC,
-   is the natural second); an EHRCON26 conformance slot; EHDS liaison per
+   publish (FerroEHR volunteers; upstream EHRbase, already assessed by this
+   instrument, is the natural second); an EHRCON26 conformance slot; EHDS liaison per
    §6.5 (track the Art 36/15 implementing acts; revisit the EEHRxF-seam
    profile when they land in 2027).
 
@@ -2309,12 +2333,14 @@ pass the §8.12 verification pack; the AQL chapter ships with normative
 equivalence rules; ≥3 products on the public registry; CNF Release 1.0.0
 finally cut — before the March 2027 EHDS implementing acts.
 
-## 14. Production implementation plan
+## 14. Production implementation — the plan, and what shipped
 
 Two tracks, both production-grade from day one — no throwaway prototype. The
-in-repo track does not wait for upstream adoption: the reference runner
-implements the §8 artifact set as its production format immediately, which is
-simultaneously the proof the upstream proposal ships with.
+in-repo track did not wait for upstream adoption: the reference runner
+implements the §8 artifact set as its production format, which is
+simultaneously the proof the upstream proposal ships with. **Status
+(re-verified 2026-08-27): the in-repo track (§14.2) is DELIVERED and
+published; the upstream track (§14.1) has not started and remains the plan.**
 
 ### 14.1 Upstream: the specifications-CNF PR series
 
@@ -2336,35 +2362,51 @@ The performance & volumetrics chapter (§8.14 + §11.4), Demographic
 (master10), and Admin/Messaging (master12/13) follow as U9+ per the §11
 roadmap once the pattern is proven on U2–U6.
 
-### 14.2 This codebase: the reference runner, built from scratch
+### 14.2 This codebase: the reference runner, built from scratch — DELIVERED
 
-Owner ruling: the conformance + benchmark tooling is **rebuilt from the
+Owner ruling: the conformance + benchmark tooling was **rebuilt from the
 ground up** as one runner implementing the §8 architecture natively — not an
-incremental adaptation of today's ECC, and **not a 1:1 transcription of its
-catalogue**: the new catalogue is authored from the CNF 2.0 framework itself
+incremental adaptation of the ECC, and **not a 1:1 transcription of its
+catalogue**: the catalogue was authored from the CNF 2.0 framework itself
 (the official schedule cases per the §8.9 pilots, the new chapters, the
-framework's own selection/format/option machinery). The current ECC and its
-committed baseline (402 case×format executions · 384 passed · 18 N/A) remain
-running untouched as the **comparison reference**: differences are expected
-and are enumerated + justified in a comparison report (the W2 gate); the old
-harness retires on a reviewed report, and the new runner establishes the
-new baseline. Tracked as dedicated issues (opened when this design is
-owner-approved), sequenced:
+framework's own selection/format/option machinery). The ECC and its final
+committed baseline (402 case×format executions · 384 passed · 18 N/A)
+served as the **comparison reference** and retired FerroEHR-side; the
+FerroEHR split's acceptance run drove the extracted instrument
+byte-identical to the in-tree runner's record (FerroEHR#2789), and this
+repository's catalogue is the baseline that now ratchets. The workstreams
+below shipped, in this order, first inside FerroEHR and then here:
 
 | WS | Workstream | Content | Done-gate |
 |---|---|---|---|
-| W1 | **Artifact schemas in Rust** | `tools/conformance`: typed model + validator for case cores, bindings, vocabularies (outcomes + the capability matrix), corpus manifest, ambiguity register; JSON-Schema emission so the same schemas ship upstream in U1. The §8.13 checks become `cargo nextest` guards alongside the existing coverage guard. Scope: assertion-machinery artifacts; the performance case-core schema lands with W7. | Validator rejects every seeded-defect artifact fixture; schemas byte-identical to the U1 set |
+| W1 | **Artifact schemas in Rust** | The typed model + validator (now `app/veredictum/src/`) for case cores, bindings, vocabularies (outcomes + the capability matrix), corpus manifest, ambiguity register; JSON-Schema emission so the same schemas ship upstream in U1. The §8.13 checks become `cargo nextest` guards alongside the existing coverage guard. Scope: assertion-machinery artifacts; the performance case-core schema lands with W7. | Validator rejects every seeded-defect artifact fixture; schemas byte-identical to the U1 set |
 | W2 | **Catalogue authoring + comparison** | The CNF 2.0 catalogue authored per the framework: official schedule cases first (the §8.9 pilot encodings generalized across master04–09/15–17), then the ECC-original designs that fill genuine gaps — each re-adjudicated to spec-text-only evidence (§11.8) before entry, keeping an `ecc-` namespace pending upstream adoption. Official CNF ids primary; `inventory/ecc-catalog.tsv` retires with the old harness. | **Comparison gate** (not reproduction): committed ECC↔CNF coverage map + comparison report — every difference from the old baseline enumerated and justified against the framework, verdict regressions on equivalent coverage explained, official-schedule coverage ≥ the old harness; cutover, old-harness retirement, and the new baseline follow a reviewed report |
 | W3 | **Data-driven executor** | The engine executes functional case cores directly from the artifact files (flow interpreter: requires-setup, parameter iteration with reset_per_row, captures, outcome mapping via bindings, typed assertions). Hand-written Rust remains only for generation recipes and genuinely non-mechanizable glue — each such exception is registered. Content decision tables execute from the data. The AQL `result_set` assertions execute under the §8.6 equivalence rules (U5 ratifies the [legislated] defaults). | ≥90% of cases run through the interpreter; every exception listed in the report; the W2 comparison report stays green |
 | W4 | **Statement / results / ixit emission** | `results.json` is emitted in the §8.10 schema (per-row outcomes, ambiguity dispositions, runner verification status); `statement.json` (ICS) + `ixit.json` (formalizing `SutDescriptor`) emitted per SUT; the Certificate/Statement/Comparison artifacts render from them; verdict computation moves to the shared pure function. | All of FerroEHR's `docs/conformance/**` artifacts regenerate from the new schemas; the honesty blocks survive; badges derive from the new results |
 | W5 | **Simplified-formats deepening** | The §8.7 blueprint's gap categories 2–9 (node-id algorithm, level removal, the 43 suffix tables, `_`-attributes, `\|raw`, full ctx vocabulary, counters, STRUCTURED style) + deepened 1/10 — ~40 new SF cases, all spec-example-driven, all OPTIONS-profile. | Every master04/05/06 spec-example JSON block exercised; ECC baseline ratchets upward only |
 | W6 | **Runner verification pack** | Author the U7 transcripts + adjudications; ECC self-verifies against them in CI; publish the pack so the Robot suite (and any vendor runner) can prove itself. | ECC passes both pack parts; the pack rejects a deliberately-broken runner build |
-| W7 | **Performance schedule implementation** | `tools/benchmark`'s workload generation, knee-finding ladder, and sustained-run procedure re-expressed as §8.14 performance cases + the measurement schema; class verdicts computed into results.json; environment block formalized in ixit.json. | An earned-class run against both SUTs committed; verdicts reproduce the published benchmark artifacts |
+| W7 | **Performance schedule implementation** | The donated benchmark harness's workload generation, knee-finding ladder, and sustained-run procedure re-expressed as §8.14 performance cases + the measurement schema; class verdicts computed into results.json; environment block formalized in ixit.json. | An earned-class run against both SUTs committed; verdicts reproduce the published benchmark artifacts |
 
-Sequencing: W1 → W2 → {W3, W4} → {W5, W6, W7}. Standing gates apply throughout:
-`cargo clippy --workspace --all-targets --all-features`, full nextest, the
-ECC zero-drift rule (the baseline only ratchets upward), and the
-changelog/docs-website rules for any user-visible surface.
+Sequencing was W1 → W2 → {W3, W4} → {W5, W6, W7}, all delivered. The
+standing gates carried over and grew: the guard tier, the full Rust tier,
+`validate` at zero findings over 1103 cases / 247 bindings, the fuzz lane,
+and the ratchet rule (the baseline only moves upward).
+
+**Shipped since the split, beyond the W-plan** (each on this repository's
+tracker): the deliberate library API (`veredictum::pipeline`, one seam per
+whole operation; #22); publication on crates.io with the signed release
+pipeline, SBOMs and the multi-architecture container image (#5, #12); the
+signed run record (a byte-deterministic digest manifest, a detached OpenPGP
+signature, and the `verify-record` verb; #62); the machine-readable
+`run --progress` stream for drivers (#81); and the web console over the
+published crate (#6; the ratified screen record is #61; shipped so far: the
+shell and design system #63, the instrument landing and catalogue explorer
+#64, and the run wizard's connect and scope steps #65; the container image
+now carries the console). **Open and release-blocking for v0.1.0** (the
+first stable release, per the 2026-08-27 milestone renumbering): the
+remaining console surfaces (#6's open children), the oracle-generation
+selection (#78), and the recorded findings #74–#76. The tracker is the plan
+from here; this section stays as the record.
 
 ### 14.3 Runner technology — why the reference runner is Rust
 
@@ -2394,8 +2436,8 @@ technology choice, and it is Rust:
 - **One language serves both machineries.** The measurement machinery
   (§8.14) needs a workload generator that is never itself the bottleneck at
   class-R concurrency; Rust's async runtime handles goose-class load
-  generation, and this repo's `tools/benchmark` (knee ladder + sustained
-  runs, already published against two CDRs) is the donated draft. Assertion
+  generation, and FerroEHR's `tools/benchmark` (knee ladder + sustained
+  runs, published against two CDRs) was the donated draft. Assertion
   interpreter + load generator + verdict computation share one toolchain.
 - **A single static binary ends the environment rot that killed the last
   suite.** The Robot suite's practical death was environmental
@@ -2418,17 +2460,17 @@ hand-roll what a vetted crate provides, verify versions live at adoption):
 | Canonical interchange | `serde_json` | statement/results/ixit are JSON; hash-linked artifacts |
 | Schema validation | `jsonschema` | Validates the artifact families + emitted party artifacts against the published schemas |
 | YAML authoring front-end | **`serde-saphyr`** (1.0.0-rc.1, 2026-07-18) | The only actively-maintained pure-Rust (`unsafe`-forbidden) serde YAML 1.2 front-end with **no RUSTSEC advisories** — `serde_yaml` is archived and both libyaml-fork successors inherit RUSTSEC-2023-0075; deserializes to `serde_json::Value` (the exact shape `jsonschema` validates) and ships a `Budget` cap on nesting/alias expansion, closing billion-laughs on untrusted test files. Pin the rc or its stable line. |
-| Workload engine (measurement machinery) | **own tokio-native engine** — the knee-ladder + sustained-run code of `tools/benchmark`, carried into the rebuild | Already built, published against two CDRs, and methodology-specific; [goose](https://github.com/tag1consulting/goose) evaluated and named as fallback — its Locust user-behaviour model does not fit the ladder |
-| Latency statistics | **`hdrhistogram`** (7.6.0, 2026-07-18) | The canonical Rust HdrHistogram port, no RUSTSEC advisories; the `serialization` feature emits the standard V2/compressed encoding so §8.14 thresholds are re-checkable from the results artifact, and `record_correct` provides the coordinated-omission correction the open-loop model requires. |
+| Workload engine (measurement machinery) | **own tokio-native engine** — the knee-ladder + sustained-run code of the donated benchmark harness, carried into the rebuild (the `perf` and `stress` instruments under `app/veredictum/src/`) | Already built, published against two CDRs, and methodology-specific; [goose](https://github.com/tag1consulting/goose) evaluated and named as fallback — its Locust user-behaviour model does not fit the ladder |
+| Latency statistics | **`hdrhistogram`** (evaluated at 7.6.0, 2026-07-18; pinned 7.5.4 in the tree) | The canonical Rust HdrHistogram port, no RUSTSEC advisories; the `serialization` feature emits the standard V2/compressed encoding so §8.14 thresholds are re-checkable from the results artifact, and `record_correct` provides the coordinated-omission correction the open-loop model requires. |
 | CLI / errors / telemetry | `clap` / `thiserror` / `tracing` | Workspace standards |
 | Test-definition DSLs | **[cucumber-rs](https://github.com/cucumber-rs/cucumber) and [Hurl](https://hurl.dev): evaluated and declined** | Each would introduce a second test-definition language beside the schedule — the exact three-representations drift CNF 2.0 exists to kill; the schedule is the only DSL |
 
-ECC (`tools/conformance` + `tools/benchmark`) is the prior art and the
-comparison reference for the rebuild (§14.2); W1–W7 deliver the new runner as
-the first production implementation of the artifact set. The Robot suite
-remains a first-class *compliant* runner via the verification pack —
-rescuing it is inside the proposal (§8.7, §13); it is simply no longer the
-thing the framework's credibility depends on.
+The ECC (FerroEHR's `tools/conformance` + `tools/benchmark`) was the prior
+art and the comparison reference for the rebuild (§14.2); W1–W7 delivered
+the new runner as the first production implementation of the artifact set.
+The Robot suite remains a first-class *compliant* runner via the
+verification pack — rescuing it is inside the upstream proposal (§8.7, §13);
+it is simply no longer the thing the framework's credibility depends on.
 
 **The comparison gate, operationally** (the W2 done-gate): (a) a committed
 ECC↔CNF **coverage map** relating old cases to the ground the new catalogue
@@ -2445,8 +2487,8 @@ Cutover, old-harness retirement, and the establishment of the new baseline
 (which then ratchets) follow a reviewed report.
 
 What this buys strategically: when U1 reaches the SEC, the schemas arrive
-with a production runner already storing, validating, executing, and
-reporting through them against two real CDRs — the difference between
+with a published production runner already storing, validating, executing,
+and reporting through them against real CDRs — the difference between
 proposing a format and demonstrating one.
 
 ---
@@ -2578,7 +2620,11 @@ proposing a format and demonstrating one.
   `master04-result_structure.adoc`; ITS-REST
   `schemas/query/{ResultSet,ResultSetColumn,ResultSetRow,ResultSetMetadata}.yaml`,
   `docs/query/{Request,Response}.md` (all vendored).
-- Our instrument: `tools/conformance/` (ECC), latest committed baseline
-  FerroEHR's `docs/conformance/ferroehr/CONFORMANCE_REPORT.md` (402 case×format
-  executions · 384 passed · 0 failed · 18 N/A; CORE PASS / STANDARD PASS /
-  OPTIONS OBTAINED; 394 active catalogue cases).
+- Our instrument: this repository (`app/veredictum/`), published as
+  `veredictum` on crates.io (0.1.0-alpha.4 at the 2026-08-27
+  re-verification); the catalogue holds 1103 case cores and 247 operation
+  bindings and passes every validate gate. Its predecessor, the ECC
+  (FerroEHR's `tools/conformance/`, 394 active catalogue cases; final
+  committed baseline `docs/conformance/ferroehr/CONFORMANCE_REPORT.md`, 402
+  case×format executions · 384 passed · 0 failed · 18 N/A; CORE PASS /
+  STANDARD PASS / OPTIONS OBTAINED), is the retired comparison reference.
