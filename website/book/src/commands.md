@@ -7,7 +7,8 @@ prints the same list from the build you have installed, and that output is the
 authority if the two ever disagree.
 
 Three commands make the conformance record (`validate`, `run`, `verdicts`), two
-measure (`perf`, `stress`), and the rest render or explore.
+measure (`perf`, `stress`), `verify-record` checks a sealed bundle, and the rest
+render or explore.
 
 ## validate
 
@@ -40,7 +41,8 @@ report.
 ```bash
 veredictum run --root <ROOT> --ixit <IXIT> --out <OUT> \
     [--sut-name <NAME>] [--sut-version <VERSION>] \
-    [--filter <SUBSTRING>] [--statement <STATEMENT>]
+    [--filter <SUBSTRING>] [--statement <STATEMENT>] \
+    [--sign-key <KEY>]
 ```
 
 | Flag | Meaning |
@@ -52,6 +54,8 @@ veredictum run --root <ROOT> --ixit <IXIT> --out <OUT> \
 | `--sut-version <VERSION>` | Version label for the system under test. Default `dev` |
 | `--filter <SUBSTRING>` | Only run cases whose identifier contains this substring |
 | `--statement <STATEMENT>` | The party statement. When supplied, an option-gated case whose option the statement does not declare is recorded not-applicable at drive time instead of driven |
+| `--sign-key <KEY>` | An armored OpenPGP secret key. Seals the emitted documents with `record-manifest.json` and its detached signature |
+| `--sign-passphrase <PASSPHRASE>` | The passphrase unlocking `--sign-key`, read from `VEREDICTUM_SIGN_PASSPHRASE` |
 
 Drives every applicable case and records the exchange. Exits `1` if any case
 failed or errored.
@@ -63,7 +67,7 @@ tree, and write the rendered submission documents.
 
 ```bash
 veredictum verdicts --statement <STATEMENT> --results <RESULTS> \
-    --root <ROOT> --out <OUT>
+    --root <ROOT> --out <OUT> [--sign-key <KEY>]
 ```
 
 | Flag | Meaning |
@@ -72,10 +76,41 @@ veredictum verdicts --statement <STATEMENT> --results <RESULTS> \
 | `--results <RESULTS>` | The recorded results, `results.json`. Required |
 | `--root <ROOT>` | The artifact root. Required |
 | `--out <OUT>` | Output directory for the rendered documents and `verdicts.json`. Required |
+| `--sign-key <KEY>` | An armored OpenPGP secret key. Seals the rendered documents with `record-manifest.json` and its detached signature |
+| `--sign-passphrase <PASSPHRASE>` | The passphrase unlocking `--sign-key`, read from `VEREDICTUM_SIGN_PASSPHRASE` |
 
 The pure step. It reaches no network and reads nothing but its inputs, which is
 what makes a published verdict re-derivable by anyone who has the same four
 files.
+
+## verify-record
+
+Verify a sealed bundle: recompute every digest its record manifest names, and
+check the detached signature over that manifest.
+
+```bash
+veredictum verify-record --record <DIR> --key <KEY>
+```
+
+| Flag | Meaning |
+|---|---|
+| `--record <DIR>` | The bundle directory holding the emitted documents, `record-manifest.json` and `record-manifest.json.asc`. Required |
+| `--key <KEY>` | The armored OpenPGP public key the signature is checked against. Required |
+
+Prints the signer fingerprint, the signing time, and one line per file with its
+digest verdict. Zero findings is the only passing result: a digest mismatch, a
+file the manifest names but the bundle does not carry, or a signature no
+component of the supplied key verifies, each exits `1` naming what failed.
+
+The bundle is ordinary files, so the check does not depend on this tool.
+`gpg --verify record-manifest.json.asc record-manifest.json` establishes the
+same signature, and `sha256sum` re-derives the same digests.
+
+A verified bundle is one link in the chain and not the whole of it. A valid
+signature proves integrity and origin since signing, and says nothing about the
+conditions the run executed under. The published instrument, the verification
+pack and the citation-carrying record are the rest, which is why that sentence
+prints on every verification.
 
 ## perf
 

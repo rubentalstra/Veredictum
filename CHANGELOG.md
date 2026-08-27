@@ -30,6 +30,20 @@ version on.
   pagination, toast plus inline message bar, and the verbatim pane with a
   copy affordance. Surfaces still under construction render an honest
   placeholder naming their tracker issue.
+- **The signed run record (#62).** `run` and `verdicts` take `--sign-key
+  <FILE>`, an armored OpenPGP secret key, with its passphrase read from
+  `VEREDICTUM_SIGN_PASSPHRASE`. The emitted documents are then sealed with
+  `record-manifest.json`, a byte-deterministic SHA-256 digest manifest
+  carrying the instrument's name and version, and `record-manifest.json.asc`,
+  a detached RFC 9580 signature over it. The bundle is ordinary files, so
+  `gpg --verify record-manifest.json.asc record-manifest.json` accepts it
+  without this tool. A new `verify-record --record <DIR> --key <FILE>`
+  recomputes every digest the manifest names and checks the signature against
+  a supplied public key, printing the signer fingerprint, the signing time and
+  one line per file; a mismatch, a missing file or a rejected signature exits
+  `1` naming what failed. Every verification prints what the signature does
+  not establish: it proves integrity and origin since signing, and says
+  nothing about the conditions the run executed under.
 - **The console's engine seam (#54).** `app/veredictum-console` consumes the
   instrument as `veredictum = "=0.1.0-alpha.4"` from crates.io — never a path
   dependency — and a console-started run spawns that same pinned binary as a
