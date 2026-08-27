@@ -235,7 +235,9 @@ pub mod unpack {
     /// # Errors
     /// The refusal when the id is not one this console mints.
     pub fn scratch_dir(state: &ConsoleState, id: &str) -> Result<PathBuf, String> {
-        if !is_bundle_id(id) {
+        // NOTE: the explicit `..` refusal is the guard shape CodeQL's
+        // rust/path-injection query models; is_bundle_id already implies it.
+        if id.contains("..") || !is_bundle_id(id) {
             return Err(String::from("not a bundle this console unpacked"));
         }
         // The joined id is REBUILT from the checked characters, so no byte
@@ -257,7 +259,7 @@ pub mod unpack {
         for entry in entries.flatten() {
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
-            if !name.starts_with(SCRATCH_PREFIX) {
+            if !name.starts_with(SCRATCH_PREFIX) || name.contains("..") {
                 continue;
             }
             let expired = entry
@@ -332,6 +334,11 @@ pub mod unpack {
             // step that lets `../` escape. The on-disk name is then REBUILT
             // from the allowlist, so no uploader byte reaches the join.
             let name = safe_entry_name(entry.name())?;
+            if name.contains("..") {
+                return Err(format!(
+                    "the archive carries {name:?}, which is not a plain file name — a record bundle is one flat directory"
+                ));
+            }
             let declared = entry.size();
             if declared > MAX_ENTRY_BYTES {
                 return Err(format!(
