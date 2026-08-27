@@ -83,6 +83,9 @@ pub struct RunSpec {
     /// The secret values for the environment-variable names the ixit
     /// declares. They reach the child process environment and nothing else.
     pub credentials: Vec<Credential>,
+    /// Ask the engine for its `--progress` stream (#81); a binary predating
+    /// the flag refuses the argument, so the caller decides.
+    pub progress: bool,
 }
 
 /// One line of the running engine's own output, as it happens.
@@ -197,7 +200,18 @@ impl Engine {
     /// cannot be read, [`Error::NoResults`] when the run leaves no results
     /// document, and [`Error::Malformed`] when that document does not parse
     /// as the published record.
-    pub fn run(&self, spec: &RunSpec, mut on_line: impl FnMut(Line)) -> Result<Finished, Error> {
+    pub fn run(&self, spec: &RunSpec, on_line: impl FnMut(Line)) -> Result<Finished, Error> {
+        let running = self.spawn(spec)?;
+        running.stream(on_line)
+    }
+
+    /// Spawns one run and hands back the handle that streams it — the split
+    /// [`Self::run`] composes, exposed so a job supervisor can hold the
+    /// [`RunningEngine::canceller`] while another thread streams (#66).
+    ///
+    /// # Errors
+    /// [`Error::Execute`] when the process cannot be spawned.
+    pub fn spawn(&self, spec: &RunSpec) -> Result<RunningEngine, Error> {
         let mut command = std::process::Command::new(&self.binary);
         command
             .args(args(spec))
@@ -207,14 +221,74 @@ impl Engine {
         for credential in &spec.credentials {
             command.env(&credential.name, &credential.value.0);
         }
+        let child = command.spawn().map_err(Error::Execute)?;
+        Ok(RunningEngine {
+            child: std::sync::Arc::new(std::sync::Mutex::new(child)),
+            out_dir: spec.out_dir.clone(),
+        })
+    }
+}
 
-        let mut child = command.spawn().map_err(Error::Execute)?;
+/// A cancel handle onto a running engine, safe to hold on another thread.
+#[derive(Debug, Clone)]
+pub struct Canceller {
+    child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
+}
+
+impl Canceller {
+    /// Kills the subprocess; the streaming side then observes the exit.
+    ///
+    /// # Errors
+    /// [`Error::Execute`] when the kill itself fails (an already-exited
+    /// child kills cleanly, so this is rare).
+    pub fn cancel(&self) -> Result<(), Error> {
+        let mut child = self
+            .child
+            .lock()
+            .map_err(|poison| Error::Execute(std::io::Error::other(poison.to_string())))?;
+        child.kill().map_err(Error::Execute)
+    }
+}
+
+/// One spawned run: stream it to completion, or cancel it from elsewhere.
+#[derive(Debug)]
+pub struct RunningEngine {
+    child: std::sync::Arc<std::sync::Mutex<std::process::Child>>,
+    out_dir: PathBuf,
+}
+
+impl RunningEngine {
+    /// The cancel handle, cloneable across threads.
+    #[must_use]
+    pub fn canceller(&self) -> Canceller {
+        Canceller {
+            child: std::sync::Arc::clone(&self.child),
+        }
+    }
+
+    /// Streams the run to completion, then parses the results record through
+    /// the published lib.
+    ///
+    /// # Errors
+    /// [`Error::Execute`] when the output cannot be read, [`Error::NoResults`]
+    /// when the run leaves no results document (a cancelled run's ordinary
+    /// shape), and [`Error::Malformed`] when that document does not parse as
+    /// the published record.
+    pub fn stream(self, mut on_line: impl FnMut(Line)) -> Result<Finished, Error> {
+        // The pipes leave the child under a short lock; streaming itself
+        // never holds it, so a canceller can take the lock and kill.
+        let (stdout, stderr) = {
+            let mut child = self
+                .child
+                .lock()
+                .map_err(|poison| Error::Execute(std::io::Error::other(poison.to_string())))?;
+            (child.stdout.take(), child.stderr.take())
+        };
         // Both pipes are drained concurrently: a child that fills the
         // un-read pipe's buffer blocks forever, so stderr drains on its own
         // thread while this one reads stdout, and the lines merge over a
         // channel in arrival order.
         let (sender, receiver) = std::sync::mpsc::channel::<Line>();
-        let stderr = child.stderr.take();
         let stderr_reader = std::thread::spawn({
             let sender = sender.clone();
             move || {
@@ -228,7 +302,7 @@ impl Engine {
                 }
             }
         });
-        if let Some(stdout) = child.stdout.take() {
+        if let Some(stdout) = stdout {
             for line in std::io::BufReader::new(stdout).lines() {
                 let line = line.map_err(Error::Execute)?;
                 on_line(Line::Out(line));
@@ -239,7 +313,13 @@ impl Engine {
                 }
             }
         }
-        let status = child.wait().map_err(Error::Execute)?;
+        let status = {
+            let mut child = self
+                .child
+                .lock()
+                .map_err(|poison| Error::Execute(std::io::Error::other(poison.to_string())))?;
+            child.wait().map_err(Error::Execute)?
+        };
         // The guard is joined, never dropped mid-stream: the remaining
         // stderr lines are delivered before the run is reported finished.
         let joined = stderr_reader.join();
@@ -253,8 +333,8 @@ impl Engine {
             )));
         }
 
-        let results_path = spec.out_dir.join("results.json");
-        let exceptions_path = spec.out_dir.join("run-exceptions.json");
+        let results_path = self.out_dir.join("results.json");
+        let exceptions_path = self.out_dir.join("run-exceptions.json");
         let body = std::fs::read_to_string(&results_path).map_err(|source| Error::NoResults {
             path: results_path.clone(),
             source,
@@ -318,6 +398,9 @@ pub fn args(spec: &RunSpec) -> Vec<std::ffi::OsString> {
         args.push("--filter".into());
         args.push(filter.clone().into());
     }
+    if spec.progress {
+        args.push("--progress".into());
+    }
     args
 }
 
@@ -351,6 +434,7 @@ mod tests {
             statement: Some("party/mine/statement.json".into()),
             filter: Some("create_ehr-main".into()),
             credentials: vec![],
+            progress: true,
         };
         let rendered: Vec<String> = args(&spec)
             .into_iter()
@@ -374,6 +458,7 @@ mod tests {
                 "party/mine/statement.json",
                 "--filter",
                 "create_ehr-main",
+                "--progress",
             ]
         );
     }

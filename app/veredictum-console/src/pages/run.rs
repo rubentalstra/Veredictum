@@ -8,9 +8,9 @@
 //! values the connect form collects reach only that draft.
 
 use leptos::prelude::{
-    AddAnyAttr, ClassAttribute, CollectView, ElementChild, Get, GlobalAttributes, IntoAny,
+    AddAnyAttr, ClassAttribute, CollectView, Effect, ElementChild, Get, GlobalAttributes, IntoAny,
     IntoView, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal, ServerAction, Set,
-    Suspend, Suspense, component, view,
+    StyleAttribute, Suspend, Suspense, Transition, Update, component, view,
 };
 use leptos_meta::Title;
 use leptos_router::components::{A, Redirect};
@@ -20,9 +20,11 @@ use crate::components::format_view::{Pane, inline_error};
 use crate::components::page_header::{Crumb, PageHeader};
 use crate::components::surface::{CARD_PAD, CARD_TITLE};
 use crate::run_api::fns::{
-    FetchScopePreview, ProbeAndSave, SaveScope, fetch_draft, fetch_statements,
+    CancelRun, FetchScopePreview, ProbeAndSave, SaveScope, StartRun, fetch_draft, fetch_job,
+    fetch_statements,
 };
 use crate::run_api::{AuthChoice, ProbeAnswer};
+use crate::run_job::{JobStatus, JobView};
 
 /// `/run` — the wizard's entry: always the first step.
 #[expect(
@@ -292,6 +294,7 @@ pub fn Scope() -> impl IntoView {
     let filter = RwSignal::new(String::new());
     let preview = ServerAction::<FetchScopePreview>::new();
     let save = ServerAction::<SaveScope>::new();
+    let start = ServerAction::<StartRun>::new();
 
     view! {
         <Title text="Scope · Run · Veredictum console" />
@@ -450,9 +453,39 @@ pub fn Scope() -> impl IntoView {
                         .map(|result| match result {
                             Ok(()) => {
                                 view! {
-                                    <p class="text-sm text-ink">
-                                        "Scope saved. The live run screen is under construction (#66)."
-                                    </p>
+                                    <div class="flex items-center gap-2">
+                                        <p class="text-sm text-ink">"Scope saved."</p>
+                                        <button
+                                            type="button"
+                                            class=BTN_PRIMARY
+                                            on:click=move |_| {
+                                                start.dispatch(StartRun {});
+                                            }
+                                        >
+                                            "Start the run"
+                                        </button>
+                                    </div>
+                                }
+                                    .into_any()
+                            }
+                            Err(e) => inline_error(&e.to_string()).into_any(),
+                        })
+                }}
+                {move || {
+                    start
+                        .value()
+                        .get()
+                        .map(|result| match result {
+                            Ok(id) => {
+                                view! {
+                                    <div class="flex items-center gap-2">
+                                        <p class="text-sm text-ink">
+                                            {format!("Run started (job {id}).")}
+                                        </p>
+                                        <A href="/run/live" attr:class=BTN_SECONDARY>
+                                            "Watch it live"
+                                        </A>
+                                    </div>
                                 }
                                     .into_any()
                             }
@@ -461,5 +494,187 @@ pub fn Scope() -> impl IntoView {
                 }}
             </div>
         </section>
+    }
+}
+
+/// Renders milliseconds as `mm:ss` — display truncation is the intent of
+/// each division here.
+#[expect(
+    clippy::integer_division,
+    reason = "clock display truncates by definition; the remainder is shown in the seconds field"
+)]
+fn mmss(ms: u64) -> String {
+    let seconds = ms / 1000;
+    format!("{:02}:{:02}", seconds / 60, seconds % 60)
+}
+
+/// S5 — the live run: progress from the engine's own stream, the honest
+/// estimate, the output tail, and cancel. The page polls and therefore
+/// rejoins the running job on refresh.
+#[expect(
+    clippy::must_use_candidate,
+    reason = "a Leptos component is mounted by the framework, never consumed as a value"
+)]
+#[component]
+pub fn Live() -> impl IntoView {
+    // A browser-side tick drives the poll; on the server the resource loads
+    // once and the timer never runs (pause/resume are browser-only).
+    let tick = RwSignal::new(0_u64);
+    let job = Resource::new(move || tick.get(), |_| fetch_job());
+    let cancel = ServerAction::<CancelRun>::new();
+    Effect::new(move |_| {
+        let _pausable =
+            leptos_use::use_interval_fn(move || tick.update(|t| *t = t.wrapping_add(1)), 1_000);
+    });
+
+    view! {
+        <Title text="Live run · Veredictum console" />
+        <PageHeader
+            title="Live run"
+            subtitle="Progress is the engine's own stream; the estimate is a moving median, labelled as such."
+            crumbs=vec![Crumb::new("Run", "/run/connect")]
+        >
+            <div class="flex items-center gap-1">{steps("live")}</div>
+        </PageHeader>
+        <Transition fallback=|| {
+            view! { <p class="text-sm text-ink-muted">"Reading the job…"</p> }
+        }>
+            {move || Suspend::new(async move {
+                match job.await {
+                    Ok(Some(view_job)) => live_view(&view_job, cancel).into_any(),
+                    Ok(None) => idle_view().into_any(),
+                    Err(e) => inline_error(&e.to_string()).into_any(),
+                }
+            })}
+        </Transition>
+    }
+}
+
+/// The no-job state: the wizard starts at Connect.
+fn idle_view() -> impl IntoView + use<> {
+    view! {
+        <div class="space-y-2">
+            <p class="text-sm text-ink">"No run is in flight. Start one from Connect."</p>
+            <A href="/run/connect" attr:class=BTN_SECONDARY>
+                "Go to Connect"
+            </A>
+        </div>
+    }
+}
+
+/// The loaded job's sections — plain assembly, erased per section.
+#[expect(
+    clippy::too_many_lines,
+    reason = "the progress header, the tail pane and the finished summary — one cohesive assembly, each section already erased"
+)]
+fn live_view(job: &JobView, cancel: ServerAction<CancelRun>) -> impl IntoView + use<> {
+    // Display truncation is intended: a bar at 99.9% shows 99.
+    let percent = job
+        .completed
+        .saturating_mul(100)
+        .checked_div(job.total)
+        .unwrap_or(0);
+    let counter = if job.total > 0 {
+        format!("{} / {} cases", job.completed, job.total)
+    } else {
+        String::from("progress stream not available from this engine build")
+    };
+    let eta = job
+        .eta_ms
+        .map(|ms| format!("~{} remaining (estimate)", mmss(ms)));
+    let current = job.current_case.clone().map(
+        |case| view! { <p class="font-mono text-xs text-ink-muted">{format!("now: {case}")}</p> },
+    );
+    let status_line = match &job.status {
+        JobStatus::Running => view! {
+            <span class="rounded-control bg-run-subtle px-2 py-0.5 text-xs font-medium text-run-ink">
+                "running"
+            </span>
+        }
+        .into_any(),
+        JobStatus::Finished => view! {
+            <span class="rounded-control bg-ok-subtle px-2 py-0.5 text-xs font-medium text-ink">
+                "finished"
+            </span>
+        }
+        .into_any(),
+        JobStatus::Cancelled => view! {
+            <span class="rounded-control bg-warn-subtle px-2 py-0.5 text-xs font-medium text-ink">
+                "cancelled"
+            </span>
+        }
+        .into_any(),
+        JobStatus::Failed(reason) => view! {
+            <span class="rounded-control bg-danger-subtle px-2 py-0.5 text-xs font-medium text-ink">
+                {format!("failed: {reason}")}
+            </span>
+        }
+        .into_any(),
+    };
+    let running = job.status == JobStatus::Running;
+    let tail = job.tail.join("\n");
+    let finished = job.finished.clone().map(|summary| {
+        view! {
+            <section class=format!("{CARD_PAD} mt-4")>
+                <h2 class=CARD_TITLE>"Outcome"</h2>
+                <p class="tabular-nums text-sm text-ink">
+                    {format!(
+                        "{} passed · {} failed · {} errored · {} not applicable",
+                        summary.passed,
+                        summary.failed,
+                        summary.errored,
+                        summary.not_applicable,
+                    )}
+                </p>
+                <p class="mt-1 font-mono text-xs text-ink-muted">
+                    {format!("results: {}", summary.results_path)}
+                </p>
+                <p class="mt-2 text-sm text-ink-muted">
+                    "The results and verdicts screens are under construction (#67)."
+                </p>
+            </section>
+        }
+    });
+    view! {
+        <section class=CARD_PAD>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <h2 class="text-sm font-semibold text-ink-heading">
+                        {format!("job {} · {}", job.id, job.sut_name)}
+                    </h2>
+                    {status_line}
+                </div>
+                {running
+                    .then(|| {
+                        view! {
+                            <button
+                                type="button"
+                                class=crate::components::field::BTN_DANGER
+                                on:click=move |_| {
+                                    cancel.dispatch(CancelRun {});
+                                }
+                            >
+                                "Cancel run"
+                            </button>
+                        }
+                    })}
+            </div>
+            <div class="mt-3 h-2 w-full overflow-hidden rounded-control bg-sunken">
+                <div
+                    class="h-full rounded-control bg-run transition-all"
+                    style=format!("width: {percent}%")
+                ></div>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-ink-muted">
+                <span class="tabular-nums">{counter}</span>
+                <span class="tabular-nums">{format!("elapsed {}", mmss(job.elapsed_ms))}</span>
+                {eta.map(|eta| view! { <span class="tabular-nums">{eta}</span> })}
+            </div>
+            {current}
+        </section>
+        <div class="mt-4">
+            <Pane label="engine output (tail)" body=tail />
+        </div>
+        {finished}
     }
 }
