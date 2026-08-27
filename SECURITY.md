@@ -5,6 +5,10 @@ is handed credentials for a system under test, it writes data into that system,
 and the records it produces are used as evidence about that system. Reports
 against it are taken seriously and handled with priority.
 
+[`ASSURANCE_CASE.md`](ASSURANCE_CASE.md) carries the security argument behind
+this policy: the trust boundaries, and the machine check that enforces each
+security-relevant requirement.
+
 ## Two different things, two different processes
 
 Read this section before reporting, because the routing is the part people get
