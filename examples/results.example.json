@@ -1,0 +1,88 @@
+{
+  "sut": {
+    "name": "example-cdr",
+    "version": "0.0.0-example"
+  },
+  "runner": {
+    "name": "veredictum",
+    "version": "0.1.0-alpha.4",
+    "verification_pack_status": "not_run"
+  },
+  "schedule_release": "cnf-2.0-w2",
+  "tech_profile": {
+    "its": "its-rest",
+    "formats": [
+      "canonical-json"
+    ]
+  },
+  "ixit_digest": "5006bc5ec7bff606",
+  "restapi_specs_version": "1.1.0",
+  "outcomes": [
+    {
+      "case": "I_EHR_SERVICE.create_ehr-main",
+      "format": "canonical-json",
+      "status": "passed",
+      "rows_driven": 1,
+      "rows_total": 1
+    },
+    {
+      "case": "I_EHR_SERVICE.create_ehr-conflict",
+      "format": "canonical-json",
+      "status": "failed",
+      "rows_driven": 1,
+      "rows_total": 1,
+      "failing_step": 2,
+      "reason": "expected 409, observed 500"
+    },
+    {
+      "case": "I_EHR_COMPOSITION.get_composition-main",
+      "format": "canonical-json",
+      "status": "not_applicable",
+      "rows_driven": 1,
+      "rows_total": 1,
+      "citation": "ITS-REST composition §Requirements — the profile does not declare the optional branch"
+    }
+  ],
+  "measurements": [
+    {
+      "case": "PERF-hospital_sim-class_POC",
+      "class": "POC",
+      "environment": {
+        "exclusive_server": false,
+        "hardware_class": "example laptop",
+        "cores": 8,
+        "memory_gb": 16,
+        "storage_class": "nvme ssd",
+        "topology": "single node"
+      },
+      "offered_load_sustained": 25.0,
+      "warmup_s": 60,
+      "duration_s": 3600,
+      "operations": [
+        {
+          "operation": "create_composition",
+          "requests": 500,
+          "errors": 1,
+          "latency_ms_p50": 7.603,
+          "latency_ms_p90": 31.615,
+          "latency_ms_p99": 68.031,
+          "hdr_v2_base64": "HISTEwAAASMAAAAAAAAAAwAAAAAAAAABAAAAAAOThwA/8AAAAAAAAJ8vFHcUSRRHFEkURxRJFEcUSRRHFEkURxRJFEcUSRRHFEkURxRJFEcUSRRHFEkURxRJFEcUSRRHFEcUIRQjFCMUIxQhFCMUIxQjFCEUIxQjFJcEAmECYQJhAmECYQJhAmECYQJhAmECXwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi0CFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXArUCArUCArUCAukBApkBApkBApkBApsBApkBAg=="
+        },
+        {
+          "operation": "execute_stored_query",
+          "requests": 500,
+          "errors": 0,
+          "latency_ms_p50": 12.607,
+          "latency_ms_p90": 46.623,
+          "latency_ms_p99": 128.063,
+          "hdr_v2_base64": "HISTEwAAAR8AAAAAAAAAAwAAAAAAAAABAAAAAAOThwA/8AAAAAAAAMlBFCEUIxQjFCMUIRQjFCMUIxQhFCMUIxQjFCEUIxQjFCMUIRQjFCMUIxQhFCMUIxQjFCEUIxQjFCMUIRQjFCMUIxQhFCMUIxQjFCEUIxQjFKsNAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIvAi8CLwIhAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwIVAhcCFQIXAhUCFwLjCwKZAQKZAQKZAQKbAQJ7AksCSwJLAksC"
+        }
+      ],
+      "verdict": "not-earned",
+      "violations": [
+        "error_rate 0.001 > max 0"
+      ]
+    }
+  ],
+  "ambiguity_dispositions": []
+}
