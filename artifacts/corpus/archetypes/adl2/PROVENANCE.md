@@ -2,7 +2,7 @@
 
 Vendored verbatim from `https://github.com/openEHR/adl-archetypes`
 (`Reference/CKM_2013_12_09/`) at commit `093c77ea003742b9540e3dd377d615e2b26f2996` by
-`scripts/vendor/adl2-archetypes.sh` on 2026-08-01T12:30:22Z.
+`scripts/vendor/adl2-archetypes.sh` on 2026-08-27T00:18:15Z.
 
 Upstream describes the tree as archetypes exported from the Clinical
 Knowledge Manager (export time Mon Dec 09 15:42:23 CET 2013).
@@ -34,9 +34,8 @@ root reference copy: `LICENSE-CC-BY-SA-3.0`.
 - archetypes present in BOTH dialects: **321**
 
 The dual-dialect pairing is the value here: the same clinical archetype
-in 1.4 and in 2, as published upstream — an INDEPENDENT reference for
-the conversion path and matched inputs for the DEFINITION API's ADL 1.4
-and ADL 2 wire cases.
+in 1.4 and in 2, as published upstream, which is an INDEPENDENT
+reference for the conversion path.
 
 | RM class | ADL 2 files |
 |---|---|
@@ -58,5 +57,23 @@ and ADL 2 wire cases.
 | openEHR-DEMOGRAPHIC-ITEM_TREE | 1 |
 | openEHR-DEMOGRAPHIC-ORGANISATION | 1 |
 | openEHR-EHR-ADMIN_ENTRY | 1 |
+
+## What exercises this pack
+
+`tests/it/corpus_packs.rs` reads every file in the tree and pins
+what this instrument can check first-hand: the two dialect counts
+above, the `adl_version` each file declares, the archetype id
+inside each file against the name it is stored under, and the
+pairing itself. This instrument ships no ADL parser, so nothing
+here reads an archetype body.
+
+The pairing is not total, and the gate pins the exact shortfall:
+
+- ADL 2 files with no ADL 1.4 twin: **1**
+- ADL 1.4 files with no ADL 2 twin: **9**
+
+A wire battery driving the pairs through the DEFINITION API would
+exercise the pack further. That is catalogue work: no case sources
+a file from this tree today.
 
 Never hand-edit a vendored fixture; re-run this script and bump the pin.

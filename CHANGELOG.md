@@ -58,6 +58,27 @@ version on.
   parser. The pack stays as reserve material for wire batteries the catalogue
   has not authored yet, and the exercise is at the byte level, which is what the
   instrument can perform first-hand.
+- The ADL 2 pair pack and the CKM Operational Template breadth pack gain the
+  same byte-level exercisers, so every vendored corpus tree in this repository
+  now has one. The pair pack's 654 files are all read and refused when empty,
+  its 322 ADL 2 sources are checked for `adl_version=2.0.6` and its 330 ADL 1.4
+  twins for `adl_version=1.4`, each against the archetype id written inside it,
+  and the 321 archetypes upstream published in both dialects are proven to pair
+  with a twin in the same directory. The files that do not pair are pinned as
+  what they are: one ADL 2 template, which the archetypes-only 1.4 half has
+  nothing to hold, and nine ADL 1.4 archetypes this snapshot never converted.
+  The template pack's 305 exports are each parsed to end of input and checked
+  to root at `template` in `http://schemas.openehr.org/v1` carrying a template
+  id, and its file list is compared against the record's own vendored table
+  rather than against its count alone.
+
+### Changed
+
+- The CKM template breadth pack is re-vendored. CKM published new asset
+  versions of `ips-problem-list` and `ips-allergies-and-intolerances` on
+  2026-08-19, so those two exports carry different bytes. The library is still
+  305 vendored templates beside the one private-incubator template that answers
+  404 without an account.
 
 ### Fixed
 

@@ -1,22 +1,23 @@
 // SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//! The vendored CKM ADL 1.4 archetype pack, exercised as bytes.
+//! The vendored archetype and template packs, exercised as bytes.
 //!
 //! A vendored tree is 100% exercised with adjudicated skips only
 //! (`.claude/rules/testing.md`). This instrument reads a corpus as a wire
-//! payload and ships no ADL parser, so the exercise the pack gets here is the
-//! one the instrument can perform first-hand: every file is read and decoded,
-//! and checked against the dialect and the identity its `PROVENANCE.md`
-//! records. The counts are pinned, so a re-vendor that silently returns fewer
-//! files, a 404 body, or ADL 2 text fails instead of shrinking the pack
-//! unnoticed.
+//! payload and ships no ADL parser, no OPT reader and no WebTemplate builder,
+//! so the exercise a pack gets here is the one the instrument can perform
+//! first-hand: every file is read and decoded, and checked against the dialect
+//! and the identity its `PROVENANCE.md` records. The counts are pinned, so a
+//! re-vendor that silently returns fewer files, a 404 body, or the wrong
+//! dialect fails instead of shrinking a pack unnoticed.
 //!
-//! The ADL 2 pair pack and the CKM template breadth pack are not covered here:
-//! each carries its own dialect and its own adjudication, tracked as their own
-//! issues.
+//! Three packs are covered, each with its own provenance record: the CKM ADL
+//! 1.4 archetype pack with its AM 1.4 XML twins, the upstream ADL 2 pair pack
+//! whose two dialects pair by archetype id, and the CKM Operational Template
+//! breadth pack.
 
-/// The pack root, under the repository root.
+/// The CKM ADL 1.4 pack root, under the repository root.
 const PACK: &str = "artifacts/corpus/archetypes/ckm";
 
 /// The ADL 1.4 exports the pack's `PROVENANCE.md` records as vendored. CKM
@@ -26,17 +27,18 @@ const PACK: &str = "artifacts/corpus/archetypes/ckm";
 /// shrank.
 const VENDORED: usize = 944;
 
-/// The namespace the AM 1.4 archetype XML twins bind, as CKM exports them.
+/// The namespace the AM 1.4 archetype XML twins bind, as CKM exports them, and
+/// the one its Operational Template exports bind too.
 const XML_NAMESPACE: &str = "http://schemas.openehr.org/v1";
 
-/// The repository root. The one package sits at it, so the manifest directory
-/// IS the root.
-fn pack_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(PACK)
+/// A path under the repository root. The one package sits at it, so the
+/// manifest directory IS the root.
+fn repo_path(relative: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)
 }
 
 /// Every file with `extension` directly under `dir`, keyed by file stem and
-/// ordered by it, so two halves of the pack compare as sequences.
+/// ordered by it, so two halves of a pack compare as sequences.
 ///
 /// # Errors
 /// A message when the directory cannot be read, an entry cannot be resolved, or
@@ -54,16 +56,97 @@ fn files_by_stem(
         if path.extension().is_none_or(|e| e != extension) {
             continue;
         }
-        let stem = path
-            .file_stem()
-            .and_then(std::ffi::OsStr::to_str)
-            .ok_or_else(|| format!("non-UTF-8 file name at {}", path.display()))?
-            .to_owned();
-        out.push((stem, path));
+        out.push((stem_of(&path)?.to_owned(), path));
     }
     out.sort();
     Ok(out)
 }
+
+/// Every regular file under `dir` and its subdirectories, ordered by path.
+///
+/// # Errors
+/// A message when a directory cannot be read, an entry cannot be resolved, or
+/// an entry's kind cannot be read.
+fn walk_files(dir: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
+    let mut pending = vec![dir.to_path_buf()];
+    let mut out: Vec<std::path::PathBuf> = Vec::new();
+    while let Some(current) = pending.pop() {
+        let entries = std::fs::read_dir(&current)
+            .map_err(|e| format!("reading {}: {e}", current.display()))?;
+        for entry in entries {
+            let entry =
+                entry.map_err(|e| format!("reading an entry of {}: {e}", current.display()))?;
+            let path = entry.path();
+            let kind = entry
+                .file_type()
+                .map_err(|e| format!("reading the kind of {}: {e}", path.display()))?;
+            if kind.is_dir() {
+                pending.push(path);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// The UTF-8 file stem of `path`.
+///
+/// # Errors
+/// A message when the path carries no stem or the stem is not UTF-8.
+fn stem_of(path: &std::path::Path) -> Result<&str, String> {
+    path.file_stem()
+        .and_then(std::ffi::OsStr::to_str)
+        .ok_or_else(|| format!("non-UTF-8 file name at {}", path.display()))
+}
+
+/// True when `path` carries `extension`.
+fn has_extension(path: &std::path::Path, extension: &str) -> bool {
+    path.extension().is_some_and(|e| e == extension)
+}
+
+/// The number a `PROVENANCE.md` inventory line records for `label`, read from a
+/// line of the form ``- <label>: **<n>**``.
+///
+/// A record is generated by the same run that wrote its tree, so a drifted
+/// inventory line means the record no longer describes the pack.
+///
+/// # Errors
+/// A message when no such line exists, the bold marker does not close, or the
+/// value is not a number.
+fn inventory(provenance: &str, label: &str) -> Result<usize, String> {
+    let prefix = format!("- {label}: **");
+    let value = provenance
+        .lines()
+        .find_map(|line| line.strip_prefix(prefix.as_str()))
+        .ok_or_else(|| format!("PROVENANCE.md carries no `{prefix}N**` inventory line"))?;
+    let digits = value
+        .strip_suffix("**")
+        .ok_or_else(|| format!("the `{label}` inventory line does not close its bold marker"))?;
+    digits
+        .parse()
+        .map_err(|e| format!("the `{label}` inventory line reads `{digits}`: {e}"))
+}
+
+/// Read a vendored file as text, refusing an empty one.
+///
+/// Emptiness is its own check because it is what a truncated fetch leaves
+/// behind, and an empty file passes every structural check that only looks at
+/// what IS there.
+///
+/// # Errors
+/// A message when the file cannot be read as UTF-8 text or holds no bytes.
+fn read_non_empty(path: &std::path::Path) -> Result<String, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("reading {}: {e}", path.display()))?;
+    if text.is_empty() {
+        return Err(format!("{} is empty", path.display()));
+    }
+    Ok(text)
+}
+
+// ── the CKM ADL 1.4 archetype pack ──────────────────────────────────────────
 
 /// The archetype id a pack file name carries.
 ///
@@ -81,7 +164,7 @@ fn archetype_id_of(stem: &str) -> &str {
 
 #[test]
 fn the_ckm_pack_is_completely_vendored_and_its_record_agrees() {
-    let pack = pack_dir();
+    let pack = repo_path(PACK);
     let adl = files_by_stem(&pack.join("adl14"), "adl").expect("the ADL 1.4 half");
     let xml = files_by_stem(&pack.join("xml"), "xml").expect("the XML twin half");
 
@@ -108,36 +191,25 @@ fn the_ckm_pack_is_completely_vendored_and_its_record_agrees() {
         "the ADL 1.4 exports and their XML twins name different archetypes"
     );
 
-    // The provenance record is generated from the same fetch, so a drifted
-    // inventory line means the record no longer describes the tree.
     let provenance = std::fs::read_to_string(pack.join("PROVENANCE.md")).expect("PROVENANCE.md");
-    let claimed = provenance
-        .lines()
-        .find_map(|line| line.strip_prefix("- vendored: **"))
-        .and_then(|rest| rest.strip_suffix("**"))
-        .expect("PROVENANCE.md carries a `- vendored: **N**` inventory line");
+    let claimed = inventory(&provenance, "vendored").expect("the vendored inventory line");
     assert_eq!(
-        claimed,
-        VENDORED.to_string(),
+        claimed, VENDORED,
         "PROVENANCE.md claims {claimed} vendored files, the tree holds {VENDORED}"
     );
 }
 
 #[test]
 fn every_ckm_export_is_adl14_text_named_by_the_archetype_id_inside_it() {
-    let dir = pack_dir().join("adl14");
+    let dir = repo_path(PACK).join("adl14");
     let files = files_by_stem(&dir, "adl").expect("the ADL 1.4 half");
     assert_eq!(files.len(), VENDORED, "pack size changed");
 
     for (stem, path) in &files {
-        let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("reading {stem}: {e}"));
-        let text = String::from_utf8(bytes)
-            .unwrap_or_else(|e| panic!("{stem} is not valid UTF-8: {e}"))
-            // CKM's export opens with a byte-order mark.
-            .trim_start_matches('\u{feff}')
-            .to_owned();
+        let text = read_non_empty(path).unwrap_or_else(|e| panic!("{e}"));
 
-        let mut lines = text.lines();
+        // CKM's export opens with a byte-order mark.
+        let mut lines = text.trim_start_matches('\u{feff}').lines();
         let header = lines.next().unwrap_or_default();
         assert!(
             header.starts_with("archetype ("),
@@ -147,8 +219,8 @@ fn every_ckm_export_is_adl14_text_named_by_the_archetype_id_inside_it() {
         // 1.4 only, and an export that ever came back as anything else would
         // silently relabel the corpus.
         assert!(
-            header.contains("adl_version=1.4"),
-            "{stem} does not declare adl_version=1.4, header is `{header}`"
+            header.contains(ADL14_VERSION),
+            "{stem} does not declare {ADL14_VERSION}, header is `{header}`"
         );
 
         let declared = lines.next().unwrap_or_default().trim();
@@ -163,14 +235,13 @@ fn every_ckm_export_is_adl14_text_named_by_the_archetype_id_inside_it() {
 
 #[test]
 fn every_ckm_xml_twin_is_a_well_formed_archetype_document() {
-    let dir = pack_dir().join("xml");
+    let dir = repo_path(PACK).join("xml");
     let files = files_by_stem(&dir, "xml").expect("the XML twin half");
     assert_eq!(files.len(), VENDORED, "twin pack size changed");
 
     for (stem, path) in &files {
-        let text = std::fs::read_to_string(path)
-            .unwrap_or_else(|e| panic!("reading {stem} as UTF-8 text: {e}"));
-        let (root, namespace, archetype_id) = read_archetype_xml(&text)
+        let text = read_non_empty(path).unwrap_or_else(|e| panic!("{e}"));
+        let (root, namespace, archetype_id) = read_xml_document(&text, &["archetype_id", "value"])
             .unwrap_or_else(|e| panic!("{stem} is not a well-formed XML document: {e}"));
 
         assert_eq!(
@@ -191,22 +262,471 @@ fn every_ckm_xml_twin_is_a_well_formed_archetype_document() {
     }
 }
 
-/// Read an exported archetype document to end of input, returning its root
-/// element's local name, the namespace bound to it, and the text of
-/// `archetype_id/value`.
+// ── the ADL 2 pair pack ─────────────────────────────────────────────────────
+
+/// The ADL 2 pair pack's provenance record, under the repository root. It sits
+/// one level above the vendored tree, which is named for the upstream export.
+const ADL2_RECORD: &str = "artifacts/corpus/archetypes/adl2/PROVENANCE.md";
+
+/// The ADL 2 pair pack root, under the repository root.
+const ADL2_PACK: &str = "artifacts/corpus/archetypes/adl2/ckm-2013-12-09";
+
+/// Every file the upstream tree carries: the two dialect halves, plus its own
+/// library index (`_repo_lib.idx`) and its export readme. Pinned so a partial
+/// re-vendor fails rather than shrinking the pack unnoticed.
+const ADL2_PACK_FILES: usize = 654;
+
+/// ADL 2 sources (`*.adls`), as `PROVENANCE.md` records them.
+const ADL2_SOURCES: usize = 322;
+
+/// ADL 1.4 twins (`*.adl`), as `PROVENANCE.md` records them.
+const ADL14_TWINS: usize = 330;
+
+/// Archetypes upstream published in BOTH dialects. The pairing is what makes
+/// this pack worth vendoring, so the gate proves it rather than assuming it.
+const ADL2_PAIRED: usize = 321;
+
+/// The `adl_version` every ADL 2 file in the pair pack declares.
+const ADL2_VERSION: &str = "adl_version=2.0.6";
+
+/// The `adl_version` every ADL 1.4 file in either pack declares.
+const ADL14_VERSION: &str = "adl_version=1.4";
+
+/// The one ADL 2 file with no ADL 1.4 twin. Its own header keyword is
+/// `template` rather than `archetype`, and the upstream 1.4 half holds
+/// archetypes only, so the file itself explains the gap.
+const ADL2_WITHOUT_TWIN: [&str; 1] = ["openEHR-EHR-COMPOSITION.t_encounter_opt_test.v1"];
+
+/// The nine ADL 1.4 archetypes this upstream snapshot never converted to ADL 2.
+/// The list is pinned so the gap stays exactly these nine: a re-vendor that
+/// drops a twin fails here instead of widening the asymmetry quietly.
+const ADL14_WITHOUT_TWIN: [&str; 9] = [
+    "openEHR-DEMOGRAPHIC-CLUSTER.identifier_other_details.v1",
+    "openEHR-DEMOGRAPHIC-CLUSTER.provider_identifier.v1",
+    "openEHR-EHR-CLUSTER.palpation-external_ear.v1",
+    "openEHR-EHR-CLUSTER.palpation-joint.v1",
+    "openEHR-EHR-OBSERVATION.audiogram.v1",
+    "openEHR-EHR-OBSERVATION.lab_test-immunology-ANA.v1",
+    "openEHR-EHR-OBSERVATION.lab_test-microbiology-csf.v1",
+    "openEHR-EHR-OBSERVATION.lab_test-microbiology-urine.v1",
+    "openEHR-EHR-OBSERVATION.tendon_babinski_reflexes.v1",
+];
+
+/// True when `text` is one or more ASCII digits.
+fn is_digits(text: &str) -> bool {
+    !text.is_empty() && text.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// True when `name` ends in an all-digit major version segment (`….v1`).
+fn is_major_version(name: &str) -> bool {
+    name.rsplit_once(".v")
+        .is_some_and(|(_, major)| is_digits(major))
+}
+
+/// The key the two dialects of the pair pack meet on: the archetype id
+/// truncated at its major version.
+///
+/// ADL 2 stores the full three-part version in the file name
+/// (`openEHR-EHR-CLUSTER.address.v1.0.0.adls`) while the ADL 1.4 twin stores
+/// the major alone (`openEHR-EHR-CLUSTER.address.v1.adl`). Truncating at the
+/// major keeps two majors of one archetype distinct, which the vendor script's
+/// own `sed 's|\.v[0-9].*$||'` reduction does not.
+///
+/// # Errors
+/// A message when the name does not end in a major version, with or without a
+/// trailing minor and patch.
+fn pairing_key(stem: &str) -> Result<&str, String> {
+    let mut key = stem;
+    for _ in 0..2 {
+        if is_major_version(key) {
+            break;
+        }
+        match key.rsplit_once('.') {
+            Some((head, tail)) if is_digits(tail) => key = head,
+            _ => break,
+        }
+    }
+    if is_major_version(key) {
+        Ok(key)
+    } else {
+        Err(format!("`{stem}` carries no `.v<major>` version segment"))
+    }
+}
+
+/// The files of `files` carrying `extension`, keyed by pairing key and ordered
+/// by it.
+///
+/// # Errors
+/// A message when a name is not UTF-8, carries no version segment, or two files
+/// of one dialect reduce to the same key.
+fn pack_half(
+    files: &[std::path::PathBuf],
+    extension: &str,
+) -> Result<Vec<(String, std::path::PathBuf)>, String> {
+    let mut out: Vec<(String, std::path::PathBuf)> = Vec::new();
+    for path in files.iter().filter(|p| has_extension(p, extension)) {
+        out.push((pairing_key(stem_of(path)?)?.to_owned(), path.clone()));
+    }
+    out.sort();
+    for pair in out.windows(2) {
+        if let [(left, left_path), (right, right_path)] = pair
+            && left == right
+        {
+            return Err(format!(
+                "{} and {} both reduce to `{left}`, so the pairing key is ambiguous",
+                left_path.display(),
+                right_path.display()
+            ));
+        }
+    }
+    Ok(out)
+}
+
+/// The header line of an ADL file, past the byte-order mark the ADL 1.4 half
+/// carries.
+fn adl_header(text: &str) -> &str {
+    text.trim_start_matches('\u{feff}')
+        .lines()
+        .next()
+        .unwrap_or_default()
+}
+
+/// The identifier line of an ADL file, which follows the header.
+fn adl_declared_id(text: &str) -> &str {
+    text.trim_start_matches('\u{feff}')
+        .lines()
+        .nth(1)
+        .unwrap_or_default()
+        .trim()
+}
+
+#[test]
+fn the_adl2_pair_pack_is_completely_vendored_and_its_record_agrees() {
+    let files = walk_files(&repo_path(ADL2_PACK)).expect("the pair pack");
+
+    assert_eq!(
+        files.len(),
+        ADL2_PACK_FILES,
+        "the pair pack holds {} files, the pin says {ADL2_PACK_FILES} — re-vendor deliberately or \
+         restore the pack, never lower the pin",
+        files.len()
+    );
+
+    // Every file, both dialect halves plus upstream's own index and readme: the
+    // tree is exercised whole, so nothing rides along unread.
+    for path in &files {
+        read_non_empty(path).unwrap_or_else(|e| panic!("{e}"));
+    }
+
+    let sources = files.iter().filter(|p| has_extension(p, "adls")).count();
+    let twins = files.iter().filter(|p| has_extension(p, "adl")).count();
+    assert_eq!(sources, ADL2_SOURCES, "the ADL 2 half changed size");
+    assert_eq!(twins, ADL14_TWINS, "the ADL 1.4 half changed size");
+
+    let provenance = std::fs::read_to_string(repo_path(ADL2_RECORD)).expect("PROVENANCE.md");
+    for (label, pinned) in [
+        ("ADL 2 archetypes (`*.adls`)", ADL2_SOURCES),
+        ("ADL 1.4 twins (`*.adl`)", ADL14_TWINS),
+        ("archetypes present in BOTH dialects", ADL2_PAIRED),
+        ("ADL 2 files with no ADL 1.4 twin", ADL2_WITHOUT_TWIN.len()),
+        ("ADL 1.4 files with no ADL 2 twin", ADL14_WITHOUT_TWIN.len()),
+    ] {
+        let claimed = inventory(&provenance, label).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            claimed, pinned,
+            "PROVENANCE.md claims {claimed} for `{label}`, the gate pins {pinned}"
+        );
+    }
+}
+
+#[test]
+fn every_adl2_source_declares_adl_2_and_the_id_its_file_name_carries() {
+    let files = walk_files(&repo_path(ADL2_PACK)).expect("the pair pack");
+    let sources: Vec<&std::path::PathBuf> =
+        files.iter().filter(|p| has_extension(p, "adls")).collect();
+    assert_eq!(sources.len(), ADL2_SOURCES, "the ADL 2 half changed size");
+
+    for path in sources {
+        let stem = stem_of(path).unwrap_or_else(|e| panic!("{e}"));
+        let text = read_non_empty(path).unwrap_or_else(|e| panic!("{e}"));
+        let header = adl_header(&text);
+        assert!(
+            header.starts_with("archetype (") || header.starts_with("template ("),
+            "{stem} opens with neither an archetype nor a template header, found `{header}`"
+        );
+        // The dialect claim the pack rests on. This half is upstream's own
+        // conversion, so a file arriving as 1.4 text would relabel the corpus
+        // and destroy the pairing's whole value.
+        assert!(
+            header.contains(ADL2_VERSION),
+            "{stem} does not declare {ADL2_VERSION}, header is `{header}`"
+        );
+
+        let declared = adl_declared_id(&text);
+        assert_eq!(
+            declared, stem,
+            "{stem} declares the id `{declared}`, so the file name and its content disagree"
+        );
+    }
+}
+
+#[test]
+fn every_adl14_twin_declares_adl_1_4_and_the_id_its_file_name_carries() {
+    let files = walk_files(&repo_path(ADL2_PACK)).expect("the pair pack");
+    let twins: Vec<&std::path::PathBuf> =
+        files.iter().filter(|p| has_extension(p, "adl")).collect();
+    assert_eq!(twins.len(), ADL14_TWINS, "the ADL 1.4 half changed size");
+
+    for path in twins {
+        let stem = stem_of(path).unwrap_or_else(|e| panic!("{e}"));
+        let text = read_non_empty(path).unwrap_or_else(|e| panic!("{e}"));
+        let header = adl_header(&text);
+        assert!(
+            header.starts_with("archetype ("),
+            "{stem} does not open with an ADL archetype header, found `{header}`"
+        );
+        assert!(
+            header.contains(ADL14_VERSION),
+            "{stem} does not declare {ADL14_VERSION}, header is `{header}`"
+        );
+
+        let declared = adl_declared_id(&text);
+        assert_eq!(
+            declared, stem,
+            "{stem} declares the id `{declared}`, so the file name and its content disagree"
+        );
+    }
+}
+
+#[test]
+fn the_two_dialects_pair_by_archetype_id_and_the_asymmetry_is_upstreams_own() {
+    let files = walk_files(&repo_path(ADL2_PACK)).expect("the pair pack");
+    let sources = pack_half(&files, "adls").expect("the ADL 2 half");
+    let twins = pack_half(&files, "adl").expect("the ADL 1.4 half");
+
+    let paired = sources
+        .iter()
+        .filter(|(key, _)| twins.iter().any(|(twin, _)| twin == key))
+        .count();
+    assert_eq!(
+        paired, ADL2_PAIRED,
+        "{paired} archetypes carry both dialects, the pin says {ADL2_PAIRED}"
+    );
+
+    // Upstream files a twin beside its source, so a pair that drifted apart in
+    // the tree is a re-vendor defect rather than a pairing.
+    for (key, source) in &sources {
+        let Some((_, twin)) = twins.iter().find(|(twin, _)| twin == key) else {
+            continue;
+        };
+        assert_eq!(
+            source.parent(),
+            twin.parent(),
+            "`{key}` has its two dialects in different directories"
+        );
+    }
+
+    let unpaired_sources: Vec<&str> = sources
+        .iter()
+        .map(|(key, _)| key.as_str())
+        .filter(|key| !twins.iter().any(|(twin, _)| twin == key))
+        .collect();
+    assert_eq!(
+        unpaired_sources, ADL2_WITHOUT_TWIN,
+        "the ADL 2 files with no ADL 1.4 twin are not the pinned set"
+    );
+
+    let unpaired_twins: Vec<&str> = twins
+        .iter()
+        .map(|(key, _)| key.as_str())
+        .filter(|key| !sources.iter().any(|(source, _)| source == key))
+        .collect();
+    assert_eq!(
+        unpaired_twins, ADL14_WITHOUT_TWIN,
+        "the ADL 1.4 files with no ADL 2 twin are not the pinned set"
+    );
+
+    // The one unpaired ADL 2 file says why it is unpaired: it is a template,
+    // and the upstream 1.4 half holds archetypes only.
+    for (key, path) in sources
+        .iter()
+        .filter(|(key, _)| ADL2_WITHOUT_TWIN.contains(&key.as_str()))
+    {
+        let text = read_non_empty(path).unwrap_or_else(|e| panic!("{e}"));
+        let header = adl_header(&text);
+        assert!(
+            header.starts_with("template ("),
+            "`{key}` has no ADL 1.4 twin and is not a template either, header is `{header}`"
+        );
+    }
+}
+
+// ── the CKM Operational Template breadth pack ───────────────────────────────
+
+/// The CKM template breadth pack root, under the repository root.
+const TEMPLATE_PACK: &str = "artifacts/corpus/templates/ckm/full";
+
+/// The Operational Templates CKM answered for at vendoring time. Bumping this
+/// number is a deliberate re-vendor, never a way to quiet a pack that shrank.
+const TEMPLATES_VENDORED: usize = 305;
+
+/// Templates CKM lists but holds in a private incubator, which answer 404
+/// without a signed-in account. `PROVENANCE.md` records them as unreachable, so
+/// the shortfall against the published count is declared rather than silently
+/// absorbed.
+const TEMPLATES_UNREACHABLE: usize = 1;
+
+/// The file names the pack's `PROVENANCE.md` lists in its `## Vendored` table,
+/// ordered.
+///
+/// # Errors
+/// A message when the record carries no `## Vendored` section.
+fn vendored_table(provenance: &str) -> Result<Vec<String>, String> {
+    let (_, section) = provenance
+        .split_once("\n## Vendored\n")
+        .ok_or_else(|| "PROVENANCE.md carries no `## Vendored` section".to_owned())?;
+    let mut out: Vec<String> = Vec::new();
+    for line in section.lines() {
+        let Some(cell) = line.split('|').nth(2) else {
+            continue;
+        };
+        // The header and separator rows carry no backticked file name, so they
+        // fall out here without needing a row counter.
+        let Some(name) = cell
+            .trim()
+            .strip_prefix('`')
+            .and_then(|rest| rest.strip_suffix('`'))
+        else {
+            continue;
+        };
+        out.push(name.to_owned());
+    }
+    out.sort();
+    Ok(out)
+}
+
+#[test]
+fn the_ckm_template_pack_is_completely_vendored_and_its_record_agrees() {
+    let pack = repo_path(TEMPLATE_PACK);
+    let files = walk_files(&pack).expect("the template pack");
+    let templates = files_by_stem(&pack, "opt").expect("the Operational Templates");
+
+    assert_eq!(
+        templates.len(),
+        TEMPLATES_VENDORED,
+        "the pack holds {} templates, the pin says {TEMPLATES_VENDORED} — re-vendor deliberately \
+         or restore the pack, never lower the pin",
+        templates.len()
+    );
+    // The record is the only other file in the tree, so nothing rides along
+    // unnamed.
+    assert_eq!(
+        files.len(),
+        TEMPLATES_VENDORED + 1,
+        "the pack holds {} files, expected {TEMPLATES_VENDORED} templates and PROVENANCE.md",
+        files.len()
+    );
+
+    let provenance = std::fs::read_to_string(pack.join("PROVENANCE.md")).expect("PROVENANCE.md");
+    let vendored = inventory(&provenance, "vendored").expect("the vendored inventory line");
+    let unreachable =
+        inventory(&provenance, "unreachable").expect("the unreachable inventory line");
+    let published = inventory(&provenance, "published by CKM").expect("the published line");
+    assert_eq!(
+        vendored, TEMPLATES_VENDORED,
+        "PROVENANCE.md claims {vendored} vendored templates, the tree holds {TEMPLATES_VENDORED}"
+    );
+    assert_eq!(
+        unreachable, TEMPLATES_UNREACHABLE,
+        "PROVENANCE.md records {unreachable} unreachable templates, the pin says \
+         {TEMPLATES_UNREACHABLE}"
+    );
+    assert_eq!(
+        published,
+        vendored + unreachable,
+        "PROVENANCE.md says CKM published {published} templates and accounts for {}",
+        vendored + unreachable
+    );
+
+    // Every vendored file is a row of the record, and every row is a file: a
+    // count alone would pass a pack that swapped one template for another.
+    let listed = vendored_table(&provenance).expect("the Vendored table");
+    let mut present: Vec<String> = templates
+        .iter()
+        .map(|(stem, _)| format!("{stem}.opt"))
+        .collect();
+    // Ordered by the whole file name, as the table's rows are: a stem-ordered
+    // list puts `x-y.opt` before `x.opt` and the two would never compare equal.
+    present.sort();
+    assert_eq!(
+        listed, present,
+        "the Vendored table and the tree name different templates"
+    );
+}
+
+#[test]
+fn every_ckm_template_export_is_a_well_formed_operational_template() {
+    let pack = repo_path(TEMPLATE_PACK);
+    let templates = files_by_stem(&pack, "opt").expect("the Operational Templates");
+    assert_eq!(
+        templates.len(),
+        TEMPLATES_VENDORED,
+        "template pack size changed"
+    );
+
+    for (stem, path) in &templates {
+        let text = read_non_empty(path).unwrap_or_else(|e| panic!("{e}"));
+        let (root, namespace, template_id) = read_xml_document(&text, &["template_id", "value"])
+            .unwrap_or_else(|e| panic!("{stem} is not a well-formed XML document: {e}"));
+
+        assert_eq!(
+            root, "template",
+            "{stem} has root element `{root}`, so it is not an Operational Template"
+        );
+        assert_eq!(
+            namespace.as_deref(),
+            Some(XML_NAMESPACE),
+            "{stem} binds its root to {namespace:?} rather than the exported namespace"
+        );
+        // The slug comes from the CKM display name and is not a naming
+        // contract, so the identity asserted here is that the export declares
+        // one at all, not that it matches the file name.
+        let declared = template_id.unwrap_or_default();
+        assert!(
+            !declared.is_empty(),
+            "{stem} carries no template_id/value, so the export identifies nothing"
+        );
+    }
+}
+
+// ── the shared XML reader ───────────────────────────────────────────────────
+
+/// Read an exported document to end of input, returning its root element's
+/// local name, the namespace bound to it, and the text found at `value_path`
+/// below the root.
 ///
 /// The whole document is read rather than only its first tag: a truncated or
 /// ill-formed export is exactly the failure a byte-level gate exists to catch,
 /// and it is invisible if reading stops at the root. Namespace resolution is
 /// delegated to `quick_xml::NsReader` because a conforming document may bind
 /// the namespace with any prefix.
-fn read_archetype_xml(text: &str) -> Result<(String, Option<String>, Option<String>), String> {
+///
+/// # Errors
+/// A message when the document is not well-formed, its root prefix resolves to
+/// no namespace, or it carries no element at all.
+fn read_xml_document(
+    text: &str,
+    value_path: &[&str],
+) -> Result<(String, Option<String>, Option<String>), String> {
     let mut reader = quick_xml::NsReader::from_str(text);
     let mut root: Option<(String, Option<String>)> = None;
-    let mut archetype_id: Option<String> = None;
-    // The element path below the root, so `archetype_id/value` is read at its
-    // own position and not from a namesake elsewhere in the document.
+    let mut value: Option<String> = None;
+    // The element path below the root, so the wanted value is read at its own
+    // position and not from a namesake elsewhere in the document. Names deeper
+    // than the path are never compared, so they are not recorded either: an
+    // Operational Template reaches 5 MB and the allocation would dominate.
     let mut path: Vec<String> = Vec::new();
+    let mut depth = 0_usize;
     loop {
         let (resolved, event) = reader.read_resolved_event().map_err(|e| e.to_string())?;
         match event {
@@ -228,20 +748,28 @@ fn read_archetype_xml(text: &str) -> Result<(String, Option<String>, Option<Stri
                     };
                     root = Some((local, namespace));
                 } else {
-                    path.push(local);
+                    depth += 1;
+                    if depth <= value_path.len() {
+                        path.push(local);
+                    }
                 }
             }
             quick_xml::events::Event::End(_) => {
-                path.pop();
+                if depth > 0 {
+                    if depth <= value_path.len() {
+                        path.pop();
+                    }
+                    depth -= 1;
+                }
             }
-            quick_xml::events::Event::Text(e) if path == ["archetype_id", "value"] => {
-                archetype_id = Some(e.decode().map_err(|err| err.to_string())?.trim().to_owned());
+            quick_xml::events::Event::Text(e) if path == value_path => {
+                value = Some(e.decode().map_err(|err| err.to_string())?.trim().to_owned());
             }
             _ => {}
         }
     }
     match root {
-        Some((local, namespace)) => Ok((local, namespace, archetype_id)),
+        Some((local, namespace)) => Ok((local, namespace, value)),
         None => Err("the document carries no element".to_owned()),
     }
 }
