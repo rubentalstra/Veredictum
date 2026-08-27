@@ -136,7 +136,10 @@ jobs:
           changed=$(git diff --name-only "$base" "$head")
           echo "changed paths:"
           echo "$changed"
-          if echo "$changed" | grep -qE '^(src/|tests/|artifacts/|schemas/|party/|specs/|verification-pack/|scripts/vendor/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
+          # website/ is in the CODE tier deliberately (#35): the test job holds
+          # the site's hand-typed catalogue counts to the artifacts, so a
+          # website-only PR must run it too.
+          if echo "$changed" | grep -qE '^(src/|tests/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|scripts/vendor/|scripts/checks/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
@@ -460,6 +463,11 @@ jobs:
       - run: cargo nextest run --locked --profile ci
       - name: The artifact tree passes every machine gate
         run: cargo run --locked -- validate --root artifacts --specs specs/openehr
+      # The website's hand-typed catalogue counts cannot drift from the
+      # catalogue (#35): the guard reruns validate for its summary line and
+      # holds every count-bearing phrase on both site surfaces to it.
+      - name: The site's counts match the catalogue
+        run: bash scripts/checks/site-counts.sh
 
   # The `[lints.rustdoc]` table is inert without a doc run — this is the run.
   # `-D warnings` promotes the warn-tier entries (unescaped backticks, a missing
