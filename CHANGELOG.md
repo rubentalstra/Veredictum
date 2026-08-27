@@ -18,6 +18,8 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-08-27
+
 ### Added
 
 - A committed example results document, `examples/results.example.json`,
@@ -400,7 +402,8 @@ version on.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.3...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.4...HEAD
+[0.1.0-alpha.4]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/rubentalstra/Veredictum/compare/v0.0.1-alpha.1...v0.1.0-alpha.2
 [0.0.1-alpha.1]: https://github.com/rubentalstra/Veredictum/releases/tag/v0.0.1-alpha.1
