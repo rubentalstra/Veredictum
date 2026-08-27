@@ -152,6 +152,12 @@ enum Command {
         /// process on the host.
         #[arg(long, env = "VEREDICTUM_SIGN_PASSPHRASE", hide_env_values = true)]
         sign_passphrase: Option<String>,
+        /// Print one machine-parseable line per processed case:
+        /// `progress: <k>/<n> <case-id>` after `progress: 0/<n>` — a stable
+        /// grammar a driver may parse. Off by default, so existing output is
+        /// byte-identical without it.
+        #[arg(long)]
+        progress: bool,
     },
     /// Validate one artifact tree through every machine gate.
     Validate {
@@ -425,6 +431,7 @@ fn main() -> ExitCode {
             statement,
             sign_key,
             sign_passphrase,
+            progress,
         } => run_command(
             &RunRequest {
                 root: &root,
@@ -439,6 +446,7 @@ fn main() -> ExitCode {
                 key: sign_key,
                 passphrase: sign_passphrase,
             },
+            progress,
         ),
         Command::Validate {
             root,
@@ -845,7 +853,7 @@ fn perf_command(
     }
 }
 
-fn run_command(request: &RunRequest<'_>, signing: &Signing) -> ExitCode {
+fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> ExitCode {
     let warn = |warning: RunWarning<'_>| match warning {
         RunWarning::CarriedMeasurements {
             count,
@@ -855,7 +863,17 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing) -> ExitCode {
             "warning: carrying {count} measurement record(s) taken at SUT version {measured_at} into a run at {running_at} — re-measure or attest the surface unchanged"
         ),
     };
-    let outcome = match execute_run(request, &warn) {
+    // The progress stream is line-flushed on purpose: a driver reads this
+    // through a pipe, where stdout is block-buffered and an unflushed line
+    // arrives only in bursts.
+    let mut report_progress = |event: veredictum::run::Progress<'_>| {
+        if progress {
+            use std::io::Write as _;
+            println!("{}", event.render_line());
+            let _flush = std::io::stdout().flush();
+        }
+    };
+    let outcome = match execute_run(request, &warn, &mut report_progress) {
         Ok(outcome) => outcome,
         Err(e) => return fail(&e),
     };

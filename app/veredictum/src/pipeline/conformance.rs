@@ -141,6 +141,7 @@ pub fn ixit_digest(ixit_text: &str) -> String {
 pub fn execute_run(
     request: &RunRequest<'_>,
     warn: &dyn Fn(RunWarning<'_>),
+    progress: &mut dyn FnMut(crate::run::Progress<'_>),
 ) -> Result<RunOutcome, Error> {
     let loaded = load_clean_root(request.root)?;
     let (ixit, ixit_text) = load_ixit(request.ixit)?;
@@ -152,7 +153,7 @@ pub fn execute_run(
         None => None,
         Some(path) => Some(read_json(path, "statement")?),
     };
-    let report = crate::run::execute(&set, &ixit, statement.as_ref())
+    let report = crate::run::execute(&set, &ixit, statement.as_ref(), progress)
         .map_err(|e| Error::Instrument(format!("execution defect: {e}")))?;
     let outcomes: Vec<OutcomeRecord> = report.records.iter().map(OutcomeRecord::from).collect();
     let counts = tally(&outcomes);

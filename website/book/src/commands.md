@@ -56,6 +56,7 @@ veredictum run --root <ROOT> --ixit <IXIT> --out <OUT> \
 | `--statement <STATEMENT>` | The party statement. When supplied, an option-gated case whose option the statement does not declare is recorded not-applicable at drive time instead of driven |
 | `--sign-key <KEY>` | An armored OpenPGP secret key. Seals the emitted documents with `record-manifest.json` and its detached signature |
 | `--sign-passphrase <PASSPHRASE>` | The passphrase unlocking `--sign-key`, read from `VEREDICTUM_SIGN_PASSPHRASE` |
+| `--progress` | Print one machine-parseable line per processed case: `progress: 0/<n>` once the selection is final, then `progress: <k>/<n> <case-id>` as each case is processed. Off by default, so existing output is byte-identical without it |
 
 Drives every applicable case and records the exchange. Exits `1` if any case
 failed or errored.
