@@ -18,6 +18,8 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.5] - 2026-08-27
+
 ### Changed
 
 - **The vendored oracle is pinned to released tags (#78).** RM, BASE, AM,
@@ -563,7 +565,8 @@ version on.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.4...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.5...HEAD
+[0.1.0-alpha.5]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/rubentalstra/Veredictum/compare/v0.0.1-alpha.1...v0.1.0-alpha.2
