@@ -34,7 +34,7 @@ const XML_NAMESPACE: &str = "http://schemas.openehr.org/v1";
 /// A path under the repository root. The one package sits at it, so the
 /// manifest directory IS the root.
 fn repo_path(relative: &str) -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(relative)
+    std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join(relative)
 }
 
 /// Every file with `extension` directly under `dir`, keyed by file stem and

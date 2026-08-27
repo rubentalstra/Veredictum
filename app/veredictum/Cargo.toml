@@ -1,0 +1,122 @@
+# The instrument package. The workspace root manifest (../../Cargo.toml) is
+# VIRTUAL and carries the members, the shared lint tables and the profiles;
+# this file carries only the package (#55). The legal set the crates.io
+# `include` list names (README, CHANGELOG, LICENSE, LICENSES, NOTICE,
+# REUSE.toml) lives once at the repository root and is reached from here by
+# relative symlinks, which `cargo package` dereferences into real files —
+# verified against `cargo package --list`.
+
+[package]
+name = "veredictum"
+version = "0.1.0-alpha.4"
+# Two binaries exist in the workspace since the console (#53), so a bare
+# `cargo run --` is ambiguous without this; every documented invocation is
+# `cargo run -- <subcommand>` and must keep meaning the instrument.
+default-run = "veredictum"
+edition = "2024"
+rust-version = "1.96"
+license = "Apache-2.0"
+description = "The independent conformance instrument for openEHR clinical data repositories: a machine-readable catalogue of spec-cited test cases, executed against any running CDR, judged by pure-function verdicts"
+repository = "https://github.com/rubentalstra/Veredictum"
+readme = "README.md"
+keywords = ["openehr", "conformance", "testing", "ehr", "cdr"]
+categories = ["development-tools::testing", "command-line-utilities", "science"]
+# No `authors`, deliberately. The cargo manifest reference opens that section
+# with "Warning: This field is deprecated"
+# (https://doc.rust-lang.org/cargo/reference/manifest.html#the-authors-field),
+# and it cannot be corrected after publication. Attribution is the repository
+# link above plus CITATION.cff, which IS editable and is what GitHub's citation
+# box and the Zenodo deposit read.
+
+# WHAT SHIPS TO crates.io, and why it is an allowlist rather than an exclude
+# list. The catalogue and the vendored specification oracle are 347 MB of data
+# in this repository — far past what a registry accepts, and nothing the crate
+# needs in order to COMPILE: no source file embeds an artifact
+# (`include_str!`/`include_bytes!` appear nowhere), because every root is a path
+# the caller passes at run time. So the package carries the code and the legal
+# set, and the data is obtained from the repository or a release.
+#
+# `include` wins over `exclude` here on the failure direction: a new vendored
+# tree lands in this repository regularly, and with an exclude list one that
+# nobody remembered to add would silently blow the package size on the next
+# publish. An allowlist fails the other way — a new SOURCE directory would be
+# missing and the build verification catches it immediately.
+#
+# NOTICE travels because Apache-2.0 §4(d) requires it to: the whole point of
+# choosing that licence for this instrument is that attribution follows every
+# copy and derivative.
+include = [
+  "src/**/*.rs",
+  "Cargo.toml",
+  "README.md",
+  "CHANGELOG.md",
+  "LICENSE",
+  "LICENSES/**",
+  "NOTICE",
+  "REUSE.toml",
+]
+
+[[bin]]
+name = "veredictum"
+path = "src/bin/veredictum.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+# The executor: blocking HTTP driver realized from the operation bindings.
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json", "gzip", "brotli"] }
+# YAML authoring front-end for the schedule artifacts: pure Rust, no RUSTSEC
+# advisories, alias-expansion Budget against untrusted case files.
+serde-saphyr = "1.0.0-rc.1"
+# The published artifact schemas are the norm; every loaded artifact validates
+# against them before typed parsing.
+jsonschema = "0.49.3"
+# `applies` spec-version ranges use the Cargo/semver requirement grammar.
+semver = "1.0.28"
+regex = "1"
+# Wall-clock time (token `iat`/`exp`, run stamps) comes from the pinned time
+# library, never `std::time::SystemTime` (clippy.toml `disallowed-methods`);
+# elapsed-time measurement stays on `std::time::Instant`.
+jiff = { version = "0.2.31", features = ["serde"] }
+# Canonical-XML response assertions (`xml_root`): the served document's root
+# element name and the namespace its prefix resolves to. A namespace-aware
+# parser is required — a regex cannot tell the root from a descendant, nor
+# relate a prefix to the URI in scope for it.
+quick-xml = { version = "0.41.0", features = ["serialize"] }
+# Percent-encode path/query segments — never hand-roll a percent codec.
+urlencoding = "2.1.3"
+thiserror = "2"
+clap = { version = "4", features = ["derive", "env"] }
+# The measurement machinery: coordinated-omission-corrected latency with the
+# standard V2 serialization so thresholds are re-checkable from the artifact.
+hdrhistogram = { version = "7.5.4", features = ["serialization"] }
+base64 = "0.23"
+# Deterministic case-scoped ids (UUIDv5) for the recipe machinery.
+uuid = { version = "1", features = ["v4", "v5", "v7", "serde", "fast-rng"] }
+# Version-signature verification (SIG-VERSION cases): reconstruct the agreed
+# signed canonical form (RFC 8785 JCS of the ORIGINAL_VERSION minus signature),
+# recompute the digest (digest mode), or verify the RFC 4880 detached signature
+# (pgp mode). Spec: RM common master06 §Digital Signature.
+serde_jcs = "0.2.0"
+sha2 = "0.11.0"
+# rPGP — pure-Rust OpenPGP (RFC 4880/9580). `default-features = false` drops the
+# bzip2 (libbz2-rs-sys) dependency: a detached signature needs no compression,
+# and that crate fails the cargo-deny license gate.
+pgp = { version = "0.20.0", default-features = false }
+# The SMART lane's per-step token mint: a CDR is a SMART resource server and
+# never issues tokens (ITS-REST docs/smart_app_launch/master06-authentication
+# §Supported Authentication Flows), and the conformance stack runs no
+# Authorization Server, so the runner signs RS256 access tokens carrying the
+# scope claim each case declares. Never hand-roll JWT signing.
+jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
+
+[dev-dependencies]
+assert_fs = "1"
+# NOT rand 0.10. `pgp 0.20`'s signing call takes an RNG from rand 0.8's
+# rand_core generation, so the types must come from that major or they do not
+# unify. A deliberate pin, not drift.
+rand = "0.8"
+
+[lints]
+workspace = true
+

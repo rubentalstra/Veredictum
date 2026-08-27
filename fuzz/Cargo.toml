@@ -20,7 +20,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4.13"
-veredictum = { path = ".." }
+veredictum = { path = "../app/veredictum" }
 serde_json = { version = "1", features = ["preserve_order"] }
 base64 = "0.23"
 # Named only to hold the compiled case-core schema in a `LazyLock`.

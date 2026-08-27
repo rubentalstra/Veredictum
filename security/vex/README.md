@@ -48,7 +48,10 @@ by hand:
   the only place the id list may live.
 - **`security/vex/rust-advisories.toml`** — the reasoning: the OpenVEX
   `status`, the controlled-vocabulary `justification`, and the
-  `impact_statement` for each id.
+  `impact_statement` for each id. Unmaintained-class notices deny.toml
+  accepts sit in its `[[informational]]` tier: they are not vulnerabilities,
+  so no OpenVEX statement is emitted for them, and the generator still holds
+  them to the same two-way agreement with the gate.
 
 Two lists that must agree is a shape that drifts silently, so the generator
 refuses to emit anything unless the two sets match in **both** directions, and

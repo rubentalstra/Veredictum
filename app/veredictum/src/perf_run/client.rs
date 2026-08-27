@@ -477,7 +477,7 @@ mod tests {
     /// arrival must present a scope-limited Bearer token.
     #[test]
     fn a_bearer_mint_principal_presents_one_cached_standing_grant() {
-        let key = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let key = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
             .join("party/smart/cnf-smart-test.key.pem");
         assert!(key.is_file(), "committed test issuer key is missing");
         let ixit: Ixit = serde_json::from_value(serde_json::json!({

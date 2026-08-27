@@ -15,7 +15,7 @@ use veredictum::artifacts::load_root;
 use veredictum::exec::player::{ExpectedVerdict, Transcript, replay_entry, verdict_matches};
 
 fn load() -> (veredictum::artifacts::ArtifactSet, Transcript) {
-    let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let crate_dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
     let loaded = load_root(&crate_dir.join("artifacts")).expect("schema compilation");
     assert!(loaded.errors.is_empty(), "artifact tree must load cleanly");
     let text = std::fs::read_to_string(crate_dir.join("verification-pack/transcript.json"))

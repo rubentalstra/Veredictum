@@ -35,9 +35,10 @@ Layout:
 
 | Path | Contents |
 |---|---|
-| `src/**` | the runner machinery: driver, provisioning, resolver, outcome classification, comparator, verdict pipeline, the perf/stress/probe instruments |
-| `src/bin/veredictum.rs` | the one binary; every instrument is a subcommand of it |
-| `tests/**` | the integration suite: artifact gates, seeded-defect rejection, schema drift, claim completeness, the verification pack, the perf driver |
+| `app/veredictum/src/**` | the runner machinery: driver, provisioning, resolver, outcome classification, comparator, verdict pipeline, the perf/stress/probe instruments |
+| `app/veredictum/src/bin/veredictum.rs` | the instrument binary; every instrument is a subcommand of it |
+| `app/veredictum/tests/**` | the integration suite: artifact gates, seeded-defect rejection, schema drift, claim completeness, the verification pack, the perf driver |
+| `app/veredictum-console/**` | the web console: the Leptos frontend the container image serves (#6, design #52); its rules are `.claude/rules/leptos-ui.md` |
 | `artifacts/**` | the catalogue: `schedule/` case cores, `bindings/` per-ITS operation bindings, `vocab/`, `corpus/`, `registers/ambiguities.yaml` |
 | `party/**` | per-party statement + IXIT declarations |
 | `schemas/**` | the published JSON Schemas for every artifact family (emitted, drift-guarded) |
@@ -87,7 +88,7 @@ catalogue-expected against SUT-observed. The full law is
 | Suspect | What it means | Fix path |
 |---|---|---|
 | **The SUT** | the server under test violates the spec | a defect report to that CDR, with the reproduced exchange and the spec citation. Never a change here |
-| **The runner machinery** | the server behaved correctly and `src/**` misdrove the case or misjudged the response | fix the runner module. Those rows were inconclusive, never SUT failures |
+| **The runner machinery** | the server behaved correctly and `app/veredictum/src/**` misdrove the case or misjudged the response | fix the runner module. Those rows were inconclusive, never SUT failures |
 | **The catalogue** | the hand-authored expectation is wrong against the spec | edit the artifact, with a new spec-cited source for the corrected expectation |
 
 Two reflexes are banned, and the second one is the failure mode this product
@@ -309,7 +310,7 @@ cargo machete                                    # no dependency nothing imports
 ```
 
 The libFuzzer harnesses in `fuzz/` are their own nightly workspace, never a
-root member. CI compiles them on every pull request touching `src/` or `fuzz/`
+root member. CI compiles them on every pull request touching `app/` or `fuzz/`
 and campaigns weekly; a crash is fixed in the reader and pinned by a test, never
 worked around in the harness (`.claude/rules/fuzzing.md`).
 

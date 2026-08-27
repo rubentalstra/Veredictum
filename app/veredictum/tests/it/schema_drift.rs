@@ -9,7 +9,7 @@ use veredictum::schema::{emit_all, render};
 
 #[test]
 fn committed_schemas_are_byte_identical_to_emission() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("schemas");
+    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join("schemas");
     for (name, schema) in emit_all() {
         let committed = std::fs::read_to_string(dir.join(name))
             .unwrap_or_else(|e| panic!("{name} is not committed: {e}"));
@@ -23,7 +23,7 @@ fn committed_schemas_are_byte_identical_to_emission() {
 
 #[test]
 fn no_extra_schema_files_are_committed() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("schemas");
+    let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join("schemas");
     let expected: Vec<&str> = emit_all().into_iter().map(|(n, _)| n).collect();
     for entry in std::fs::read_dir(&dir).expect("schemas dir") {
         let name = entry.expect("dir entry").file_name();

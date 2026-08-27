@@ -202,7 +202,8 @@ mod tests {
         use pgp::types::Password;
         use rand::rngs::OsRng;
 
-        let keys = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("artifacts/corpus/keys");
+        let keys = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("artifacts/corpus/keys");
         let (secret, _) = SignedSecretKey::from_string(&std::fs::read_to_string(
             keys.join("cnf-signing.sec.asc"),
         )?)?;

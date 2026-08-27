@@ -1,5 +1,5 @@
 ---
-paths: ["src/**/*.rs", "tests/**/*.rs"]
+paths: ["app/**/*.rs"]
 ---
 
 # Comments & documentation (RFC 505 + RFC 1574)

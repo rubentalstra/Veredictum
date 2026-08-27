@@ -133,14 +133,18 @@ defects! {
         ("wire-surface-empty.yaml", "vocab/wire_surface.yaml", "surface-coverage"),
 }
 
-/// This package's directory, which is the repository root.
+/// The repository root, two levels above this package (#55): the catalogue
+/// and the vendored specs live there, never inside the crate.
 fn crate_dir() -> &'static Path {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
-/// The seeded-defect fixture directory.
+/// The seeded-defect fixture directory, which moved WITH the crate.
 fn fixture_dir() -> PathBuf {
-    crate_dir().join("tests/fixtures/defects")
+    PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/defects"
+    ))
 }
 
 /// The vendored spec tree the citation-resolution gates read.

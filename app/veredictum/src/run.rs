@@ -1741,7 +1741,7 @@ mod tests {
 
     #[test]
     fn coverage_gate_holds_on_the_committed_catalogue() {
-        let crate_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let crate_dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
         let loaded = crate::artifacts::load_root(&crate_dir.join("artifacts")).unwrap();
         assert!(loaded.errors.is_empty());
         let report = coverage_accounting(&loaded.set);

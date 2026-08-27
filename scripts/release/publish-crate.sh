@@ -29,7 +29,7 @@ manifest_version() {
   # The `[package]` table's own `version`, never the first `version = ` line in
   # the file: this manifest carries dependency versions too, and a `[workspace]`
   # table above `[package]`.
-  awk -F'"' '/^\[package\]/{p=1} p && /^version = /{print $2; exit}' Cargo.toml
+  awk -F'"' '/^\[package\]/{p=1} p && /^version = /{print $2; exit}' app/veredictum/Cargo.toml
 }
 
 do_publish() {

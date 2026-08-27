@@ -140,9 +140,10 @@ jobs:
           # the site's hand-typed catalogue counts to the artifacts, so a
           # website-only PR must run it too. fuzz/ is in it for the mirror
           # reason (#11): the fuzz-build job compiles the harnesses, and the
-          # harnesses read `src/`, so either side changing must compile the
-          # other.
-          if echo "$changed" | grep -qE '^(src/|app/|tests/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
+          # harnesses read the instrument crate, so either side changing must
+          # compile the other. app/ carries both crates since the restructure
+          # (#55); no code lives at the root any more.
+          if echo "$changed" | grep -qE '^(app/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
@@ -441,7 +442,7 @@ jobs:
           components: clippy
           target: wasm32-unknown-unknown
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       # The console's two SHIPPING shapes (.claude/rules/leptos-ui.md §10):
       # the featureless pass above compiles neither, so without these a
       # server-only dependency leaking past the `ssr` feature gate, or an
@@ -477,10 +478,10 @@ jobs:
       - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
           tool: cargo-nextest
-      - run: cargo build --locked --all-targets
+      - run: cargo build --locked --workspace --all-targets
       # The `ci` profile: never stop at the first failure, so one run reports the
       # whole failure surface.
-      - run: cargo nextest run --locked --profile ci
+      - run: cargo nextest run --locked --workspace --profile ci
       - name: The artifact tree passes every machine gate
         run: cargo run --locked -- validate --root artifacts --specs specs/openehr
       # The website's hand-typed catalogue counts cannot drift from the
@@ -509,7 +510,7 @@ jobs:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
       - env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --locked --no-deps --document-private-items
+        run: cargo doc --locked --workspace --no-deps --document-private-items
 
   # The declared MSRV is a possibly-breaking semver datum
   # (https://doc.rust-lang.org/cargo/reference/semver.html#env-new-rust), and

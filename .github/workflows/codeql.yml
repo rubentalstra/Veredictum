@@ -18,8 +18,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "src/**"
-      - "tests/**"
+      - "app/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/**"
@@ -27,8 +26,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "src/**"
-      - "tests/**"
+      - "app/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/**"

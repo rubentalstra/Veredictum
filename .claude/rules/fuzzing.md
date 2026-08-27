@@ -67,7 +67,7 @@ Fixed, in this order. A finding that is only fixed comes back.
 2. **Attribute** it. Which reader, and what does the released grammar or the
    documented contract actually say the bound is? A bound invented to silence a
    crash is not a fix.
-3. **Fix the reader** in `src/`, with the bound named as a constant and its doc
+3. **Fix the reader** in `app/veredictum/src/`, with the bound named as a constant and its doc
    comment saying what the legitimate depth or width is, so the next reader can
    tell a real limit from a guess.
 4. **Pin it as a normal test** in the module that owns the reader — a
@@ -102,7 +102,7 @@ record.
 - **A scheduled-only lane rots silently.** Nothing on the pull-request path
   would compile the harnesses, so a renamed function would break the lane and
   nobody would learn until the next campaign. The `build` job exists for that
-  and must keep firing on changes to `fuzz/**` or `src/**`.
+  and must keep firing on changes to `fuzz/**` or `app/**`.
 
 ## Adding a target
 
@@ -118,7 +118,7 @@ record.
 
 | Property | Check |
 |---|---|
-| The harnesses compile | the `build` job, on every pull request touching `fuzz/**` or `src/**` |
+| The harnesses compile | the `build` job, on every pull request touching `fuzz/**` or `app/**` |
 | Crashes surface | the weekly campaign; a crash uploads its artifact and fails the job |
 | Every past finding is re-checked | `fuzz/regressions/` is tracked and seeded into every run |
 | Every fixed crash is pinned by a test | the test suite, plus **review** |
