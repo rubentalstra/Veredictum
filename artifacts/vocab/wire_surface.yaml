@@ -1,4 +1,4 @@
-# The wire-surface coverage register (issue #271) — the authored,
+# The wire-surface coverage register (issue FerroEHR#271) — the authored,
 # spec-cited record of the wire surface the CNF catalogue is measured
 # against for TOTAL coverage. The `surface-coverage` gate
 # (src/validate.rs) fails on any spec-defined wire

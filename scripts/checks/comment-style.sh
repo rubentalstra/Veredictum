@@ -41,6 +41,11 @@
 #                          string the code EMITS may legitimately name a
 #                          markdown file the tool writes.
 #
+# FILE SCOPE: every rule reads hand-written `.rs` files only. YAML in the
+# catalogue and the fixtures is outside this guard by design — the catalogue
+# has its own gate (`validate`), and a comment defect there is a catalogue
+# review's business (#139 recorded the one sweep done by hand).
+#
 # Usage:
 #   scripts/checks/comment-style.sh --all               # whole tree
 #   scripts/checks/comment-style.sh --diff <base> [head]  # changed files only
