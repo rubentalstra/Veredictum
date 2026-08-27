@@ -11,7 +11,7 @@ use leptos::prelude::{
     AutoReload, Effect, ElementChild, GlobalAttributes, HydrationScripts, IntoView, LeptosOptions,
     component, document, view,
 };
-use leptos_meta::{Link, MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{Link, Meta, MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     ParamSegment, StaticSegment,
     components::{ParentRoute, Route, Router, Routes},
@@ -19,6 +19,7 @@ use leptos_router::{
 
 use crate::pages::catalogue::{Case, Catalogue, Chapter};
 use crate::pages::instrument::Instrument;
+use crate::pages::not_found::NotFound;
 use crate::pages::results::Results;
 use crate::pages::run::{Connect, Live, Run, Scope};
 use crate::pages::shell::Shell;
@@ -72,13 +73,19 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href="/pkg/veredictum-console.css" />
-        // Declaring the icon is what stops the browser probing `/favicon.ico`,
-        // whose 404 the journeys' console gate reads as a page error on every
-        // load. The seal is the one brand original (`public/seal.svg`).
-        <Link rel="icon" href="/seal.svg" />
+        // The icon set (#84), every file rendered from one of the two brand
+        // originals by `scripts/render/brand-icons.sh`. `favicon.ico` exists
+        // whether or not it is declared: a browser probes that path on every
+        // load, and the 404 it logs is a page error the journeys' console gate
+        // fails on.
+        <Link rel="icon" type_="image/svg+xml" href="/seal.svg" />
+        <Link rel="icon" sizes="32x32" href="/favicon.ico" />
+        <Link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <Link rel="manifest" href="/site.webmanifest" />
+        <Meta name="theme-color" content="#1B6E92" />
         <Title text="Veredictum console" />
         <Router>
-            <Routes fallback=|| "Page not found.">
+            <Routes fallback=|| view! { <NotFound /> }>
                 <ParentRoute path=StaticSegment("") view=Shell>
                     <Route path=StaticSegment("") view=Instrument />
                     <Route path=StaticSegment("catalogue") view=Catalogue />

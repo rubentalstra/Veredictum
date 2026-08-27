@@ -68,6 +68,23 @@ version on.
 
 ### Changed
 
+- **The console answers an unknown address with a real page (#84).** A path
+  outside the route tree used to render the bare string "Page not found."
+  with no chrome, no title and no way back. It now renders inside the
+  console's own sidebar and toast chrome, sets its own title, names the path
+  that missed, and offers the instrument and the catalogue as routes out. The
+  HTTP status is unchanged at 404.
+- **The console ships a full icon set (#84).** `favicon.ico`,
+  `apple-touch-icon.png`, `icon-192.png`, `icon-512.png` and a web manifest,
+  every one of them rendered from the two brand SVG masters by
+  `scripts/render/brand-icons.sh` so the mark cannot fork. The image serves
+  them from the same `public/` mount as the seal.
+- **Every run-wizard mutation reports both outcomes as a notification.**
+  Saving the scope, previewing the selection, starting a run and cancelling
+  one each raise a toast on success and on failure, with the failure copy
+  naming the object, the instrument's own diagnostic verbatim, and the next
+  action. The detailed inline panes stay beside them, which is where a
+  schema finding or a per-chapter breakdown is read line by line.
 - **The console reads two new environment variables.** `VEREDICTUM_SIGN_KEY`
   names the armored OpenPGP secret key the export seals with, and
   `VEREDICTUM_VERIFY_KEY` names the public half. Both are optional and both

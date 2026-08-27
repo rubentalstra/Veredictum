@@ -14,8 +14,8 @@
 //! (<https://book.leptos.dev/ssr/24_hydration_bugs.html>).
 
 use leptos::prelude::{
-    AddAnyAttr, AriaAttributes, ClassAttribute, CollectView, Effect, ElementChild, Get, IntoView,
-    OnAttribute, RwSignal, Set, Update, component, view,
+    AddAnyAttr, AriaAttributes, Children, ClassAttribute, CollectView, Effect, ElementChild, Get,
+    IntoView, OnAttribute, RwSignal, Set, Update, component, view,
 };
 use leptos_icons::Icon;
 use leptos_router::components::{A, Outlet};
@@ -71,13 +71,34 @@ fn nav_key(path: &str) -> &'static str {
     }
 }
 
-/// The application shell: sidebar, toast host, and the routed content.
+/// The application shell: the chrome around the routed `<Outlet/>`.
 #[expect(
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"
 )]
 #[component]
 pub fn Shell() -> impl IntoView {
+    view! {
+        <Chrome>
+            <Outlet />
+        </Chrome>
+    }
+}
+
+/// The chrome itself: sidebar, toast host, and whatever content it frames.
+///
+/// Taking the content as `children` rather than rendering `<Outlet/>` itself
+/// is what lets the routes' 404 fallback wear the same chrome (#84): the
+/// fallback renders OUTSIDE the route tree, so it has no outlet to fill.
+#[expect(
+    clippy::must_use_candidate,
+    reason = "a Leptos component is mounted by the framework, never consumed as a value"
+)]
+#[component]
+pub fn Chrome(
+    /// The framed content — the routed `<Outlet/>`, or the 404 answer.
+    children: Children,
+) -> impl IntoView {
     toast::provide();
     let location = use_location();
     let nav_open = RwSignal::new(false);
@@ -165,9 +186,7 @@ pub fn Shell() -> impl IntoView {
                     </button>
                     <span class="text-sm font-semibold text-ink-heading">"Veredictum"</span>
                 </header>
-                <main class="min-w-0 flex-1 px-6 py-6 lg:px-8">
-                    <Outlet />
-                </main>
+                <main class="min-w-0 flex-1 px-6 py-6 lg:px-8">{children()}</main>
             </div>
             <ToastHost />
         </div>

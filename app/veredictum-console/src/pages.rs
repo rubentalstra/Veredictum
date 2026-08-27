@@ -7,6 +7,7 @@
 
 pub mod catalogue;
 pub mod instrument;
+pub mod not_found;
 pub mod results;
 pub mod run;
 pub mod shell;
