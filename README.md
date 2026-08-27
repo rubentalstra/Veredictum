@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/brand/veredictum-icon.svg" width="112" alt="The Veredictum seal"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/rubentalstra/Veredictum/main/assets/brand/veredictum-icon.svg" width="112" alt="The Veredictum seal"></p>
 
 <h1 align="center">Veredictum</h1>
 
@@ -36,7 +36,7 @@
 <a href="https://www.bestpractices.dev/projects/14252"><img src="https://www.bestpractices.dev/projects/14252/badge" alt="OpenSSF Best Practices"></a>
 <a href="https://veredictum.eu/docs/installation.html"><img src="https://slsa.dev/images/gh-badge-level3.svg" alt="SLSA Build L3"></a>
 <a href="https://doi.org/10.5281/zenodo.22113258"><img src="https://zenodo.org/badge/1347360549.svg" alt="DOI"></a>
-<a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-46215C" alt="License: Apache-2.0"></a>
+<a href="https://github.com/rubentalstra/Veredictum/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-46215C" alt="License: Apache-2.0"></a>
 <a href="https://github.com/rubentalstra/Veredictum/blob/main/rust-toolchain.toml"><img src="https://img.shields.io/badge/rust-1.97-B7431B?logo=rust&logoColor=white" alt="Rust 1.97"></a>
 </p>
 
@@ -246,7 +246,7 @@ pack exists to check exactly that. A certificate row a human typed is a
 defect.
 
 Two verdict machineries share that discipline
-([`ARCHITECTURE.md`](ARCHITECTURE.md) §8):
+([`ARCHITECTURE.md`](https://github.com/rubentalstra/Veredictum/blob/main/ARCHITECTURE.md) §8):
 
 - **Conformance by assertion:** the statement selects the applicable cases,
   typed assertions judge each recorded exchange, and case results roll up
@@ -270,7 +270,7 @@ slowed-down client.
 
 The performance classes anchor to population served rather than to a
 concurrent-user guess, with the full derivation from OECD, Eurostat and NHS
-activity statistics in [`ARCHITECTURE.md`](ARCHITECTURE.md) §8.14:
+activity statistics in [`ARCHITECTURE.md`](https://github.com/rubentalstra/Veredictum/blob/main/ARCHITECTURE.md) §8.14:
 
 | Class | Population served | Corpus | Sustained arrival floor | p99 budget | Error rate |
 |---|---|---|---|---|---|
@@ -317,7 +317,7 @@ about what it observed. The seal above is the mark of that verdict.
 
 ## Design record
 
-[`ARCHITECTURE.md`](ARCHITECTURE.md) carries the reasoning rather than a
+[`ARCHITECTURE.md`](https://github.com/rubentalstra/Veredictum/blob/main/ARCHITECTURE.md) carries the reasoning rather than a
 summary of it: the testable surface and the case-core field definitions, the
 per-operation wire bindings, the outcome taxonomy and the ambiguity
 register, the assertion vocabulary, the verdict computation, and the
@@ -329,11 +329,11 @@ CASCO vocabulary the scheme is built in.
 
 ## Contributing
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) has the gates and the review bar.
-[`CLAUDE.md`](CLAUDE.md) is the working discipline the project holds itself
+[`CONTRIBUTING.md`](https://github.com/rubentalstra/Veredictum/blob/main/CONTRIBUTING.md) has the gates and the review bar.
+[`CLAUDE.md`](https://github.com/rubentalstra/Veredictum/blob/main/CLAUDE.md) is the working discipline the project holds itself
 to, including the attribution law above. Security reports go through
-[`SECURITY.md`](SECURITY.md), and questions through
-[`SUPPORT.md`](SUPPORT.md).
+[`SECURITY.md`](https://github.com/rubentalstra/Veredictum/blob/main/SECURITY.md), and questions through
+[`SUPPORT.md`](https://github.com/rubentalstra/Veredictum/blob/main/SUPPORT.md).
 
 If you maintain a CDR and want it graded, open an issue. A defect this
 instrument finds in your server arrives with the reproduced exchange and the
