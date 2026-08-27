@@ -21,8 +21,8 @@ use serde::{Deserialize, Serialize};
 /// The trademark acknowledgment and independence disclaimer every published
 /// export surface carries visibly (the #94 ruling).
 ///
-/// The wording is one fact with the root `README.md` and the book's
-/// introduction; the seal card renders it as [`INDEPENDENCE_LINES`].
+/// The same wording carries across every surface that publishes it; the seal
+/// card renders it as [`INDEPENDENCE_LINES`].
 pub const INDEPENDENCE_LINE: &str = "openEHR® is the registered trademark of the openEHR Foundation. Veredictum is an independent, community-driven conformance instrument, not an official openEHR Foundation product and not the Foundation's CNF program.";
 
 /// [`INDEPENDENCE_LINE`] broken for the seal card's caption area, whose text

@@ -173,12 +173,17 @@ jobs:
 
       # `.claude/rules/comments.md` (RFC 505 / RFC 1574): line comments only,
       # `TODO(#NNNN):` form, the sanctioned marker vocabulary, the NOTE and
-      # comment-run budgets. It reads hand-written `.rs` files, of which this
-      # tree has none today — the step prints `no files to check — OK.` and that
-      # is the honest report, not a silent pass. It becomes load-bearing on the
-      # first Rust file that lands, which is exactly why it is wired now.
+      # comment-run budgets, and no internal-document citation — neither a
+      # `.claude/` path anywhere in the file nor an in-repo markdown document
+      # in a comment (root CLAUDE.md rule 11, adjudicated in #125).
       - name: Comment style
         run: bash scripts/checks/comment-style.sh --all
+
+      # The seeded-violation proof for that last check: three citations that
+      # MUST be reported and three legitimate lines that must not. A guard
+      # nobody has watched fire is a guard nobody knows the shape of.
+      - name: Comment style — seeded-violation proof
+        run: bash scripts/checks/comment-style.sh --self-test
 
       # Keep a Changelog 1.1.0 structure: no duplicated `### <Type>` inside one
       # release section, no subsection header outside the canonical type set.
@@ -478,6 +483,12 @@ jobs:
       - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
         with:
           tool: cargo-nextest
+      # The published record's interop claim is checked against GnuPG itself
+      # (#76): `gpg_interop.rs` skips with a printed reason when `gpg` is
+      # absent, so this step refuses a runner without it — a skip must never be
+      # the outcome that gates a merge.
+      - name: GnuPG is present, so the interop gate cannot skip
+        run: gpg --version
       - run: cargo build --locked --workspace --all-targets
       # The `ci` profile: never stop at the first failure, so one run reports the
       # whole failure surface.
@@ -494,6 +505,13 @@ jobs:
       # holds every count-bearing phrase on both site surfaces to it.
       - name: The site's counts match the catalogue
         run: bash scripts/checks/site-counts.sh
+      # The CLI surface has one truth (clap's `--help`) and three hand-written
+      # copies (#76): the binary's header table, the root CLAUDE.md
+      # parenthetical, and the book's command reference. The guard needs the
+      # built binary, which is why it rides this job rather than the cargo-free
+      # guards tier.
+      - name: The documented CLI surface matches the binary
+        run: bash scripts/checks/cli-surface.sh
 
   # The `[lints.rustdoc]` table is inert without a doc run — this is the run.
   # `-D warnings` promotes the warn-tier entries (unescaped backticks, a missing

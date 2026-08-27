@@ -12,7 +12,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use crate::artifacts::ArtifactSet;
@@ -137,7 +137,7 @@ fn step_binding<'a>(
 }
 
 /// The OPERATION-level spec-version floors this party does not meet
-/// (`OperationBinding::applies`, issue #629 — the field was deserialized and
+/// (`OperationBinding::applies`, issue FerroEHR#629 — the field was deserialized and
 /// read by nothing).
 ///
 /// A binding declares a floor when the WIRE itself arrived in a later
@@ -1106,7 +1106,7 @@ pub fn synthesize_content_case(case: &CaseCore) -> CaseCore {
         synthesized.requires.server = Some(crate::vocab::ServerState::Any);
         // A varying-constraint case (constraint_columns declared) provisions no
         // baked template — the driver synthesizes and uploads one OPT PER ROW
-        // (issue #228). A constant-constraint case keeps its single baked
+        // (issue FerroEHR#228). A constant-constraint case keeps its single baked
         // template. constraint_context rides on the synthesized case so the
         // driver can tell the two apart.
         synthesized.requires.templates = if context.constraint_columns.is_empty() {
@@ -1164,7 +1164,7 @@ mod tests {
     /// invalid … content"), while a value that converts and then fails a
     /// constraint, an RM invariant, or its lexical form is the 422 branch
     /// (`responses/422.yaml`, "could be converted to a resource"). Row 1 is
-    /// the malformed-URI class issue #1899 adjudicated onto the 422 side and
+    /// the malformed-URI class issue FerroEHR#1899 adjudicated onto the 422 side and
     /// register AMB-209 records.
     #[test]
     fn a_rejected_row_splits_on_its_violation_class() {
@@ -1219,7 +1219,7 @@ mod tests {
         );
     }
 
-    /// `OperationBinding.applies` is LIVE (issue #629): a binding declaring a
+    /// `OperationBinding.applies` is LIVE (issue FerroEHR#629): a binding declaring a
     /// spec-version floor the party does not meet takes its cases out of
     /// scope with the binding's own declared range as the citation, and a
     /// binding without a floor is untouched.

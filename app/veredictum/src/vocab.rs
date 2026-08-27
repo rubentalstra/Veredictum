@@ -79,7 +79,7 @@ outcome_kinds! {
     (AlreadyExists, "already_exists", Error),
     /// Target does not exist ("EHR with `<ehr_id>` does not exist").
     (NotFound, "not_found", Error),
-    /// `preceding_version_uid` does not exist. DECISION (#557, 2026-07-28):
+    /// `preceding_version_uid` does not exist. DECISION (FerroEHR#557, 2026-07-28):
     /// stays a distinct kind from `precondition_failed` even where ITS-REST
     /// realizes both as one indistinguishable wire answer (the If-Match PUTs:
     /// a false-evaluating If-Match "MUST respond with HTTP status code `412
@@ -264,7 +264,7 @@ impl Tier {
 /// The machine-readable handling class of an ambiguity-register entry — the
 /// pipeline branches on this (closed enum).
 ///
-/// The `FixedHandling`/`Editorial` boundary (issue #2546) is decidable by one
+/// The `FixedHandling`/`Editorial` boundary (issue FerroEHR#2546) is decidable by one
 /// question: **did the entry CHOOSE anything?** `Editorial` records a
 /// wording/typography defect with zero behavioural latitude — the corrected
 /// reading is forced by the surrounding released text, and the catalogue
@@ -845,7 +845,7 @@ mod tests {
         assert_eq!(OutcomeKind::ALL.len(), 26);
         assert_eq!(OutcomeKind::Created.class(), OutcomeClass::Success);
         assert_eq!(OutcomeKind::Timeout.class(), OutcomeClass::Error);
-        // The schedule-release additions of #544.
+        // The schedule-release additions of FerroEHR#544.
         assert_eq!(OutcomeKind::Accepted.class(), OutcomeClass::Success);
         assert_eq!(OutcomeKind::BadRequest.class(), OutcomeClass::Error);
         assert_eq!(OutcomeKind::MethodNotAllowed.class(), OutcomeClass::Error);

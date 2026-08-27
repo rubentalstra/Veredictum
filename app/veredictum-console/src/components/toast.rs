@@ -3,7 +3,7 @@
 
 //! Toast feedback: every mutation reports its outcome as a transient toast.
 //!
-//! Success AND failure both toast (the crate CLAUDE.md doctrine), with the
+//! Success AND failure both toast, with the
 //! inline `MessageBar` beside a failure where a diagnostic is worth reading
 //! line by line.
 //!
@@ -143,7 +143,7 @@ pub fn ToastHost() -> impl IntoView {
 
 /// The inline message bar that sits BESIDE a failure toast where the
 /// diagnostic is worth reading line by line — never inline-only for
-/// mutations, never a toast for pure reads (the crate CLAUDE.md doctrine).
+/// mutations, never a toast for pure reads.
 #[expect(
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"

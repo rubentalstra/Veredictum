@@ -155,6 +155,18 @@ jobs:
           fi
           echo "Release notes for $VERSION:"; cat release-notes.md
 
+      # The console consumes the engine at an exact crates.io version and
+      # displays that same version in its chrome. Nothing held either to the
+      # release before #128: main shipped alpha.6 while both still read alpha.4,
+      # so the console consumed a two-release-old engine across two cuts. The
+      # policy, and why it allows two values rather than one, is the script's
+      # own header — it runs after the changelog check above, because it reads
+      # the previous published version from the section that check proves.
+      - name: The console's engine pin satisfies the release policy
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: bash scripts/release/check-console-pin.sh "$VERSION"
+
       - name: CITATION.cff version matches the released version
         env:
           VERSION: ${{ steps.tag.outputs.version }}

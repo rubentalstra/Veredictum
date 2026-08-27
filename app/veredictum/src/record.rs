@@ -565,8 +565,9 @@ mod tests {
     use super::*;
 
     /// The committed test keypair: a primary key certifying a signing subkey,
-    /// with no passphrase (`artifacts/corpus/keys/README.md` records how it
-    /// was generated).
+    /// with no passphrase. The armored certificate is self-describing — its
+    /// packets carry the user id, the key flags and the subkey binding
+    /// signature, so nothing outside the key material states its identity.
     fn key_dir() -> PathBuf {
         Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).join("artifacts/corpus/keys")
     }

@@ -14,7 +14,7 @@
 #![allow(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694); the carriers here are cfg(test)-only, so \
+              exchanges) — not the application (FerroEHR#1694); the carriers here are cfg(test)-only, so \
               #[expect] would be unfulfilled in the non-test build"
 )]
 
@@ -133,7 +133,7 @@ pub fn render_report(
     // ── per-capability rows ─────────────────────────────────────────────────
     // The headline evidence token is worst-wins, so on its own it hides an
     // inconclusive row inside a capability that also has passes. The counts
-    // travel with it (issue #629): an errored exchange is never a SUT failure,
+    // travel with it (issue FerroEHR#629): an errored exchange is never a SUT failure,
     // but it is never evidence of conformance either, and a divergence must
     // not be able to sit behind one unseen.
     if !verdicts.capability_tallies.is_empty() {
@@ -927,7 +927,7 @@ mod tests {
     ///
     /// The catalogue axis is ONE product's outward surface, so rendering it
     /// into every party's `SDoC` declared another vendor's routes as that
-    /// vendor's own (#2377).
+    /// vendor's own (FerroEHR#2377).
     #[test]
     fn a_party_declaring_no_family_publishes_none_of_the_catalogue_table() {
         let text = render_statement(&statement(), &verdicts(), &served());

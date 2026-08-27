@@ -215,7 +215,7 @@ fn Export() -> impl IntoView {
     let state = Resource::new(|| (), |()| fetch_export());
     // The inline bar sits BESIDE the toast, never instead of it: a transient
     // success with a silent failure below the fold reads as "nothing
-    // happened" (the crate CLAUDE.md doctrine).
+    // happened".
     let note = RwSignal::new(None::<Result<String, String>>);
     let running = RwSignal::new(false);
     // The sanctioned dispatch-continuation shape: the click is the event, the

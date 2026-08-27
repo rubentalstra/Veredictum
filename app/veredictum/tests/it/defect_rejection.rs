@@ -74,7 +74,7 @@ defects! {
     corpus_invalid_without_defect =>
         ("corpus-invalid-without-defect.yaml", "corpus/MANIFEST.yaml", "load"),
     // A declared view with no registered evaluator fails corpus-integrity at
-    // validate time, never at run time (#971).
+    // validate time, never at run time (FerroEHR#971).
     corpus_view_without_evaluator =>
         ("corpus-view-without-evaluator.yaml", "corpus/MANIFEST.yaml", "corpus-integrity"),
     matrix_bad_tier => ("matrix-bad-tier.yaml", "vocab/capability_matrix.yaml", "load"),

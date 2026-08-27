@@ -26,11 +26,26 @@
 #                          comment-only, because an `#[expect(reason = "…")]`
 #                          string is read as justification exactly like a
 #                          comment.
+#   7. internal markdown   the same rule for every OTHER in-repo markdown
+#                          document: an `artifacts/`, `party/`, `scripts/`,
+#                          `website/`, `schemas/`, `fuzz/`, `app/` or
+#                          `verification-pack/` path ending in `.md`, and the
+#                          root documents by name (README, CLAUDE,
+#                          ARCHITECTURE, CONTRIBUTING, CHANGELOG). Adjudicated
+#                          2026-08-27 (#125): a corpus-local README is NOT a
+#                          sanctioned exception — it moves and dies like any
+#                          other internal document, so a comment grounds on
+#                          the material itself. COMMENT LINES ONLY, unlike
+#                          rule 6: the vendored spec text is full of `.md`
+#                          documents that ARE legitimate citations, and a
+#                          string the code EMITS may legitimately name a
+#                          markdown file the tool writes.
 #
 # Usage:
 #   scripts/checks/comment-style.sh --all               # whole tree
 #   scripts/checks/comment-style.sh --diff <base> [head]  # changed files only
 #   scripts/checks/comment-style.sh --files <f.rs>...   # named files (hook)
+#   scripts/checks/comment-style.sh --self-test         # seeded-violation proof
 #
 # Exit 0 = clean, 1 = violations (listed as file:line: message), 2 = usage.
 
@@ -38,6 +53,12 @@ set -euo pipefail
 
 NOTE_MAX=3
 RUN_MAX=8
+
+# The in-repo markdown documents a comment may not cite (check 7 above). The
+# vendored spec trees are deliberately absent: `specs/**` IS the oracle, and an
+# ITS-REST citation names a `.md` document there.
+INTERNAL_DOC='(artifacts|party|scripts|website|schemas|fuzz|app|verification-pack)/[^[:space:]]*[.]md'
+INTERNAL_DOC="$INTERNAL_DOC"'|(^|[^[:alnum:]_./-])(README|CLAUDE|ARCHITECTURE|CONTRIBUTING|CHANGELOG)[.]md'
 
 cd "$(dirname "$0")/../.."
 
@@ -67,8 +88,41 @@ case "$mode" in
     esac
   done
   ;;
+--self-test)
+  # The seeded-violation proof for check 7: a guard nobody has watched fire is
+  # a guard nobody knows the shape of. Each seeded line below MUST be reported,
+  # and each clean line MUST NOT be.
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  seeded="$tmp/seeded.rs"
+  {
+    echo '// the committed keypair (`artifacts/corpus/keys/README.md` records it)'
+    echo '/// the crate CLAUDE.md doctrine'
+    echo '//! see website/book/src/commands.md for the surface'
+    echo '/// ITS-REST `docs/overview/Requests_and_responses.md` §HTTP status codes'
+    echo 'const REPORT: &str = "coverage-report.md";'
+    echo 'const PROVENANCE: &str = "artifacts/corpus/archetypes/adl2/PROVENANCE.md";'
+  } >"$seeded"
+  out="$("$0" --files "$seeded" 2>/dev/null || true)"
+  fail=0
+  for want in 1 2 3; do
+    grep -q "seeded.rs:$want: internal-document citation" <<<"$out" || {
+      echo "self-test: line $want was NOT reported — the guard does not fire" >&2
+      fail=1
+    }
+  done
+  for unwanted in 4 5 6; do
+    if grep -q "seeded.rs:$unwanted: internal-document citation" <<<"$out"; then
+      echo "self-test: line $unwanted was reported — a legitimate citation is refused" >&2
+      fail=1
+    fi
+  done
+  [[ "$fail" -eq 0 ]] || exit 1
+  echo "comment-style: self-test OK (3 seeded violations caught, 3 legitimate lines passed)."
+  exit 0
+  ;;
 *)
-  echo "usage: $0 [--all | --diff <base> [head] | --files <f.rs>...]" >&2
+  echo "usage: $0 [--all | --diff <base> [head] | --files <f.rs>... | --self-test]" >&2
   exit 2
   ;;
 esac
@@ -84,7 +138,8 @@ for f in "${files[@]}"; do
   # skip anchors there. Matching the marker anywhere would let a hand-written
   # file exempt itself by merely mentioning it in prose.
   head -n 1 "$f" 2>/dev/null | grep -q '^// @generated' && continue
-  out="$(awk -v NOTE_MAX="$NOTE_MAX" -v RUN_MAX="$RUN_MAX" '
+  out="$(awk -v NOTE_MAX="$NOTE_MAX" -v RUN_MAX="$RUN_MAX" \
+    -v INTERNAL_DOC="$INTERNAL_DOC" '
     function flush_note() {
       if (note_len > NOTE_MAX)
         printf ":%d: NOTE block is %d lines (max %d) — a NOTE is a citation + one sentence; move the essay to the PR/issue\n", note_start, note_len, NOTE_MAX
@@ -126,6 +181,11 @@ for f in "${files[@]}"; do
           printf ":%d: TODO without an issue reference — the only sanctioned form is `TODO(#NNNN):`\n", NR
         if (line ~ /PORT NOTE|PORT STATUS|TODO\(port\)|PERF\(port\)|NOTE\(port\)|FIXME|HACK:|(^|[^A-Za-z0-9_])XXX([^A-Za-z0-9_]|$)|\/\/[[:space:]]*WIP[: ]/)
           printf ":%d: unsanctioned comment marker — the only forms are TODO(#NNNN): / NOTE: / SAFETY:\n", NR
+
+        # 7. in-repo markdown citations, comment lines only. A vendored spec
+        # document under `specs/**` is the oracle and never matches.
+        if (line ~ INTERNAL_DOC)
+          printf ":%d: internal-document citation — cite the vendored openEHR spec text or official external documentation, never an in-repo markdown file (CLAUDE.md rule 11)\n", NR
       }
 
       # 4 + 5. NOTE / plain-run budgets

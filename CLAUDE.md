@@ -337,8 +337,9 @@ statements — and **zero findings is the only passing result.** The instrument'
 own canonical CLI table (`validate`, `run`, `verdicts`, `verify-record`,
 `perf`, `stress`, `stress-compare`, `aql-probe`, `perf-assets`,
 `conformance-assets`, `emit-schemas`) is the authority on how to invoke
-everything else; never improvise a flag (#76 tracks the drift guard over the
-hand-maintained copies).
+everything else; never improvise a flag. `scripts/checks/cli-surface.sh` holds
+this list, the binary's own header table and the book's command reference to
+clap's `--help`, so a subcommand cannot land in one copy and rot in another.
 
 ## Releasing
 
@@ -371,6 +372,14 @@ pipeline is a `needs` edge, so no leg guesses whether an earlier one finished.
 6. `git tag -s vX.Y.Z -m "…"` on the verified merge commit, and push it. The
    `release tags` ruleset requires a signature and refuses deletion, so a tag is
    never re-pointed: the recovery for a bad cut is the next version.
+
+**The console's engine pin trails by at most one release**, and `plan` refuses
+a cut that breaks it (`scripts/release/check-console-pin.sh`, #128). The
+console consumes the engine at an exact crates.io version, and an exact pin can
+only name a version that already published, so at tag time it is either the
+version being published (a cut PR that pre-bumped it) or the version published
+immediately before. A third value means the console is consuming an engine more
+than one release old, which is how alpha.4 survived two cuts unnoticed.
 
 **What the tag then does**, in order: `plan` re-verifies every fact above
 against the tagged commit and publishes nothing; the GitHub release is created

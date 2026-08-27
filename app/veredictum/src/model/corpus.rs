@@ -11,7 +11,7 @@
 #![allow(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694); the carriers here are cfg(test)-only, so \
+              exchanges) — not the application (FerroEHR#1694); the carriers here are cfg(test)-only, so \
               #[expect] would be unfulfilled in the non-test build"
 )]
 
@@ -222,7 +222,7 @@ mod tests {
         assert!(e.check_invariants().is_err()); // no origin
     }
 
-    /// A `raw-json` entry carries SOURCE BYTES (issue #1725), so the two
+    /// A `raw-json` entry carries SOURCE BYTES (issue FerroEHR#1725), so the two
     /// structural ways of having none are refused: a recipe yields a `Value`,
     /// and a view projects parsed structure the raw carrier does not have.
     #[test]

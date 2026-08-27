@@ -40,9 +40,9 @@ pub mod window;
 /// Set the moment any arrival observes `429 Too Many Requests`.
 ///
 /// A measured record must describe the SERVER's ceiling. If the SUT rate-limits
-/// the instrument, the ceiling being measured is `server.rate_limit`'s instead —
-/// the ladder reaches 1024 requests/second from one principal and one address,
-/// so an enabled limiter WILL bite, and the resulting numbers would be a
+/// the instrument, the ceiling being measured is the limiter's instead — the
+/// ladder reaches 1024 requests/second from one principal and one address, so
+/// an enabled limiter WILL bite, and the resulting numbers would be a
 /// configuration artefact wearing a measurement's clothes. Both instruments
 /// consult this before writing a record and refuse rather than publish one.
 static RATE_LIMITED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -63,8 +63,10 @@ pub fn rate_limited_observed() -> bool {
 pub fn rate_limited_refusal(instrument: &str) -> String {
     format!(
         "{instrument}: the SUT answered 429 — the measurement would record the \
-         rate limiter's ceiling, not the server's. Compose the SUT with \
-         `docker/sut-measurement.yml`, or set \
-         FERROEHR__SERVER__RATE_LIMIT__ENABLED=false, and run again."
+         rate limiter's ceiling, not the server's. Measurement requires the \
+         SUT's rate limiter disabled, or raised above the ladder's peak \
+         arrival rate, for the duration of the window; the switch that does \
+         that is the SUT's own, and the party declares it in its IXIT. Run \
+         again once the window is unlimited."
     )
 }
