@@ -52,7 +52,10 @@ registry row reads crates.io, docs.rs and the GHCR package directly, so the
 version shown is whatever is actually published, the docs badge goes red if a
 docs.rs build fails, and the pull count is the package's own. Several read below
 their ceiling today, and the scorecard workflow's header says why check by
-check — Fuzzing waits on a harness (#11). Those are the honest numbers, and they
+check — Fuzzing reads low by Scorecard's own detection (it looks for OSS-Fuzz
+and the integrations it knows), while the harnesses exist under fuzz/ (#11):
+CI compiles them per pull request and campaigns weekly. Those are the honest
+numbers, and they
 are the baseline the next ones are measured against.
 
 The SLSA badge is the one static image here, and its claim is substantiated
