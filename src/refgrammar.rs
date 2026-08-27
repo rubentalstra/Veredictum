@@ -168,8 +168,14 @@ impl ValueRef {
         let illegal = |why: &str| RefError::Illegal(body.to_owned(), why.to_owned());
 
         if let Some(column) = body.strip_prefix("row.") {
-            if column.is_empty() || column.contains(char::is_whitespace) {
-                return Err(illegal("row column must be a non-empty name"));
+            // Braces are refused like whitespace: a column containing `}`
+            // renders back to a `${row.…}` form that cuts at the first `}`,
+            // so the accepted value could not survive its own Display.
+            if column.is_empty()
+                || column.contains(char::is_whitespace)
+                || column.contains(['{', '}'])
+            {
+                return Err(illegal("row column must be a non-empty brace-free name"));
             }
             return Ok(Self::Row(column.to_owned()));
         }
@@ -203,7 +209,7 @@ impl ValueRef {
         if let Some(field) = body.strip_prefix("ixit:") {
             return IxitField::parse(field)
                 .map(Self::Ixit)
-                .ok_or_else(|| illegal("ixit field must be system_id"));
+                .ok_or_else(|| illegal("ixit field must be system_id | dump_location"));
         }
         if body.contains(':') || body.contains('.') {
             return Err(illegal(
@@ -456,6 +462,15 @@ mod tests {
 
     fn parse_ref(body: &str) -> ValueRef {
         ValueRef::parse(body).unwrap()
+    }
+
+    #[test]
+    fn row_column_refuses_braces() {
+        // A column containing `}` would render to a `${row.…}` form that cuts
+        // at the first `}` and cannot survive its own Display (fuzz review,
+        // #11): the parse refuses it up front.
+        assert!(ValueRef::parse("row.a}b").is_err());
+        assert!(ValueRef::parse("row.a{b").is_err());
     }
 
     #[test]

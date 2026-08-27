@@ -348,6 +348,10 @@ pipeline is a `needs` edge, so no leg guesses whether an earlier one finished.
    v0.0.1-alpha.1 cut rewrote a mention inside the intro paragraph and shipped a
    release with no section at all.
 2. `Cargo.toml` `[package] version`, and `Cargo.lock` with it (`cargo check`).
+   A content PR MAY pre-bump the version when its change is what the next
+   release exists to ship (the way #36 moved alpha.3 → alpha.4 for the lib
+   API); the cut then verifies the version rather than moving it. Whichever
+   PR moves it, the version in the tree at tag time is what publishes.
 3. `CITATION.cff`: `version` and `date-released`.
 4. `bash scripts/render/zenodo-json.sh` — `.zenodo.json` is GENERATED, because
    Zenodo ignores `CITATION.cff` completely whenever a `.zenodo.json` exists
