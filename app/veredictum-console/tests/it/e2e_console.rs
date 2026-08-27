@@ -513,13 +513,15 @@ async fn e2e_run_wizard_reaches_connect_and_scope() {
     };
     h.goto("/run/connect").await;
     h.wait_xpath("//h1[contains(., 'Grade a server')]").await;
-    h.wait_xpath("//button[contains(., 'Probe connection')]").await;
+    h.wait_xpath("//button[contains(., 'Probe connection')]")
+        .await;
     h.wait_xpath("//button[contains(., 'Basic')]").await;
     h.capture("connect-light").await;
     h.enable_dark().await;
     h.capture("connect-dark").await;
     h.goto("/run/scope").await;
-    h.wait_xpath("//body[contains(., 'No connection draft')]").await;
+    h.wait_xpath("//body[contains(., 'No connection draft')]")
+        .await;
     h.assert_console_clean(&[]).await;
     h.finish().await;
 }
