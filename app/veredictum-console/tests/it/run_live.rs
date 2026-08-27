@@ -340,6 +340,8 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
             filter: None,
             record_exchanges: false,
         }))),
+        sign_key: None,
+        verify_key: None,
         jobs: JobSlot::default(),
     };
 

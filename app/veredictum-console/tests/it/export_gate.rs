@@ -123,6 +123,7 @@ fn driven(out: &Path) -> Result<Option<(ConsoleState, Engine)>, Box<dyn std::err
             filter: Some(String::from("I_EHR_SERVICE.create_ehr-main")),
             credentials: vec![],
             progress: true,
+            record_exchanges: false,
         },
         String::from("export-gate"),
     )?;
