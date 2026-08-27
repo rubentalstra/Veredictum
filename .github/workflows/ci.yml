@@ -629,6 +629,114 @@ jobs:
           tool: cargo-machete
       - run: cargo machete
 
+  # The console's browser journeys (#69): the one gate that proves the shipped
+  # UI actually renders, hydrates and navigates, and the only one that reads the
+  # browser console — where a hydration mismatch and a client panic surface and
+  # nowhere else. `scripts/ui-e2e.sh` owns the whole composition (build, serve
+  # over the repository's own mounts, start the pinned browser container, run
+  # the journeys, tear down), so this job installs tools and calls it.
+  #
+  # The capture pass is deliberately NOT run here: committed screenshots are
+  # reviewed as a diff on the pull request, and a CI job regenerating them would
+  # produce bytes nobody looked at. `ui-screenshot-guard` below is what makes an
+  # author refresh them.
+  ui-e2e:
+    name: console journeys
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          target: wasm32-unknown-unknown
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        with:
+          tool: cargo-nextest
+
+      # The SAME pinned, checksum-verified prebuilt binaries the image's
+      # from-source stage and release.yml's `console site bundle` job fetch,
+      # with the versions single-sourced from the Dockerfile's ARGs so the
+      # three lanes cannot drift. Never `cargo install cargo-leptos`: it
+      # compiles a vendored OpenSSL tree.
+      - name: Fetch cargo-leptos and Tailwind (pinned, checksum-verified)
+        env:
+          DOCKERFILE: docker/Dockerfile
+        run: |
+          set -euo pipefail
+          clv="$(grep -E '^ARG CARGO_LEPTOS_VERSION=' "$DOCKERFILE" | head -1 | cut -d= -f2)"
+          twv="$(grep -E '^ARG TAILWIND_VERSION=' "$DOCKERFILE" | head -1 | cut -d= -f2)"
+          echo "cargo-leptos ${clv}, tailwindcss ${twv}"
+          triple=x86_64-unknown-linux-gnu
+          curl -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${clv}/cargo-leptos-${triple}.tar.gz"
+          curl -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${clv}/cargo-leptos-${triple}.tar.gz.sha256"
+          sha256sum -c "cargo-leptos-${triple}.tar.gz.sha256"
+          tar -xzf "cargo-leptos-${triple}.tar.gz"
+          sudo install -m 0755 "$(find . -type f -name cargo-leptos | head -1)" /usr/local/bin/cargo-leptos
+          curl -fsSLo tailwindcss "https://github.com/tailwindlabs/tailwindcss/releases/download/${twv}/tailwindcss-linux-x64"
+          sudo install -m 0755 tailwindcss /usr/local/bin/tailwindcss
+          rm -rf cargo-leptos* tailwindcss
+
+      - run: bash scripts/ui-e2e.sh
+
+      # A journey failure is a screenshot plus a browser-console dump, and the
+      # screenshot is the half the log cannot carry.
+      - if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ui-e2e-evidence
+          path: target/ui-e2e/screenshots
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The visual feedback loop's other half: a pull request that changes how the
+  # console LOOKS must refresh the committed captures, so every UI change lands
+  # as a reviewable image diff instead of a description of one. The escape is the
+  # `no-ui-visual-change` label, which exists in the repository — a guard reading
+  # a label that does not exist can never fire, and would fail silently.
+  #
+  # PULL-REQUEST ONLY, deliberately: it compares the pull request's base and head
+  # trees and reads a pull-request label, neither of which a `merge_group` event
+  # carries. It has already gated this pull request by then. Applying the label
+  # raises a fresh run because the `pull_request` trigger above lists `labeled`.
+  ui-screenshot-guard:
+    name: ui-screenshot-guard
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require refreshed captures for console UI changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'no-ui-visual-change') }}
+        run: |
+          set -euo pipefail
+          if [ "$HAS_LABEL" = "true" ]; then
+            echo "no-ui-visual-change label set — guard skipped."; exit 0
+          fi
+          changed=$(git diff --name-only "$BASE" "$HEAD")
+          if ! echo "$changed" | grep -qE '^app/veredictum-console/(src|style)/'; then
+            echo "No console UI paths touched — guard not required."; exit 0
+          fi
+          if echo "$changed" | grep -qE '^website/book/src/console/img/'; then
+            echo "Captures refreshed — OK."; exit 0
+          fi
+          echo "::error::This pull request changes the console UI but does not refresh website/book/src/console/img/ (run UI_E2E_DOCS_SHOTS=1 scripts/ui-e2e.sh and commit the captures), and does not carry the 'no-ui-visual-change' label." >&2
+          exit 1
+
   # ── The single required check ───────────────────────────────────────────────
   # Branch protection points at `conclusion` alone, which is what lets jobs be
   # added, renamed or path-gated without editing repository settings. The cost
@@ -651,6 +759,8 @@ jobs:
       - deny
       - fuzz-build
       - unused-deps
+      - ui-e2e
+      - ui-screenshot-guard
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}

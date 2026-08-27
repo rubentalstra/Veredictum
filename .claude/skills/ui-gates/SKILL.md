@@ -47,12 +47,20 @@ cargo nextest run
 #    touches the build surface (Cargo.toml, styles, assets, features);
 #    otherwise report it as skipped-with-reason
 cargo leptos build
+
+# 5. The browser journeys — only when the change touches src/ or style/;
+#    otherwise report it as skipped-with-reason. The script builds, serves,
+#    drives and tears down by itself; it needs docker (the digest-pinned
+#    browser container) or UI_E2E_CHROMEDRIVER pointing at a local driver.
+bash scripts/ui-e2e.sh
 ```
 
-Deliberately absent, named so a green report cannot overclaim: the E2E
-journey stage (the harness lands with the screens, #6) and FerroEHR's
-screenshot guard (no docs-site capture set exists here). When those land,
-this file gains their stages in the same change.
+When the change alters how a screen LOOKS, re-run stage 5 as
+`UI_E2E_DOCS_SHOTS=1 bash scripts/ui-e2e.sh` and commit the refreshed
+`website/book/src/console/img/` captures: the `ui-screenshot-guard` CI job
+fails a console `src/`/`style/` change that carries neither refreshed
+captures nor the `no-ui-visual-change` label. Read the captures before
+committing them — the diff is the point.
 
 Adjust the exact feature flags to the crate's `Cargo.toml` (read it first —
 the `ssr`/`hydrate` feature names are the convention, not a guess).

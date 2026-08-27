@@ -39,6 +39,22 @@ version on.
   the spawned run's environment — the client-safe view carries no secret by
   construction, tested. The probe is the one carved-out console request to a
   CDR (a diagnostic, never a judgement), recorded in the crate's mandates.
+- **The console's browser journeys and the screenshot feedback loop (#69).**
+  `scripts/ui-e2e.sh` builds the console, serves it over the repository's own
+  catalogue and specification mounts, starts a digest-pinned headless
+  Chromium, and runs the journeys in
+  `app/veredictum-console/tests/it/e2e_console.rs` — the landing's four
+  counts, the sidebar's walk to a case detail and its citations, dark mode
+  surviving a reload, and the routed 404. Rust-native WebDriver throughout,
+  never Playwright; every journey waits on explicit conditions and ends by
+  reading the browser console, failing on any error entry, hydration failure
+  or client panic. With `UI_E2E_DOCS_SHOTS=1` the same journeys photograph
+  each surface in one 1440×900 viewport, light and dark, into
+  `website/book/src/console/img/`, which the book's new console chapter
+  embeds. Two CI jobs hold it together: `console journeys` runs the harness,
+  and `ui-screenshot-guard` fails a pull request that changes the console's
+  `src/` or `style/` without refreshing those captures or carrying the
+  `no-ui-visual-change` label.
 - **The console's read surfaces (#64).** The instrument landing shows the
   catalogue's own numbers — case cores, bindings, party statements, findings
   — read once at startup through the published lib, from the same

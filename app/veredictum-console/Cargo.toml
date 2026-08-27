@@ -47,7 +47,7 @@ icondata_core = "0.1"
 # Isomorphic browser-API wrappers (the clipboard copy in the format_view
 # kit). Its `ssr` feature MUST ride the ssr gate below or its browser
 # primitives compile the wasm path into the native binary and panic at SSR
-# (the FerroEHR lesson recorded in .claude/rules/leptos-ui.md §1).
+# (a lesson learned live in FerroEHR's console).
 leptos-use = "0.19"
 
 # The read seam's typed rows serialize across the server-fn wire on both
@@ -66,8 +66,8 @@ axum = { version = "0.8", optional = true }
 # `signal` carries the SIGTERM handler: the binary is PID 1 in the image, so
 # graceful shutdown on `docker stop` is its own duty (src/main.rs).
 tokio = { version = "1", features = ["rt-multi-thread", "signal"], optional = true }
-# `anyhow` stays legal in binary entry points only
-# (`.claude/rules/reliability.md`); the ssr main is one.
+# `anyhow` stays legal in binary entry points only, and the ssr main is one;
+# library code returns typed `thiserror` errors.
 anyhow = { version = "1", optional = true }
 
 # browser-only (behind `hydrate`)
@@ -99,6 +99,15 @@ ssr = [
 [dev-dependencies]
 # Scratch directories for the engine gate test's out trees and fixture ixit.
 assert_fs = "1"
+# The browser journeys (#69): a Rust-native WebDriver client over headless
+# Chromium, never Playwright — the console admits no hand-written JavaScript,
+# its test suite included. The gate reads the browser log through
+# thirtyfour's legacy-log API. `tokio` repeats here
+# for the `macros` feature the `#[tokio::test]` attribute needs; the ssr
+# dependency above carries only what the server binary uses. Dev-only, so
+# neither crate reaches the ssr binary or the hydrate bundle.
+thirtyfour = "0.37.2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
 
 [lints]
 workspace = true

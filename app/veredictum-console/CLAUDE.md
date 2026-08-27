@@ -78,6 +78,15 @@ must derive from the mounted artifacts or not exist.
 
 `/ui-gates`: clippy on **native (`--features ssr`) and wasm32 (hydrate)**
 targets, `cargo nextest run`, `cargo fmt` (plus `leptosfmt` when installed),
-cargo-leptos build when the build surface changed. The E2E journey stage and
-any visual-capture guard are deliberately absent until their machinery lands
-(#6) — a gate pointing at absent machinery reports green.
+cargo-leptos build when the build surface changed, and `scripts/ui-e2e.sh`
+for the browser journeys.
+
+`scripts/ui-e2e.sh` builds the console, serves it over this repository's own
+`artifacts/` and `specs/openehr/` mounts, starts a digest-pinned headless
+Chromium, and runs the journeys in
+`app/veredictum-console/tests/it/e2e_console.rs`. Every journey fails on any
+browser-console error, which is the only place a hydration mismatch or a
+client panic ever surfaces. With `UI_E2E_DOCS_SHOTS=1` the same run refreshes
+the book's screenshots under `website/book/src/console/img/`; a pull request
+touching `src/` or `style/` must commit refreshed captures or carry the
+`no-ui-visual-change` label, which the `ui-screenshot-guard` CI job enforces.
