@@ -12,7 +12,7 @@
 //!
 //! An uploaded bundle is transient. It unpacks into a scratch directory under
 //! the mounted output root, is verified, and is swept on a short TTL; the
-//! console keeps no state of its own (the crate CLAUDE.md law).
+//! console keeps no state of its own.
 
 use serde::{Deserialize, Serialize};
 

@@ -51,7 +51,7 @@ pub fn Pane(
 }
 
 /// The inline read-error shape: a screen says so where the data would be —
-/// pure reads never toast (the crate CLAUDE.md doctrine).
+/// pure reads never toast.
 #[must_use]
 pub fn inline_error(diagnostic: &str) -> impl IntoView + use<> {
     view! {

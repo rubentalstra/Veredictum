@@ -4,7 +4,7 @@
 //! The console's server state: the mounted roots, and the catalogue loaded
 //! through the published lib ONCE at startup.
 //!
-//! The console stores nothing of its own (the crate CLAUDE.md law): this
+//! The console stores nothing of its own: this
 //! state is a read of the mounts, and a restart re-reads them. A missing or
 //! unreadable catalogue is a FIRST-CLASS state the screens render as the
 //! named-mount explanation — the server still serves.
@@ -72,7 +72,7 @@ pub struct ConsoleState {
     pub catalogue: Arc<Result<veredictum::pipeline::catalogue::Validation, String>>,
     /// The one in-flight run draft (the wizard's server-side memory): the
     /// console holds at most one, and a restart legitimately forgets it —
-    /// no console-local store exists (the crate CLAUDE.md law).
+    /// no console-local store exists.
     pub draft: Arc<std::sync::Mutex<Option<crate::run_api::RunDraft>>>,
     /// The one run-job slot (#66).
     pub jobs: crate::run_job::JobSlot,
