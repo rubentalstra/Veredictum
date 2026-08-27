@@ -116,6 +116,15 @@ jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
 
 [dev-dependencies]
 assert_fs = "1"
+# The fake SUT the wire-speaking modules are tested against: a real HTTP
+# server on a real socket, so the driver, the probe and the stress ladder are
+# exercised over the same reqwest path a live run uses.
+wiremock = "0.6.5"
+# wiremock's control surface (start, register, received_requests) is async
+# while every client here is `reqwest::blocking`, so the harness owns one
+# current-thread runtime for setup and readback. Already in the lock through
+# reqwest, so this adds no crate to the graph.
+tokio = { version = "1.53.1", default-features = false, features = ["rt", "time"] }
 
 [lints]
 workspace = true
