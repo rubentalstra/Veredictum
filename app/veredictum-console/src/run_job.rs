@@ -339,17 +339,23 @@ impl JobSlot {
 }
 
 /// The engine's own tally over the typed record: passed / failed / errored /
-/// not-applicable, by outcome status token.
+/// excused, counted on the lib's status enum itself.
+///
+/// The match is exhaustive on purpose. A status the engine adds later breaks
+/// this build instead of landing in a catch-all, which is how a new
+/// vocabulary member would otherwise be counted as excused without anyone
+/// deciding that.
 #[cfg(feature = "ssr")]
 fn tally(results: &veredictum::party::Results) -> (u64, u64, u64, u64) {
+    use veredictum::party::OutcomeStatus;
+
     let mut counts = (0_u64, 0_u64, 0_u64, 0_u64);
     for outcome in &results.outcomes {
-        let token = serde_json::to_string(&outcome.status).unwrap_or_default();
-        match token.trim_matches('"') {
-            "passed" => counts.0 += 1,
-            "failed" => counts.1 += 1,
-            "errored" => counts.2 += 1,
-            _ => counts.3 += 1,
+        match outcome.status {
+            OutcomeStatus::Passed => counts.0 += 1,
+            OutcomeStatus::Failed => counts.1 += 1,
+            OutcomeStatus::Errored => counts.2 += 1,
+            OutcomeStatus::Skipped | OutcomeStatus::NotApplicable => counts.3 += 1,
         }
     }
     counts
@@ -366,6 +372,55 @@ mod tests {
             super::job_dir(std::path::Path::new("/work/out"), 7),
             std::path::PathBuf::from("/work/out/console-job-7")
         );
+    }
+
+    /// Every status the engine records lands in exactly one column, and the
+    /// two citation-bearing selection records count as excused rather than as
+    /// failures.
+    #[cfg(feature = "ssr")]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+    )]
+    #[test]
+    fn the_tally_counts_every_recorded_status() -> Result<(), serde_json::Error> {
+        // Authored as bytes, the way the engine writes the document the
+        // console reads back (testing.md: a wire input may be raw JSON).
+        const RECORD: &str = r#"{
+            "sut": { "name": "sut", "version": "1" },
+            "runner": {
+                "name": "veredictum",
+                "version": "0",
+                "verification_pack_status": "passed"
+            },
+            "schedule_release": "0",
+            "tech_profile": { "its": "its-rest", "formats": [] },
+            "ixit_digest": "0",
+            "outcomes": [
+                { "case": "A-a", "status": "passed", "rows_driven": 1, "rows_total": 1 },
+                { "case": "A-b", "status": "passed", "rows_driven": 1, "rows_total": 1 },
+                { "case": "A-c", "status": "failed", "rows_driven": 1, "rows_total": 1 },
+                { "case": "A-d", "status": "errored", "rows_driven": 1, "rows_total": 1 },
+                {
+                    "case": "A-e",
+                    "status": "skipped",
+                    "rows_driven": 0,
+                    "rows_total": 1,
+                    "citation": "ITS-REST"
+                },
+                {
+                    "case": "A-f",
+                    "status": "not_applicable",
+                    "rows_driven": 0,
+                    "rows_total": 1,
+                    "citation": "ITS-REST"
+                }
+            ]
+        }"#;
+
+        let results: veredictum::party::Results = serde_json::from_str(RECORD)?;
+        assert_eq!(super::tally(&results), (2, 1, 1, 2));
+        Ok(())
     }
 
     #[test]

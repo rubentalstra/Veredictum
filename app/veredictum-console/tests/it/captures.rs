@@ -42,6 +42,48 @@ fn repo_root() -> Result<PathBuf, std::io::Error> {
         .canonicalize()
 }
 
+/// The tags that open a route declaration.
+///
+/// `<Routes …>` is deliberately absent: it is the fallback container, and a
+/// prefix split on `<Route` reads it as a declaration, then parses whatever
+/// route follows it a second time.
+const ROUTE_TAGS: [&str; 2] = ["<Route", "<ParentRoute"];
+
+/// Whether `tag` at byte offset `at` opens a route declaration.
+///
+/// The tag name must END at that offset, so `<Routes` never reads as
+/// `<Route`: the character after the tag is the attribute separator, never
+/// another name character.
+fn opens_route(app_rs: &str, at: usize, tag: &str) -> bool {
+    app_rs
+        .get(at + tag.len()..)
+        .and_then(|rest| rest.chars().next())
+        .is_some_and(|next| !next.is_ascii_alphanumeric() && next != '_')
+}
+
+/// The source following each route declaration's tag, in source order.
+///
+/// One entry per `<Route>` and `<ParentRoute>`, so a nested parent is read
+/// as its own route rather than swallowed by the sibling before it.
+fn route_declarations(app_rs: &str) -> Vec<&str> {
+    let mut starts = Vec::new();
+    for tag in ROUTE_TAGS {
+        let mut from = 0;
+        while let Some(offset) = app_rs.get(from..).and_then(|rest| rest.find(tag)) {
+            let at = from + offset;
+            if opens_route(app_rs, at, tag) {
+                starts.push(at + tag.len());
+            }
+            from = at + tag.len();
+        }
+    }
+    starts.sort_unstable();
+    starts
+        .into_iter()
+        .filter_map(|start| app_rs.get(start..))
+        .collect()
+}
+
 /// Extracts the routed paths from `app.rs`'s segment literals.
 ///
 /// The parse is deliberately narrow: it reads the `path=` attributes'
@@ -50,7 +92,7 @@ fn repo_root() -> Result<PathBuf, std::io::Error> {
 /// which is the point — the manifest must move with the router.
 fn routed_paths(app_rs: &str) -> BTreeSet<String> {
     let mut routes = BTreeSet::new();
-    for route in app_rs.split("<Route").skip(1) {
+    for route in route_declarations(app_rs) {
         let Some(path_attr) = route.split("path=").nth(1) else {
             continue;
         };
@@ -112,9 +154,10 @@ fn every_routed_surface_has_its_captures() -> Result<(), std::io::Error> {
 
     let routes = routed_paths(&app_rs);
     assert!(
-        routes.len() >= 9,
-        "the router parse found only {} routes — the narrow parser no longer reads app.rs; fix the parser, never the manifest",
-        routes.len()
+        routes.len() >= SLUG_OF.len(),
+        "the router parse found only {} routes for {} manifest entries — the narrow parser no longer reads app.rs; fix the parser, never the manifest",
+        routes.len(),
+        SLUG_OF.len()
     );
 
     let mut missing = Vec::new();
@@ -148,4 +191,47 @@ fn every_routed_surface_has_its_captures() -> Result<(), std::io::Error> {
         missing.join("\n  ")
     );
     Ok(())
+}
+
+/// An `app.rs`-shaped router carrying the two shapes the earlier parser read
+/// wrong: the `<Routes …>` container, and a second `<ParentRoute>` sibling.
+const ROUTER_SHAPE: &str = r#"
+    <Router>
+        <Routes fallback=|| view! { <NotFound /> }>
+            <ParentRoute path=StaticSegment("app") view=Shell>
+                <Route path=(StaticSegment("app"), StaticSegment("cases")) view=Cases />
+                <Route
+                    path=(
+                        StaticSegment("app"),
+                        StaticSegment("cases"),
+                        ParamSegment("case"),
+                    )
+                    view=Case
+                />
+            </ParentRoute>
+            <ParentRoute path=StaticSegment("admin") view=Admin>
+                <Route path=(StaticSegment("admin"), StaticSegment("keys")) view=Keys />
+            </ParentRoute>
+        </Routes>
+    </Router>
+"#;
+
+/// The container is not a declaration: five route tags, five declarations.
+///
+/// A `<Routes …>` sibling counted as a sixth is the phantom route this pins
+/// out, and it hides in the parsed paths because it re-reads the declaration
+/// that follows it.
+#[test]
+fn a_routes_container_opens_no_route_declaration() {
+    assert_eq!(route_declarations(ROUTER_SHAPE).len(), 5);
+}
+
+/// Every route tag is read, the second parent included.
+#[test]
+fn every_route_tag_is_read_including_a_second_parent() {
+    let expected: BTreeSet<String> = ["admin", "admin/keys", "app", "app/cases", "app/cases/:case"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(routed_paths(ROUTER_SHAPE), expected);
 }

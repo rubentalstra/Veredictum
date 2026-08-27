@@ -333,20 +333,16 @@ pub mod prepare {
             },
         )
         .map_err(|e| e.to_string())?;
-        Ok(judgement
+        judgement
             .report
             .performance
             .iter()
             .map(|verdict| {
-                let class = serde_json::to_string(&verdict.class).unwrap_or_default();
-                let outcome = serde_json::to_string(&verdict.verdict).unwrap_or_default();
-                format!(
-                    "class {} {}",
-                    class.trim_matches('"'),
-                    outcome.trim_matches('"')
-                )
+                let outcome = crate::engine::token(&verdict.verdict)?;
+                Ok(format!("class {} {outcome}", verdict.class.token()))
             })
-            .collect())
+            .collect::<Result<Vec<String>, serde_json::Error>>()
+            .map_err(|e| format!("a measured class verdict did not render: {e}"))
     }
 
     /// Writes the three presentation files beside the sealed set.

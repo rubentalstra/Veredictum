@@ -146,21 +146,51 @@ pub mod render {
     /// container image does not carry.
     const SEAL_CARD_MASTER: &str = include_str!("../../../assets/brand/veredictum-seal-card.svg");
 
+    /// Which fact of the record a dotted slot carries.
+    ///
+    /// The slot names its field, so a slot line and the value written on it
+    /// travel together and no slot can be filled from a position that has no
+    /// value behind it.
+    #[derive(Debug, Clone, Copy)]
+    enum SealSlot {
+        /// The product under test.
+        Sut,
+        /// The conformance profile the verdict is spoken on.
+        Profile,
+        /// The instant the record was signed.
+        SignedAt,
+    }
+
+    impl SealSlot {
+        /// The record's fact this slot is filled from.
+        fn value(self, facts: &SealFacts) -> &str {
+            match self {
+                Self::Sut => &facts.sut,
+                Self::Profile => &facts.profile_summary,
+                Self::SignedAt => &facts.signed_at,
+            }
+        }
+    }
+
     /// The dotted slot lines the master ships empty, with the baseline each
-    /// slot's value is written on. Order is the card's own: product under
-    /// test, conformance profile, verdict spoken on.
-    const SLOT_ANCHORS: [(&str, u32); 3] = [
+    /// slot's value is written on and the fact it carries. Order is the
+    /// card's own: product under test, conformance profile, verdict spoken
+    /// on.
+    const SLOT_ANCHORS: [(&str, u32, SealSlot); 3] = [
         (
             "<line x1=\"660\" y1=\"382\" x2=\"1180\" y2=\"382\" stroke=\"#258BB0\" stroke-width=\"1.6\" stroke-dasharray=\"2 4\"/>",
             375,
+            SealSlot::Sut,
         ),
         (
             "<line x1=\"660\" y1=\"458\" x2=\"1180\" y2=\"458\" stroke=\"#258BB0\" stroke-width=\"1.6\" stroke-dasharray=\"2 4\"/>",
             451,
+            SealSlot::Profile,
         ),
         (
             "<line x1=\"660\" y1=\"534\" x2=\"1180\" y2=\"534\" stroke=\"#258BB0\" stroke-width=\"1.6\" stroke-dasharray=\"2 4\"/>",
             527,
+            SealSlot::SignedAt,
         ),
     ];
 
@@ -202,22 +232,16 @@ pub mod render {
     /// slot line or the caption block the fill targets — a loud refusal,
     /// because a card that silently lost a slot would certify nothing.
     pub fn seal_card(facts: &SealFacts) -> Result<String, RenderError> {
-        let values = [
-            facts.sut.as_str(),
-            facts.profile_summary.as_str(),
-            facts.signed_at.as_str(),
-        ];
         let mut svg = String::from(SEAL_CARD_MASTER);
-        for (index, (anchor, baseline)) in SLOT_ANCHORS.iter().enumerate() {
+        for (index, (anchor, baseline, slot)) in SLOT_ANCHORS.iter().enumerate() {
             if !svg.contains(anchor) {
                 return Err(RenderError::MissingAnchor {
                     anchor: format!("slot {}", index + 1),
                 });
             }
-            let value = values.get(index).copied().unwrap_or_default();
             let filled = format!(
                 "{anchor}<text x=\"660\" y=\"{baseline}\" font-family=\"Georgia,serif\" font-size=\"24\" fill=\"#0b2530\">{}</text>",
-                escape(value)
+                escape(slot.value(facts))
             );
             svg = svg.replace(anchor, &filled);
         }

@@ -293,13 +293,9 @@ pub mod read {
                         .claims
                         .profiles
                         .iter()
-                        .map(|tier| {
-                            serde_json::to_string(tier)
-                                .unwrap_or_default()
-                                .trim_matches('"')
-                                .to_owned()
-                        })
-                        .collect(),
+                        .map(crate::engine::token)
+                        .collect::<Result<Vec<String>, serde_json::Error>>()
+                        .map_err(|e| format!("a claimed profile tier did not render: {e}"))?,
                     capabilities: count(statement.claims.capabilities.len()),
                 })
             })
