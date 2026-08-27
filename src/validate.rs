@@ -2316,8 +2316,9 @@ fn component_dir(token: &str) -> Option<&'static str> {
 
 /// Marker tokens a citation may carry between the component and its path
 /// hint: they name the SOURCE the claim is grounded on, not a path segment.
-/// `OAS` is the one in use — the oracle order requires an OAS-only ground to
-/// be cited AS the OAS (`.claude/rules/spec-adherence.md`).
+/// `OAS` is the one in use — the oracle order (the released docs text wins,
+/// the released OAS grounds an expectation only where the text is silent)
+/// requires an OAS-only ground to be cited AS the OAS.
 const CITATION_SOURCE_MARKERS: [&str; 1] = ["OAS"];
 
 /// One `<COMPONENT> <path hint> §<section>` clause of a citation. A citation
@@ -2693,8 +2694,9 @@ fn check_spec_refs(case: &CaseCore, who: &str, spec: &SpecIndex<'_>, findings: &
 }
 
 /// The one non-citation clause a binding `source` may carry: the explicit
-/// spec-silence flag an `unrealized`/`extension` declaration must state
-/// (`.claude/rules/spec-adherence.md` — where the specs are SILENT, flag it).
+/// spec-silence flag an `unrealized`/`extension` declaration must state —
+/// where the specifications are silent, the declaration says so instead of
+/// citing.
 const SPEC_SILENCE_FLAG_PREFIX: &str = "no openehr spec governs";
 /// The other non-citation clause: the ambiguity-register entry that
 /// adjudicated the boundary (`ambiguity:` carries the id; the `source` may
