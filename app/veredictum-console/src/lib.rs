@@ -41,10 +41,13 @@ compile_error!("features \"hydrate\" and \"ssr\" cannot be enabled at the same t
 pub const ENGINE_PIN: &str = "0.1.0-alpha.4";
 
 pub mod app;
+pub mod catalogue_api;
 pub mod components;
 #[cfg(feature = "ssr")]
 pub mod engine;
 pub mod pages;
+#[cfg(feature = "ssr")]
+pub mod state;
 pub mod theme;
 
 /// The browser entry point: installs the panic hook so a client-side panic

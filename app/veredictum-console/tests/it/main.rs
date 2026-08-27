@@ -6,3 +6,5 @@
 
 #[cfg(feature = "ssr")]
 mod engine_gate;
+#[cfg(feature = "ssr")]
+mod read_surfaces;

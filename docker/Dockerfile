@@ -132,7 +132,9 @@ WORKDIR /app
 ENV LEPTOS_OUTPUT_NAME=veredictum-console \
     LEPTOS_SITE_ROOT=/app/site \
     LEPTOS_SITE_PKG_DIR=pkg \
-    LEPTOS_SITE_ADDR=0.0.0.0:3000
+    LEPTOS_SITE_ADDR=0.0.0.0:3000 \
+    VEREDICTUM_ROOT=/work/artifacts \
+    VEREDICTUM_SPECS=/work/specs/openehr
 EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/veredictum-console"]
 # The binary is its own probe (`healthcheck` mode GETs /healthz and exits by

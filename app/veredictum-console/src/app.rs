@@ -13,11 +13,11 @@ use leptos::prelude::{
 };
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
-    StaticSegment,
+    ParamSegment, StaticSegment,
     components::{ParentRoute, Route, Router, Routes},
 };
 
-use crate::pages::catalogue::Catalogue;
+use crate::pages::catalogue::{Case, Catalogue, Chapter};
 use crate::pages::instrument::Instrument;
 use crate::pages::run::Run;
 use crate::pages::shell::Shell;
@@ -62,6 +62,18 @@ pub fn App() -> impl IntoView {
                 <ParentRoute path=StaticSegment("") view=Shell>
                     <Route path=StaticSegment("") view=Instrument />
                     <Route path=StaticSegment("catalogue") view=Catalogue />
+                    <Route
+                        path=(StaticSegment("catalogue"), ParamSegment("chapter"))
+                        view=Chapter
+                    />
+                    <Route
+                        path=(
+                            StaticSegment("catalogue"),
+                            ParamSegment("chapter"),
+                            ParamSegment("case"),
+                        )
+                        view=Case
+                    />
                     <Route path=StaticSegment("run") view=Run />
                     <Route path=StaticSegment("verify") view=Verify />
                 </ParentRoute>

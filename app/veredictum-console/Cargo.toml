@@ -50,6 +50,10 @@ icondata_core = "0.1"
 # (the FerroEHR lesson recorded in .claude/rules/leptos-ui.md §1).
 leptos-use = "0.19"
 
+# The read seam's typed rows serialize across the server-fn wire on both
+# targets.
+serde = { version = "1", features = ["derive"] }
+
 # server-only (behind `ssr`)
 serde_json = { version = "1", optional = true }
 thiserror = { version = "2", optional = true }
