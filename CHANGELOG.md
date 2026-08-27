@@ -84,6 +84,27 @@ version on.
 
 ### Changed
 
+- **A measured population now varies leaf by leaf, so earlier measured records
+  are not comparable with later ones (#137).** The performance pack used to
+  stamp each composition with only the event-context times and the composer
+  name, so every composition of a population carried identical clinical values.
+  A server storing that population can share structure, index entries and cache
+  pages that a real population would never let it share, which flattered every
+  number measured over it — records produced before this change are flattered
+  in exactly that way, and a number from one of them must not be compared with
+  a number produced after it. The pack now reads the leaf constraints the
+  operational template itself declares and redraws every numeric leaf inside
+  its own permitted range: `DV_QUANTITY` magnitudes against the
+  `C_DV_QUANTITY` interval declared for the leaf's units, and `DV_COUNT`
+  magnitudes against the `C_INTEGER` range declared for a `DV_COUNT`
+  magnitude. A leaf whose permitted range the template does not declare, and
+  every coded, textual and date-time leaf, keeps its committed value, so no
+  arrival can send an instance the template refuses. The draw is seeded from
+  the template key and the arrival index, so the same run reproduces the same
+  population byte for byte.
+- **`perf_run::pack::PackTemplate` carries a `constraints` field.** The library
+  type gains the leaf ranges read out of its operational template, which is a
+  breaking change for anything constructing the struct literally.
 - **The console answers an unknown address with a real page (#84).** A path
   outside the route tree used to render the bare string "Page not found."
   with no chrome, no title and no way back. It now renders inside the

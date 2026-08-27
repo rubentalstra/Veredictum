@@ -21,8 +21,9 @@
 //! records honestly as an error arrival.
 //!
 //! Module map: [`client`] the blocking SUT client · [`pack`] the CKM
-//! template pack + payload stamping · [`corpus`] the seeded scale corpus +
-//! the standing ward · [`schedule`] journey expansion into planned
+//! template pack + payload stamping · [`jitter`] the template-constrained
+//! numeric-leaf redraw the stamping applies · [`corpus`] the seeded scale
+//! corpus + the standing ward · [`schedule`] journey expansion into planned
 //! arrivals (uniform + diurnal curves) · [`execute`] the per-stage wire
 //! realization + captured-id state · [`window`] the measured window core
 //! shared by the class runs (conformance) and the stress ladder
@@ -32,10 +33,28 @@
 pub mod client;
 pub mod corpus;
 pub mod execute;
+pub mod jitter;
 pub mod pack;
 pub mod resources;
 pub mod schedule;
 pub mod window;
+
+/// FNV-1a over a stream seed plus the caller's index parts: the deterministic
+/// draw shared by the arrival schedule and the payload jitter, each carrying
+/// its own seed so the two streams never correlate.
+///
+/// The parameters and the 64-bit offset basis are the reference ones
+/// (<http://www.isthe.com/chongo/tech/comp/fnv/index.html>).
+pub(crate) fn fnv1a(seed: u64, parts: &[u64]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325 ^ seed;
+    for part in parts {
+        for byte in part.to_le_bytes() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    }
+    hash
+}
 
 /// Set the moment any arrival observes `429 Too Many Requests`.
 ///
