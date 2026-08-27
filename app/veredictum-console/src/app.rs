@@ -19,8 +19,10 @@ use leptos_router::{
 
 use crate::pages::catalogue::{Case, Catalogue, Chapter};
 use crate::pages::instrument::Instrument;
+use crate::pages::results::Results;
 use crate::pages::run::{Connect, Live, Run, Scope};
 use crate::pages::shell::Shell;
+use crate::pages::verdicts::Verdicts;
 use crate::pages::verify::Verify;
 
 /// The HTML document the server renders around the application: the head with
@@ -99,6 +101,14 @@ pub fn App() -> impl IntoView {
                     />
                     <Route path=(StaticSegment("run"), StaticSegment("scope")) view=Scope />
                     <Route path=(StaticSegment("run"), StaticSegment("live")) view=Live />
+                    <Route
+                        path=(StaticSegment("run"), StaticSegment("results"))
+                        view=Results
+                    />
+                    <Route
+                        path=(StaticSegment("run"), StaticSegment("verdicts"))
+                        view=Verdicts
+                    />
                     <Route path=StaticSegment("verify") view=Verify />
                 </ParentRoute>
             </Routes>

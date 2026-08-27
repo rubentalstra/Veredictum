@@ -20,6 +20,17 @@ version on.
 
 ### Added
 
+- **The console reads the record and speaks the verdict (#67).** Results:
+  the finished run's outcomes red-rows-first with the engine's own tallies,
+  and a URL-addressed detail joining each outcome to its catalogue case —
+  the recorded reason verbatim, the excusing citation, the failing step and
+  the per-row evidence, with the attribution law stated where a red row is
+  read (the wire transcript itself is #96). Verdicts: the profile matrix and
+  per-capability evidence with the NotEvidenced/NoCases coverage bounds
+  first-class, computed by the published lib's own judgement — the same pure
+  function the CLI runs, so the rendered report, statement and certificate
+  shown (and the verdicts.json beside them) are the CLI's bodies by
+  construction. A statement-less run answers honestly: no claim, no verdict.
 - **The console runs the campaign live (#66).** Scope's save gains "Start
   the run": the console writes the job's ixit (env-var names only, pinned by
   a test and parsed back through the published lib's own reader), spawns the
