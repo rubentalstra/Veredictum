@@ -134,11 +134,7 @@ pub fn TableFooter(
     view! {
         <div class="flex items-center justify-between border-t border-edge px-3 py-2 text-sm text-ink-muted">
             <span class="tabular-nums">
-                {format!(
-                    "{}–{} of {total}",
-                    if total == 0 { 0 } else { start + 1 },
-                    end,
-                )}
+                {format!("{}–{} of {total}", if total == 0 { 0 } else { start + 1 }, end)}
             </span>
             <span class="flex items-center gap-3">{previous} {next}</span>
         </div>

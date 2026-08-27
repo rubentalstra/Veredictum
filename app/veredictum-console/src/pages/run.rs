@@ -219,7 +219,9 @@ pub fn Connect() -> impl IntoView {
                 }}
                 <div class="flex items-center gap-2">
                     <button type="button" class=BTN_SECONDARY on:click=dispatch_probe>
-                        {move || if probe.pending().get() { "Probing…" } else { "Probe connection" }}
+                        {move || {
+                            if probe.pending().get() { "Probing…" } else { "Probe connection" }
+                        }}
                     </button>
                 </div>
                 {move || {
@@ -412,7 +414,11 @@ pub fn Scope() -> impl IntoView {
                             view_draft.sut_name,
                             view_draft.sut_version,
                             view_draft.auth,
-                            if view_draft.probed_ok { " · probed ✓" } else { " · probe not 2xx" },
+                            if view_draft.probed_ok {
+                                " · probed ✓"
+                            } else {
+                                " · probe not 2xx"
+                            },
                         );
                         view! { <Pane label="connection" body=connection /> }.into_any()
                     }

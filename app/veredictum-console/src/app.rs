@@ -102,20 +102,11 @@ pub fn App() -> impl IntoView {
                         view=Case
                     />
                     <Route path=StaticSegment("run") view=Run />
-                    <Route
-                        path=(StaticSegment("run"), StaticSegment("connect"))
-                        view=Connect
-                    />
+                    <Route path=(StaticSegment("run"), StaticSegment("connect")) view=Connect />
                     <Route path=(StaticSegment("run"), StaticSegment("scope")) view=Scope />
                     <Route path=(StaticSegment("run"), StaticSegment("live")) view=Live />
-                    <Route
-                        path=(StaticSegment("run"), StaticSegment("results"))
-                        view=Results
-                    />
-                    <Route
-                        path=(StaticSegment("run"), StaticSegment("verdicts"))
-                        view=Verdicts
-                    />
+                    <Route path=(StaticSegment("run"), StaticSegment("results")) view=Results />
+                    <Route path=(StaticSegment("run"), StaticSegment("verdicts")) view=Verdicts />
                     <Route path=StaticSegment("verify") view=Verify />
                 </ParentRoute>
             </Routes>

@@ -25,6 +25,10 @@ use crate::components::surface::{CARD_PAD, CARD_TITLE};
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"
 )]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the four stat cards and the mounts panel — one cohesive screen, its sections erased per rules §1"
+)]
 #[component]
 pub fn Instrument() -> impl IntoView {
     // Created in setup, never inside a Suspend (rules §4).
@@ -44,7 +48,10 @@ pub fn Instrument() -> impl IntoView {
                     Ok(InstrumentView::Loaded(s)) => {
                         let findings_ok = s.findings == 0;
                         view! {
-                            <div id="instrument-stats" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            <div
+                                id="instrument-stats"
+                                class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                            >
                                 <StatCard
                                     label="Case cores"
                                     value=s.cases.to_string()

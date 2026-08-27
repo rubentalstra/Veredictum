@@ -233,9 +233,6 @@ pub fn Chapter() -> impl IntoView {
                             }
                                 .into_any();
                         }
-                        // Paging windows over the FLAT case sequence; band
-                        // headers render wherever their first visible case
-                        // lands, so the two-level reading survives paging.
                         let (start, end) = page_window(current_page, total);
                         let mut index = 0_usize;
                         let sections = bands
@@ -256,11 +253,11 @@ pub fn Chapter() -> impl IntoView {
                                     .iter()
                                     .cloned()
                                     .map(|row| {
-                                        let href = format!(
-                                            "/catalogue/{chapter_key}/{}",
-                                            row.id,
-                                        );
+                                        let href = format!("/catalogue/{chapter_key}/{}", row.id);
                                         let badges = tier_badges(&row.tiers);
+                                        // Paging windows over the FLAT case sequence; band
+                                        // headers render wherever their first visible case
+                                        // lands, so the two-level reading survives paging.
                                         view! {
                                             <tr class="hover:bg-sunken">
                                                 <td class=TD>
@@ -390,11 +387,19 @@ fn case_view(chapter_key: &str, case: CaseDetail) -> impl IntoView + use<> {
             .into_iter()
             .map(|binding| {
                 let badge = if binding.realized {
-                    view! { <span class="rounded-control bg-ok-subtle px-1.5 py-0.5 text-xs text-ink">"realized"</span> }
-                        .into_any()
+                    view! {
+                        <span class="rounded-control bg-ok-subtle px-1.5 py-0.5 text-xs text-ink">
+                            "realized"
+                        </span>
+                    }
+                    .into_any()
                 } else {
-                    view! { <span class="rounded-control bg-warn-subtle px-1.5 py-0.5 text-xs text-ink">"unrealized"</span> }
-                        .into_any()
+                    view! {
+                        <span class="rounded-control bg-warn-subtle px-1.5 py-0.5 text-xs text-ink">
+                            "unrealized"
+                        </span>
+                    }
+                    .into_any()
                 };
                 view! {
                     <li class="flex items-center gap-2">

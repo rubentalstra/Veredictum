@@ -77,8 +77,7 @@ pub fn PageHeader(
         view! {
             <nav aria-label="Breadcrumb" class="mb-1">
                 <ol class="flex flex-wrap items-center gap-1.5 text-sm">
-                    {links}
-                    <li aria-current="page" class="text-ink-muted">
+                    {links} <li aria-current="page" class="text-ink-muted">
                         {move || title.get()}
                     </li>
                 </ol>
@@ -88,8 +87,7 @@ pub fn PageHeader(
     });
     view! {
         <header class="mb-6">
-            {trail}
-            <div class="flex flex-wrap items-center justify-between gap-3">
+            {trail} <div class="flex flex-wrap items-center justify-between gap-3">
                 <h1 class="text-xl font-semibold text-ink-heading">{move || title.get()}</h1>
                 <div class="flex items-center gap-2">{children.map(|c| c())}</div>
             </div>
