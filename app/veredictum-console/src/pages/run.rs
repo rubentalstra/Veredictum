@@ -19,11 +19,12 @@ use crate::components::field::{BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, TEXTARE
 use crate::components::format_view::{Pane, inline_error};
 use crate::components::page_header::{Crumb, PageHeader};
 use crate::components::surface::{CARD_PAD, CARD_TITLE};
+use crate::components::toast;
 use crate::run_api::fns::{
-    CancelRun, FetchScopePreview, ProbeAndSave, SaveScope, StartRun, fetch_draft, fetch_job,
-    fetch_statement_body, fetch_statements,
+    ProbeAndSave, cancel_run, fetch_draft, fetch_job, fetch_scope_preview, fetch_statement_body,
+    fetch_statements, save_scope, start_run,
 };
-use crate::run_api::{AuthChoice, ProbeAnswer};
+use crate::run_api::{AuthChoice, ClaimSummary, ProbeAnswer, ScopePreview};
 use crate::run_job::{JobStatus, JobView};
 
 /// `/run` — the wizard's entry: always the first step.
@@ -308,9 +309,87 @@ pub fn Scope() -> impl IntoView {
     });
     let filter = RwSignal::new(String::new());
     let record_exchanges = RwSignal::new(false);
-    let preview = ServerAction::<FetchScopePreview>::new();
-    let save = ServerAction::<SaveScope>::new();
-    let start = ServerAction::<StartRun>::new();
+    // Every mutation below reports BOTH outcomes as a toast and keeps its
+    // inline pane, where the diagnostic is worth reading line by line (the
+    // crate CLAUDE.md's error-feedback doctrine). The answers land in each
+    // action's own async continuation — the sanctioned shape, since the
+    // dispatch IS the user event (rules §2).
+    let previewed = RwSignal::new(None::<Result<ScopePreview, String>>);
+    let preview = Action::new(move |filter: &String| {
+        let filter = filter.clone();
+        async move {
+            match fetch_scope_preview(filter).await {
+                Ok(scope) => {
+                    toast::success(
+                        "Selection previewed",
+                        &format!(
+                            "{} cases are in scope; every one of them lands as an outcome or a recorded exception.",
+                            scope.total
+                        ),
+                    );
+                    previewed.set(Some(Ok(scope)));
+                }
+                Err(e) => {
+                    let body = e.to_string();
+                    toast::error(
+                        "The preview was refused",
+                        &format!(
+                            "The catalogue could not be counted: {body}. Check the mounted artifact root."
+                        ),
+                    );
+                    previewed.set(Some(Err(body)));
+                }
+            }
+        }
+    });
+    let saved = RwSignal::new(None::<Result<Option<ClaimSummary>, String>>);
+    let save = Action::new(move |input: &ScopeInput| {
+        let input = input.clone();
+        async move {
+            match save_scope(
+                Some(input.statement_json),
+                Some(input.filter),
+                input.record_exchanges,
+            )
+            .await
+            {
+                Ok(claim) => {
+                    toast::success("Scope saved", &saved_body(claim.as_ref()));
+                    saved.set(Some(Ok(claim)));
+                }
+                Err(e) => {
+                    let body = e.to_string();
+                    toast::error(
+                        "The scope was refused",
+                        &format!(
+                            "The pasted claim was not stored: {body}. Correct it and save again."
+                        ),
+                    );
+                    saved.set(Some(Err(body)));
+                }
+            }
+        }
+    });
+    let started = RwSignal::new(None::<Result<u64, String>>);
+    let start = Action::new(move |(): &()| async move {
+        match start_run().await {
+            Ok(id) => {
+                toast::success(
+                    "Run started",
+                    &format!("Job {id} is driving; watch it on the Live screen."),
+                );
+                started.set(Some(Ok(id)));
+            }
+            Err(e) => {
+                let body = e.to_string();
+                toast::error(
+                    "The run was refused",
+                    &format!("Nothing was driven: {body}."),
+                );
+                started.set(Some(Err(body)));
+            }
+        }
+    });
 
     view! {
         <Title text="Scope · Run · Veredictum console" />
@@ -451,9 +530,7 @@ pub fn Scope() -> impl IntoView {
                         type="button"
                         class=BTN_SECONDARY
                         on:click=move |_| {
-                            preview.dispatch(FetchScopePreview {
-                                filter: filter.get(),
-                            });
+                            preview.dispatch(filter.get());
                         }
                     >
                         "Preview selection"
@@ -462,22 +539,19 @@ pub fn Scope() -> impl IntoView {
                         type="button"
                         class=BTN_PRIMARY
                         on:click=move |_| {
-                            save.dispatch(SaveScope {
-                                statement_json: Some(statement_json.get()),
-                                filter: Some(filter.get()),
+                            save.dispatch(ScopeInput {
+                                statement_json: statement_json.get(),
+                                filter: filter.get(),
                                 record_exchanges: record_exchanges.get(),
                             });
-                            preview.dispatch(FetchScopePreview {
-                                filter: filter.get(),
-                            });
+                            preview.dispatch(filter.get());
                         }
                     >
                         "Save scope"
                     </button>
                 </div>
                 {move || {
-                    preview
-                        .value()
+                    previewed
                         .get()
                         .map(|result| match result {
                             Ok(scope) => {
@@ -500,30 +574,15 @@ pub fn Scope() -> impl IntoView {
                                 }
                                     .into_any()
                             }
-                            Err(e) => inline_error(&e.to_string()).into_any(),
+                            Err(e) => inline_error(&e).into_any(),
                         })
                 }}
                 {move || {
-                    save.value()
+                    saved
                         .get()
                         .map(|result| match result {
                             Ok(claim) => {
-                                let line = claim
-                                    .map_or_else(
-                                        || String::from(
-                                            "Scope saved without a claim: everything applicable drives, nothing is certified.",
-                                        ),
-                                        |summary| format!(
-                                            "Claim accepted: {} — profiles {} — {} capabilities.",
-                                            summary.product,
-                                            if summary.profiles.is_empty() {
-                                                String::from("none")
-                                            } else {
-                                                summary.profiles.join(", ")
-                                            },
-                                            summary.capabilities,
-                                        ),
-                                    );
+                                let line = saved_body(claim.as_ref());
                                 view! {
                                     <div class="space-y-2">
                                         <p class="text-sm text-ink">{line}</p>
@@ -531,7 +590,7 @@ pub fn Scope() -> impl IntoView {
                                             type="button"
                                             class=BTN_PRIMARY
                                             on:click=move |_| {
-                                                start.dispatch(StartRun {});
+                                                start.dispatch(());
                                             }
                                         >
                                             "Start the run"
@@ -540,12 +599,11 @@ pub fn Scope() -> impl IntoView {
                                 }
                                     .into_any()
                             }
-                            Err(e) => inline_error(&e.to_string()).into_any(),
+                            Err(e) => inline_error(&e).into_any(),
                         })
                 }}
                 {move || {
-                    start
-                        .value()
+                    started
                         .get()
                         .map(|result| match result {
                             Ok(id) => {
@@ -561,12 +619,47 @@ pub fn Scope() -> impl IntoView {
                                 }
                                     .into_any()
                             }
-                            Err(e) => inline_error(&e.to_string()).into_any(),
+                            Err(e) => inline_error(&e).into_any(),
                         })
                 }}
             </div>
         </section>
     }
+}
+
+/// What one Save-scope dispatch carries: the pasted claim, the filter, and
+/// the wire-recording choice, read off the form at click time.
+#[derive(Debug, Clone)]
+struct ScopeInput {
+    /// The pasted statement document, empty for a no-claim run.
+    statement_json: String,
+    /// The case-id filter, empty for the whole catalogue.
+    filter: String,
+    /// Whether the run persists its wire exchanges.
+    record_exchanges: bool,
+}
+
+/// The one sentence a saved scope is reported by, in the toast and inline —
+/// one reader for one claim.
+fn saved_body(claim: Option<&ClaimSummary>) -> String {
+    claim.map_or_else(
+        || {
+            String::from(
+                "Scope saved without a claim: everything applicable drives, nothing is certified.",
+            )
+        },
+        |summary| {
+            let profiles = if summary.profiles.is_empty() {
+                String::from("none")
+            } else {
+                summary.profiles.join(", ")
+            };
+            format!(
+                "Claim accepted: {} — profiles {profiles} — {} capabilities.",
+                summary.product, summary.capabilities,
+            )
+        },
+    )
 }
 
 /// Renders milliseconds as `mm:ss` — display truncation is the intent of
@@ -593,7 +686,21 @@ pub fn Live() -> impl IntoView {
     // once and the timer never runs (pause/resume are browser-only).
     let tick = RwSignal::new(0_u64);
     let job = Resource::new(move || tick.get(), |_| fetch_job());
-    let cancel = ServerAction::<CancelRun>::new();
+    // Cancel is a mutation, so both outcomes are notifications: the live
+    // screen's own status chip is the standing record, and a silent refusal
+    // below the fold would read as "nothing happened".
+    let cancel = Action::new(move |(): &()| async move {
+        match cancel_run().await {
+            Ok(()) => toast::success(
+                "Cancel requested",
+                "The engine process was signalled; the job reports cancelled once it exits.",
+            ),
+            Err(e) => toast::error(
+                "The cancel was refused",
+                &format!("The run is still driving: {e}."),
+            ),
+        }
+    });
     Effect::new(move |_| {
         let _pausable =
             leptos_use::use_interval_fn(move || tick.update(|t| *t = t.wrapping_add(1)), 1_000);
@@ -639,7 +746,7 @@ fn idle_view() -> impl IntoView + use<> {
     clippy::too_many_lines,
     reason = "the progress header, the tail pane and the finished summary — one cohesive assembly, each section already erased"
 )]
-fn live_view(job: &JobView, cancel: ServerAction<CancelRun>) -> impl IntoView + use<> {
+fn live_view(job: &JobView, cancel: Action<(), ()>) -> impl IntoView + use<> {
     // Display truncation is intended: a bar at 99.9% shows 99.
     let percent = job
         .completed
@@ -728,7 +835,7 @@ fn live_view(job: &JobView, cancel: ServerAction<CancelRun>) -> impl IntoView + 
                                 type="button"
                                 class=crate::components::field::BTN_DANGER
                                 on:click=move |_| {
-                                    cancel.dispatch(CancelRun {});
+                                    cancel.dispatch(());
                                 }
                             >
                                 "Cancel run"

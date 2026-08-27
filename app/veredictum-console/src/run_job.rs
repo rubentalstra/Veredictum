@@ -131,6 +131,17 @@ struct JobState {
     cancel_requested: bool,
 }
 
+/// The directory one job's artifacts land in, under the mounted output tree.
+///
+/// The ONE derivation of that path (#134): the run seam creates it before the
+/// spawn, and the export seam reads the sealed bundle back out of it. Two
+/// spellings of the same claim drift the moment either side changes.
+#[cfg(feature = "ssr")]
+#[must_use]
+pub fn job_dir(out: &std::path::Path, id: u64) -> std::path::PathBuf {
+    out.join(format!("console-job-{id}"))
+}
+
 /// The one job slot: the console runs at most one campaign at a time.
 #[cfg(feature = "ssr")]
 #[derive(Debug, Clone, Default)]
@@ -347,6 +358,15 @@ fn tally(results: &veredictum::party::Results) -> (u64, u64, u64, u64) {
 #[cfg(test)]
 mod tests {
     use super::{eta_ms, parse_progress};
+
+    #[cfg(feature = "ssr")]
+    #[test]
+    fn the_job_directory_is_the_output_root_plus_the_id() {
+        assert_eq!(
+            super::job_dir(std::path::Path::new("/work/out"), 7),
+            std::path::PathBuf::from("/work/out/console-job-7")
+        );
+    }
 
     #[test]
     fn the_progress_grammar_parses_both_shapes() {
