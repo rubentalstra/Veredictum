@@ -77,9 +77,16 @@ must derive from the mounted artifacts or not exist.
 ## Gates
 
 `/ui-gates`: clippy on **native (`--features ssr`) and wasm32 (hydrate)**
-targets, `cargo nextest run`, `cargo fmt` (plus `leptosfmt` when installed),
-cargo-leptos build when the build surface changed, and `scripts/ui-e2e.sh`
-for the browser journeys.
+targets, `cargo nextest run`, `cargo fmt` plus `leptosfmt`, cargo-leptos build
+when the build surface changed, and `scripts/ui-e2e.sh` for the browser
+journeys.
+
+**leptosfmt is pinned at 0.1.33** (`cargo install --locked leptosfmt@0.1.33`),
+and `leptosfmt --check app/veredictum-console/src` is clean under exactly that
+version. The pin is the whole point: leptosfmt's `view!` layout changes between
+releases, so an unpinned gate either reformats eight untouched files or reports
+green having never run (#135). A version bump is its own formatting-only
+change, with the pin here moved in the same commit.
 
 `scripts/ui-e2e.sh` builds the console, serves it over this repository's own
 `artifacts/` and `specs/openehr/` mounts, starts a digest-pinned headless

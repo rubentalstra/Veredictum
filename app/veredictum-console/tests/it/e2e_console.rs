@@ -500,16 +500,30 @@ async fn e2e_dark_mode_persists_across_a_reload() {
     h.finish().await;
 }
 
-/// An unrouted path renders the router's own 404 answer rather than a blank
-/// document or a server error.
+/// An unrouted path renders the designed 404 inside the console's own chrome
+/// (#84) rather than a blank document, a bare string, or a server error.
 #[tokio::test]
 async fn e2e_unknown_route_renders_the_fallback() {
     let Some(h) = Harness::start("not-found").await else {
         return;
     };
     h.goto_unhydrated("/no-such-surface").await;
-    h.wait_xpath("//body[contains(., 'Page not found.')]").await;
+    // The server-rendered heading, so the page is the assertion before any
+    // WASM loads; the chrome and the route home prove it is the designed
+    // surface rather than the old bare string.
+    h.wait_xpath("//h1[normalize-space()='Page not found']")
+        .await;
+    h.wait_css("nav[aria-label='Primary'] a[href='/catalogue']")
+        .await;
+    h.wait_xpath("//a[normalize-space()='Back to the instrument']")
+        .await;
+    // The path that missed is named, so the reader knows what was asked for.
+    h.wait_xpath("//body[contains(., '/no-such-surface')]")
+        .await;
     h.wait_hydrated().await;
+    h.capture("not-found-light").await;
+    h.enable_dark().await;
+    h.capture("not-found-dark").await;
     // The waived entry is the 404 this journey exists to provoke: the browser
     // logs a main-document 404 as a page error, and the server answering 404
     // for an unrouted path is the assertion.
@@ -518,8 +532,14 @@ async fn e2e_unknown_route_renders_the_fallback() {
     h.finish().await;
 }
 
-/// The wizard's first step renders: /run redirects to Connect, the form and
-/// the auth control exist, and Scope without a draft answers honestly.
+/// The wizard's first two steps render: /run redirects to Connect, the form
+/// and the auth control exist, and Scope carries its own selection controls.
+///
+/// Scope is asserted by its OWN structure, never by the absence of a draft
+/// (#135): the console holds one draft and one job slot, so an assertion on
+/// the empty-draft copy passes or fails by which journey nextest happened to
+/// run first. The heading, the claim box, the filter and the two controls are
+/// on the page whatever the draft holds.
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_run_wizard_reaches_connect_and_scope() {
     let Some(h) = Harness::start("run-wizard").await else {
@@ -534,8 +554,18 @@ async fn e2e_run_wizard_reaches_connect_and_scope() {
     h.enable_dark().await;
     h.capture("connect-dark").await;
     h.goto("/run/scope").await;
-    h.wait_xpath("//body[contains(., 'No connection draft')]")
+    h.wait_xpath("//h1[contains(., 'Scope')]").await;
+    h.wait_css("textarea#statement-json").await;
+    h.wait_css("input#filter").await;
+    h.wait_css("input#record-exchanges").await;
+    h.wait_xpath("//button[contains(., 'Preview selection')]")
         .await;
+    h.wait_xpath("//button[contains(., 'Save scope')]").await;
+    // The connection pane resolves either way — a draft summary labelled
+    // `connection`, or the honest "No connection draft" answer — so what is
+    // asserted is that the Suspense RESOLVED, never which of the two it
+    // landed on.
+    h.wait_xpath("//body[contains(., 'connection')]").await;
     h.assert_console_clean(&[]).await;
     h.finish().await;
 }
