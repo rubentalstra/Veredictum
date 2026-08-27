@@ -1091,4 +1091,388 @@ mod tests {
         c.set(name.clone(), Captured::Scalar("id-1".into()));
         assert!(eval_unique(&name, &[a, c]).is_err());
     }
+
+    /// A FLAT body is "key-value pairs at a single level in JSON where …
+    /// keys are full WT paths" and "context fields MUST use `ctx/` prefix"
+    /// (ITS-REST `docs/simplified_formats/master04-basic_concepts.adoc`
+    /// §Format variants → Flat format), which is exactly the shape this
+    /// predicate reads: path-formed keys, no nested object under any of them.
+    #[test]
+    fn a_flat_body_is_recognized_by_its_single_level_of_path_keys() {
+        let flat = json!({
+            "ctx/language": "en",
+            "vital_signs/body_temperature:0/any_event:0/temperature|magnitude": 37.5,
+            "vital_signs/body_temperature:0/any_event:0/temperature|unit": "°C"
+        });
+        assert!(is_flat_map(&flat));
+        // A canonical body nests, and carries no path-formed key.
+        assert!(!is_flat_map(&json!({
+            "_type": "COMPOSITION",
+            "name": { "value": "Vital signs" }
+        })));
+        // One path-formed key is not enough if a value still nests.
+        assert!(!is_flat_map(&json!({
+            "vital_signs/x|magnitude": 1,
+            "nested": { "a": 1 }
+        })));
+        assert!(!is_flat_map(&json!({})), "an empty object is not a body");
+        assert!(!is_flat_map(&json!([])), "an array is not a FLAT map");
+    }
+
+    /// The STRUCTURED→FLAT algorithm: "build path by concatenating property
+    /// names with forward slash", "for properties with a pipe prefix, append
+    /// to a parent path with pipe", "unwrap arrays" and "preserve instance
+    /// indices" (ITS-REST
+    /// `docs/simplified_formats/master04-basic_concepts.adoc` §Conversion
+    /// Between Formats → Structured to Flat). The empty-string key is the
+    /// element's own main value, so it flattens onto the parent path itself.
+    #[test]
+    fn a_structured_body_flattens_onto_its_flat_key_form() {
+        let structured = json!({
+            "vital_signs": [ {
+                "body_temperature": [ {
+                    "any_event": [ {
+                        "temperature": [ { "|magnitude": 37.5, "|unit": "°C" } ],
+                        "time": [ { "": "2026-07-21T10:00:00Z" } ]
+                    } ]
+                } ]
+            } ]
+        });
+        let mut flat = BTreeMap::new();
+        flatten_structured(&structured, "", &mut flat);
+        let keys: Vec<&str> = flat.keys().map(String::as_str).collect();
+        assert_eq!(
+            keys,
+            vec![
+                "vital_signs:0/body_temperature:0/any_event:0/temperature:0|magnitude",
+                "vital_signs:0/body_temperature:0/any_event:0/temperature:0|unit",
+                "vital_signs:0/body_temperature:0/any_event:0/time:0",
+            ]
+        );
+        assert_eq!(
+            flat.get("vital_signs:0/body_temperature:0/any_event:0/temperature:0|magnitude"),
+            Some(&json!(37.5))
+        );
+    }
+
+    /// The attribute-key shape is what tells a simplified body from a
+    /// canonical one: `|`-prefixed and empty-string keys are STRUCTURED
+    /// spellings (master04 §Format variants), and canonical JSON carries
+    /// neither — it carries `_type`.
+    #[test]
+    fn a_canonical_body_is_never_read_as_a_simplified_one() {
+        let canonical = json!({
+            "_type": "COMPOSITION",
+            "name": { "_type": "DV_TEXT", "value": "Vital signs" }
+        });
+        assert!(!has_simplified_leaf_keys(&canonical));
+        assert!(
+            simplified_as_flat(&canonical).is_none(),
+            "a canonical body has no FLAT reading"
+        );
+        // A STRUCTURED body does, and it comes back flattened.
+        let structured = json!({ "vital_signs": [ { "temperature": [ { "|magnitude": 1 } ] } ] });
+        assert!(has_simplified_leaf_keys(&structured));
+        let flat = simplified_as_flat(&structured).expect("a STRUCTURED body reads as FLAT");
+        assert_eq!(
+            flat.keys().map(String::as_str).collect::<Vec<_>>(),
+            vec!["vital_signs:0/temperature:0|magnitude"]
+        );
+        // A FLAT body reads as itself, verbatim.
+        let already_flat = json!({ "ctx/language": "en", "vitals/temp|magnitude": 37.5 });
+        assert_eq!(
+            simplified_as_flat(&already_flat).map(|m| m.len()),
+            Some(2),
+            "a FLAT body is its own key map"
+        );
+        assert!(simplified_as_flat(&json!("text")).is_none());
+    }
+
+    /// The committed side's `ctx/*` input keys name the same data the
+    /// read-back expresses at RM paths: `ctx/participation_<field>:<i>` and
+    /// `ctx/health_care_facility|<attr>` (ITS-REST
+    /// `docs/simplified_formats/master06-context_information.adoc`
+    /// §Participation, §`health_care_facility`), with `ctx/id_namespace` and
+    /// `ctx/id_scheme` as the declared defaults for external references
+    /// (§ID Namespace and Scheme) rather than data of their own.
+    #[test]
+    fn the_ctx_input_keys_fold_onto_the_paths_a_read_back_uses() {
+        let committed: BTreeMap<String, Value> = [
+            ("ctx/participation_name:1".to_owned(), json!("Lara Markham")),
+            ("ctx/participation_id:1".to_owned(), json!("198")),
+            ("ctx/participation_function".to_owned(), json!("performer")),
+            ("ctx/health_care_facility|id".to_owned(), json!("9091")),
+            ("ctx/id_namespace".to_owned(), json!("HOSPITAL-NS")),
+            ("ctx/id_scheme".to_owned(), json!("HOSPITAL-NS")),
+            ("ctx/language".to_owned(), json!("en")),
+            ("vitals/temperature|magnitude".to_owned(), json!(37.5)),
+        ]
+        .into_iter()
+        .collect();
+
+        let folded = fold_flat_ctx(&committed, "vitals");
+        assert_eq!(
+            folded.get("vitals/context/_participation:1|name"),
+            Some(&json!("Lara Markham"))
+        );
+        assert_eq!(
+            folded.get("vitals/context/_participation:0|function"),
+            Some(&json!("performer")),
+            "an index-free participation key is the first participation"
+        );
+        assert_eq!(
+            folded.get("vitals/context/_health_care_facility|id"),
+            Some(&json!("9091"))
+        );
+        // The declared defaults expand onto every folded party carrying an id,
+        // and never survive as keys of their own.
+        assert_eq!(
+            folded.get("vitals/context/_participation:1|id_namespace"),
+            Some(&json!("HOSPITAL-NS"))
+        );
+        assert_eq!(
+            folded.get("vitals/context/_health_care_facility|id_scheme"),
+            Some(&json!("HOSPITAL-NS"))
+        );
+        assert!(!folded.contains_key("ctx/id_namespace"));
+        assert!(!folded.contains_key("ctx/id_scheme"));
+        // Everything else passes through untouched, ctx defaults included:
+        // the ignore pass is what excuses them.
+        assert_eq!(folded.get("ctx/language"), Some(&json!("en")));
+        assert_eq!(
+            folded.get("vitals/temperature|magnitude"),
+            Some(&json!(37.5))
+        );
+    }
+
+    /// The ignore pass reads a FLAT key at the RM path it names: the
+    /// `ctx/*` default-setter spellings map onto their master06 targets
+    /// (`ctx/time` → `context/start_time`, `ctx/setting` → `context/setting`,
+    /// `ctx/composer_*` → `composer`), and any other key matches when its
+    /// post-root path falls under the ignored path.
+    #[test]
+    fn a_flat_key_is_ignored_at_the_rm_path_it_names() {
+        let ignored = [
+            "context/start_time".to_owned(),
+            "context/setting".to_owned(),
+            "composer".to_owned(),
+            "uid".to_owned(),
+        ];
+        assert!(flat_key_ignored("ctx/time", &ignored));
+        assert!(flat_key_ignored("ctx/setting", &ignored));
+        assert!(flat_key_ignored("ctx/composer_name", &ignored));
+        assert!(flat_key_ignored("ctx/composer_id", &ignored));
+        // The post-root path is what is compared, so the root segment of a
+        // read-back key never has to be enumerated.
+        assert!(flat_key_ignored("vitals/context/start_time", &ignored));
+        assert!(flat_key_ignored("vitals/uid|value", &ignored));
+        // The flat `_uid` spelling of the same RM attribute is the same datum.
+        assert!(flat_key_ignored("vitals/_uid", &ignored));
+        // A datum nobody ignored stays compared.
+        assert!(!flat_key_ignored("vitals/temperature|magnitude", &ignored));
+        assert!(!flat_key_ignored("ctx/end_time", &ignored));
+        assert!(flat_key_ignored(
+            "ctx/end_time",
+            &["context/end_time".to_owned()]
+        ));
+    }
+
+    /// Keys are compared in one canonical spelling, so a first-element index
+    /// written out and one left off name the same datum.
+    #[test]
+    fn the_first_element_index_is_elided_before_keys_are_compared() {
+        assert_eq!(
+            dezero("vitals:0/temperature:0|magnitude"),
+            "vitals/temperature|magnitude"
+        );
+        assert_eq!(dezero("vitals/events:0"), "vitals/events");
+        assert_eq!(
+            dezero("vitals:1/temperature:2|magnitude"),
+            "vitals:1/temperature:2|magnitude",
+            "only the FIRST element's index is elidable"
+        );
+        assert_eq!(
+            dezero("vitals/temperature|magnitude"),
+            "vitals/temperature|magnitude"
+        );
+    }
+
+    /// The FLAT round-trip rule: every committed datum must come back with an
+    /// equal value, read-back surplus is tolerated (the export is the full RM
+    /// projection of the committed data, master04 §Format variants), and an
+    /// ignored path is compared on neither side.
+    #[test]
+    fn a_flat_round_trip_loses_no_committed_datum_and_tolerates_surplus() {
+        let committed = json!({
+            "ctx/language": "en",
+            "ctx/time": "2026-07-21T10:00:00Z",
+            "vitals/temperature|magnitude": 37.5,
+            "vitals/temperature|unit": "°C"
+        });
+        let read_back = json!({
+            "vitals/temperature:0|magnitude": 37.5,
+            "vitals/temperature:0|unit": "°C",
+            "vitals/context/start_time": "2026-07-21T10:00:04Z",
+            "vitals/category|code_string": "433",
+            "vitals/_uid": "8849182c-82ad-4088-a07f-48ead4180515::sut::1",
+            "ctx/language": "en"
+        });
+        let ignored = ["context/start_time".to_owned(), "uid".to_owned()];
+        assert!(
+            equivalent(&read_back, &committed, &ignored),
+            "the read-back carries every committed datum"
+        );
+
+        // A changed datum is a failure, surplus or not.
+        let altered = json!({
+            "vitals/temperature:0|magnitude": 38.5,
+            "vitals/temperature:0|unit": "°C",
+            "ctx/language": "en"
+        });
+        assert!(!equivalent(&altered, &committed, &ignored));
+
+        // A dropped datum is a failure too.
+        let lossy = json!({
+            "vitals/temperature:0|magnitude": 37.5,
+            "ctx/language": "en"
+        });
+        assert!(!equivalent(&lossy, &committed, &ignored));
+
+        // Without the ignore set the server-set start_time is compared, and
+        // the committed `ctx/time` no longer matches it.
+        assert!(!equivalent(&read_back, &committed, &[]));
+    }
+
+    /// ITS-REST overview `Resources.md` §JSON Format makes the `_type`
+    /// self-tag CONDITIONAL while the requirement governs its VALUE, so a
+    /// fully self-tagging codec and a sparsely tagged committed twin describe
+    /// the same RM content — but two DIFFERENT tags are a real polymorphic
+    /// substitution and stay detectable.
+    #[test]
+    fn a_type_self_tag_present_on_one_side_only_is_not_a_content_difference() {
+        let served = json!({
+            "_type": "COMPOSITION",
+            "name": { "_type": "DV_TEXT", "value": "Vital signs" }
+        });
+        let committed = json!({ "name": { "value": "Vital signs" } });
+        assert!(equivalent(&served, &committed, &[]));
+
+        let substituted = json!({
+            "_type": "COMPOSITION",
+            "name": { "_type": "DV_CODED_TEXT", "value": "Vital signs" }
+        });
+        let tagged_committed = json!({
+            "name": { "_type": "DV_TEXT", "value": "Vital signs" }
+        });
+        assert!(
+            !equivalent(&substituted, &tagged_committed, &[]),
+            "two different concrete types are not the same content"
+        );
+        // Array length is content, never padding.
+        assert!(!equivalent(
+            &json!({ "content": [1, 2] }),
+            &json!({ "content": [1] }),
+            &[]
+        ));
+    }
+
+    /// The named ignore-sets come from the two artifacts that define them —
+    /// the binding's `server_assigned` list and the selectors vocabulary's
+    /// `ctx_defaults` — and an explicit path passes through as written.
+    #[test]
+    fn named_ignore_sets_expand_from_their_own_artifacts() {
+        use crate::model::assertion::IgnoreSpec;
+
+        let specs = vec![
+            IgnoreSpec::Named(IgnoreSetName::ServerAssigned),
+            IgnoreSpec::Named(IgnoreSetName::CtxDefaults),
+            IgnoreSpec::Path("content[0]/uid".to_owned()),
+        ];
+        let resolved = resolve_ignore_sets(
+            &specs,
+            &["uid".to_owned(), "**/uid".to_owned()],
+            &["context/start_time".to_owned()],
+        );
+        assert_eq!(
+            resolved,
+            vec![
+                "uid".to_owned(),
+                "**/uid".to_owned(),
+                "context/start_time".to_owned(),
+                "content[0]/uid".to_owned(),
+            ],
+            "the sets expand in the order the row declares them"
+        );
+        assert!(
+            resolve_ignore_sets(&[], &["uid".to_owned()], &[]).is_empty(),
+            "a row that ignores nothing strips nothing"
+        );
+    }
+
+    /// The `returns` predicates over a scalar-shaped body: an equal value, a
+    /// pattern that must match, and a pattern that must NOT appear.
+    #[test]
+    fn returns_predicates_judge_the_whole_body() {
+        assert!(eval_returns(&json!(3), Some(&json!(3)), None, None).is_ok());
+        let failure = eval_returns(&json!(3), Some(&json!(4)), None, None).expect_err("3 is not 4");
+        assert!(failure.0.contains("!= expected"), "{failure:?}");
+
+        assert!(eval_returns(&json!("v1.2.3"), None, Some(r"^v\d+\.\d+"), None).is_ok());
+        assert!(eval_returns(&json!("draft"), None, Some(r"^v\d+"), None).is_err());
+
+        // `omits` is the negative direction: the body must not carry it.
+        assert!(eval_returns(&json!("public data"), None, None, Some("secret")).is_ok());
+        let leaked = eval_returns(&json!("carries a secret"), None, None, Some("secret"))
+            .expect_err("a body that must omit the pattern carries it");
+        assert!(leaked.0.contains("must omit"), "{leaked:?}");
+
+        // A pattern that does not compile is reported as such, never as a
+        // silently passing row.
+        let broken = eval_returns(&json!("x"), None, Some("("), None)
+            .expect_err("an uncompilable pattern is a failure");
+        assert!(broken.0.contains("does not compile"), "{broken:?}");
+        let broken = eval_returns(&json!("x"), None, None, Some("("))
+            .expect_err("an uncompilable omits pattern is a failure");
+        assert!(broken.0.contains("does not compile"), "{broken:?}");
+    }
+
+    /// The `field` predicates that the existing battery leaves open: a
+    /// pattern over a resolved leaf, a path that resolves to nothing, and an
+    /// `absent` expectation the body contradicts.
+    #[test]
+    fn field_predicates_report_the_predicate_they_violated() {
+        let body = json!({
+            "system_id": "sut.example.org",
+            "versions": [ { "uid": { "value": "a::b::1" } } ]
+        });
+        assert!(eval_field(&body, "system_id", None, None, None, None, Some(r"\.org$")).is_ok());
+        let failure = eval_field(&body, "system_id", None, None, None, None, Some(r"^\d+$"))
+            .expect_err("an identifier is not digits");
+        assert!(failure.0.contains("does not match"), "{failure:?}");
+
+        let failure = eval_field(
+            &body,
+            "missing/leaf",
+            Some(&json!(1)),
+            None,
+            None,
+            None,
+            None,
+        )
+        .expect_err("an unresolvable path cannot be compared");
+        assert!(failure.0.contains("resolves to nothing"), "{failure:?}");
+
+        let failure = eval_field(&body, "system_id", None, None, None, Some(true), None)
+            .expect_err("a present attribute is not absent");
+        assert!(failure.0.contains("expected absent"), "{failure:?}");
+
+        let failure = eval_field(&body, "audit", None, None, Some(true), None, None)
+            .expect_err("an absent attribute is not present");
+        assert!(failure.0.contains("expected present"), "{failure:?}");
+
+        // An uncompilable pattern is a failure, not a pass.
+        assert!(eval_field(&body, "system_id", None, None, None, None, Some("(")).is_err());
+        // A row with no predicate at all asserts only that the path resolves.
+        assert!(eval_field(&body, "versions[0]/uid/value", None, None, None, None, None).is_ok());
+    }
 }

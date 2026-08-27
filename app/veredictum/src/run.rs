@@ -1889,4 +1889,350 @@ mod tests {
         capability_less.capabilities.clear();
         assert!(unclaimed_capabilities(Some(&unclaimed), &capability_less).is_none());
     }
+
+    /// One realized binding plus one case that drives it — the smallest world
+    /// in which the selection law has something to decide about.
+    fn selection_world() -> (ArtifactSet, CaseCore) {
+        let binding: crate::model::binding::OperationBinding =
+            serde_json::from_value(serde_json::json!({
+                "sm_operation": "I_EHR_STATUS.get_ehr_status",
+                "its": "its-rest",
+                "request": { "method": "GET", "path": "/ehr/{ehr_id}/ehr_status" },
+                "outcomes": { "ok": { "status": 200 } }
+            }))
+            .unwrap();
+        let mut set = ArtifactSet::default();
+        set.bindings
+            .push((std::path::PathBuf::from("b.yaml"), binding));
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-main", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
+        (set, case)
+    }
+
+    fn ixit(extra: &serde_json::Value) -> Ixit {
+        let mut document = serde_json::json!({
+            "instances": {
+                "sut": { "base_url": "http://sut.test/openehr/v1", "auth": { "mode": "none" } }
+            }
+        });
+        if let (Some(target), Some(source)) = (document.as_object_mut(), extra.as_object()) {
+            for (key, value) in source {
+                target.insert(key.clone(), value.clone());
+            }
+        }
+        serde_json::from_value(document).unwrap()
+    }
+
+    /// A case every declaration satisfies drives: the law excuses nothing it
+    /// has no ground to excuse.
+    #[test]
+    fn a_case_this_party_declares_everything_for_drives() {
+        let (set, case) = selection_world();
+        let statement = statement(&["EhrStatus"]);
+        assert!(
+            selection_exception(&set, &ixit(&serde_json::json!({})), Some(&statement), &case)
+                .expect("the law is decidable")
+                .is_none(),
+            "nothing excuses a fully declared case"
+        );
+    }
+
+    /// An option branch the ICS does not declare is not this SUT's behaviour,
+    /// so it is excused at drive time with the same citation the verdict
+    /// pipeline would apply — never driven into a spurious red row.
+    #[test]
+    fn an_undeclared_option_branch_is_excused_at_selection() {
+        let (set, mut case) = selection_world();
+        case.option = Some(crate::ids::OptionTag::parse("terminology-fail-closed").unwrap());
+        let statement = statement(&["EhrStatus"]);
+        let exception =
+            selection_exception(&set, &ixit(&serde_json::json!({})), Some(&statement), &case)
+                .expect("the law is decidable")
+                .expect("an undeclared option branch is excused");
+        match &exception {
+            Exception::Unrealized(citation) => {
+                assert!(citation.contains("terminology-fail-closed"), "{citation}");
+                assert!(citation.contains("statement.options"), "{citation}");
+            }
+            other => panic!("expected an unrealized exception, got {other:?}"),
+        }
+        // The statement-blind sweep selects nothing away.
+        assert!(
+            selection_exception(&set, &ixit(&serde_json::json!({})), None, &case)
+                .expect("the law is decidable")
+                .is_none()
+        );
+    }
+
+    /// A case-level spec-version floor the party does not declare puts the
+    /// behaviour out of its scope, with the case's own `applies` range as the
+    /// citation.
+    #[test]
+    fn a_case_version_floor_the_party_predates_is_excused() {
+        let (set, _) = selection_world();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-dated", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "applies": { "its_rest": ">=2.0.0" },
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
+        let statement = statement(&["EhrStatus"]);
+        let exception =
+            selection_exception(&set, &ixit(&serde_json::json!({})), Some(&statement), &case)
+                .expect("the law is decidable")
+                .expect("an unmet case floor is excused");
+        match &exception {
+            Exception::Unrealized(citation) => {
+                assert!(citation.contains("case version floor unmet"), "{citation}");
+                assert!(citation.contains(">=2.0.0"), "{citation}");
+            }
+            other => panic!("expected an unrealized exception, got {other:?}"),
+        }
+    }
+
+    /// The SMART lane is a party declaration: a case needing a minted,
+    /// scope-carrying token is not-applicable on a deployment that declares no
+    /// trusted test issuer, rather than a failure against a server that
+    /// legitimately runs no SMART.
+    #[test]
+    fn a_scope_carrying_case_needs_a_declared_smart_lane() {
+        let (set, _) = selection_world();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-scoped", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "flow": [{
+                "step": 1, "call": "get_ehr_status", "expect": "ok",
+                "scopes": ["patient/EHR_STATUS.r"]
+            }]
+        }))
+        .unwrap();
+        assert!(needs_smart_lane(&case));
+        let statement = statement(&["EhrStatus"]);
+        let exception =
+            selection_exception(&set, &ixit(&serde_json::json!({})), Some(&statement), &case)
+                .expect("the law is decidable")
+                .expect("no SMART lane, no scoped case");
+        match &exception {
+            Exception::Guarded(citation) => {
+                assert!(citation.contains("no `smart` lane"), "{citation}");
+                assert!(citation.contains("ISO/IEC 9646"), "{citation}");
+            }
+            other => panic!("expected a guarded exception, got {other:?}"),
+        }
+    }
+
+    /// A flow step addressing an instance this party does not declare has no
+    /// ground to run on, and the miss is named at selection time rather than
+    /// surfacing later as an inconclusive transport row.
+    #[test]
+    fn a_step_addressing_an_undeclared_instance_is_excused_by_name() {
+        let (set, _) = selection_world();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-readonly", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok", "on": "readonly" }]
+        }))
+        .unwrap();
+        let topology = ixit(&serde_json::json!({}));
+        assert_eq!(undeclared_instances(&case, &topology), vec!["readonly"]);
+        let exception =
+            selection_exception(&set, &topology, Some(&statement(&["EhrStatus"])), &case)
+                .expect("the law is decidable")
+                .expect("an undeclared instance is excused");
+        match &exception {
+            Exception::Guarded(citation) => {
+                assert!(citation.contains("no instance readonly"), "{citation}");
+            }
+            other => panic!("expected a guarded exception, got {other:?}"),
+        }
+
+        // Declared, and the same case drives.
+        let declared = ixit(&serde_json::json!({
+            "instances": {
+                "sut": { "base_url": "http://sut.test/openehr/v1", "auth": { "mode": "none" } },
+                "readonly": { "base_url": "http://sut.test/openehr/v1", "auth": { "mode": "none" } }
+            }
+        }));
+        assert!(undeclared_instances(&case, &declared).is_empty());
+    }
+
+    /// A `${ixit:…}` fact is the only source for a value no released
+    /// operation discloses, so a case reading an undeclared one is excused
+    /// rather than driven against a guess.
+    #[test]
+    fn a_case_reading_an_undeclared_ixit_fact_is_excused() {
+        let (set, _) = selection_world();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-system_id", "kind": "functional",
+            "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "flow": [{
+                "step": 1, "call": "get_ehr_status", "expect": "ok",
+                "assert": [
+                    { "assert": "field", "path": "system_id", "equals": "${ixit:system_id}" }
+                ]
+            }]
+        }))
+        .unwrap();
+        let undeclared = ixit(&serde_json::json!({}));
+        assert_eq!(undeclared_ixit_facts(&case, &undeclared), vec!["system_id"]);
+        let exception =
+            selection_exception(&set, &undeclared, Some(&statement(&["EhrStatus"])), &case)
+                .expect("the law is decidable")
+                .expect("an undeclared ixit fact is excused");
+        match &exception {
+            Exception::Guarded(citation) => {
+                assert!(citation.contains("no system_id"), "{citation}");
+                assert!(citation.contains("${ixit:"), "{citation}");
+            }
+            other => panic!("expected a guarded exception, got {other:?}"),
+        }
+
+        let declared = ixit(&serde_json::json!({ "system_id": "sut.example.org" }));
+        assert!(undeclared_ixit_facts(&case, &declared).is_empty());
+    }
+
+    /// A global-state ground holds only on an exclusively owned SUT: on a
+    /// shared instance the case is not-applicable, never a false verdict.
+    #[test]
+    fn an_exclusive_server_ground_is_not_established_on_a_shared_instance() {
+        let (set, _) = selection_world();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-empty", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "requires": { "server": "exclusive" },
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
+        let environment = serde_json::json!({
+            "environment": {
+                "exclusive_server": false, "hardware_class": "laptop", "cores": 8,
+                "memory_gb": 16, "storage_class": "nvme ssd", "topology": "single node"
+            }
+        });
+        let exception = selection_exception(
+            &set,
+            &ixit(&environment),
+            Some(&statement(&["EhrStatus"])),
+            &case,
+        )
+        .expect("the law is decidable")
+        .expect("a shared instance cannot establish the ground");
+        match &exception {
+            Exception::Unrealized(citation) => {
+                assert!(
+                    citation.contains("requires.server: exclusive"),
+                    "{citation}"
+                );
+            }
+            other => panic!("expected an unrealized exception, got {other:?}"),
+        }
+
+        // Declared exclusive, and the ground holds.
+        let mut exclusive = environment;
+        exclusive["environment"]["exclusive_server"] = serde_json::json!(true);
+        assert!(
+            selection_exception(
+                &set,
+                &ixit(&exclusive),
+                Some(&statement(&["EhrStatus"])),
+                &case
+            )
+            .expect("the law is decidable")
+            .is_none()
+        );
+    }
+
+    /// The generation set is a party declaration too: an undeclared one, and
+    /// one that names the other set, both excuse the case with the citation.
+    #[test]
+    fn a_case_resting_on_a_generation_set_needs_it_declared() {
+        let (set, _) = selection_world();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-stable", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "requires": { "spec_profile": "stable" },
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
+        let undeclared = ixit(&serde_json::json!({}));
+        let citation = unsatisfied_spec_profile(&case, &undeclared)
+            .expect("an undeclared generation set excuses the case");
+        assert!(citation.contains("no `spec_profile`"), "{citation}");
+
+        let other = ixit(&serde_json::json!({ "spec_profile": "development" }));
+        let citation = unsatisfied_spec_profile(&case, &other)
+            .expect("the other generation set excuses the case");
+        assert!(citation.contains("`stable`"), "{citation}");
+        assert!(citation.contains("`development`"), "{citation}");
+
+        let declared = ixit(&serde_json::json!({ "spec_profile": "stable" }));
+        assert!(unsatisfied_spec_profile(&case, &declared).is_none());
+        // Through the whole law, the citation arrives as a guarded exception.
+        let exception = selection_exception(&set, &other, Some(&statement(&["EhrStatus"])), &case)
+            .expect("the law is decidable")
+            .expect("the wrong generation set is excused");
+        assert!(matches!(exception, Exception::Guarded(_)), "{exception:?}");
+    }
+
+    /// A terminology-backed case needs the deployment's terminology posture
+    /// declared: released ITS-REST surfaces no terminology resource, so an
+    /// undeclared lane costs coverage rather than producing a red row.
+    #[test]
+    fn a_terminology_backed_case_needs_a_declared_lane() {
+        let (set, _) = selection_world();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-terminology", "kind": "functional",
+            "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "requires": { "terminology": { "served": ["SNOMED-CT"] } },
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
+        let bare = ixit(&serde_json::json!({}));
+        let citation = unsatisfied_terminology(&case, &bare)
+            .expect("an undeclared terminology lane excuses the case");
+        assert!(citation.contains("no `terminology` posture"), "{citation}");
+        let exception = selection_exception(&set, &bare, Some(&statement(&["EhrStatus"])), &case)
+            .expect("the law is decidable")
+            .expect("the case is excused");
+        assert!(matches!(exception, Exception::Guarded(_)), "{exception:?}");
+    }
+
+    /// An excused case is recorded as ONE not-applicable row carrying the
+    /// citation, with nothing driven and the case's full row count kept — so
+    /// the coverage bound still reports what was selected.
+    #[test]
+    fn an_excused_case_records_one_cited_not_applicable_row() {
+        let (_, case) = selection_world();
+        let record = not_applicable_record(&case, "the citation");
+        assert_eq!(record.case, case.id);
+        assert_eq!(record.rows_driven, 0);
+        assert_eq!(record.rows_total, crate::exec::row_count(&case));
+        match record.rows.as_slice() {
+            [RowOutcome::NotApplicable { citation }] => assert_eq!(citation, "the citation"),
+            other => panic!("expected one cited not-applicable row, got {other:?}"),
+        }
+    }
 }
