@@ -337,6 +337,10 @@ instrument finds in your server arrives with the reproduced exchange and the
 citation, and a defect you find in this instrument is a first-class bug
 here.
 
+The [public roadmap board](https://github.com/users/rubentalstra/projects/5)
+shows what is planned, in progress, and shipped — a view over the issue
+tracker, where milestones are releases.
+
 ## License
 
 Apache-2.0. Attribution travels with every copy and derivative through the
