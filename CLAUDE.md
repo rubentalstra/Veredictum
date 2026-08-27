@@ -373,6 +373,14 @@ pipeline is a `needs` edge, so no leg guesses whether an earlier one finished.
    `release tags` ruleset requires a signature and refuses deletion, so a tag is
    never re-pointed: the recovery for a bad cut is the next version.
 
+**The console's engine pin trails by at most one release**, and `plan` refuses
+a cut that breaks it (`scripts/release/check-console-pin.sh`, #128). The
+console consumes the engine at an exact crates.io version, and an exact pin can
+only name a version that already published, so at tag time it is either the
+version being published (a cut PR that pre-bumped it) or the version published
+immediately before. A third value means the console is consuming an engine more
+than one release old, which is how alpha.4 survived two cuts unnoticed.
+
 **What the tag then does**, in order: `plan` re-verifies every fact above
 against the tagged commit and publishes nothing; the GitHub release is created
 as a DRAFT with the changelog section as its notes and the bare version as its
