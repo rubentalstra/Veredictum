@@ -5362,10 +5362,9 @@ dependencies = [
 
 [[package]]
 name = "veredictum"
-version = "0.1.0-alpha.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17f5375daff8348851181c5866ae15b1d6a8ee416f56f534cc9d190573265153"
+version = "0.1.0-alpha.6"
 dependencies = [
+ "assert_fs",
  "base64 0.23.1",
  "clap",
  "hdrhistogram",
@@ -5374,6 +5373,7 @@ dependencies = [
  "jsonwebtoken",
  "pgp",
  "quick-xml",
+ "rand 0.8.8",
  "regex",
  "reqwest",
  "semver",
@@ -5390,8 +5390,9 @@ dependencies = [
 [[package]]
 name = "veredictum"
 version = "0.1.0-alpha.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60262789baf48de1ab3be1fb8e1e3996a8fc431d0802931bcd1c03bc8d5d3b45"
 dependencies = [
- "assert_fs",
  "base64 0.23.1",
  "clap",
  "hdrhistogram",
@@ -5437,7 +5438,7 @@ dependencies = [
  "thirtyfour",
  "thiserror 2.0.20",
  "tokio",
- "veredictum 0.1.0-alpha.4",
+ "veredictum 0.1.0-alpha.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasm-bindgen",
 ]
 
