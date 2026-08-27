@@ -2401,13 +2401,15 @@ pipeline, SBOMs and the multi-architecture container image (#5, #12); the
 signed run record (a byte-deterministic digest manifest, a detached OpenPGP
 signature, and the `verify-record` verb; #62); the machine-readable
 `run --progress` stream for drivers (#81); and the web console over the
-published crate (#6; the ratified screen record is #61; shipped so far: the
-shell and design system #63, the instrument landing and catalogue explorer
-#64, and the run wizard's connect and scope steps #65; the container image
+published crate (#6; the ratified screen record is #61; shipped so far:
+#63–#67 — the shell and design system, the read surfaces, the full run
+wizard with the live screen, and the results and verdicts surfaces — plus
+the catalogue's CNF profile language #87, the E2E harness #69 with its
+real-CDR mode #99, and the pasted-statement scope #101; the container image
 now carries the console). **Open and release-blocking for v0.1.0** (the
-first stable release, per the 2026-08-27 milestone renumbering): the
-remaining console surfaces (#6's open children), the oracle-generation
-selection (#78), and the recorded findings #74–#76. The tracker is the plan
+first stable release, per the 2026-08-27 milestone renumbering): the export
+and verify surfaces (#68) and #6's other open children, and the recorded
+findings #74–#76. The tracker is the plan
 from here; this section stays as the record.
 
 ### 14.3 Runner technology — why the reference runner is Rust
