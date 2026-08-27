@@ -153,7 +153,13 @@ jobs:
           # changed that spelling before — so the file is located rather than
           # assumed, and anything other than exactly one match is a failure
           # instead of a release shipping an SBOM named after the wrong thing.
-          mapfile -t generated < <(find . -maxdepth 2 -name '*.cdx.json' -print | sort)
+          # LOCATION is not assumed either: the instrument's SBOM lands beside
+          # its crate manifest, except when the workspace member's version
+          # matches a published crates.io version, when it lands at the root
+          # (both observed first-hand at the alpha.5 cut, which failed on
+          # exactly this). The console crate's SBOMs are excluded by path:
+          # this lane ships the instrument binary alone.
+          mapfile -t generated < <(find . -maxdepth 3 -name '*.cdx.json'             -not -path './target/*' -not -path './app/veredictum-console/*'             -print | sort)
           if [ "${#generated[@]}" -ne 1 ]; then
             echo "::error::expected exactly one generated .cdx.json, found ${#generated[@]}: ${generated[*]-none}"
             exit 1

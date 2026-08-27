@@ -8,7 +8,7 @@
 
 [package]
 name = "veredictum"
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
 # Two binaries exist in the workspace since the console (#53), so a bare
 # `cargo run --` is ambiguous without this; every documented invocation is
 # `cargo run -- <subcommand>` and must keep meaning the instrument.

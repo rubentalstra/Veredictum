@@ -34,7 +34,7 @@ The binary is on [crates.io](https://crates.io/crates/veredictum). Take this
 path if you want the command on your `PATH`.
 
 ```bash
-cargo install veredictum --locked --version 0.1.0-alpha.5
+cargo install veredictum --locked --version 0.1.0-alpha.6
 veredictum validate --root artifacts --specs specs/openehr
 ```
 
