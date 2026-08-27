@@ -78,6 +78,13 @@ exist is worse than no step, because it reports green.
     cut, and a release is cut when its milestone reaches zero open issues. If
     this close empties a milestone, say so.
 
+11. **Roadmap-board check** (`.claude/rules/project-board.md`): `Done` is set
+    by the built-in workflow when the merge closes the issue — never by hand.
+    After the merge, `scripts/gh/project.sh show <n>` should say `Done`; if
+    the issue is missing from the board entirely, `scripts/gh/project.sh add
+    <n>` and let the closed→Done workflow settle it. Do not archive or delete
+    board items.
+
 ## What this skill does not do
 
 It does not run the gates for you to "check" the criteria. Those must already

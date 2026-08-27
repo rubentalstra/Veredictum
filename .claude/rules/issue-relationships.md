@@ -147,9 +147,10 @@ contract; the children are the panel.
   for a parent issue points at the next open child.
 - `/phase-done` refuses to close a parent that still has open children; closing
   a blocker unblocks its dependents automatically.
-- The public roadmap board is deliberately absent for now — it is tracked as its
-  own issue and adds a presentation view, never a second tracker. Nothing in
-  this file depends on it.
+- The public roadmap board (`.claude/rules/project-board.md`) is a presentation
+  view over the tracker, never a second tracker. Nothing in this file depends
+  on it, and it duplicates none of these edges: blocked-ness on a card comes
+  from the native `blocked-by` edge itself.
 
 ## Official documentation (durable citations)
 

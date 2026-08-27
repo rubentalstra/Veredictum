@@ -15,8 +15,8 @@ Read-only; makes no changes. The live state below is injected at invocation
 time — ground the answer in it, not in stale conversation memory.
 
 Ported from FerroEHR at the Veredictum split (FerroEHR#2789) and trimmed: the
-plan-file step and the roadmap-board step are gone, because this repository has
-no `docs/plans/` tree and its board is deliberately deferred.
+plan-file step is gone, because this repository has no `docs/plans/` tree. The
+roadmap-board step, deferred at the split, is back since #1 landed the board.
 
 ## Live state (injected)
 
@@ -55,10 +55,17 @@ cd "${CLAUDE_PROJECT_DIR}" && git status --short --branch | head -40 && echo "--
 3. Summarize the git state from the injected output: current branch, uncommitted
    files, last commits. Flag uncommitted work that looks finished — finished work
    is never left sitting unmerged.
-4. **Do not** modify an issue or make a commit. This is a read-only check. If the
+4. If the user asks how things look publicly, `scripts/gh/project.sh board`
+   prints the public roadmap board grouped by Status — a presentation VIEW over
+   the same issues, never a second source of truth
+   (`.claude/rules/project-board.md`); the issue list above stays the working
+   ground truth. Flag any `In Progress` item nobody is actually working on (it
+   should be parked back to `todo`).
+
+5. **Do not** modify an issue or make a commit. This is a read-only check. If the
    user wants the next task turned into a work plan, point at `/next-task`.
 
 ## What this skill deliberately does not report
 
-The roadmap board (deferred, tracked as its own issue) and plan-file progress
-(no `docs/plans/` tree here). Both arrive later; neither is silently implied.
+Plan-file progress (no `docs/plans/` tree here). The roadmap board is reported
+only on request (step 4), never as part of the default dump.

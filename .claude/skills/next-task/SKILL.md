@@ -17,8 +17,8 @@ caller takes after seeing the plan.
 
 Ported from FerroEHR at the Veredictum split (FerroEHR#2789) and trimmed to what
 this repository has. What was dropped, so nobody looks for it: the
-code-generator routing (nothing here is generated from a meta-model) and the
-project-board move (deferred by owner decision).
+code-generator routing (nothing here is generated from a meta-model). The
+project-board move, deferred at the split, is back since #1 landed the board.
 
 ## Steps
 
@@ -62,5 +62,13 @@ project-board move (deferred by owner decision).
    specification section requires, designing the catalogue's shape — stays
    in-session.
 
-4. **Do not edit the issue or commit.** Recording progress happens after the
+4. **When work on the picked issue actually starts** (the plan is accepted and
+   the session proceeds), move it to `In Progress` on the public roadmap board:
+   `scripts/gh/project.sh status <n> in-progress` — the one manual board move
+   in the lifecycle (`.claude/rules/project-board.md`). If the session parks
+   the issue unfinished, move it back
+   (`scripts/gh/project.sh status <n> todo`) — a stale In Progress column is a
+   false public claim.
+
+5. **Do not edit the issue or commit.** Recording progress happens after the
    work is done, not as part of planning it.
