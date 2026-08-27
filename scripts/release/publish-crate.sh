@@ -40,7 +40,7 @@ do_publish() {
   # literal "Uploaded veredictum" would never match a perfectly successful
   # publish.
   local out plain status=0
-  out="$(cargo publish --locked 2>&1)" || status=$?
+  out="$(cargo publish --locked -p "${CRATE}" 2>&1)" || status=$?
   printf '%s\n' "$out"
   plain="$(printf '%s' "$out" | sed -E 's/\x1b\[[0-9;]*m//g')"
   case "$plain" in
