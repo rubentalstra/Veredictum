@@ -19,7 +19,7 @@ use leptos_router::{
 
 use crate::pages::catalogue::{Case, Catalogue, Chapter};
 use crate::pages::instrument::Instrument;
-use crate::pages::run::Run;
+use crate::pages::run::{Connect, Run, Scope};
 use crate::pages::shell::Shell;
 use crate::pages::verify::Verify;
 
@@ -75,6 +75,11 @@ pub fn App() -> impl IntoView {
                         view=Case
                     />
                     <Route path=StaticSegment("run") view=Run />
+                    <Route
+                        path=(StaticSegment("run"), StaticSegment("connect"))
+                        view=Connect
+                    />
+                    <Route path=(StaticSegment("run"), StaticSegment("scope")) view=Scope />
                     <Route path=StaticSegment("verify") view=Verify />
                 </ParentRoute>
             </Routes>

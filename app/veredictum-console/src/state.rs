@@ -20,6 +20,10 @@ pub const ROOT_ENV: &str = "VEREDICTUM_ROOT";
 /// `specs/openehr`; the image sets it to the documented `/work` mount).
 pub const SPECS_ENV: &str = "VEREDICTUM_SPECS";
 
+/// The environment variable naming the party-declaration tree (default
+/// `party`; the image sets it to the documented `/work` mount).
+pub const PARTY_ENV: &str = "VEREDICTUM_PARTY";
+
 /// The loaded catalogue, or the explanation of why there is none.
 #[derive(Debug, Clone)]
 pub struct ConsoleState {
@@ -27,9 +31,15 @@ pub struct ConsoleState {
     pub root: PathBuf,
     /// The vendored spec tree citations resolve against.
     pub specs: PathBuf,
+    /// The party-declaration tree statements are picked from.
+    pub party: PathBuf,
     /// The one startup validation pass, shared by every request; `Err` is
     /// the verbatim reason the catalogue could not be opened.
     pub catalogue: Arc<Result<veredictum::pipeline::catalogue::Validation, String>>,
+    /// The one in-flight run draft (the wizard's server-side memory): the
+    /// console holds at most one, and a restart legitimately forgets it —
+    /// no console-local store exists (the crate CLAUDE.md law).
+    pub draft: Arc<std::sync::Mutex<Option<crate::run_api::RunDraft>>>,
 }
 
 impl ConsoleState {
@@ -42,12 +52,16 @@ impl ConsoleState {
         let specs = PathBuf::from(
             std::env::var(SPECS_ENV).unwrap_or_else(|_| String::from("specs/openehr")),
         );
+        let party =
+            PathBuf::from(std::env::var(PARTY_ENV).unwrap_or_else(|_| String::from("party")));
         let catalogue = veredictum::pipeline::catalogue::validate_tree(&root, Some(&specs))
             .map_err(|e| e.to_string());
         Self {
             root,
             specs,
+            party,
             catalogue: Arc::new(catalogue),
+            draft: Arc::new(std::sync::Mutex::new(None)),
         }
     }
 }

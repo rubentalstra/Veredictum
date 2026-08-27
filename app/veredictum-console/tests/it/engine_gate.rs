@@ -15,7 +15,7 @@ use veredictum_console::engine::{self, Credential, Engine, RunSpec, Secret};
 
 /// The repository root, two levels above this crate (#55): the catalogue the
 /// gate drives lives there.
-fn repo_root() -> &'static Path {
+pub(crate) fn repo_root() -> &'static Path {
     Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
@@ -23,7 +23,7 @@ fn repo_root() -> &'static Path {
 /// set, else the workspace build. Both run paths use the SAME binary, which
 /// is exactly the property under test — the console must add and remove
 /// nothing around it.
-fn gate_binary() -> PathBuf {
+pub(crate) fn gate_binary() -> PathBuf {
     std::env::var(engine::ENGINE_ENV).map_or_else(
         |_| repo_root().join("target/debug/veredictum"),
         PathBuf::from,
@@ -34,7 +34,7 @@ fn gate_binary() -> PathBuf {
 /// every driven row fails or errors DETERMINISTICALLY and the two run paths
 /// have identical material to record. Listens on an ephemeral loopback port;
 /// the thread ends with the test process.
-fn fixture_sut() -> Result<u16, std::io::Error> {
+pub(crate) fn fixture_sut() -> Result<u16, std::io::Error> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     std::thread::spawn(move || {
@@ -58,7 +58,7 @@ fn fixture_sut() -> Result<u16, std::io::Error> {
 /// on purpose (`.claude/rules/testing.md` §Fixture construction: a wire
 /// input independently authored catches codec bugs) — and the lib's `Ixit`
 /// is deserialize-only, so raw is also the only honest way to author one.
-fn write_ixit(dir: &Path, port: u16) -> Result<PathBuf, std::io::Error> {
+pub(crate) fn write_ixit(dir: &Path, port: u16) -> Result<PathBuf, std::io::Error> {
     let document = format!(
         r#"{{
   "instances": {{

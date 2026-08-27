@@ -55,6 +55,10 @@ leptos-use = "0.19"
 serde = { version = "1", features = ["derive"] }
 
 # server-only (behind `ssr`)
+# The reachability probe's HTTP client — the ONE console-originated request
+# to a CDR, the diagnostic carve-out the crate CLAUDE.md records. rustls,
+# never native TLS, matching the engine's own pin.
+reqwest = { version = "0.13", default-features = false, features = ["rustls"], optional = true }
 serde_json = { version = "1", optional = true }
 thiserror = { version = "2", optional = true }
 leptos_axum = { version = "0.8", optional = true }
@@ -79,6 +83,7 @@ hydrate = [
 ]
 ssr = [
     "dep:veredictum",
+    "dep:reqwest",
     "leptos-use/ssr",
     "dep:serde_json",
     "dep:thiserror",
