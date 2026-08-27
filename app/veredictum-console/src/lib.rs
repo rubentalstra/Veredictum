@@ -33,6 +33,8 @@
 compile_error!("features \"hydrate\" and \"ssr\" cannot be enabled at the same time");
 
 pub mod app;
+#[cfg(feature = "ssr")]
+pub mod engine;
 
 /// The browser entry point: installs the panic hook so a client-side panic
 /// reports a real stack trace, then hydrates the server-rendered body.

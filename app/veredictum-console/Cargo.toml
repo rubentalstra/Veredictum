@@ -26,11 +26,20 @@ path = "src/main.rs"
 # spawn the same pinned binary for runs, which needs the first published
 # release carrying the lib's pipeline API. Tracked as #54.
 [dependencies]
+# The engine, from crates.io BY EXACT VERSION — never `path =` (#52, #54):
+# the console can only ever ship over a released instrument, so a console
+# release is always reproducible by a third party from published artifacts.
+# Server-only: the lib carries the blocking driver and its native deps, and
+# nothing of it may enter the WASM bundle.
+veredictum = { version = "=0.1.0-alpha.4", optional = true }
+
 leptos = "0.8"
 leptos_meta = "0.8"
 leptos_router = "0.8"
 
 # server-only (behind `ssr`)
+serde_json = { version = "1", optional = true }
+thiserror = { version = "2", optional = true }
 leptos_axum = { version = "0.8", optional = true }
 axum = { version = "0.8", optional = true }
 # `signal` carries the SIGTERM handler: the binary is PID 1 in the image, so
@@ -52,6 +61,9 @@ hydrate = [
     "dep:console_error_panic_hook",
 ]
 ssr = [
+    "dep:veredictum",
+    "dep:serde_json",
+    "dep:thiserror",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",
@@ -60,6 +72,10 @@ ssr = [
     "dep:tokio",
     "dep:anyhow",
 ]
+
+[dev-dependencies]
+# Scratch directories for the engine gate test's out trees and fixture ixit.
+assert_fs = "1"
 
 [lints]
 workspace = true

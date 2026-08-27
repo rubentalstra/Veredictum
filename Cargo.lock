@@ -5047,17 +5047,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "veredictum"
+version = "0.1.0-alpha.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17f5375daff8348851181c5866ae15b1d6a8ee416f56f534cc9d190573265153"
+dependencies = [
+ "base64 0.23.1",
+ "clap",
+ "hdrhistogram",
+ "jiff",
+ "jsonschema",
+ "jsonwebtoken",
+ "pgp",
+ "quick-xml",
+ "regex",
+ "reqwest",
+ "semver",
+ "serde",
+ "serde-saphyr",
+ "serde_jcs",
+ "serde_json",
+ "sha2 0.11.0",
+ "thiserror 2.0.20",
+ "urlencoding",
+ "uuid",
+]
+
+[[package]]
 name = "veredictum-console"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "assert_fs",
  "axum",
  "console_error_panic_hook",
  "leptos",
  "leptos_axum",
  "leptos_meta",
  "leptos_router",
+ "serde_json",
+ "thiserror 2.0.20",
  "tokio",
+ "veredictum 0.1.0-alpha.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "wasm-bindgen",
 ]
 
