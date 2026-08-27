@@ -138,3 +138,129 @@ fn the_generated_ixit_carries_names_and_never_values() {
         "the generated ixit does not parse: {parsed:?}"
     );
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one gate walks the whole chain — run, red-first, join, judgement — and splitting it would hide the chain it exists to assert"
+)]
+#[test]
+fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std::error::Error>> {
+    let binary = engine_gate::gate_binary();
+    if !binary.exists() {
+        eprintln!(
+            "SKIPPED(no engine binary at {}): build the workspace first",
+            binary.display()
+        );
+        return Ok(());
+    }
+    let engine = match Engine::verified(&binary) {
+        Ok(engine) => engine,
+        Err(veredictum_console::engine::Error::VersionMismatch { reported }) => {
+            eprintln!("SKIPPED(engine version drift): {reported}");
+            return Ok(());
+        }
+        Err(other) => return Err(other.into()),
+    };
+
+    let scratch = assert_fs::TempDir::new()?;
+    let port = engine_gate::fixture_sut()?;
+    let ixit = engine_gate::write_ixit(scratch.path(), port)?;
+    let out = scratch.path().join("record-run");
+    std::fs::create_dir_all(&out)?;
+    let statement = engine_gate::repo_root().join("party/ehrbase/statement.json");
+
+    let root = engine_gate::repo_root().join("artifacts");
+    let state = veredictum_console::state::ConsoleState {
+        root: root.clone(),
+        specs: engine_gate::repo_root().join("specs/openehr"),
+        party: engine_gate::repo_root().join("party"),
+        out: scratch.path().to_path_buf(),
+        catalogue: std::sync::Arc::new(
+            veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
+        ),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(Some(RunDraft {
+            base_url: String::from("http://unused"),
+            sut_name: String::from("record-gate"),
+            sut_version: String::from("0.0.0-gate"),
+            auth: AuthChoice::None,
+            credentials: vec![],
+            probed_ok: true,
+            statement: Some(statement.display().to_string()),
+            filter: None,
+        }))),
+        jobs: JobSlot::default(),
+    };
+    let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
+    state
+        .jobs
+        .start(
+            id,
+            &engine,
+            &RunSpec {
+                root,
+                ixit,
+                out_dir: out,
+                sut_name: String::from("record-gate"),
+                sut_version: String::from("0.0.0-gate"),
+                statement: Some(statement),
+                filter: Some(String::from("I_EHR_SERVICE.create_ehr-main")),
+                credentials: vec![],
+                progress: true,
+            },
+            String::from("record-gate"),
+        )
+        .map_err(|e| e.to_string())?;
+    let terminal = wait_terminal(&state.jobs).ok_or("the job never left Running")?;
+    assert_eq!(
+        terminal.status,
+        JobStatus::Finished,
+        "tail: {:?}",
+        terminal.tail
+    );
+
+    // S6: the results screen reads the record red-first.
+    let results = veredictum_console::record_api::read::results_screen(&state)
+        .map_err(|e| format!("results: {e}"))?
+        .ok_or("a finished run must yield a results screen")?;
+    assert!(!results.rows.is_empty());
+    let first = results.rows.first().ok_or("rows checked non-empty")?;
+    assert!(
+        matches!(first.status.as_str(), "failed" | "errored"),
+        "red rows must sort first against a 500-only SUT: {first:?}"
+    );
+
+    // The drawer joins the catalogue.
+    let detail = veredictum_console::record_api::read::result_detail(
+        &state,
+        &first.case,
+        first.format.as_deref(),
+    )
+    .map_err(|e| format!("detail: {e}"))?
+    .ok_or("the first row must have a detail")?;
+    assert!(detail.test_purpose.is_some(), "the catalogue join failed");
+    assert!(!detail.spec_refs.is_empty());
+
+    // S7: the judgement runs through the lib and carries the documents.
+    match veredictum_console::record_api::read::verdicts_screen(&state)
+        .map_err(|e| format!("verdicts: {e}"))?
+    {
+        veredictum_console::record_api::VerdictsScreen::Judged {
+            profiles,
+            documents,
+            ..
+        } => {
+            assert!(!profiles.is_empty(), "the matrix must carry the tiers");
+            let names: Vec<&str> = documents.iter().map(|d| d.name.as_str()).collect();
+            assert!(
+                names.contains(&"CONFORMANCE_REPORT.md"),
+                "documents: {names:?}"
+            );
+        }
+        other => panic!("a statement run must judge: {other:?}"),
+    }
+    Ok(())
+}

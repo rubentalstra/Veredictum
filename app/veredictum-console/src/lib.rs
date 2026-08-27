@@ -46,6 +46,7 @@ pub mod components;
 #[cfg(feature = "ssr")]
 pub mod engine;
 pub mod pages;
+pub mod record_api;
 pub mod run_api;
 pub mod run_job;
 #[cfg(feature = "ssr")]

@@ -201,6 +201,20 @@ impl Harness {
     ///
     /// # Panics
     /// When the element never appears.
+    /// Waits for an xpath under an explicit budget (a driven run's finish).
+    async fn wait_xpath_for(&self, xpath: &str, budget: Duration) -> WebElement {
+        match self
+            .driver
+            .query(By::XPath(xpath))
+            .wait(budget, POLL)
+            .first()
+            .await
+        {
+            Ok(element) => element,
+            Err(e) => panic!("waiting {budget:?} for xpath `{xpath}`: {e}"),
+        }
+    }
+
     async fn wait_xpath(&self, xpath: &str) -> WebElement {
         match self
             .driver
@@ -526,6 +540,247 @@ async fn e2e_run_wizard_reaches_connect_and_scope() {
     h.finish().await;
 }
 
-// NOTE: no openEHR spec governs the journeys — our own design; a probe/run
-// journey against a composed SUT joins the record surfaces' work (#67),
-// where a finished run is what the screens under test consume.
+/// A minimal fixture SUT for the driven-run journey: answers every request
+/// `500` deterministically, in THIS test process — the console server on the
+/// same host reaches it over loopback. The thread ends with the process.
+fn fixture_sut() -> Result<u16, std::io::Error> {
+    use std::io::{Read as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut scratch = [0_u8; 4096];
+            let _bytes_read = stream.read(&mut scratch);
+            let _write = stream.write_all(
+                b"HTTP/1.1 500 Internal Server Error\r\ncontent-length: 2\r\nconnection: close\r\n\r\nno",
+            );
+        }
+    });
+    Ok(port)
+}
+
+/// One system under test the wizard drives end to end.
+struct DrivenSut<'a> {
+    /// The openEHR REST base URL the connect form receives.
+    base_url: &'a str,
+    /// The SUT identity typed into the form (name, version).
+    identity: (&'a str, &'a str),
+    /// Basic credentials, when the SUT wants them.
+    basic: Option<(&'a str, &'a str)>,
+    /// The substring locating the party statement option at Scope.
+    statement: &'a str,
+    /// The case-id filter for the run.
+    filter: &'a str,
+    /// The probe outcome the connect screen must show before continuing.
+    probe_answer: &'a str,
+    /// The continue control's label ("Continue" on a 2xx probe).
+    continue_label: &'a str,
+    /// The finish budget for the live screen's poll.
+    finish_budget: Duration,
+}
+
+/// Drives connect → probe → scope → start → live, returning with the run
+/// finished on the Live screen. Captures are the caller's business.
+async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>) {
+    h.goto("/run/connect").await;
+    let base = h.wait_css("input#base-url").await;
+    base.clear().await.expect("clear the base URL");
+    base.send_keys(sut.base_url)
+        .await
+        .expect("type the base URL");
+    let (name, version) = sut.identity;
+    let name_field = h.wait_css("input#sut-name").await;
+    name_field.clear().await.expect("clear the name");
+    name_field.send_keys(name).await.expect("type the name");
+    let version_field = h.wait_css("input#sut-version").await;
+    version_field.clear().await.expect("clear the version");
+    version_field
+        .send_keys(version)
+        .await
+        .expect("type the version");
+    if let Some((user, password)) = sut.basic {
+        h.wait_xpath("//button[contains(., 'Basic')]")
+            .await
+            .click()
+            .await
+            .expect("pick basic auth");
+        h.wait_css("input#sut-user")
+            .await
+            .send_keys(user)
+            .await
+            .expect("type the user");
+        h.wait_css("input#sut-pass")
+            .await
+            .send_keys(password)
+            .await
+            .expect("type the password");
+    }
+    h.wait_xpath("//button[contains(., 'Probe connection')]")
+        .await
+        .click()
+        .await
+        .expect("probe");
+    h.wait_xpath(&format!("//body[contains(., '{}')]", sut.probe_answer))
+        .await;
+    h.wait_xpath(&format!("//a[contains(., '{}')]", sut.continue_label))
+        .await
+        .click()
+        .await
+        .expect("continue");
+
+    h.wait_xpath("//h1[contains(., 'Scope')]").await;
+    let select = h.wait_css("select#statement").await;
+    select
+        .find(By::XPath(format!(
+            ".//option[contains(., '{}')]",
+            sut.statement
+        )))
+        .await
+        .expect("the statement option")
+        .click()
+        .await
+        .expect("pick the statement");
+    h.wait_css("input#filter")
+        .await
+        .send_keys(sut.filter)
+        .await
+        .expect("type the filter");
+    if let Some(slug) = scope_shot {
+        h.capture(slug).await;
+    }
+    h.wait_xpath("//button[contains(., 'Save scope')]")
+        .await
+        .click()
+        .await
+        .expect("save");
+    h.wait_xpath("//button[contains(., 'Start the run')]")
+        .await
+        .click()
+        .await
+        .expect("start");
+    h.wait_xpath("//a[contains(., 'Watch it live')]")
+        .await
+        .click()
+        .await
+        .expect("to live");
+
+    h.wait_xpath("//h1[contains(., 'Live run')]").await;
+    h.wait_xpath_for("//span[contains(., 'finished')]", sut.finish_budget)
+        .await;
+}
+
+/// Walks the finished run's record: results with one URL-addressed detail,
+/// then verdicts, capturing each under the given slugs.
+async fn read_record(h: &Harness, case_needle: &str, results_shot: &str, verdicts_shot: &str) {
+    h.goto("/run/results").await;
+    h.wait_xpath("//h1[contains(., 'Results')]").await;
+    h.wait_xpath(&format!("//td//a[contains(., '{case_needle}')]"))
+        .await
+        .click()
+        .await
+        .expect("open the detail");
+    h.wait_xpath("//body[contains(., 'Spec citations')]").await;
+    h.capture(results_shot).await;
+
+    h.goto("/run/verdicts").await;
+    h.wait_xpath("//h1[contains(., 'Verdicts')]").await;
+    h.wait_xpath("//body[contains(., 'CONFORMANCE_REPORT.md')]")
+        .await;
+    h.capture(verdicts_shot).await;
+}
+
+/// The whole pipeline through the real UI: connect → probe → scope with a
+/// statement → start → live to finished → results with a detail → verdicts —
+/// capturing every record surface, light and dark, against the hermetic
+/// in-process fixture (every request answered 500).
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_wizard_drives_a_run_to_its_verdicts() {
+    let Some(h) = Harness::start("driven-run").await else {
+        return;
+    };
+    let Ok(port) = fixture_sut() else {
+        panic!("the fixture SUT could not bind");
+    };
+    let base_url = format!("http://127.0.0.1:{port}");
+    let sut = DrivenSut {
+        base_url: &base_url,
+        identity: ("my-cdr", "unknown"),
+        basic: None,
+        statement: "EHRbase",
+        filter: "I_EHR_SERVICE.create_ehr-main",
+        probe_answer: "HTTP 500",
+        continue_label: "Continue anyway",
+        finish_budget: Duration::from_mins(1),
+    };
+    drive_wizard(&h, &sut, Some("scope-light")).await;
+    h.capture("live-light").await;
+    read_record(
+        &h,
+        "I_EHR_SERVICE.create_ehr-main",
+        "results-light",
+        "verdicts-light",
+    )
+    .await;
+    h.enable_dark().await;
+    h.capture("verdicts-dark").await;
+
+    h.assert_console_clean(&[]).await;
+    h.finish().await;
+}
+
+/// The side-by-side grading (#99): the same wizard against two REAL CDRs —
+/// FerroEHR's quickstart and EHRbase's official pairing, both latest — so the
+/// captures show two records over one catalogue. Skips unless the harness
+/// composed the SUTs (`UI_E2E_REAL_SUTS=1 scripts/ui-e2e.sh`).
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_wizard_grades_the_real_cdrs() {
+    let ferroehr = std::env::var("UI_E2E_FERROEHR_URL").unwrap_or_default();
+    let ehrbase = std::env::var("UI_E2E_EHRBASE_URL").unwrap_or_default();
+    if ferroehr.is_empty() || ehrbase.is_empty() {
+        println!(
+            "skipping: UI_E2E_FERROEHR_URL / UI_E2E_EHRBASE_URL are unset (run with UI_E2E_REAL_SUTS=1)"
+        );
+        return;
+    }
+    let Some(h) = Harness::start("real-cdrs").await else {
+        return;
+    };
+    let suts = [
+        DrivenSut {
+            base_url: &ferroehr,
+            identity: ("FerroEHR", "latest"),
+            basic: Some(("ferroehr", "ferroehr")),
+            statement: "FerroEHR",
+            filter: "I_EHR_SERVICE.",
+            probe_answer: "The server answered",
+            continue_label: "Continue",
+            finish_budget: Duration::from_mins(5),
+        },
+        DrivenSut {
+            base_url: &ehrbase,
+            identity: ("EHRbase", "latest"),
+            basic: Some(("ehrbase-user", "SuperSecretPassword")),
+            statement: "EHRbase",
+            filter: "I_EHR_SERVICE.",
+            probe_answer: "The server answered",
+            continue_label: "Continue",
+            finish_budget: Duration::from_mins(5),
+        },
+    ];
+    for sut in &suts {
+        let slug = sut.identity.0.to_lowercase();
+        drive_wizard(&h, sut, None).await;
+        h.capture(&format!("live-{slug}-light")).await;
+        read_record(
+            &h,
+            "I_EHR_SERVICE.",
+            &format!("results-{slug}-light"),
+            &format!("verdicts-{slug}-light"),
+        )
+        .await;
+    }
+
+    h.assert_console_clean(&[]).await;
+    h.finish().await;
+}

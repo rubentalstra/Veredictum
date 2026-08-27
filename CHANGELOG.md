@@ -20,6 +20,26 @@ version on.
 
 ### Added
 
+- **The E2E harness grades real CDRs side by side (#99).** An opt-in mode
+  (`UI_E2E_REAL_SUTS=1`) composes FerroEHR's published quickstart and
+  EHRbase's official image pairing — both at their latest published images,
+  deliberately unpinned, because the SUT is the thing being graded and not a
+  supply-chain input — and a new journey drives the full wizard against each,
+  photographing the two records for the book's side-by-side comparison. The
+  default lane stays hermetic on the in-process fixture, and the harness now
+  builds and hands the console the engine binary, so a driven run works
+  outside CI too.
+- **The console reads the record and speaks the verdict (#67).** Results:
+  the finished run's outcomes red-rows-first with the engine's own tallies,
+  and a URL-addressed detail joining each outcome to its catalogue case —
+  the recorded reason verbatim, the excusing citation, the failing step and
+  the per-row evidence, with the attribution law stated where a red row is
+  read (the wire transcript itself is #96). Verdicts: the profile matrix and
+  per-capability evidence with the not_evidenced/inconclusive coverage
+  bounds first-class, computed by the published lib's own judgement — the same pure
+  function the CLI runs, so the rendered report, statement and certificate
+  shown (and the verdicts.json beside them) are the CLI's bodies by
+  construction. A statement-less run answers honestly: no claim, no verdict.
 - **The console runs the campaign live (#66).** Scope's save gains "Start
   the run": the console writes the job's ixit (env-var names only, pinned by
   a test and parsed back through the published lib's own reader), spawns the

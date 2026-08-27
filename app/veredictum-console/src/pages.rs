@@ -7,8 +7,10 @@
 
 pub mod catalogue;
 pub mod instrument;
+pub mod results;
 pub mod run;
 pub mod shell;
+pub mod verdicts;
 pub mod verify;
 
 use leptos::prelude::{IntoView, view};

@@ -37,7 +37,7 @@ pub fn Run() -> impl IntoView {
 }
 
 /// The step indicator: one row, the active step accented — a URL per step.
-fn steps(active: &'static str) -> impl IntoView + use<> {
+pub(crate) fn steps(active: &'static str) -> impl IntoView + use<> {
     ["connect", "scope", "live", "results", "verdicts"]
         .into_iter()
         .map(|step| {
@@ -629,9 +629,14 @@ fn live_view(job: &JobView, cancel: ServerAction<CancelRun>) -> impl IntoView + 
                 <p class="mt-1 font-mono text-xs text-ink-muted">
                     {format!("results: {}", summary.results_path)}
                 </p>
-                <p class="mt-2 text-sm text-ink-muted">
-                    "The results and verdicts screens are under construction (#67)."
-                </p>
+                <div class="mt-2 flex items-center gap-2">
+                    <A href="/run/results" attr:class=BTN_PRIMARY>
+                        "Read the results"
+                    </A>
+                    <A href="/run/verdicts" attr:class=BTN_SECONDARY>
+                        "Compute the verdicts"
+                    </A>
+                </div>
             </section>
         }
     });

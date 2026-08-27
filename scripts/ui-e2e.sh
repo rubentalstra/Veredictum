@@ -27,6 +27,14 @@
 #                         target/debug/veredictum-console as they stand.
 #   UI_E2E_KEEP_UP        skip teardown (local debugging).
 #   UI_E2E_PORT           the console's port (default 3300).
+#   UI_E2E_REAL_SUTS      when set, compose the two real CDRs — FerroEHR's own
+#                         quickstart (its published docker-compose.yml, basic
+#                         auth ferroehr/ferroehr on 8080) and EHRbase's
+#                         official pairing (docker/e2e-ehrbase.yml, basic auth
+#                         defaults on 8090) — and run the two-CDR journey
+#                         against them (#99). Both are deliberately `:latest`
+#                         (owner ruling on #99): the SUT is the thing being
+#                         graded, not a supply-chain input.
 #
 # The journeys themselves read UI_E2E_BASE_URL, UI_E2E_WEBDRIVER_URL,
 # UI_E2E_SHOTS_DIR and UI_E2E_DOCS_SHOTS, and skip with a printed reason when
@@ -72,11 +80,18 @@ TREE_STATE_BEFORE="$(git_tree_state)"
 
 CONSOLE_PID=""
 DRIVER_PID=""
+SUTS_UP=""
 cleanup() {
   [[ -n "${UI_E2E_KEEP_UP:-}" ]] && return 0
   [[ -n "$CONSOLE_PID" ]] && kill "$CONSOLE_PID" 2>/dev/null || true
   [[ -n "$DRIVER_PID" ]] && kill "$DRIVER_PID" 2>/dev/null || true
   docker rm -f "$SELENIUM_NAME" >/dev/null 2>&1 || true
+  if [[ -n "$SUTS_UP" ]]; then
+    docker compose -p veredictum-e2e-ferroehr \
+      -f "$ROOT/target/ui-e2e/suts/ferroehr.yml" down -v >/dev/null 2>&1 || true
+    docker compose -p veredictum-e2e-ehrbase \
+      -f "$ROOT/docker/e2e-ehrbase.yml" down -v >/dev/null 2>&1 || true
+  fi
   return 0
 }
 trap cleanup EXIT
@@ -112,12 +127,25 @@ done
 CONSOLE_BIN="$ROOT/target/ui-e2e/veredictum-console"
 mkdir -p "$ROOT/target/ui-e2e"
 cp "$ROOT/target/debug/veredictum-console" "$CONSOLE_BIN"
+
+# The driven-run journey spawns the instrument itself, so the harness builds
+# the engine binary and hands it over the same copy-then-point path.
+if [[ -z "${UI_E2E_NO_BUILD:-}" ]]; then
+  echo "── building the engine (cargo build -p veredictum)"
+  cargo build --locked -p veredictum --bin veredictum
+fi
+ENGINE_BIN="$ROOT/target/ui-e2e/veredictum"
+[[ -e "$ROOT/target/debug/veredictum" ]] \
+  || { echo "FATAL: target/debug/veredictum is missing — drop UI_E2E_NO_BUILD" >&2; exit 1; }
+cp "$ROOT/target/debug/veredictum" "$ENGINE_BIN"
 # An arm64 macOS binary carries an ad-hoc signature that a copy invalidates,
 # and the kernel then SIGKILLs the copy at exec. Re-signing is a no-op
 # elsewhere, because `codesign` exists only on macOS.
 if command -v codesign >/dev/null; then
-  codesign --force --sign - "$CONSOLE_BIN" >/dev/null 2>&1 \
-    || echo "warning: could not re-sign $CONSOLE_BIN" >&2
+  for bin in "$CONSOLE_BIN" "$ENGINE_BIN"; do
+    codesign --force --sign - "$bin" >/dev/null 2>&1 \
+      || echo "warning: could not re-sign $bin" >&2
+  done
 fi
 
 echo "── serving the console on $CONSOLE_ADDR over the repository mounts"
@@ -129,6 +157,8 @@ LEPTOS_SITE_ADDR="$CONSOLE_ADDR" \
 LEPTOS_OUTPUT_NAME="veredictum-console" \
 VEREDICTUM_ROOT="artifacts" \
 VEREDICTUM_SPECS="specs/openehr" \
+VEREDICTUM_OUT="target/ui-e2e/out" \
+VEREDICTUM_ENGINE="$ENGINE_BIN" \
   "$CONSOLE_BIN" &
 CONSOLE_PID=$!
 wait_http "$PROBE_URL/healthz" 90 "the console"
@@ -177,6 +207,40 @@ else
 fi
 wait_http "$DRIVER_URL/status" 120 "the browser endpoint"
 
+# ── 2b. The real CDRs (#99, opt-in) ─────────────────────────────────────────
+# Two live SUTs the two-CDR journey grades side by side. FerroEHR runs its own
+# published quickstart compose (fetched fresh, so "latest" is whatever its
+# release train currently pins); EHRbase runs the official image pairing from
+# docker/e2e-ehrbase.yml. Answering = any HTTP status (a 401 from basic auth
+# is an answer), so the wait cannot pass on a connection refused.
+FERROEHR_SUT_URL=""
+EHRBASE_SUT_URL=""
+wait_answering() { # url, tries, what
+  local url="$1" tries="${2:-180}" what="${3:-$1}" code
+  for _ in $(seq 1 "$tries"); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "$url" || true)"
+    if [[ "$code" != "000" && "$code" -lt 500 ]]; then return 0; fi
+    sleep 1
+  done
+  echo "FATAL: $what never answered at $url (last code $code)" >&2
+  return 1
+}
+if [[ -n "${UI_E2E_REAL_SUTS:-}" ]]; then
+  echo "── composing the real CDRs (FerroEHR latest, EHRbase latest)"
+  mkdir -p "$ROOT/target/ui-e2e/suts"
+  gh api repos/rubentalstra/FerroEHR/contents/docker-compose.yml \
+    -H "Accept: application/vnd.github.raw" > "$ROOT/target/ui-e2e/suts/ferroehr.yml"
+  SUTS_UP=1
+  docker compose -p veredictum-e2e-ferroehr \
+    -f "$ROOT/target/ui-e2e/suts/ferroehr.yml" up -d --quiet-pull
+  docker compose -p veredictum-e2e-ehrbase \
+    -f "$ROOT/docker/e2e-ehrbase.yml" up -d --quiet-pull
+  FERROEHR_SUT_URL="http://127.0.0.1:8080/ferroehr/rest/openehr/v1"
+  EHRBASE_SUT_URL="http://127.0.0.1:8090/ehrbase/rest/openehr/v1"
+  wait_answering "$FERROEHR_SUT_URL/definition/template/adl1.4" 180 "FerroEHR"
+  wait_answering "$EHRBASE_SUT_URL/definition/template/adl1.4" 180 "EHRbase"
+fi
+
 # ── 3. The journeys ─────────────────────────────────────────────────────────
 NEXTEST_FILTER=(-E 'test(e2e_)')
 [[ -n "$FILTER" ]] && NEXTEST_FILTER=(-E "test($FILTER)")
@@ -185,6 +249,8 @@ UI_E2E_BASE_URL="$CONSOLE_URL" \
 UI_E2E_WEBDRIVER_URL="$DRIVER_URL" \
 UI_E2E_SHOTS_DIR="$SHOTS_DIR" \
 UI_E2E_DOCS_SHOTS="${UI_E2E_DOCS_SHOTS:-}" \
+UI_E2E_FERROEHR_URL="$FERROEHR_SUT_URL" \
+UI_E2E_EHRBASE_URL="$EHRBASE_SUT_URL" \
   cargo nextest run --locked -p veredictum-console --features ssr \
     -j 1 --no-fail-fast "${NEXTEST_FILTER[@]}"
 
