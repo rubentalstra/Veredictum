@@ -20,6 +20,15 @@ version on.
 
 ### Added
 
+- **The catalogue speaks the CNF profile language (#87).** Case rows carry
+  their tier badges (CORE / STANDARD / OPTIONS / SEC-BASIC, the capability
+  matrix's own vocabulary), a `?tier=` filter narrows any chapter to one
+  tier, and the chapter listing groups its cases by the same two-level
+  chapter → band taxonomy the published conformance visuals render — through
+  the lib's own `band_of`, never a console-side re-taxonomy. The case card
+  grows to the full core: verdict-bearing capabilities beside the informative
+  exercises, the applies version windows, guards, formats, the register
+  option tag, and the flow or decision-table size.
 - **`run --progress` (#81).** One machine-parseable stdout line per processed
   case — `progress: 0/<n>` once the selection is final, then
   `progress: <k>/<n> <case-id>` — line-flushed so a driver reading through a

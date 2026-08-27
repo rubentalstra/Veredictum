@@ -66,6 +66,21 @@ pub struct CaseRow {
     pub kind: String,
     /// The ISO/IEC 9646 test purpose.
     pub purpose: String,
+    /// The profile tiers the case carries (CORE / STANDARD / OPTIONS /
+    /// SEC-BASIC), the CNF profile model's own vocabulary.
+    pub tiers: Vec<String>,
+    /// The presentation band within the chapter — the SAME two-level
+    /// taxonomy the published chapter-bars SVG renders (`conf_assets`).
+    pub band: String,
+}
+
+/// One band section of a chapter listing: the published SVG's second level.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BandRows {
+    /// The band label from the instrument's own taxonomy.
+    pub band: String,
+    /// The band's cases, id-sorted.
+    pub cases: Vec<CaseRow>,
 }
 
 /// One realizing binding in a case detail.
@@ -101,6 +116,23 @@ pub struct CaseDetail {
     pub bindings: Vec<BindingRef>,
     /// The corpus keys the case's preconditions and commits reference.
     pub corpus_keys: Vec<String>,
+    /// The profile tiers the case carries.
+    pub tiers: Vec<String>,
+    /// The verdict-bearing capability names (kept minimal by design).
+    pub capabilities: Vec<String>,
+    /// The informative coverage tags.
+    pub exercises: Vec<String>,
+    /// The spec-version windows, component and range, verbatim.
+    pub applies: Vec<String>,
+    /// The prose run conditions, each spec-cited.
+    pub guards: Vec<String>,
+    /// The case-level format axis.
+    pub formats: Vec<String>,
+    /// The register option tag realizing an implementation choice, if any.
+    pub option: Option<String>,
+    /// The flow step count (functional) or decision-table row count
+    /// (content).
+    pub size: String,
 }
 
 #[cfg(feature = "ssr")]
@@ -109,7 +141,7 @@ pub mod read {
     //! mapping from the typed model to the rows is plain testable code.
 
     use super::{
-        BindingRef, CaseDetail, CaseRow, CatalogueMissing, ChapterRow, InstrumentSummary,
+        BandRows, BindingRef, CaseDetail, CaseRow, CatalogueMissing, ChapterRow, InstrumentSummary,
         InstrumentView,
     };
     use crate::state::ConsoleState;
@@ -176,27 +208,63 @@ pub mod read {
             .collect())
     }
 
-    /// The chapter's cases, id-sorted, filtered by the id substring `q`.
+    /// The tier tokens a case carries, in vocabulary order — the lib's own
+    /// serde names (CORE / STANDARD / OPTIONS / SEC-BASIC), never a mirrored
+    /// vocabulary.
+    fn tier_tokens(case: &veredictum::model::case::CaseCore) -> Vec<String> {
+        case.profiles
+            .iter()
+            .filter_map(|tier| serde_json::to_string(tier).ok())
+            .map(|token| token.trim_matches('"').to_owned())
+            .collect()
+    }
+
+    /// The chapter's cases grouped by the published SVG's own bands.
+    ///
+    /// The taxonomy is `conf_assets::band_of` — never a console-side
+    /// re-taxonomy. Id-sorted within a band, filtered by the id substring
+    /// `q` and the tier token `tier` (empty = every tier).
     ///
     /// # Errors
-    /// The verbatim load failure when the catalogue is absent.
-    pub fn case_rows(state: &ConsoleState, chapter: &str, q: &str) -> Result<Vec<CaseRow>, String> {
+    /// The verbatim load failure when the catalogue is absent, or the
+    /// taxonomy's own refusal for an unmapped id.
+    pub fn band_rows(
+        state: &ConsoleState,
+        chapter: &str,
+        q: &str,
+        tier: &str,
+    ) -> Result<Vec<BandRows>, String> {
         let validation = state.catalogue.as_ref().as_ref().map_err(Clone::clone)?;
-        let mut rows: Vec<CaseRow> = validation
-            .loaded
-            .set
-            .cases
-            .iter()
-            .filter(|(path, _)| chapter_of(path) == chapter)
-            .filter(|(_, case)| q.is_empty() || case.id.to_string().contains(q))
-            .map(|(_, case)| CaseRow {
-                id: case.id.to_string(),
+        let mut bands: std::collections::BTreeMap<String, Vec<CaseRow>> =
+            std::collections::BTreeMap::new();
+        for (path, case) in &validation.loaded.set.cases {
+            if chapter_of(path) != chapter {
+                continue;
+            }
+            let id = case.id.to_string();
+            if !q.is_empty() && !id.contains(q) {
+                continue;
+            }
+            let tiers = tier_tokens(case);
+            if !tier.is_empty() && !tiers.iter().any(|t| t == tier) {
+                continue;
+            }
+            let (_, band) = veredictum::conf_assets::band_of(&id).map_err(|e| e.to_string())?;
+            bands.entry(band.to_owned()).or_default().push(CaseRow {
+                id,
                 kind: format!("{:?}", case.kind).to_lowercase(),
                 purpose: case.test_purpose.clone(),
+                tiers,
+                band: band.to_owned(),
+            });
+        }
+        Ok(bands
+            .into_iter()
+            .map(|(band, mut cases)| {
+                cases.sort_by(|a, b| a.id.cmp(&b.id));
+                BandRows { band, cases }
             })
-            .collect();
-        rows.sort_by(|a, b| a.id.cmp(&b.id));
-        Ok(rows)
+            .collect())
     }
 
     /// The full case detail, or `Ok(None)` for an id the catalogue does not
@@ -240,6 +308,16 @@ pub mod read {
             .collect();
         corpus_keys.sort();
         corpus_keys.dedup();
+        let applies = case
+            .applies
+            .entries()
+            .into_iter()
+            .map(|(component, range)| format!("{} {}", component.token(), range.raw()))
+            .collect();
+        let size = case.decision_table.as_ref().map_or_else(
+            || format!("{} flow step(s)", case.flow.len()),
+            |table| format!("{} decision-table row(s)", table.rows.len()),
+        );
         Ok(Some(CaseDetail {
             id: case.id.to_string(),
             chapter: chapter_of(path),
@@ -251,6 +329,18 @@ pub mod read {
             spec_refs: case.spec_refs.clone(),
             bindings,
             corpus_keys,
+            tiers: tier_tokens(case),
+            capabilities: case.capabilities.iter().map(ToString::to_string).collect(),
+            exercises: case.exercises.iter().map(ToString::to_string).collect(),
+            applies,
+            guards: case.guards.clone(),
+            formats: case
+                .formats
+                .iter()
+                .map(|f| format!("{f:?}").to_lowercase())
+                .collect(),
+            option: case.option.as_ref().map(ToString::to_string),
+            size,
         }))
     }
 }
@@ -270,7 +360,7 @@ pub mod fns {
         reason = "fires only in some #[server] expansions; see the module doc"
     )]
 
-    use super::{CaseDetail, CaseRow, ChapterRow, InstrumentView};
+    use super::{BandRows, CaseDetail, ChapterRow, InstrumentView};
     use leptos::prelude::{ServerFnError, server};
 
     #[cfg(feature = "ssr")]
@@ -297,17 +387,20 @@ pub mod fns {
         read::chapter_rows(&state).map_err(ServerFnError::new)
     }
 
-    /// One chapter's cases, filtered by the id substring `q`.
+    /// One chapter's cases, grouped by band, filtered by the id substring
+    /// `q` and the tier token `tier`.
     ///
     /// # Errors
-    /// The verbatim load failure when the catalogue is absent.
+    /// The verbatim load failure when the catalogue is absent, or the
+    /// taxonomy's refusal for an unmapped id.
     #[server]
-    pub async fn fetch_chapter_cases(
+    pub async fn fetch_chapter_bands(
         chapter: String,
         q: String,
-    ) -> Result<Vec<CaseRow>, ServerFnError> {
+        tier: String,
+    ) -> Result<Vec<BandRows>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        read::case_rows(&state, &chapter, &q).map_err(ServerFnError::new)
+        read::band_rows(&state, &chapter, &q, &tier).map_err(ServerFnError::new)
     }
 
     /// One case in full; `None` for an id the catalogue does not carry.

@@ -16,7 +16,7 @@ use leptos_router::components::{A, Form};
 use leptos_router::hooks::{use_params_map, use_query_map};
 
 use crate::catalogue_api::CaseDetail;
-use crate::catalogue_api::fns::{fetch_case_detail, fetch_chapter_cases, fetch_chapters};
+use crate::catalogue_api::fns::{fetch_case_detail, fetch_chapter_bands, fetch_chapters};
 use crate::components::data_table::{
     TABLE, TABLE_WRAP, TD, TH, TableFooter, page_from_url, page_window,
 };
@@ -38,6 +38,50 @@ fn param(name: &'static str) -> Memo<String> {
 fn query_q() -> Memo<String> {
     let query = use_query_map();
     Memo::new(move |_| query.with(|q| q.get("q").unwrap_or_default()))
+}
+
+/// The `?tier=` profile filter from the URL (CORE / STANDARD / OPTIONS /
+/// SEC-BASIC; empty = every tier).
+fn query_tier() -> Memo<String> {
+    let query = use_query_map();
+    Memo::new(move |_| query.with(|q| q.get("tier").unwrap_or_default()))
+}
+
+/// One labeled fact list on the case card; an empty list says so instead of
+/// vanishing.
+fn fact_list(label: &'static str, values: Vec<String>) -> impl IntoView + use<> {
+    let body = if values.is_empty() {
+        view! { <p class="text-sm text-ink-faint">"none"</p> }.into_any()
+    } else {
+        values
+            .into_iter()
+            .map(|value| view! { <li class="font-mono text-xs text-ink">{value}</li> })
+            .collect_view()
+            .into_any()
+    };
+    view! {
+        <div>
+            <h3 class="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                {label}
+            </h3>
+            <ul class="space-y-0.5">{body}</ul>
+        </div>
+    }
+}
+
+/// The tier badge row for a case.
+fn tier_badges(tiers: &[String]) -> impl IntoView + use<> {
+    tiers
+        .iter()
+        .map(|tier| {
+            let class = match tier.as_str() {
+                "CORE" => "rounded-control bg-accent-subtle px-1.5 py-0.5 text-xs font-medium text-accent-ink",
+                "SEC-BASIC" => "rounded-control bg-warn-subtle px-1.5 py-0.5 text-xs font-medium text-ink",
+                _ => "rounded-control bg-sunken px-1.5 py-0.5 text-xs text-ink-muted",
+            };
+            view! { <span class=class>{tier.clone()}</span> }
+        })
+        .collect_view()
 }
 
 /// The chapter list.
@@ -93,47 +137,82 @@ pub fn Catalogue() -> impl IntoView {
     }
 }
 
-/// One chapter's case listing: URL-state search and paging over the typed
-/// rows.
+/// One chapter's case listing: band sections over URL-state search, tier
+/// filter and paging — the same two-level taxonomy the published SVG renders.
 #[expect(
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the filter form and the band sections — one cohesive screen, its sections erased per the hydration rules"
 )]
 #[component]
 pub fn Chapter() -> impl IntoView {
     let chapter = param("chapter");
     let q = query_q();
+    let tier = query_tier();
     let page = page_from_url();
-    // Reactive inputs in the SOURCE; the fetcher is untracked by design
-    // (rules §6).
+    // Reactive inputs in the SOURCE; the fetcher is untracked by design.
     let rows = Resource::new(
-        move || (chapter.get(), q.get()),
-        |(chapter, q)| fetch_chapter_cases(chapter, q),
+        move || (chapter.get(), q.get(), tier.get()),
+        |(chapter, q, tier)| fetch_chapter_bands(chapter, q, tier),
     );
+
+    let tier_links = move || {
+        let chapter_key = chapter.get();
+        let active = tier.get();
+        let q_now = q.get();
+        ["", "CORE", "STANDARD", "OPTIONS", "SEC-BASIC"]
+            .into_iter()
+            .map(|token| {
+                let label = if token.is_empty() { "all" } else { token };
+                let mut href = format!("/catalogue/{chapter_key}?tier={token}");
+                if !q_now.is_empty() {
+                    // Infallible on String; the idiomatic append the lint wants.
+                    let _ = std::fmt::Write::write_fmt(&mut href, format_args!("&q={q_now}"));
+                }
+                let class = if active == token {
+                    "rounded-control bg-accent px-2 py-1 text-xs font-medium text-on-accent"
+                } else {
+                    "rounded-control border border-edge-strong px-2 py-1 text-xs text-ink hover:bg-sunken"
+                };
+                view! {
+                    <A href=href attr:class=class>
+                        {label}
+                    </A>
+                }
+            })
+            .collect_view()
+    };
 
     view! {
         <Title text=move || format!("{} · Catalogue · Veredictum console", chapter.get()) />
         <PageHeader
             title=chapter
-            subtitle="One small isolated case per behaviour, so a red row names one defect."
+            subtitle="One small isolated case per behaviour, grouped by the same bands the published conformance visuals render."
             crumbs=vec![Crumb::new("Catalogue", "/catalogue")]
         />
-        <Form method="GET" action="">
-            <div class="mb-4 flex items-center gap-2">
-                <input
-                    type="search"
-                    name="q"
-                    value=move || q.get()
-                    placeholder="Filter by case id…"
-                    class=INPUT
-                />
-                <button type="submit" class="text-sm text-accent hover:underline">
-                    "filter"
-                </button>
-            </div>
-        </Form>
-        // Transition keeps the old rows visible while a filter reloads
-        // (rules §6) — no fallback flash on every keystroke-submit.
+        <div class="mb-4 flex flex-wrap items-center gap-3">
+            <Form method="GET" action="">
+                <div class="flex items-center gap-2">
+                    <input
+                        type="search"
+                        name="q"
+                        value=move || q.get()
+                        placeholder="Filter by case id…"
+                        class=INPUT
+                    />
+                    <input type="hidden" name="tier" value=move || tier.get() />
+                    <button type="submit" class="text-sm text-accent hover:underline">
+                        "filter"
+                    </button>
+                </div>
+            </Form>
+            <div class="flex items-center gap-1.5">{tier_links}</div>
+        </div>
+        // Transition keeps the old rows visible while a filter reloads —
+        // no fallback flash on every submit.
         <Transition fallback=|| {
             view! { <p class="text-sm text-ink-muted">"Reading the chapter…"</p> }
         }>
@@ -141,43 +220,82 @@ pub fn Chapter() -> impl IntoView {
                 let current_page = page.get();
                 let chapter_key = chapter.get();
                 match rows.await {
-                    Ok(all) => {
-                        let total = all.len();
+                    Ok(bands) => {
+                        let total: usize = bands.iter().map(|band| band.cases.len()).sum();
                         if total == 0 {
                             return view! {
                                 <EmptyState
                                     icon=icondata_lu::LuSearchX
                                     message="No case matches"
-                                    hint="Loosen the filter, or check the chapter key in the URL."
+                                    hint="Loosen the filter or the tier, or check the chapter key in the URL."
                                 />
                             }
                                 .into_any();
                         }
+                        // Paging windows over the FLAT case sequence; band
+                        // headers render wherever their first visible case
+                        // lands, so the two-level reading survives paging.
                         let (start, end) = page_window(current_page, total);
-                        let window = all.get(start..end).unwrap_or_default().to_vec();
-                        let body = window
+                        let mut index = 0_usize;
+                        let sections = bands
                             .into_iter()
-                            .map(|row| {
-                                let href = format!(
-                                    "/catalogue/{chapter_key}/{}",
-                                    row.id,
-                                );
-                                view! {
-                                    <tr class="hover:bg-sunken">
-                                        <td class=TD>
-                                            <A
-                                                href=href
-                                                attr:class="font-mono text-xs text-accent hover:underline"
-                                            >
-                                                {row.id}
-                                            </A>
-                                        </td>
-                                        <td class=TD>{row.kind}</td>
-                                        <td class=TD>
-                                            <span class="line-clamp-2 text-sm">{row.purpose}</span>
-                                        </td>
-                                    </tr>
+                            .filter_map(|band| {
+                                let band_len = band.cases.len();
+                                let band_start = index;
+                                index += band_len;
+                                let visible_from = start.max(band_start);
+                                let visible_to = end.min(band_start + band_len);
+                                if visible_from >= visible_to {
+                                    return None;
                                 }
+                                let rows = band
+                                    .cases
+                                    .get(visible_from - band_start..visible_to - band_start)
+                                    .unwrap_or_default()
+                                    .iter()
+                                    .cloned()
+                                    .map(|row| {
+                                        let href = format!(
+                                            "/catalogue/{chapter_key}/{}",
+                                            row.id,
+                                        );
+                                        let badges = tier_badges(&row.tiers);
+                                        view! {
+                                            <tr class="hover:bg-sunken">
+                                                <td class=TD>
+                                                    <A
+                                                        href=href
+                                                        attr:class="font-mono text-xs text-accent hover:underline"
+                                                    >
+                                                        {row.id}
+                                                    </A>
+                                                </td>
+                                                <td class=TD>
+                                                    <span class="flex flex-wrap gap-1">{badges}</span>
+                                                </td>
+                                                <td class=TD>{row.kind}</td>
+                                                <td class=TD>
+                                                    <span class="line-clamp-2 text-sm">{row.purpose}</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    })
+                                    .collect_view();
+                                Some(
+                                    view! {
+                                        <tbody>
+                                            <tr>
+                                                <th
+                                                    colspan="4"
+                                                    class="bg-sunken px-3 py-1.5 text-left text-xs font-semibold text-ink-heading"
+                                                >
+                                                    {format!("{} · {band_len} case(s)", band.band)}
+                                                </th>
+                                            </tr>
+                                            {rows}
+                                        </tbody>
+                                    },
+                                )
                             })
                             .collect_view();
                         view! {
@@ -186,11 +304,12 @@ pub fn Chapter() -> impl IntoView {
                                     <thead>
                                         <tr>
                                             <th class=TH>"Case id"</th>
+                                            <th class=TH>"Tiers"</th>
                                             <th class=TH>"Kind"</th>
                                             <th class=TH>"Test purpose"</th>
                                         </tr>
                                     </thead>
-                                    <tbody>{body}</tbody>
+                                    {sections}
                                 </table>
                                 <TableFooter
                                     base=format!("/catalogue/{chapter_key}")
@@ -246,6 +365,10 @@ pub fn Case() -> impl IntoView {
 
 /// The loaded case's sections — plain assembly, erased per section
 /// (rules §1).
+#[expect(
+    clippy::too_many_lines,
+    reason = "the case card's five sections — one cohesive assembly, each section already erased"
+)]
 fn case_view(chapter_key: &str, case: CaseDetail) -> impl IntoView + use<> {
     let refs = case
         .spec_refs
@@ -311,9 +434,11 @@ fn case_view(chapter_key: &str, case: CaseDetail) -> impl IntoView + use<> {
             <section class=format!("{CARD_PAD} lg:col-span-2")>
                 <h2 class=CARD_TITLE>"Description"</h2>
                 <p class="whitespace-pre-wrap text-sm text-ink">{case.description}</p>
-                <div class="mt-3 flex flex-wrap gap-3 text-sm text-ink-muted">
+                <div class="mt-3 flex flex-wrap items-center gap-3 text-sm text-ink-muted">
                     <span>{format!("kind: {}", case.kind)}</span>
                     <span>{format!("component: {}", case.component)}</span>
+                    <span>{case.size}</span>
+                    <span class="flex flex-wrap gap-1">{tier_badges(&case.tiers)}</span>
                 </div>
                 {anchor}
             </section>
@@ -329,6 +454,20 @@ fn case_view(chapter_key: &str, case: CaseDetail) -> impl IntoView + use<> {
                 <ul class="space-y-1.5">{bindings}</ul>
                 <h2 class=format!("{CARD_TITLE} mt-4")>"Corpus references"</h2>
                 <ul class="space-y-1">{corpus}</ul>
+            </section>
+            <section class=format!("{CARD_PAD} lg:col-span-2")>
+                <h2 class=CARD_TITLE>"Selection facts"</h2>
+                <div class="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                    {fact_list("Verdict-bearing capabilities", case.capabilities)}
+                    {fact_list("Exercises (informative coverage)", case.exercises)}
+                    {fact_list("Applies (spec-version windows)", case.applies)}
+                    {fact_list("Guards (cited run conditions)", case.guards)}
+                    {fact_list("Formats", case.formats)}
+                    {fact_list(
+                        "Register option",
+                        case.option.map(|option| vec![option]).unwrap_or_default(),
+                    )}
+                </div>
             </section>
         </div>
     }
