@@ -2323,14 +2323,14 @@ const CITATION_SOURCE_MARKERS: [&str; 1] = ["OAS"];
 /// One `<COMPONENT> <path hint> §<section>` clause of a citation. A citation
 /// may carry several, separated by `;` or ` + `.
 #[derive(Debug)]
-struct CitationClause<'a> {
+pub struct CitationClause<'a> {
     /// The component token opening the clause.
-    component: &'a str,
+    pub component: &'a str,
     /// The path-hint tokens naming the document (possibly empty: a
     /// component-only citation).
-    tokens: Vec<&'a str>,
+    pub tokens: Vec<&'a str>,
     /// The `§`-introduced section names, in citation order.
-    sections: Vec<&'a str>,
+    pub sections: Vec<&'a str>,
 }
 
 /// Whether a token can be part of a path hint (a file/directory name, or a
@@ -2343,12 +2343,14 @@ fn path_like(token: &str) -> bool {
         })
 }
 
-/// Split a citation into its component clauses. A citation cites several
-/// documents by separating the clauses with `;` or ` + `; a fragment that does
-/// not open with a known component is commentary on the preceding clause and
-/// is dropped. A citation naming no component at all yields one clause so the
-/// unknown-component finding still fires.
-fn citation_clauses(citation: &str) -> Vec<CitationClause<'_>> {
+/// Split a citation into its component clauses.
+///
+/// A citation cites several documents by separating the clauses with `;` or
+/// ` + `; a fragment that does not open with a known component is commentary
+/// on the preceding clause and is dropped. A citation naming no component at
+/// all yields one clause so the unknown-component finding still fires.
+#[must_use]
+pub fn citation_clauses(citation: &str) -> Vec<CitationClause<'_>> {
     let mut clauses = Vec::new();
     for semi in citation.split(';') {
         for fragment in semi.split(" + ") {
@@ -2401,41 +2403,67 @@ fn citation_clauses(citation: &str) -> Vec<CitationClause<'_>> {
     clauses
 }
 
+/// How many concrete path-hint variants one citation clause may expand into,
+/// within a single token and across the clause's tokens alike.
+///
+/// An authored shorthand names two or three sibling documents; past this
+/// ceiling the tokens come back unexpanded and fail their no-match finding.
+pub const MAX_CITATION_VARIANTS: usize = 32;
+
 /// Expand one `{a,b}` brace group in a path-hint token into its concrete
 /// alternatives, recursing for a second group in the produced tail. A token
 /// with no well-formed group passes through literally (a spaced group has
 /// already been broken by the whitespace splitter, and the literal's no-match
 /// finding is the honest failure).
+///
+/// Bounded by [`MAX_CITATION_VARIANTS`] calls: one token's groups multiply, so
+/// without the budget a 113-byte citation of 22 groups asks for four million
+/// strings. Found by the `citation` fuzz target.
 fn expand_one_token(token: &str) -> Vec<String> {
+    let mut budget = MAX_CITATION_VARIANTS;
+    expand_one_token_within(token, &mut budget).unwrap_or_else(|| vec![token.to_owned()])
+}
+
+/// The budgeted body of [`expand_one_token`]: `None` once the budget is spent,
+/// which returns the whole token unexpanded.
+fn expand_one_token_within(token: &str, budget: &mut usize) -> Option<Vec<String>> {
+    *budget = budget.checked_sub(1)?;
     let Some(open) = token.find('{') else {
-        return vec![token.to_owned()];
+        return Some(vec![token.to_owned()]);
     };
     let Some(close) = token.get(open..).and_then(|rest| rest.find('}')) else {
-        return vec![token.to_owned()];
+        return Some(vec![token.to_owned()]);
     };
     let (Some(head), Some(body), Some(tail)) = (
         token.get(..open),
         token.get(open + 1..open + close),
         token.get(open + close + 1..),
     ) else {
-        return vec![token.to_owned()];
+        return Some(vec![token.to_owned()]);
     };
-    body.split(',')
-        .flat_map(|alternative| expand_one_token(&format!("{head}{alternative}{tail}")))
-        .collect()
+    let mut expanded = Vec::new();
+    for alternative in body.split(',') {
+        expanded.extend(expand_one_token_within(
+            &format!("{head}{alternative}{tail}"),
+            budget,
+        )?);
+    }
+    Some(expanded)
 }
 
-/// Expand `{a,b}` brace groups across a clause's path-hint tokens into the
-/// concrete token-list variants — the authored shorthand for one clause citing
-/// several sibling documents (`operations/directory_{update,delete}.yaml`).
-/// Every variant must resolve on its own, so a half-phantom shorthand still
-/// fails. Bounded at 32 variants: past that the literal tokens come back
-/// unexpanded and fail loudly rather than exploding.
-fn expand_braces(tokens: &[&str]) -> Vec<Vec<String>> {
+/// Expand `{a,b}` brace groups across a clause's path-hint tokens.
+///
+/// The groups are the authored shorthand for one clause citing several sibling
+/// documents (`operations/directory_{update,delete}.yaml`), and every variant
+/// must resolve on its own, so a half-phantom shorthand still fails. Bounded at
+/// [`MAX_CITATION_VARIANTS`]: past that the literal tokens come back unexpanded
+/// and fail loudly rather than exploding.
+#[must_use]
+pub fn expand_braces(tokens: &[&str]) -> Vec<Vec<String>> {
     let mut variants: Vec<Vec<String>> = vec![Vec::new()];
     for token in tokens {
         let expansions = expand_one_token(token);
-        let mut next = Vec::with_capacity(variants.len() * expansions.len());
+        let mut next = Vec::with_capacity(variants.len().saturating_mul(expansions.len()));
         for variant in &variants {
             for expansion in &expansions {
                 let mut grown = variant.clone();
@@ -2443,7 +2471,7 @@ fn expand_braces(tokens: &[&str]) -> Vec<Vec<String>> {
                 next.push(grown);
             }
         }
-        if next.len() > 32 {
+        if next.len() > MAX_CITATION_VARIANTS {
             return vec![tokens.iter().map(|t| (*t).to_owned()).collect()];
         }
         variants = next;
@@ -2511,7 +2539,8 @@ fn normalize_section(text: &str) -> String {
 /// The forms a cited section may take once its trailing commentary is cut:
 /// citations routinely append a parenthetical, an em-dash gloss, or a
 /// qualifier after the heading proper.
-fn section_candidates(section: &str) -> BTreeSet<String> {
+#[must_use]
+pub fn section_candidates(section: &str) -> BTreeSet<String> {
     let full = normalize_section(section);
     let mut out = BTreeSet::new();
     let mut add = |text: &str| {
@@ -5905,6 +5934,25 @@ some prose\n\
             !findings.iter().any(|f| f.message.contains("§Silent")),
             "the honest exclusion must suppress its section finding, got: {findings:?}"
         );
+    }
+
+    /// The `citation` fuzz target's first finding: 22 brace groups in one
+    /// path-hint token asked for 2^22 strings, and the validator hung with the
+    /// process growing past the sanitizer's memory ceiling. The authored
+    /// shorthand still expands; the pathological token comes back whole.
+    #[test]
+    fn brace_expansion_is_bounded_per_token() {
+        let authored = expand_braces(&["operations/directory_{update,delete}.yaml"]);
+        assert_eq!(authored.len(), 2, "{authored:?}");
+
+        let bomb = "{a,b}".repeat(22);
+        let expanded = expand_braces(&[bomb.as_str()]);
+        assert_eq!(
+            expanded,
+            vec![vec![bomb.clone()]],
+            "a token past the ceiling comes back unexpanded"
+        );
+        assert!(expanded.len() <= MAX_CITATION_VARIANTS);
     }
 
     /// A missing released chapter is itself a finding — the derivation must

@@ -1,0 +1,77 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# The libFuzzer harnesses over the readers that take text or bytes the
+# instrument did not produce. Deliberately its OWN workspace (the empty
+# `[workspace]` table below): cargo-fuzz needs a nightly toolchain, this
+# repository is pinned to stable 1.97.1, and no ordinary `cargo build`,
+# `cargo clippy` or `cargo nextest` run at the root may compile this package.
+[workspace]
+
+[package]
+name = "veredictum-fuzz"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+veredictum = { path = ".." }
+serde_json = { version = "1", features = ["preserve_order"] }
+base64 = "0.23"
+# Named only to hold the compiled case-core schema in a `LazyLock`.
+jsonschema = "0.49.3"
+
+# Release-optimized with debug assertions and overflow checks ON: libFuzzer
+# needs the optimized build to reach a useful execution rate, and an arithmetic
+# overflow or a debug-only invariant break is exactly what this lane is for.
+[profile.release]
+debug = 1
+debug-assertions = true
+overflow-checks = true
+
+[[bin]]
+name = "reference_grammar"
+path = "fuzz_targets/reference_grammar.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "literal_grammar"
+path = "fuzz_targets/literal_grammar.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "citation"
+path = "fuzz_targets/citation.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "artifact_yaml"
+path = "fuzz_targets/artifact_yaml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "party_document"
+path = "fuzz_targets/party_document.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hdr_v2"
+path = "fuzz_targets/hdr_v2.rs"
+test = false
+doc = false
+bench = false

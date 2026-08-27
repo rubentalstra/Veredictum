@@ -71,6 +71,18 @@ brings are the ones listed in [`CLAUDE.md`](CLAUDE.md) § Build and test, and
 `veredictum validate` becomes the gate that must be clean before any server is
 composed.
 
+Changing a reader that parses text from outside — a grammar, the citation
+splitter, an artifact or a party document — also means running its fuzz target.
+The harnesses live in [`fuzz/`](fuzz/README.md), in their own nightly
+workspace, and CI compiles them on every pull request that touches `src/` or
+`fuzz/`:
+
+```shell
+fuzz/seeds.sh citation
+cargo +nightly fuzz run citation fuzz/corpus/citation fuzz/seeds/citation \
+  -- -max_total_time=120 -max_len=4096 -timeout=25
+```
+
 ## Hard rules
 
 These are the ones a pull request is most often refused for. The full set is in

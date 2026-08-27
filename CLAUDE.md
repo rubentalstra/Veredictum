@@ -308,6 +308,17 @@ cargo hack check --rust-version --all-targets    # the declared MSRV, verified
 cargo machete                                    # no dependency nothing imports
 ```
 
+The libFuzzer harnesses in `fuzz/` are their own nightly workspace, never a
+root member. CI compiles them on every pull request touching `src/` or `fuzz/`
+and campaigns weekly; a crash is fixed in the reader and pinned by a test, never
+worked around in the harness (`.claude/rules/fuzzing.md`).
+
+```bash
+fuzz/seeds.sh <target>
+cargo +nightly fuzz run <target> fuzz/corpus/<target> fuzz/seeds/<target> \
+  -- -max_total_time=120 -timeout=25
+```
+
 **`validate` is the gate the catalogue lives or dies by**, and it is clean
 before any SUT is composed:
 
@@ -404,6 +415,8 @@ subagents.
   on: adapt names and paths when the tree moves, never reword the content
 - `.claude/rules/cnf-triage.md` — the attribution law and the register lifecycle
 - `.claude/rules/testing.md` — test discipline and the coverage mandate
+- `.claude/rules/fuzzing.md` — the harness contract, the crash law, and the
+  crash-to-regression-test procedure
 - `.claude/rules/comments.md` — RFC 505 / RFC 1574 with budgets
 - `.claude/rules/reliability.md` — the safety rules and their enforcement
 - `.claude/rules/writing-style.md` — prose style
