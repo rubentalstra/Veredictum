@@ -52,10 +52,14 @@ answer renders verbatim before anything continues.
 ![The connect step in light mode](console/img/connect-light.png)
 ![The connect step in dark mode](console/img/connect-dark.png)
 
-Scope picks the claim the run grades: a party statement (the ICS, the
-document that says which profiles and capabilities the vendor claims) and an
-optional case-id filter for narrow runs. The verdict later certifies exactly
-this claim against the recorded evidence.
+Scope takes the claim the run grades: the vendor's own statement.json (the
+ICS, the document that says which profiles and capabilities are claimed)
+pasted into the box, or a committed example loaded into it. The document is
+held to the published statement schema before anything is stored, and saving
+answers with the claim overview — product, claimed tiers, capability count —
+beside the selection preview, so the screen says what will run before
+anything starts. An empty box is an honest no-claim run. The verdict later
+certifies exactly the pasted claim against the recorded evidence.
 
 ![The scope step in light mode](console/img/scope-light.png)
 

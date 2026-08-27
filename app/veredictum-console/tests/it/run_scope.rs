@@ -138,7 +138,8 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
                 value: Secret::new(String::from("hunter2-super-secret")),
             }],
             probed_ok: true,
-            statement: None,
+            statement_json: None,
+            statement_product: None,
             filter: None,
         },
     )
@@ -156,5 +157,113 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
         !debugged.contains("hunter2"),
         "a secret value reached a Debug rendering: {debugged}"
     );
+    Ok(())
+}
+
+/// A fresh state over the repository mounts with a connected draft, for the
+/// claim gates below.
+fn drafted_state() -> veredictum_console::state::ConsoleState {
+    let root = engine_gate::repo_root().join("artifacts");
+    veredictum_console::state::ConsoleState {
+        root: root.clone(),
+        specs: engine_gate::repo_root().join("specs/openehr"),
+        party: engine_gate::repo_root().join("party"),
+        out: engine_gate::repo_root().join("out"),
+        catalogue: std::sync::Arc::new(
+            veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
+        ),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(Some(RunDraft {
+            base_url: String::from("http://unused"),
+            sut_name: String::from("claim-gate"),
+            sut_version: String::from("0.0.0-gate"),
+            auth: AuthChoice::None,
+            credentials: vec![],
+            probed_ok: true,
+            statement_json: None,
+            statement_product: None,
+            filter: None,
+        }))),
+        jobs: veredictum_console::run_job::JobSlot::default(),
+    }
+}
+
+/// #101: a pasted claim is held to the PUBLISHED statement schema — a
+/// committed example passes with its summary, a shape serde would tolerate
+/// but the schema forbids is refused, and non-JSON is refused.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
+)]
+#[test]
+fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dyn std::error::Error>>
+{
+    let state = drafted_state();
+    let body =
+        std::fs::read_to_string(engine_gate::repo_root().join("party/ehrbase/statement.json"))?;
+    let summary = veredictum_console::run_api::read::save_scope(&state, Some(body), None)
+        .map_err(|e| format!("a committed example must pass: {e}"))?
+        .ok_or("a pasted claim must yield a summary")?;
+    assert_eq!(summary.product, "EHRbase 2.34.0");
+    assert!(
+        !summary.profiles.is_empty(),
+        "the ehrbase example claims at least one tier"
+    );
+
+    // additionalProperties: false — serde would ignore the stray key, the
+    // published schema refuses it.
+    let stray = veredictum_console::run_api::read::save_scope(
+        &state,
+        Some(String::from(
+            r#"{"product":{"name":"x","version":"1","vendor":"v","identifier":"urn:x"},"schedule_release":"cnf-2.0-w2","claims":{},"stray_key":true}"#,
+        )),
+        None,
+    );
+    assert!(
+        stray.is_err(),
+        "an undeclared key must be refused by the schema"
+    );
+
+    let not_json =
+        veredictum_console::run_api::read::save_scope(&state, Some(String::from("not json")), None);
+    assert!(not_json.is_err(), "non-JSON must be refused");
+
+    // The honest no-claim run stays legal: nothing pasted, no summary.
+    let none = veredictum_console::run_api::read::save_scope(&state, None, None)
+        .map_err(|e| format!("no-claim save: {e}"))?;
+    assert_eq!(none, None);
+    Ok(())
+}
+
+/// #101: the example loader serves only a statement.json under the mounted
+/// party tree — anything else is refused, path traversal included.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
+)]
+#[test]
+fn the_example_loader_refuses_paths_outside_the_party_tree()
+-> Result<(), Box<dyn std::error::Error>> {
+    let state = drafted_state();
+    let good = veredictum_console::run_api::read::statement_body(
+        &state,
+        &engine_gate::repo_root()
+            .join("party/ehrbase/statement.json")
+            .display()
+            .to_string(),
+    )
+    .map_err(|e| format!("the committed example must load: {e}"))?;
+    assert!(good.contains("EHRbase"));
+
+    for refused in [
+        engine_gate::repo_root().join("Cargo.toml"),
+        engine_gate::repo_root().join("party/ehrbase/../../Cargo.toml"),
+        engine_gate::repo_root().join("party/ehrbase/ixit.json"),
+    ] {
+        let answer = veredictum_console::run_api::read::statement_body(
+            &state,
+            &refused.display().to_string(),
+        );
+        assert!(answer.is_err(), "{} must be refused", refused.display());
+    }
     Ok(())
 }

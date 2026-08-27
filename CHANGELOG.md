@@ -20,6 +20,16 @@ version on.
 
 ### Added
 
+- **Scope takes the party's own claim (#101).** The statement select is
+  gone: the operator pastes the vendor's statement.json into Scope (or loads
+  a committed example into the same box), and the document is held to the
+  PUBLISHED statement schema — refused with the validator's finding verbatim
+  — before the typed parse ever runs. Saving answers with the claim overview
+  (product, claimed tiers, capability count) beside the selection preview,
+  so the screen says what will run before anything starts. The accepted
+  bytes are written into the job's output directory beside the ixit, and the
+  verdicts judge that file — the run's own claim, never the mutable draft.
+
 - **The E2E harness grades real CDRs side by side (#99).** An opt-in mode
   (`UI_E2E_REAL_SUTS=1`) composes FerroEHR's published quickstart and
   EHRbase's official image pairing — both at their latest published images,

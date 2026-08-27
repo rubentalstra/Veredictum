@@ -121,7 +121,8 @@ fn the_generated_ixit_carries_names_and_never_values() {
             },
         ],
         probed_ok: true,
-        statement: None,
+        statement_json: None,
+        statement_product: None,
         filter: None,
     };
     let document = veredictum_console::run_api::read::ixit_document(&draft);
@@ -172,6 +173,9 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
     let out = scratch.path().join("record-run");
     std::fs::create_dir_all(&out)?;
     let statement = engine_gate::repo_root().join("party/ehrbase/statement.json");
+    // What start_run does for a pasted claim: the accepted bytes travel with
+    // the run, and the verdicts read them back from the job directory.
+    std::fs::copy(&statement, out.join("statement.json"))?;
 
     let root = engine_gate::repo_root().join("artifacts");
     let state = veredictum_console::state::ConsoleState {
@@ -189,7 +193,8 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
             auth: AuthChoice::None,
             credentials: vec![],
             probed_ok: true,
-            statement: Some(statement.display().to_string()),
+            statement_json: Some(std::fs::read_to_string(&statement)?),
+            statement_product: Some(String::from("EHRbase 2.34.0")),
             filter: None,
         }))),
         jobs: JobSlot::default(),

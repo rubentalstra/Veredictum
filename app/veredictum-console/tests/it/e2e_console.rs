@@ -630,17 +630,17 @@ async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>
         .expect("continue");
 
     h.wait_xpath("//h1[contains(., 'Scope')]").await;
-    let select = h.wait_css("select#statement").await;
-    select
-        .find(By::XPath(format!(
-            ".//option[contains(., '{}')]",
-            sut.statement
-        )))
-        .await
-        .expect("the statement option")
-        .click()
-        .await
-        .expect("pick the statement");
+    // The claim goes in as the document itself (#101): the example button
+    // fills the paste box the way a vendor pastes their own statement.json.
+    h.wait_xpath(&format!(
+        "//button[contains(., 'Load') and contains(., '{}')]",
+        sut.statement
+    ))
+    .await
+    .click()
+    .await
+    .expect("load the example claim");
+    h.wait_xpath("//p[contains(., 'Loaded ')]").await;
     h.wait_css("input#filter")
         .await
         .send_keys(sut.filter)
@@ -654,6 +654,7 @@ async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>
         .click()
         .await
         .expect("save");
+    h.wait_xpath("//p[contains(., 'Claim accepted')]").await;
     h.wait_xpath("//button[contains(., 'Start the run')]")
         .await
         .click()

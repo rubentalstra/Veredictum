@@ -8,20 +8,20 @@
 //! values the connect form collects reach only that draft.
 
 use leptos::prelude::{
-    AddAnyAttr, ClassAttribute, CollectView, Effect, ElementChild, Get, GlobalAttributes, IntoAny,
-    IntoView, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal, ServerAction, Set,
-    StyleAttribute, Suspend, Suspense, Transition, Update, component, view,
+    Action, AddAnyAttr, ClassAttribute, CollectView, Effect, ElementChild, Get, GlobalAttributes,
+    IntoAny, IntoView, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal,
+    ServerAction, Set, StyleAttribute, Suspend, Suspense, Transition, Update, component, view,
 };
 use leptos_meta::Title;
 use leptos_router::components::{A, Redirect};
 
-use crate::components::field::{BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, SELECT};
+use crate::components::field::{BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, TEXTAREA};
 use crate::components::format_view::{Pane, inline_error};
 use crate::components::page_header::{Crumb, PageHeader};
 use crate::components::surface::{CARD_PAD, CARD_TITLE};
 use crate::run_api::fns::{
     CancelRun, FetchScopePreview, ProbeAndSave, SaveScope, StartRun, fetch_draft, fetch_job,
-    fetch_statements,
+    fetch_statement_body, fetch_statements,
 };
 use crate::run_api::{AuthChoice, ProbeAnswer};
 use crate::run_job::{JobStatus, JobView};
@@ -290,7 +290,22 @@ pub fn Connect() -> impl IntoView {
 pub fn Scope() -> impl IntoView {
     let draft = Resource::new(|| (), |()| fetch_draft());
     let statements = Resource::new(|| (), |()| fetch_statements());
-    let statement = RwSignal::new(String::new());
+    let statement_json = RwSignal::new(String::new());
+    let example_note = RwSignal::new(None::<Result<String, String>>);
+    // The sanctioned dispatch-continuation shape: the click is the event,
+    // the answer lands in the action's own async block.
+    let load_example = Action::new(move |path: &String| {
+        let path = path.clone();
+        async move {
+            match fetch_statement_body(path.clone()).await {
+                Ok(body) => {
+                    statement_json.set(body);
+                    example_note.set(Some(Ok(format!("Loaded {path}."))));
+                }
+                Err(e) => example_note.set(Some(Err(e.to_string()))),
+            }
+        }
+    });
     let filter = RwSignal::new(String::new());
     let preview = ServerAction::<FetchScopePreview>::new();
     let save = ServerAction::<SaveScope>::new();
@@ -342,37 +357,40 @@ pub fn Scope() -> impl IntoView {
             <h2 class=CARD_TITLE>"Selection"</h2>
             <div class="space-y-4">
                 <div>
-                    <label class=LABEL for="statement">
-                        "Party statement (ICS)"
+                    <label class=LABEL for="statement-json">
+                        "Party statement (ICS) — the claim this run grades"
                     </label>
+                    <p class="mt-1 text-sm text-ink-muted">
+                        "Paste the vendor's own statement.json, or load a committed example. Leave the box empty for an honest no-claim run: everything applicable drives, nothing is certified."
+                    </p>
                     <Suspense fallback=|| {
                         view! { <p class="text-sm text-ink-muted">"Reading party/…"</p> }
                     }>
                         {move || Suspend::new(async move {
                             match statements.await {
                                 Ok(rows) => {
-                                    let options = rows
+                                    let buttons = rows
                                         .into_iter()
                                         .map(|row| {
+                                            let label = format!("Load {}", row.product);
+                                            let path = row.path;
                                             view! {
-                                                <option value=row.path.clone()>
-                                                    {format!("{} — {}", row.product, row.path)}
-                                                </option>
+                                                <button
+                                                    type="button"
+                                                    class=BTN_SECONDARY
+                                                    on:click=move |_| {
+                                                        load_example.dispatch(path.clone());
+                                                    }
+                                                >
+                                                    {label}
+                                                </button>
                                             }
                                         })
                                         .collect_view();
                                     view! {
-                                        <select
-                                            id="statement"
-                                            class=format!("{SELECT} mt-1 w-full")
-                                            prop:value=move || statement.get()
-                                            on:change:target=move |ev| statement.set(ev.target().value())
-                                        >
-                                            <option value="">
-                                                "No statement — drive everything applicable"
-                                            </option>
-                                            {options}
-                                        </select>
+                                        <div class="mt-2 flex flex-wrap items-center gap-2">
+                                            {buttons}
+                                        </div>
                                     }
                                         .into_any()
                                 }
@@ -380,6 +398,24 @@ pub fn Scope() -> impl IntoView {
                             }
                         })}
                     </Suspense>
+                    <textarea
+                        id="statement-json"
+                        class=format!("{TEXTAREA} mt-2 h-48")
+                        placeholder="{ \"product\": { \"name\": …, \"version\": … }, \"claims\": { \"profiles\": [\"CORE\"], \"capabilities\": [s] }, … }"
+                        prop:value=move || statement_json.get()
+                        on:input:target=move |ev| statement_json.set(ev.target().value())
+                    ></textarea>
+                    {move || {
+                        example_note
+                            .get()
+                            .map(|note| match note {
+                                Ok(line) => {
+                                    view! { <p class="mt-1 text-sm text-ink-muted">{line}</p> }
+                                        .into_any()
+                                }
+                                Err(e) => inline_error(&e).into_any(),
+                            })
+                    }}
                 </div>
                 <div>
                     <label class=LABEL for="filter">
@@ -411,8 +447,11 @@ pub fn Scope() -> impl IntoView {
                         class=BTN_PRIMARY
                         on:click=move |_| {
                             save.dispatch(SaveScope {
-                                statement: Some(statement.get()),
+                                statement_json: Some(statement_json.get()),
                                 filter: Some(filter.get()),
+                            });
+                            preview.dispatch(FetchScopePreview {
+                                filter: filter.get(),
                             });
                         }
                     >
@@ -451,10 +490,26 @@ pub fn Scope() -> impl IntoView {
                     save.value()
                         .get()
                         .map(|result| match result {
-                            Ok(()) => {
+                            Ok(claim) => {
+                                let line = claim
+                                    .map_or_else(
+                                        || String::from(
+                                            "Scope saved without a claim: everything applicable drives, nothing is certified.",
+                                        ),
+                                        |summary| format!(
+                                            "Claim accepted: {} — profiles {} — {} capabilities.",
+                                            summary.product,
+                                            if summary.profiles.is_empty() {
+                                                String::from("none")
+                                            } else {
+                                                summary.profiles.join(", ")
+                                            },
+                                            summary.capabilities,
+                                        ),
+                                    );
                                 view! {
-                                    <div class="flex items-center gap-2">
-                                        <p class="text-sm text-ink">"Scope saved."</p>
+                                    <div class="space-y-2">
+                                        <p class="text-sm text-ink">{line}</p>
                                         <button
                                             type="button"
                                             class=BTN_PRIMARY
