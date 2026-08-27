@@ -189,10 +189,9 @@ version with its date, re-add an empty one, update the link references, then
 tag. Rewrite the HEADING, not the first textual match — the v0.0.1-alpha.1 cut
 rewrote a mention inside a paragraph and left the release with no section.
 Milestones are releases, and a release is cut when its milestone reaches zero
-open issues. `scripts/checks/changelog-structure.sh` runs in CI on every change;
-the guard that REQUIRES an entry when a user-visible surface changes is issue
-#10 — those paths exist now that the code is here, so it is tracked rather than
-assumed. The full cut procedure is the Releasing section below, and the pipeline
+open issues. `scripts/checks/changelog-structure.sh` runs in CI on every change, and
+`scripts/checks/changelog-entry.sh` (#10) REQUIRES an entry when a
+user-visible surface changes, waived only by the `no-changelog` label. The full cut procedure is the Releasing section below, and the pipeline
 reads this file: a missing or empty section for the tagged version fails `plan`
 before anything is published.
 
@@ -335,9 +334,11 @@ It is every machine check over the artifact tree — id uniqueness, citation
 resolution against the vendored specs, binding completeness, coverage of the
 enumerated wire surface, claim completeness against the committed party
 statements — and **zero findings is the only passing result.** The instrument's
-own canonical CLI table (`validate`, `run`, `verdicts`, `perf`, `stress`,
-`aql-probe`, `emit-schemas`) is the authority on how to invoke everything else;
-never improvise a flag.
+own canonical CLI table (`validate`, `run`, `verdicts`, `verify-record`,
+`perf`, `stress`, `stress-compare`, `aql-probe`, `perf-assets`,
+`conformance-assets`, `emit-schemas`) is the authority on how to invoke
+everything else; never improvise a flag (#76 tracks the drift guard over the
+hand-maintained copies).
 
 ## Releasing
 

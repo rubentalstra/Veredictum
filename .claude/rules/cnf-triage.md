@@ -5,7 +5,7 @@ paths: ["app/veredictum/src/**", "artifacts/**", "party/**", "schemas/**"]
 # Red-run triage (the attribution law)
 
 > Ported from FerroEHR's `.claude/rules/cnf-triage.md` at the Veredictum split
-> (FerroEHR#2789) and adapted: the paths point at this repository's planned
+> (FerroEHR#2789) and adapted: the paths point at this repository's
 > layout, and the first suspect bin is the SUT, which is somebody else's code
 > and never edited here.
 

@@ -1731,7 +1731,7 @@ catalogue, **capability matrix**):
    evidence: `Passed` (≥1 case ran, none failed) / `Failed` /
    `Inconclusive` / `NotEvidenced` / `NotClaimed` (the printed coverage
    bounds; the former `Unrealized`/`NoCases` states are unrepresentable
-   since the #626 ratchet). Profile verdicts
+   since the FerroEHR#626 ratchet). Profile verdicts
    per the capability matrix: CORE/STANDARD = all required capabilities
    `Passed`; OPTIONS = any. `report_only`-disposition cases (AMB-5, AMB-29)
    report but never gate.

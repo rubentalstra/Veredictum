@@ -47,10 +47,10 @@ Those 11 findings sit on hooks ported verbatim from FerroEHR, and a style
 rewrite here would silently fork them from their upstream originals. Under the
 precedence above that is a finding to record, not one to act on reflexively.
 
-Rust is analysed first-party once the code arrives (the analyzer runs Clippy
-itself from the workspace manifest, as a second and deliberately independent
-Clippy configuration beside our own deny-tier lanes). Coverage rides the same
-lane at that point, imported as lcov.
+Rust is analysed first-party (the analyzer runs Clippy itself from the
+workspace manifest, as a second and deliberately independent Clippy
+configuration beside our own deny-tier lanes), and coverage rides the same
+lane, imported as lcov (#9).
 
 ## New Code = since the last release
 

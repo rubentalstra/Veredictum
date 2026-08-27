@@ -96,9 +96,9 @@ same edge.
 Links a **code-scanning alert** to an issue so a security fix appears in
 planning. This is **public preview and UI-only — there is no REST, GraphQL or
 `gh` API** — so it cannot be scripted and `scripts/gh/rel.sh` does not cover it.
-It also needs code scanning enabled, which this repository does not have yet: no
-CodeQL lane exists, and the only SARIF uploaded today comes from the Scorecard
-analysis. The manual flow, once there is something to link: Security tab → Code
+Code scanning is enabled (`codeql.yml`, plus the Trivy SARIF the image-scan
+lane uploads), so alerts exist to link; the flow stays manual because the
+endpoint is UI-only. The manual flow, once there is something to link: Security tab → Code
 scanning → the alert → **Tracking** → *Create issue* or *Add existing GitHub
 issue*.
 

@@ -15,7 +15,7 @@ reads all three as paths you pass on the command line, so the code and the data
 travel separately.
 
 That split is deliberate. The catalogue and the specification oracle together
-are 347 MB of data, which no package registry accepts, and a party may
+are over 300 MB of data, which no package registry accepts, and a party may
 legitimately want to point the instrument at a catalogue of their own. So the
 published crate and the published image carry the code, and a clone of the
 repository is where the data lives:
@@ -71,7 +71,7 @@ tags applied only after a smoke run and a vulnerability scan of that digest have
 passed.
 
 The catalogue and the specification oracle are not baked into the image. That is
-the same 347 MB reason as above, and it means the data you grade against is the
+the same over 300 MB reason as above, and it means the data you grade against is the
 data you can see in your own checkout. The console has no login, so the
 publish flag above binds it to loopback; exposing it further is the
 operator's decision, behind their own gate.
