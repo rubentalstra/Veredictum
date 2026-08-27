@@ -215,7 +215,7 @@ Installing from crates.io puts the command on your `PATH`, which is the path
 to take if you already have a catalogue checkout to point it at:
 
 ```bash
-cargo install veredictum --version 0.1.0-alpha.6   # pre-release: name the version
+cargo install veredictum
 veredictum validate --root <catalogue> --specs <spec-tree>
 ```
 

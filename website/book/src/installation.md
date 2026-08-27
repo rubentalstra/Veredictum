@@ -34,15 +34,12 @@ The binary is on [crates.io](https://crates.io/crates/veredictum). Take this
 path if you want the command on your `PATH`.
 
 ```bash
-cargo install veredictum --locked --version 0.1.0-alpha.6
+cargo install veredictum --locked
 veredictum validate --root artifacts --specs specs/openehr
 ```
 
 Two flags are worth understanding rather than copying:
 
-- `--version` is required while the crate is on pre-release versions. `cargo
-  install` ignores a pre-release unless you name it, so without the flag it
-  finds no version to install.
 - `--locked` builds against the `Cargo.lock` the release was tested with. Leave
   it off and cargo resolves fresh versions of every dependency, which is a
   different build from the one the project's gates ran.
