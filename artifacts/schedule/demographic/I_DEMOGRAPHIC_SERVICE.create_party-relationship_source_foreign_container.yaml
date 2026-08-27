@@ -3,7 +3,7 @@
 # which names a DIFFERENT party — so `PARTY.Relationships_validity`
 # (`relationships /= Void implies (not relationships.is_empty and then
 # relationships.for_all (r | r.source = self)`, RM demographic
-# UML/classes/org.openehr.rm.demographic.party.adoc §Invariants) is violated:
+# UML/classes/party.adoc §Invariants) is violated:
 # the list would store, as this party's data, a relationship the party is not
 # the source of — which RM demographic master02-demographic_package.adoc §Party
 # Relationships forbids by construction ("`PARTY_RELATIONSHIPs` are stored as

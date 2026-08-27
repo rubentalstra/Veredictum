@@ -2,7 +2,7 @@
 # update.
 #
 # The RULE is SM — I_EHR_DIRECTORY.update_directory declares `Pre_has_directory`
-# — and RM ehr ehr.adoc types `EHR.directory` 0..1, so the absence is a
+# — and RM UML/classes/ehr.adoc types `EHR.directory` 0..1, so the absence is a
 # representable state the operation forbids.
 #
 # SPEC SILENCE on the CODE, adjudicated as AMB-80 (fixed_handling): the

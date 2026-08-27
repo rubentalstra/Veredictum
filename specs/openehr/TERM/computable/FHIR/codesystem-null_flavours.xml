@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CodeSystem xmlns="http://hl7.org/fhir">
   <url value="https://specifications.openehr.org/fhir/codesystem-null_flavours"/>
-  <version value="3.1.0"/>
+  <version value="3.0.0"/>
   <name value="null_flavours"/>
   <title value="Null Flavours"/>
   <status value="active"/>
   <experimental value="false"/>
-  <date value="2024-08-22"/>
+  <date value="2023-06-26"/>
   <publisher value="openEHR International"/>
   <contact>
     <name value="openEHR TERM specifications"/>
     <telecom>
       <system value="url"/>
-      <value value="https://specifications.openehr.org/releases/TERM/Release-3.1.0"/>
+      <value value="https://specifications.openehr.org/releases/TERM/Release-3.0.0"/>
     </telecom>
   </contact>
   <caseSensitive value="true"/>
@@ -33,10 +33,6 @@
       <language value="pt"/>
       <value value="sem informação"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="无信息"/>
-    </designation>
   </concept>
   <concept>
     <code value="253"/>
@@ -52,10 +48,6 @@
     <designation>
       <language value="pt"/>
       <value value="desconhecido"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="未知"/>
     </designation>
   </concept>
   <concept>
@@ -73,10 +65,6 @@
       <language value="pt"/>
       <value value="mascarado"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="已遮蔽"/>
-    </designation>
   </concept>
   <concept>
     <code value="273"/>
@@ -92,10 +80,6 @@
     <designation>
       <language value="pt"/>
       <value value="não aplicável"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="不适用"/>
     </designation>
   </concept>
 </CodeSystem>

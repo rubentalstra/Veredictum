@@ -11,7 +11,7 @@ spec_refs:
   - "RM data_types \u00a7DV_CODED_TEXT"
   - "AM AOM1.4 \u00a7C_CODE_PHRASE"
   - "AM AOM1.4 \u00a7CONSTRAINT_REF"
-  - "RM data_types dv_text.adoc \u00a7Invariants (Valid_value: not value.is_empty)"
+  - "RM UML/classes/dv_text.adoc \u00a7Invariants (Valid_value: not value.is_empty)"
 constraint_context:
   template: cnf.tpl.dv_coded_text_constraint_ref
   path: "/content[openEHR-EHR-OBSERVATION.minimal.v1]/data/events/data/items[at0001]/value"

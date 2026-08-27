@@ -7,7 +7,7 @@
 # the signature attribute will be Void at this point)". `signature` is the ONLY
 # attribute the rule excludes, and `ORIGINAL_VERSION.attestations` is one of the
 # attributes the class declares
-# (UML/classes/org.openehr.rm.common.original_version.adoc §Attributes:
+# (UML/classes/original_version.adoc §Attributes:
 # `attestations: List<ATTESTATION>` 0..1). So an attestation that is ON the
 # version at the act of committal is INSIDE the signed canonical form.
 #

@@ -11,7 +11,7 @@
 # so the released OAS grounds every value below, no ETag/Last-Modified declared
 # (a REVISION_HISTORY is neither a VERSION nor a VERSIONED_OBJECT and carries no
 # identity of its own — RM common
-# UML/classes/org.openehr.rm.common.revision_history.adoc), canonical-json only
+# UML/classes/revision_history.adoc), canonical-json only
 # (register AMB-167: no published document element).
 #
 # WHY THE PSEUDO-INTERFACE AND NOT `I_PARTY`: register AMB-136 records that

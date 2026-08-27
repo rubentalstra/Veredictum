@@ -3,9 +3,9 @@
 # from the VERSION envelopes and the revision history reachable beneath it.
 #
 # The asserted facts are normative RM, quoted from RM common
-# UML/classes/org.openehr.rm.common.versioned_object.adoc §Attributes (the
+# UML/classes/versioned_object.adoc §Attributes (the
 # supertype of RM demographic
-# UML/classes/org.openehr.rm.demographic.versioned_party.adoc):
+# UML/classes/versioned_party.adoc):
 #   * `uid`: HIER_OBJECT_ID — "Unique identifier of this version container in
 #     the form of a UID with no extension", so the container id carries NO
 #     `::system::n` version coordinate (contrast VERSION.uid, the three-part

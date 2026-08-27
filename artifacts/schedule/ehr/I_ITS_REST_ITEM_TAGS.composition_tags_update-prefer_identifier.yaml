@@ -8,7 +8,7 @@
 # status will be `201 Created` or `200 OK`, never `204 No Content`). The
 # response body SHOULD contain only the identifier of the affected resource
 # ... a single JSON object with a single `uid` attribute." An ITEM_TAG has no
-# uid — RM UML/classes/org.openehr.rm.common.item_tag.adoc declares `key`,
+# uid — RM UML/classes/item_tag.adoc declares `key`,
 # `value`, `target`, `target_path` and `owner_id` and no identifier attribute,
 # the identity being the (key, target_path) pair — and the affected resource
 # is a COLLECTION, not one resource. There is nothing for the identifier body

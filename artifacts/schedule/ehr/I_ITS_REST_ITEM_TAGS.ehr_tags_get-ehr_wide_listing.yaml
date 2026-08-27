@@ -4,7 +4,7 @@
 # ITEM_TAG resources associated with any target VERSION or VERSIONED_OBJECT
 # within the EHR identified by `ehr_id`" and "In case no such parameter is
 # provided then all ITEM_TAG resources will be retrieved". The RM says the
-# same reach from the other side: RM ehr ehr.adoc §Attributes, `tags` —
+# same reach from the other side: RM UML/classes/ehr.adoc §Attributes, `tags` —
 # "Optional list of tags associated with this EHR. Tag `_target_` values can
 # only be within the same EHR".
 #

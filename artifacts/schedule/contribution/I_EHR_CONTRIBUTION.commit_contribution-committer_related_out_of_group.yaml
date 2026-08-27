@@ -1,7 +1,7 @@
 # PARTY_RELATED.Relationship_valid on the COMMIT AUDIT's committer.
 #
 # THE INVARIANT, verbatim (RM common
-# UML/classes/org.openehr.rm.common.party_related.adoc §Invariants):
+# UML/classes/party_related.adoc §Invariants):
 # "__Relationship_valid__: `terminology (Terminology_id_openehr).
 # has_code_for_group_id (Group_id_subject_relationship,
 # relationship.defining_code)`". It is unconditional — `relationship` is
@@ -10,7 +10,7 @@
 # §Vocabularies), regardless of the seat it occupies.
 #
 # WHY THE COMMITTER SEAT: `AUDIT_DETAILS.committer` is a `PARTY_PROXY` at
-# `1..1` (RM common UML/classes/org.openehr.rm.common.audit_details.adoc
+# `1..1` (RM UML/classes/audit_details.adoc
 # §Attributes) and PARTY_RELATED is one of its subtypes (…party_related.adoc
 # §Inherit: PARTY_IDENTIFIED, itself a PARTY_PROXY); the released commit DTO
 # admits it explicitly (ITS-REST specifications/schemas/common/UpdateAudit.yaml

@@ -12,7 +12,7 @@
 # `is_modifiable` 1..1 Boolean) or a missing `_type` on an abstract slot — is
 # the 400 row ("could not be parsed or is invalid"; typed construction is the
 # shape check). A payload that CONVERTS and then breaks an RM invariant (an
-# archetype root without `archetype_details`, RM common locatable.adoc
+# archetype root without `archetype_details`, RM UML/classes/locatable.adoc
 # `Archetyped_valid`) is the 422 row ("well-formed but … semantic errors").
 sm_operation: I_EHR_STATUS.set_ehr_queryable
 its: its-rest

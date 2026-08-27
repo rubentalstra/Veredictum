@@ -2,7 +2,7 @@
 # `audit change type` group — presence alone is not enough.
 #
 # THE INVARIANT, verbatim (RM common
-# UML/classes/org.openehr.rm.common.audit_details.adoc §Invariants):
+# UML/classes/audit_details.adoc §Invariants):
 # "__Change_type_valid__: `terminology (Terminology_id_openehr).
 # has_code_for_group_id (Group_id_audit_change_type, change_type.defining_code)`"
 # — and the §Attributes row for `change_type` says the same in prose ("Coded

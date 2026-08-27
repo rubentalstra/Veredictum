@@ -1,7 +1,7 @@
 # The container-addressed and VERSION-addressed tag collections of the same
 # PARTY are DISJOINT — the demographic half of the one RM rule.
 #
-# THE LAW: RM common item_tag.adoc §Attributes types ITEM_TAG.target a
+# THE LAW: RM UML/classes/item_tag.adoc §Attributes types ITEM_TAG.target a
 # UID_BASED_ID and glosses it "Identifier of target, which may be a
 # `VERSIONED_OBJECT<T>` or a `VERSION<T>`". The released party tag operations
 # carry the same split in their addressing paragraph: the OBJECT_VERSION_ID

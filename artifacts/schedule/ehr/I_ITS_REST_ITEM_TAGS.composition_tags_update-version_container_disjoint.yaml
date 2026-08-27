@@ -2,7 +2,7 @@
 # COMPOSITION are DISJOINT: each PUT replaces only the addressed collection and
 # each GET reaches only the addressed one.
 #
-# THE LAW: RM common item_tag.adoc §Attributes types ITEM_TAG.target as a
+# THE LAW: RM UML/classes/item_tag.adoc §Attributes types ITEM_TAG.target as a
 # UID_BASED_ID and glosses it "Identifier of target, which may be a
 # `VERSIONED_OBJECT<T>` or a `VERSION<T>`" — two different targets, therefore
 # two different tag sets. ITS-REST carries the same split on the wire twice

@@ -30,7 +30,7 @@ attr_1 = <
 attr_8 = <...>
 --------
 
-In the above structure, each "<>" encloses an instance of some type. The hierarchical structure corresponds to the part-of relationship between objects, otherwise known as composition and _aggregation_ relationships in object-oriented formalisms such as UML (the difference between the two is usually described as being "sub-objects related by aggregation can have independent lifetimes, whereas sub-objects related by composition have co-terminal lifetimes and are always destroyed with the parent"; ODIN does not differentiate between the two, since it is the business of a model, not the data, to express such semantics). Associations between instances in ODIN are also representable by references, and are described in the section <<Associations and Shared Objects>>.
+In the above structure, each "<>" encloses an instance of some type. The hierarchical structure corresponds to the part-of relationship between objects, otherwise known as composition and _aggregation_ relationships in object-oriented formalisms such as UML (the difference between the two is usually described as being "sub-objects related by aggregation can have independent lifetimes, whereas sub-objects related by composition have co-termimal lifetimes and are always destroyed with the parent"; ODIN does not differentiate between the two, since it is the business of a model, not the data, to express such semantics). Associations between instances in ODIN are also representable by references, and are described in the section <<Associations and Shared Objects>>.
 
 Validity rules for object-structuring of ODIN are as follows:
 
@@ -103,7 +103,7 @@ people = <
 >
 --------
 
-Strings and dates may also be used. Keys are coloured blue in this specification in order to distinguish the run-time status of key values from the design-time status of class and attribute names. The following example shows the use of string values as keys for the contained items.
+Strings and dates may also be used. Keys are coloured blue in the this specification in order to distinguish the run-time status of key values from the design-time status of class and attribute names. The following example shows the use of string values as keys for the contained items.
 
 [source, odin]
 --------
@@ -221,7 +221,7 @@ etc
 
 == Adding Type Information
 
-In many cases, ODIN data is of a simple structure, very regular, and highly repetitive, such as the expression of simple demographic data. In such cases, it is preferable to express as little as possible about the information model on which the data are based, since various software components want to use the data, and use it in different ways. However, there are also cases where the data is highly complex, and more model information is needed to help a parser. Examples include large design databases for aircraft and health records. Data obeying more complex models typically include sub-objects that are of a subtype of the statically declared type in the information model, in other words, dynamically bound types.
+In many cases, ODIN data is of a simple structure, very regular, and highly repetitive, such as the expression of simple demographic data. In such cases, it is preferable to express as little as possible about the informatoin model on which the data are based, since various software components want to use the data, and use it in different ways. However, there are also cases where the data is highly complex, and more model information is needed to help a parser. Examples include large design databases for aircraft and health records. Data obeying more complex models typically include sub-objects that are of a subtype of the statically declared type in the information model, in other words, dynamically bound types.
 
 Where dynamic binding occurs in the data, it must be indicated in an ODIN document. Typing information is added to using a syntactical addition inspired by the `(type)` casting operator of the C language, whose meaning is approximately: force the type of the result of the following expression to be `type`. In ODIN typing is therefore done by including the type name in parentheses after the '=' sign, as in the following example.
 

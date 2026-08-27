@@ -21,8 +21,8 @@ test_purpose: "An EXTRACT_SPEC whose manifest names no entity is refused — EXT
 description: "Export an EXTRACT_SPEC with an empty manifest is refused"
 spec_refs:
   - "SM openehr_platform §I_EHR_EXTRACT_SERVICE.export_ehr_extracts (extract_spec: EXTRACT_SPEC[1] — a mandatory, well-formed spec)"
-  - "RM ehr_extract UML/classes/org.openehr.rm.ehr_extract.extract_manifest.adoc §Attributes (entities 1..1 List<EXTRACT_ENTITY_MANIFEST>)"
-  - "RM BMM (1.0.4/1.1.0/1.2.0) EXTRACT_MANIFEST.entities cardinality {lower: 1, upper_unbounded} — the item-count bound (LANG bmm_container_property.adoc §Attributes: cardinality is the container's item count, distinct from existence)"
+  - "RM UML/classes/extract_manifest.adoc §Attributes (entities 1..1 List<EXTRACT_ENTITY_MANIFEST>)"
+  - "ITS-XML its-xml-1.0.2-nsv1/ALL/Extract.xsd §EXTRACT_MANIFEST (`entities` maxOccurs unbounded with the XSD default minOccurs 1 — the released schema's non-empty item bound; RM UML/classes/extract_manifest.adoc §Attributes carries the 1..1 existence)"
   - "CNF platform_test_schedule master13 §export_ehr_extracts (chapter: export_ehr_extract)"
 applies: { rm: ">=1.0.2" }
 guards:

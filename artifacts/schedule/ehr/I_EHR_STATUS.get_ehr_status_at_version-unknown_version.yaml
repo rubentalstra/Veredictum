@@ -4,7 +4,7 @@
 # The addressed value has the lexical form ITS-REST overview Resources.md
 # §Identifier types fixes — "`object_id :: creating_system_id ::
 # version_tree_id`" — so the request is not refused for shape; it is refused
-# because RM common versioned_object.adoc's `Pre: has_version_id
+# because RM UML/classes/versioned_object.adoc's `Pre: has_version_id
 # (a_version_uid)` is false. ITS-REST overview Requests_and_responses.md §HTTP
 # status codes assigns that state its row: "404 | Not Found | The origin
 # service did not find the target resource or is not willing to disclose that

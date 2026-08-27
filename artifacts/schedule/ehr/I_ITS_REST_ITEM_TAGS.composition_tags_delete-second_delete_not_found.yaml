@@ -14,7 +14,7 @@
 # been (logically) deleted" — change-control vocabulary the release reuses
 # here although an ITEM_TAG is not change-controlled: the RM class carries no
 # `lifecycle_state`, no uid and no version at all (RM
-# UML/classes/org.openehr.rm.common.item_tag.adoc), and register AMB-97
+# UML/classes/item_tag.adoc), and register AMB-97
 # records that wording as an editorial defect. With no lifecycle state there is
 # no deleted-but-present state a second DELETE could address, so the released
 # 404 trigger is the only reading left. The final read confirms it from the

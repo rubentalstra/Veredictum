@@ -4,17 +4,12 @@
 |===
 |Issue|Details|Raiser|Completed
 
-|[[latest_issue]]1.5.3
-|{spec_tickets}/SPECLANG-10[SPECLANG-10^]: Fix typos in ODIN.
-|R Kavanagh
-|[[latest_issue_date]]03 Apr 2023
-
 4+^h|*LANG Release 1.0.0*
 
-|1.5.2
+|[[latest_issue]]1.5.2
 |{spec_tickets}/SPECLANG-7[SPECLANG-7^]: Move IDON spec to LANG component.
 |openEHR SEC
-|11 Nov 2018
+|[[latest_issue_date]]11 Nov 2018
 
 |
 |{spec_tickets}/SPECLANG-3[SPECLANG-3^]: Add grammar support for plus-or-minus ranges; +

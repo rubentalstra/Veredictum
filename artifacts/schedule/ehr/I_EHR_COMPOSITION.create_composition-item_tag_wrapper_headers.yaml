@@ -10,7 +10,7 @@
 # `POST`), the header instructs the system which ITEM_TAG list should be
 # associated with the target VERSION or VERSIONED_OBJECT resource (depending on
 # the header name)." Two named targets, therefore two collections — the same
-# split RM common item_tag.adoc §Attributes makes on `target` ("may be a
+# split RM UML/classes/item_tag.adoc §Attributes makes on `target` ("may be a
 # `VERSIONED_OBJECT<T>` or a `VERSION<T>`").
 #
 # WHY THE PROOF IS THE READ-BACK AND NOT THE ECHO: §Usage in Responses makes

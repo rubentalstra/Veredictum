@@ -1,12 +1,12 @@
 # A CODED description on a `666|attestation|` member survives the commit whole.
 #
 # ATTESTATION is an AUDIT_DETAILS subtype (RM common
-# UML/classes/org.openehr.rm.common.attestation.adoc §Class — "Inherit
+# UML/classes/attestation.adoc §Class — "Inherit
 # AUDIT_DETAILS"), so it inherits `description`, which
-# UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes types
+# UML/classes/audit_details.adoc §Attributes types
 # `DV_TEXT` at 0..1 ("Reason for committal"). DV_CODED_TEXT is a DV_TEXT subtype
 # carrying a `defining_code` (RM data_types
-# UML/classes/org.openehr.rm.data_types.dv_coded_text.adoc), and the released
+# UML/classes/dv_coded_text.adoc), and the released
 # wire says the same: ITS-REST specifications/schemas/common/
 # UpdateAttestation.yaml extends UpdateAudit, whose `description` is `UDvText`
 # — a `oneOf` over DV_TEXT and DV_CODED_TEXT (schemas/common/UDvText.yaml).

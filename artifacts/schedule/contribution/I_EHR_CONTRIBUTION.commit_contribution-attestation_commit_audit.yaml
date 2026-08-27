@@ -28,7 +28,7 @@
 #
 # The commit audit carries no `proof`: this is the pending half — "the
 # appropriate proof supplied" belongs to the later signing (ATTESTATION.proof
-# is 0..1, RM common UML/classes/org.openehr.rm.common.attestation.adoc
+# is 0..1, RM UML/classes/attestation.adoc
 # §Attributes).
 #
 # The released commit schema admits only the flat class for this attribute

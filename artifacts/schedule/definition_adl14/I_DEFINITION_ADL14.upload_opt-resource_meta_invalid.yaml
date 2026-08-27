@@ -20,7 +20,7 @@ description: "upload OPTs with RM ch.8 resource-meta defects"
 spec_refs:
   - "SM openehr_platform §I_DEFINITION_ADL14.upload_opt"
   - "RM common master08-resource_package.adoc (the resource package governs ADL 1.4 artefact meta-data)"
-  - "RM UML/classes/org.openehr.rm.common.authored_resource.adoc §Invariants; …resource_description.adoc §Invariants; …resource_description_item.adoc §Invariants"
+  - "RM UML/classes/authored_resource.adoc §Invariants; …resource_description.adoc §Invariants; …resource_description_item.adoc §Invariants"
   - "ITS-REST overview Requests_and_responses.md §HTTP status codes (the semantic 422 branch, AMB-110)"
 applies: { rm: ">=1.0.2" }
 requires: { server: empty }

@@ -2,11 +2,11 @@
 # the member-level audit cases in this directory.
 #
 # THE RULE, verbatim (RM common
-# UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes): the
+# UML/classes/audit_details.adoc §Attributes): the
 # `1..1` row reads "*change_type*: DV_CODED_TEXT — Type of change. Coded using
 # the openEHR Terminology  audit change type  group." A CONTRIBUTION's own
 # `audit` is an AUDIT_DETAILS (RM common
-# UML/classes/org.openehr.rm.common.contribution.adoc §Attributes: "audit:
+# UML/classes/contribution.adoc §Attributes: "audit:
 # AUDIT_DETAILS, 1..1"), so an envelope that omits `change_type` is an audit
 # the RM cannot represent.
 #

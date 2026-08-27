@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CodeSystem xmlns="http://hl7.org/fhir">
   <url value="https://specifications.openehr.org/fhir/codesystem-instruction_transitions"/>
-  <version value="3.1.0"/>
+  <version value="3.0.0"/>
   <name value="instruction_transitions"/>
   <title value="Instruction Transitions"/>
   <status value="active"/>
   <experimental value="false"/>
-  <date value="2024-08-22"/>
+  <date value="2023-06-26"/>
   <publisher value="openEHR International"/>
   <contact>
     <name value="openEHR TERM specifications"/>
     <telecom>
       <system value="url"/>
-      <value value="https://specifications.openehr.org/releases/TERM/Release-3.1.0"/>
+      <value value="https://specifications.openehr.org/releases/TERM/Release-3.0.0"/>
     </telecom>
   </contact>
   <caseSensitive value="true"/>
@@ -33,10 +33,6 @@
       <language value="pt"/>
       <value value="iniciar"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="发起"/>
-    </designation>
   </concept>
   <concept>
     <code value="536"/>
@@ -52,10 +48,6 @@
     <designation>
       <language value="pt"/>
       <value value="planear etapa"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="计划步骤"/>
     </designation>
   </concept>
   <concept>
@@ -73,10 +65,6 @@
       <language value="pt"/>
       <value value="adiar"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="推迟"/>
-    </designation>
   </concept>
   <concept>
     <code value="538"/>
@@ -92,10 +80,6 @@
     <designation>
       <language value="pt"/>
       <value value="restaurar"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="恢复"/>
     </designation>
   </concept>
   <concept>
@@ -113,10 +97,6 @@
       <language value="pt"/>
       <value value="cancelar"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="取消"/>
-    </designation>
   </concept>
   <concept>
     <code value="542"/>
@@ -132,10 +112,6 @@
     <designation>
       <language value="pt"/>
       <value value="etapa adiada"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="推迟的步骤"/>
     </designation>
   </concept>
   <concept>
@@ -153,10 +129,6 @@
       <language value="pt"/>
       <value value="agendar"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="排程"/>
-    </designation>
   </concept>
   <concept>
     <code value="534"/>
@@ -172,10 +144,6 @@
     <designation>
       <language value="pt"/>
       <value value="etapa agendada"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="排程步骤"/>
     </designation>
   </concept>
   <concept>
@@ -193,10 +161,6 @@
       <language value="pt"/>
       <value value="iniciar"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="开始"/>
-    </designation>
   </concept>
   <concept>
     <code value="541"/>
@@ -212,10 +176,6 @@
     <designation>
       <language value="pt"/>
       <value value="executar"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="执行"/>
     </designation>
   </concept>
   <concept>
@@ -233,10 +193,6 @@
       <language value="pt"/>
       <value value="etapa activa"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="现行步骤"/>
-    </designation>
   </concept>
   <concept>
     <code value="544"/>
@@ -252,10 +208,6 @@
     <designation>
       <language value="pt"/>
       <value value="suspender"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="暂停"/>
     </designation>
   </concept>
   <concept>
@@ -273,10 +225,6 @@
       <language value="pt"/>
       <value value="etapa suspensa"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="暂停步骤"/>
-    </designation>
   </concept>
   <concept>
     <code value="546"/>
@@ -292,10 +240,6 @@
     <designation>
       <language value="pt"/>
       <value value="retomar"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="中断后继续"/>
     </designation>
   </concept>
   <concept>
@@ -313,10 +257,6 @@
       <language value="pt"/>
       <value value="abortar"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="中止"/>
-    </designation>
   </concept>
   <concept>
     <code value="548"/>
@@ -332,10 +272,6 @@
     <designation>
       <language value="pt"/>
       <value value="terminar"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="完成"/>
     </designation>
   </concept>
   <concept>
@@ -353,10 +289,6 @@
       <language value="pt"/>
       <value value="tempo esgotado"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="超时"/>
-    </designation>
   </concept>
   <concept>
     <code value="550"/>
@@ -372,10 +304,6 @@
     <designation>
       <language value="pt"/>
       <value value="notificação abortada"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="通知已中止"/>
     </designation>
   </concept>
   <concept>
@@ -393,10 +321,6 @@
       <language value="pt"/>
       <value value="notificação concluída"/>
     </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="通知已完成"/>
-    </designation>
   </concept>
   <concept>
     <code value="552"/>
@@ -412,10 +336,6 @@
     <designation>
       <language value="pt"/>
       <value value="notificação cancelada"/>
-    </designation>
-    <designation>
-      <language value="zh"/>
-      <value value="通知已取消"/>
     </designation>
   </concept>
 </CodeSystem>

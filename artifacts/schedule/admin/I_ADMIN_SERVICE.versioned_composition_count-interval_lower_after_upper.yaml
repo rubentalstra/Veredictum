@@ -1,5 +1,5 @@
 # The `Interval` TYPE invariant, not a route rule: BASE
-# org.openehr.base.foundation_types.interval.adoc §Invariants declares
+# interval.adoc §Invariants declares
 # `Limits_consistent: (not upper_unbounded and not lower_unbounded) implies
 # lower <= upper`. The `time_interval` argument is an
 # `Interval<Iso8601_date_time>` (i_admin_service.adoc), so a both-bounded pair

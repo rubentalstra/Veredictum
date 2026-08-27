@@ -3,7 +3,7 @@
 # unchanged.
 #
 # THE INVARIANT, verbatim (RM
-# UML/classes/org.openehr.rm.common.item_tag.adoc §Invariants):
+# UML/classes/item_tag.adoc §Invariants):
 # "__Inv_value_valid__: `value /= Void implies not value.is_empty`" — a tag
 # either carries no value at all (`value: String[0..1]`) or carries a
 # non-empty one; `""` is neither.

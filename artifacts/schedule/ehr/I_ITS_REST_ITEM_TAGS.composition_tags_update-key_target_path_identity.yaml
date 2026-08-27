@@ -9,7 +9,7 @@
 # verbatim again in operations/composition_tags_get.yaml and
 # composition_tags_update.yaml. The RM makes the pair meaningful: `target_path`
 # is an "Optional archetype (i.e. AQL) or RM path within `_target_`, used to tag
-# a fine-grained element" (RM common item_tag.adoc §Attributes).
+# a fine-grained element" (RM UML/classes/item_tag.adoc §Attributes).
 #
 # WHY THE ASSERTIONS ARE SOUND UNDER AN UNDEFINED LIST ORDER: result ordering is
 # unstated on every tag GET (register AMB-97), so nothing may depend on which

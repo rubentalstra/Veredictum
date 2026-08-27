@@ -1,7 +1,7 @@
 # PARTY_IDENTIFIED.Basic_validity on the COMMIT AUDIT's committer.
 #
 # THE INVARIANT, verbatim (RM common
-# UML/classes/org.openehr.rm.common.party_identified.adoc §Invariants):
+# UML/classes/party_identified.adoc §Invariants):
 # "__Basic_validity__: `name /= Void or identifiers /= Void or external_ref /=
 # Void`". The class description states the same requirement in prose — "There
 # must be at least one of name, identifier or external_ref present" — so a
@@ -10,7 +10,7 @@
 #
 # WHY THE COMMITTER SEAT SPECIFICALLY: `AUDIT_DETAILS.committer` is a
 # `PARTY_PROXY` at `1..1` (RM common
-# UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes), and the
+# UML/classes/audit_details.adoc §Attributes), and the
 # ITS-REST commit DTO types it the same way (specifications/schemas/common/
 # UpdateAudit.yaml: `committer: PartyProxy`, listed under `required`). A party
 # in CONTENT is reached by the RM-invariant walk over the composition; the

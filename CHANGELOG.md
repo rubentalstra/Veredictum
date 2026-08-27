@@ -18,7 +18,20 @@ version on.
 
 ## [Unreleased]
 
-### Added
+### Changed
+
+- **The vendored oracle is pinned to released tags (#78).** RM, BASE, AM,
+  TERM, LANG and QUERY now vendor at their released tags (RM 1.1.0,
+  BASE 1.2.0, AM 2.3.0, TERM 3.0.0, LANG 1.0.0, QUERY 1.1.0, ITS-REST 1.1.0,
+  adjudicated against specifications.openehr.org/releases) instead of master
+  development snapshots; SM, CNF and ITS-JSON have never been released and
+  keep frozen SHAs that say so, and ITS-XML's docs tree keeps its frozen SHA
+  because the tags carry only XSDs, which are already tag-pinned in the
+  second root. Every citation in the catalogue now resolves against released
+  bytes: the UML class-doc references migrated to the released trees' short
+  names, and the version-lifecycle cases re-grounded on released TERM 3.0.0
+  (codes 800/801) with the unreleased transition table recorded on AMB-195
+  as the anticipated resolution rather than cited as the oracle.
 
 - **Scope takes the party's own claim (#101).** The statement select is
   gone: the operator pastes the vendor's statement.json into Scope (or loads
@@ -153,7 +166,6 @@ version on.
   `run-exceptions.json` — no tolerated delta, since the record carries no
   wall-clock stamp.
 
-### Changed
 
 - **The repository is restructured: both products live under `app/`.** The
   instrument crate moved from the repository root to `app/veredictum` and the

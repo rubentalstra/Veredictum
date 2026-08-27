@@ -15,7 +15,7 @@ description: "upload an ADL 1.4 source with a translation re-stating the origina
 spec_refs:
   - "SM openehr_platform §I_DEFINITION_ADL14.upload_archetype"
   - "RM common master08-resource_package.adoc (the resource package governs ADL 1.4 artefact meta-data)"
-  - "RM UML/classes/org.openehr.rm.common.authored_resource.adoc §Invariants Translations_valid"
+  - "RM UML/classes/authored_resource.adoc §Invariants Translations_valid"
 applies: { rm: ">=1.0.2" }
 guards:
   - "EXTENSION ROUTE — no openEHR spec governs the /definition/archetype/adl1.4* routes; our own design/extension, declared in vocab/wire_surface.yaml served_extensions (family adl14-archetype) and adjudicated by register AMB-41. The row gates the Adl14ArchetypeProvisioning CAPABILITY verdict only, never ITS-REST wire conformance"

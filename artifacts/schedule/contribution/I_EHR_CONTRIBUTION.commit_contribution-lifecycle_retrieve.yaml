@@ -1,4 +1,4 @@
-# The `retrieve` transition of the master06 §Abandoned and Inactive States
+# The `retrieve` transition of the UNRELEASED master06 §Abandoned and Inactive States
 # table: `abandoned` -> `incomplete`.
 #
 # The prose: "If circumstances change again and the abandoned item once more
@@ -26,7 +26,7 @@ test_purpose: >-
 description: "Commit CONTRIBUTION transitioning an abandoned version back to incomplete (retrieve)"
 spec_refs:
   - "RM common §change_control (master06 §Version Lifecycle — any transition requires the commit of a new version)"
-  - "RM common §change_control (master06 §Abandoned and Inactive States — the transition table)"
+  - "TERM SupportTerminology §Version Lifecycle State (codes 800 inactive and 801 abandoned, released by SPECTERM-10 — the group RM 1.1.0 §Version Lifecycle delegates to; the transition table naming their arrivals is unreleased RM development text, register AMB-195)"
   - "TERM SupportTerminology §Version Lifecycle State"
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
 applies: { rm: ">=1.0.2" }

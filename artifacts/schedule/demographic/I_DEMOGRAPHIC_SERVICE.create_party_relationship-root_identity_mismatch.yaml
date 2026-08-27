@@ -22,7 +22,7 @@ test_purpose: >-
 description: "Create a PARTY_RELATIONSHIP (root identity mismatch, 422)"
 spec_refs:
   - "SM openehr_platform §I_DEMOGRAPHIC_SERVICE.create_party_relationship"
-  - "RM common UML/classes/org.openehr.rm.common.locatable.adoc §Attributes"
+  - "RM UML/classes/locatable.adoc §Attributes"
   - "ITS-REST overview Requests_and_responses §HTTP status codes"
 applies: { rm: ">=1.0.2" }
 requires: { server: empty }

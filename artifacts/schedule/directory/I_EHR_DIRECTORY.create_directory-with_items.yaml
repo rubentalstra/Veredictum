@@ -6,7 +6,7 @@
 # `items` list outright would pass the by-value refusal case, and the catalogue
 # would certify leniency's opposite — over-rejection — as conformance. The
 # reference slot is not an optional extra: it is what a directory IS. RM common
-# UML/classes/org.openehr.rm.common.folder.adoc §Attributes types
+# UML/classes/folder.adoc §Attributes types
 # `items: List<OBJECT_REF>` at 0..1 — "The list of references to other (usually)
 # versioned objects logically in this folder" — and
 # master05-directory_package.adoc §Overview says the same in prose ("A FOLDER
@@ -17,7 +17,7 @@
 # The fixture's members are complete OBJECT_REFs: `namespace` "my.system.id"
 # (a FOREIGN system — the namespace the CNF Robot corpus's own directory
 # fixtures carry), `type` the referenced class, and `id` a HIER_OBJECT_ID
-# (BASE base_types UML/classes/org.openehr.base.base_types.object_ref.adoc
+# (BASE UML/classes/object_ref.adoc
 # §Attributes — the three attributes are each 1..1, and the value is an
 # ordinary match of the namespace regex the same section states).
 #

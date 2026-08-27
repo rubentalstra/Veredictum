@@ -1,6 +1,6 @@
 # A party update whose payload violates a released RM invariant: the fixture is
 # a PERSON with an EMPTY `identities` list, which breaches RM demographic
-# UML/classes/org.openehr.rm.demographic.party.adoc §Invariants
+# UML/classes/party.adoc §Invariants
 # `Identities_valid: not identities.is_empty` (the attribute is `1..1
 # List<PARTY_IDENTITY>`).
 #

@@ -20,7 +20,7 @@ test_purpose: >-
   item is refused at import, and nothing is committed.
 description: "EXTRACT_CONTENT_ITEM with is_masked AND a present item refused (the import seam)"
 spec_refs:
-  - "RM UML/classes/org.openehr.rm.ehr_extract.extract_content_item.adoc §Invariants (Item_validity: is_masked xor item /= Void)"
+  - "RM UML/classes/extract_content_item.adoc §Invariants (Item_validity: is_masked xor item /= Void)"
   - "SM openehr_platform §I_EHR_EXTRACT_SERVICE.import_ehr_extract"
 applies: { rm: ">=1.0.2" }
 requires:

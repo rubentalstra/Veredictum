@@ -4,36 +4,12 @@
 |===
 |Issue|Details|Raiser|Completed
 
-4+^h|*BASE Release 1.3.0 (unreleased)*
-
-|[[latest_issue]]1.3.2
-| Add BMM definition of BASE and render class asciidoc files ({spec_tickets}/SPECBASE-48[SPECBASE-48^]).
-|S Iancu
-|[[latest_issue_date]]11 May 2026
-
-|1.3.1
-| Adding deprecated VALIDITY_KIND.disallowed (including {spec_tickets}/SPECPR-378[SPECPR-378^] and {spec_tickets}/SPECPR-387[SPECPR-387^]).
-|P Pazos
-|07 Mar 2025
-
-|
-| Improving definition of ARCHETYPE_ID ({spec_tickets}/SPECBASE-35[SPECBASE-35^]).
-|S Iancu
-|09 Mar 2025
-
-|1.3.0
-| Documentation fixes and typos (including {spec_tickets}/SPECPR-365[SPECPR-365^] and {spec_tickets}/SPECPR-392[SPECPR-392^]).
-|S Iancu, +
-J Zeilstra, +
-P Bos
-|10 Jan 2025
-
 4+^h|*BASE Release 1.2.0*
 
-|1.2.0
+|[[latest_issue]]1.2.0
 |{spec_tickets}/SPECBASE-26[SPECBASE-26^]. Add Built-in classes and functions for use in AQL, EL; added `builtins` package.
 |openEHR SEC
-|28 Nov 2020
+|[[latest_issue_date]]28 Nov 2020
 
 |
 |{spec_tickets}/SPECBASE-28[SPECBASE-28^]. Fix `internet_id` and `uid_based_id` confusion in <<_syntaxes,syntax definition>>; +

@@ -41,7 +41,7 @@ is quite challenging.
 === Design
 
 The HL7 version 3 data types for time specification appear to allow for all of the required possibilities.
-The syntax is based on the {iso_8601}[ISO 8601 standard^]. It provides types which express:
+The syntax is based on the {iso_8601}[ISO 8601 standard]. It provides types which express:
 
 * Periodic intervals (HL7v3 - `PIVL<T:TS>`) - allows period, duration, and calendar linking to
 be specified.
@@ -54,11 +54,11 @@ The HL7 syntax for time specification is encapsulated in equivalent openEHR type
 
 == Class Descriptions
 
-include::{uml_export_dir}/classes/{pkg}dv_time_specification.adoc[]
+include::{uml_export_dir}/classes/dv_time_specification.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}dv_periodic_time_specification.adoc[]
+include::{uml_export_dir}/classes/dv_periodic_time_specification.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}dv_general_time_specification.adoc[]
+include::{uml_export_dir}/classes/dv_general_time_specification.adoc[]
 
 == Syntaxes
 

@@ -8,7 +8,7 @@ test_purpose: "A committed DV_URI is accepted iff value is present and non-empty
 description: "DV_URI open: only missing or empty values are rejected"
 spec_refs:
   - "CNF platform_test_schedule master17.7 \u00a7CONT-DV_URI-validate_open"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_uri.adoc \u00a7Invariants (Value_valid: not value.is_empty \u2014 the only declared invariant) + \u00a7Description (plain-text URIs allowed)"
+  - "RM UML/classes/dv_uri.adoc \u00a7Invariants (Value_valid: not value.is_empty \u2014 the only declared invariant) + \u00a7Description (plain-text URIs allowed)"
   - "RM data_types/master10-uri_package.adoc \u00a7Design (plain-text URIs \u2026 are allowed \u2026 must be RFC-3986 encoded prior to use)"
   - "AM AOM1.4 \u00a7C_STRING"
 constraint_context:

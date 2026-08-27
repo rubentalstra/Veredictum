@@ -4,9 +4,9 @@
 # reads back intact.
 #
 # WHY THE WIDE FORM IS THE RELEASED SHAPE. RM common
-# UML/classes/org.openehr.rm.common.folder.adoc §Attributes types `items` as
+# UML/classes/folder.adoc §Attributes types `items` as
 # `List<OBJECT_REF>` (0..1); BASE base_types
-# UML/classes/org.openehr.base.base_types.object_ref.adoc §Attributes types the
+# UML/classes/object_ref.adoc §Attributes types the
 # member's `id` as `OBJECT_ID` (1..1) — the ABSTRACT root. Its concrete family
 # has six members, each declaring `OBJECT_ID` (directly or through
 # `UID_BASED_ID`) in its own class table's *Inherit* row: HIER_OBJECT_ID,

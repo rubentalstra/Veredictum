@@ -14,7 +14,7 @@
 # `get_versioned_composition-at_time_before_first_version` case, and rests on
 # the same RM sentence: `version_at_time (a_time): VERSION` carries
 # `Pre: has_version_at_time (a_time)` (RM common
-# UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions), so below
+# UML/classes/versioned_object.adoc §Functions), so below
 # the first commit there is no version to serve. Register AMB-70's fixed
 # handling makes that arm the miss.
 id: I_DEMOGRAPHIC_SERVICE.versioned_party_version_unknown

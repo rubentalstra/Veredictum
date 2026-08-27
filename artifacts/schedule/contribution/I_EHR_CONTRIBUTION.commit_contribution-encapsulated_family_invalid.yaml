@@ -12,8 +12,8 @@ test_purpose: "A committed encapsulated value violating the family — an out-of
 description: "commit compositions with Encapsulated-package invariant defects"
 spec_refs:
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_multimedia.adoc §Invariants (Compression_algorithm_validity, Integrity_check_validity, Integrity_check_algorithm_validity)"
-  - "RM UML/classes/org.openehr.rm.data_types.dv_parsable.adoc §Invariants (Formalism_valid) + org.openehr.rm.data_types.dv_encapsulated.adoc §Invariants (Charset_valid)"
+  - "RM UML/classes/dv_multimedia.adoc §Invariants (Compression_algorithm_validity, Integrity_check_validity, Integrity_check_algorithm_validity)"
+  - "RM UML/classes/dv_parsable.adoc §Invariants (Formalism_valid) + dv_encapsulated.adoc §Invariants (Charset_valid)"
   - "ITS-REST overview Requests_and_responses.md §HTTP status codes (the semantic 422 branch)"
 applies: { rm: ">=1.0.2" }
 requires:

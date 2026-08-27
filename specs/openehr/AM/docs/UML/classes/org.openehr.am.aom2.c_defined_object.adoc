@@ -18,7 +18,6 @@ h|*Attributes*
 h|*0..1*
 |*default_value*: `link:/releases/BASE/{base_release}/foundation_types.html#_any_class[Any^]`
 a|Default value set in a template, and present in an operational template. Generally limited to leaf and near-leaf nodes.
-
 h|*Functions*
 ^h|*Signature*
 ^h|*Meaning*
@@ -32,7 +31,7 @@ h|*1..1 +
 (abstract)*
 |*valid_value* ( +
 a_value: `link:/releases/BASE/{base_release}/foundation_types.html#_any_class[Any^][1]` +
-): `link:/releases/BASE/{base_release}/foundation_types.html#_boolean_class[Boolean^]`
+): `Boolean`
 a|True if `_a_value_` is valid with respect to constraint expressed in concrete instance of this type.
 
 h|*1..1 +

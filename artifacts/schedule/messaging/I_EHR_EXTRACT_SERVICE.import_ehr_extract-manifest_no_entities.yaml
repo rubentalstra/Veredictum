@@ -1,7 +1,7 @@
 # A present-but-empty `EXTRACT_MANIFEST.entities` is refused at the EHR-Extract IMPORT seam.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM `UML/classes/org.openehr.rm.ehr_extract.extract_manifest.adoc`
+# RM `UML/classes/extract_manifest.adoc`
 # §Attributes types `EXTRACT_MANIFEST.entities` at 1..1 — a MANDATORY list, so a present-but-EMPTY list is the one shape the bound
 # forbids — the way to say "none" is to omit an optional container, never
 # to send [].

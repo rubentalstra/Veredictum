@@ -30,7 +30,7 @@ description: "Get the CONTRIBUTION an EHR-Extract import created"
 spec_refs:
   - "RM common §change_control (master06 §Copying — committed in the normal way, as part of a Contribution)"
   - "RM common §change_control (master06 §Contributions — a CONTRIBUTION lists the affected VERSION objects; 'import of item')"
-  - "RM common UML/classes/org.openehr.rm.common.imported_version.adoc (the wrapper's own audit trail and Contribution)"
+  - "RM UML/classes/imported_version.adoc (the wrapper's own audit trail and Contribution)"
   - "SM openehr_platform §I_EHR_CONTRIBUTION.get_contribution"
 applies: { rm: ">=1.0.2" }
 requires:

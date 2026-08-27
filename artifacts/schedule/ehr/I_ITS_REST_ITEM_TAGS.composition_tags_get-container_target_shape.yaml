@@ -1,7 +1,7 @@
 # A container-addressed ITEM_TAG carries `target` as the BARE RM UID_BASED_ID —
 # the HIER_OBJECT_ID of the VERSIONED_COMPOSITION — never an OBJECT_REF wrapper.
 #
-# THE LAW: RM common item_tag.adoc §Attributes types ITEM_TAG.target `1..1
+# THE LAW: RM UML/classes/item_tag.adoc §Attributes types ITEM_TAG.target `1..1
 # UID_BASED_ID` ("Identifier of target, which may be a `VERSIONED_OBJECT<T>` or
 # a `VERSION<T>`"), and types the sibling `owner_id` `1..1 OBJECT_REF`
 # ("Identifier of owner object, such as EHR"). The two are DIFFERENT BASE
@@ -18,7 +18,7 @@
 # pins that the identifier served is the addressed container's.
 #
 # owner_id on the EHR side IS the EHR: the RM declares the containment
-# (RM ehr ehr.adoc §Attributes, `tags`: "Tag `_target_` values can only be
+# (RM UML/classes/ehr.adoc §Attributes, `tags`: "Tag `_target_` values can only be
 # within the same EHR") and both EHR-side released examples set
 # `owner_id.type: EHR` (register AMB-137 contrasts the demographic silence).
 #

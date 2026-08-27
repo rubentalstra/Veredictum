@@ -39,22 +39,29 @@ DEST="$REPO_ROOT/specs/openehr"
 INCLUDE_EXT=(adoc md txt csv json yaml yml robot xml opt g4)
 
 # component | upstream repo | human ref | pinned commit
-# Master pins: the latest published spec versions (RM 1.2.0, BASE 1.3.0,
-# TERM 3.1.0, AM 2.4.0, LANG 1.1.0) have no GitHub release tags yet — they
-# live on master. SHAs chosen 2026-07-06 to match the ITS-BMM/ITS-JSON pins
-# already vendored for codegen.
+# Every tree with a released tag is pinned TO that tag (#78): the oracle is
+# the RELEASED components, and specifications.openehr.org/releases is the
+# index this table was adjudicated against (RM 1.1.0, BASE 1.2.0, AM 2.3.0,
+# TERM 3.0.0, LANG 1.0.0, QUERY 1.1.0, ITS-REST 1.1.0, ITS-XML 1.0.2 stable —
+# ITS-XML 2.0.0 exists but upstream marks it TRIAL, and the vendored XSD tree
+# is 1.0.2, so the two roots stay one version). Three components have never
+# been released at all (SM, CNF, ITS-JSON): their pins are frozen SHAs,
+# refreshed deliberately only, and the trees carry the development caveat in
+# their PROVENANCE.md — SM anchors operation naming, CNF is a coverage guide
+# and never an authority, ITS-JSON is the development pin the codegen tree
+# already matched.
 COMPONENTS=(
-  "BASE|specifications-BASE|master (BASE 1.3.0)|e48795762a0648cbe5701be58d42ec5df0c701a7"
-  "RM|specifications-RM|master (RM 1.2.0)|66d3ac45587e4532a94d5fd27ca24bcf049f5bf3"
-  "AM|specifications-AM|master (AM 2.4.0 + ADL/AOM/OPT 1.4)|da06d63297e8549a351c854d8b1c45cd9f1d577c"
-  "TERM|specifications-TERM|master (TERM 3.1.0)|007d0dddcdd77648711681878b54ace021b2fbd5"
-  "LANG|specifications-LANG|master (LANG 1.1.0)|201b647034f7b1ddfe207e4c3c6f52f6878869b8"
+  "BASE|specifications-BASE|Release-1.2.0|fba868df1fad9fe15ae0483f3e3ac1c3fa94d735"
+  "RM|specifications-RM|Release-1.1.0|355eb63e201c6b805c44c8809c70d63f79d54f92"
+  "AM|specifications-AM|Release-2.3.0|244baee6761a2c024944c122f261088975c2720b"
+  "TERM|specifications-TERM|Release-3.0.0|d45ef3e21a05d3759101ae7bdb260e8193a3d0da"
+  "LANG|specifications-LANG|Release-1.0.0|096932fc6c8fb90f7e5bb52f1a118b4a0234e916"
   "QUERY|specifications-QUERY|Release-1.1.0|a87bb51fa1c515b863c9610a9444a2d5570dc05a"
-  "SM|specifications-SM|master|23ffc4711c10bae2ae43724b1948fe3b24a0964e"
-  "CNF|specifications-CNF|master|33251d2abe5a75c042e11c9385d2e9a79aa15904"
+  "SM|specifications-SM|master (never released; frozen SHA)|23ffc4711c10bae2ae43724b1948fe3b24a0964e"
+  "CNF|specifications-CNF|master (never released; guide only, frozen SHA)|33251d2abe5a75c042e11c9385d2e9a79aa15904"
   "ITS-REST|specifications-ITS-REST|Release-1.1.0 (released 19-Jul-2026; matches the vendored OAS identity)|24058992d5fa96e8dfbd855d9c133f328387fc09"
-  "ITS-XML|specifications-ITS-XML|master (1.0.2 target, 2.0.0 TRIAL)|de8b37ba6c9a5e126623a063cafba3b58ebf1107"
-  "ITS-JSON|specifications-ITS-JSON|master (development pin)|5acae056248e917a4b4c56f7e712f4fcfeb616a6"
+  "ITS-XML|specifications-ITS-XML|master, frozen SHA (the tags carry only XSDs — vendored AT their tags in specs/its-xml-schemas; the prose the catalogue cites, the README release directory and the per-release documents/README, exists only on master)|de8b37ba6c9a5e126623a063cafba3b58ebf1107"
+  "ITS-JSON|specifications-ITS-JSON|master (never released; frozen SHA)|5acae056248e917a4b4c56f7e712f4fcfeb616a6"
 )
 # ITS-BMM is deliberately absent: it is already vendored verbatim (all
 # serializations) at tools/openehr-codegen/vendor/bmm/.

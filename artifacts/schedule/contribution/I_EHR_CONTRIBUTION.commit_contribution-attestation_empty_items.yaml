@@ -2,7 +2,7 @@
 # commit_contribution-attestation_pending_then_final: the SAME attestation with
 # its `items` list emptied.
 #
-# RM common UML/classes/org.openehr.rm.common.attestation.adoc §Invariants,
+# RM UML/classes/attestation.adoc §Invariants,
 # verbatim: "__Items_valid__: `items /= Void implies not items.is_empty`".
 #
 # WHY THIS IS NOT PEDANTRY — absence and emptiness carry DIFFERENT meanings

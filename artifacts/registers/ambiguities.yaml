@@ -129,7 +129,7 @@ AMB-5:
     only the same-template case is open; the "under SEC debate" provenance
     is the stalled CNF guide's own note, not released text).
   source: >-
-    RM UML/classes/org.openehr.rm.composition.composition.adoc §Invariants
+    RM UML/classes/composition.adoc §Invariants
     (Category_validity / Territory_valid /
     Language_valid / Content_valid / Is_archetype_root — no invariant requires a
     persistent COMPOSITION to be unique per EHR) + RM ehr
@@ -301,10 +301,9 @@ AMB-24:
     has_directory_version, get_directory_at_version, get_versioned_directory;
     none of them is revision_history, version_count, all_version_ids,
     all_versions, latest_version, latest_trunk_version, is_original_version or
-    trunk_lifecycle_state. RM common
-    UML/classes/org.openehr.rm.common.versioned_folder.adoc (§Description +
+    trunk_lifecycle_state. RM UML/classes/versioned_folder.adoc (§Description +
     §Inherit: VERSIONED_OBJECT, no own members) and
-    UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions (the
+    UML/classes/versioned_object.adoc §Functions (the
     declared set, each 1..1) — the surface the container defines. Released
     ITS-REST 1.1.0: no versioned_directory resource — the
     specifications/operations/ directory carries directory_create,
@@ -339,11 +338,11 @@ AMB-27:
     (ratio) row (L1017-1025); the integer_fraction prose type [3] vs data
     column [4] (L1290); the forum-style "IMO should fail" notes (L783-785).
   source: >-
-    BASE foundation_types interval.adoc §Invariants (the four-invariant set —
+    BASE UML/classes/interval.adoc §Invariants (the four-invariant set —
     Lower_included_valid / Upper_included_valid / Limits_consistent /
     Limits_comparable — the bound-referencing pair is guarded by "(not
     upper_unbounded and not lower_unbounded) implies", so none bites on an
-    unbounded-flagged limit) + RM data_types dv_interval.adoc §Invariants
+    unbounded-flagged limit) + RM UML/classes/dv_interval.adoc §Invariants
     (DV_INTERVAL's own Limits_consistent, the same guarded shape — added
     2026-08-21); the master17.3 quantity decision tables are the stalled
     guide where the defect appears
@@ -389,7 +388,7 @@ AMB-29:
     times) — the date/time constraint tables mix precisions whose ordering the
     RM leaves open.
   source: >-
-    RM data_types date_time classes (DV_DATE_TIME/DV_DATE/DV_TIME each Effect
+    RM UML/classes/{dv_date_time,dv_date,dv_time}.adoc (DV_DATE_TIME/DV_DATE/DV_TIME each Effect
     is_strictly_comparable_to = "True, for any two Date/times" / "… Dates" /
     "… Times" respectively, and each REDEFINES less_than over magnitude())
     + each class table's own Value_valid invariant (valid_iso8601_* over the
@@ -994,12 +993,12 @@ AMB-43:
     RM invariant's antecedent is exactly that configuration, and no BASE or
     RM generation ever carried a bound-presence invariant.)
   source: >-
-    BASE foundation_types interval.adoc §Attributes (lower/upper 0..1) +
+    BASE UML/classes/interval.adoc §Attributes (lower/upper 0..1) +
     §Invariants (Limits_consistent, guarded by "(not upper_unbounded and
-    not lower_unbounded) implies") + RM data_types dv_interval.adoc
+    not lower_unbounded) implies") + RM UML/classes/dv_interval.adoc
     §Invariants (its own Limits_consistent, the same shape, calling
     lower.is_strictly_comparable_to(upper) unguarded) + RM
-    data_structures history.adoc §Invariants (Events_valid: "events /= Void and then …" — the
+    UML/classes/history.adoc §Invariants (Events_valid: "events /= Void and then …" — the
     explicit Void-guard idiom the interval invariants do NOT use) — the
     Void-evaluation silence CONFIRMED first-hand
   handling: >-
@@ -1022,7 +1021,7 @@ AMB-44:
     no leading T in either form. DV_TIME.value's type oracle is the BASE
     class.
   source: >-
-    BASE foundation_types iso8601_time.adoc §Description (value syntax
+    BASE UML/classes/iso8601_time.adoc §Description (value syntax
     hh:mm:ss[(,|.)sss][Z|±hh[:mm]] extended or hhmmss… compact — no leading T)
   handling: >-
     Time literals in the catalogue take the BASE Iso8601_time form: the
@@ -1043,7 +1042,7 @@ AMB-45:
     AND the four ">=1900-03-13T11…" rows expecting `rejected`, where
     2021-10-24T10 >= 1900-03-13T11 plainly holds.
   source: >-
-    BASE foundation_types interval.adoc §Functions `has` (total-order
+    BASE UML/classes/interval.adoc §Functions `has` (total-order
     containment via its Post_result ordering expression — a Functions-table
     row, not a heading); the master17.4 temporal range table is the stalled
     guide where the defect appears
@@ -1097,7 +1096,7 @@ AMB-51:
     which such an instance violates regardless of any archetype events
     cardinality.
   source: >-
-    RM data_structures history.adoc §Invariants (Events_valid: "(events /= Void
+    RM UML/classes/history.adoc §Invariants (Events_valid: "(events /= Void
     and then not events.is_empty) or summary /= Void"); the master16 HISTORY
     tables are the stalled guide where the defect appears
   handling: >-
@@ -1125,8 +1124,7 @@ AMB-54:
   source: >-
     ITS-REST specifications/responses/400_CONTRIBUTION.yaml (the assigned
     trigger, quoted); operations/contribution_create.yaml (responses
-    201/400/404/409 — no 412/422); RM common
-    UML/classes/org.openehr.rm.common.version.adoc
+    201/400/404/409 — no 412/422); RM UML/classes/version.adoc
     (Preceding_version_uid_validity) + master06 §Contributions (the
     change-kind law) — confirmed first-hand.
   handling: >-
@@ -1169,7 +1167,7 @@ AMB-55:
     coded rubric (an arbitrary display label, or the raw code string) violates
     no RM invariant.
   source: >-
-    RM data_types dv_coded_text.adoc §Description ("A text item whose value must
+    RM UML/classes/dv_coded_text.adoc §Description ("A text item whose value must
     be the rubric from a controlled terminology") + dv_text.adoc §Attributes
     value ("For DV_CODED_TEXT, this is the rubric of the complete term as
     provided by the terminology service") vs dv_text.adoc §Invariants
@@ -1678,7 +1676,7 @@ AMB-63:
     `ehr_for_subject_already_exists`) vs §create_ehr_for_subject_with_id (only
     `ehr_create_fail_duplicate_id`) vs §get_ehrs_for_subject ("Retrieve EHR or
     EHRs …": `List<EHR_SUMMARY>`) and §has_ehr_for_subject ("there are EHR(s)")
-    + RM UML/classes/org.openehr.rm.ehr.ehr_status.adoc §Attributes (`subject`: 1..1 PARTY_SELF, "The
+    + RM UML/classes/ehr_status.adoc §Attributes (`subject`: 1..1 PARTY_SELF, "The
     subject of this EHR. The `_external_ref_` attribute can be used to contain
     a direct reference to the subject in a demographic or identity service" —
     no uniqueness, no comparison rule) + the released ITS-REST DOCS TEXT,
@@ -1765,7 +1763,7 @@ AMB-64:
     responses for VERSION, VERSIONED_OBJECT, or other resources that have
     versioning or unique state identifiers"; "For openEHR resources, this value
     should be derived from VERSION.commit_audit.time_committed.value") + RM
-    UML/classes/org.openehr.rm.ehr.ehr.adoc §Attributes (`ehr_id` 1..1 HIER_OBJECT_ID, `time_created` 1..1
+    UML/classes/ehr.adoc §Attributes (`ehr_id` 1..1 HIER_OBJECT_ID, `time_created` 1..1
     DV_DATE_TIME — no uid, no version identity; the EHR is not a
     change-controlled resource) — the undefined third limb and the missing
     derivation source CONFIRMED first-hand.
@@ -1816,16 +1814,15 @@ AMB-65:
     in COMPOSITION objects be populated using the `uid` copied from the
     enclosing VERSION object. For example, if an ORIGINAL_VERSION.uid is
     `87284370-2D4B-4e3d-A3F3-F303D2F4F34B::uk.nhs.ehr1::2`, then this value
-    should be copied to the COMPOSITION.uid attribute") + RM common
-    locatable.adoc §Attributes (`uid`: UID_BASED_ID 0..1 — both forms legal) —
+    should be copied to the COMPOSITION.uid attribute") + RM UML/classes/locatable.adoc §Attributes (`uid`: UID_BASED_ID 0..1 — both forms legal) —
     released-vs-released contradiction CONFIRMED first-hand.
     THE CONTRADICTION IS NOT EHR_STATUS-LOCAL: it is carried VERBATIM by FIVE
     class tables, and every one of them contradicts ITSELF the same way. A
     sweep of `object_id()` across RM docs/UML/classes returns exactly five
-    files — org.openehr.rm.common.folder.adoc,
-    org.openehr.rm.composition.composition.adoc,
-    org.openehr.rm.demographic.party.adoc, org.openehr.rm.ehr.ehr_status.adoc
-    and org.openehr.rm.ehr.ehr_access.adoc — each carrying the SAME NOTE in
+    files — folder.adoc,
+    composition.adoc,
+    party.adoc, ehr_status.adoc
+    and ehr_access.adoc — each carrying the SAME NOTE in
     its §Description: "It is strongly recommended that the inherited attribute
     `_uid_` be populated in <the class>, using the UID copied from the
     `_object_id()_` of the `_uid_` field of the enclosing `VERSION` object",
@@ -1876,7 +1873,7 @@ AMB-67:
   ambiguity: >-
     Whether the CONTAINED top-level object served inside an ORIGINAL_VERSION
     envelope must carry a populated `uid` at all is required by NO released
-    sentence: RM common locatable.adoc §Attributes types `uid` as
+    sentence: RM UML/classes/locatable.adoc §Attributes types `uid` as
     UID_BASED_ID 0..1; RM common master03-archetyped_package.adoc §Unique
     Node Identification calls the copy "recommended" and adds "The `uid`
     attribute will usually be empty in most EHR data in most openEHR EHR
@@ -1884,7 +1881,7 @@ AMB-67:
     COMPOSITION-scoped and "strongly recommended"/"should". A server that
     serves the contained object uid-less breaches nothing released.
   source: >-
-    RM common locatable.adoc §Attributes (uid 0..1); RM common
+    RM UML/classes/locatable.adoc §Attributes (uid 0..1); RM common
     master03-archetyped_package.adoc §Unique Node Identification
     (recommended; "will usually be empty"); ITS-REST
     specifications/docs/overview/Resources.md §Identifier types (COMPOSITION
@@ -1901,8 +1898,7 @@ AMB-67:
     wire-level statement.
     SCOPE EXCLUSION (2026-07-27, group-12 audit): this entry does NOT reach
     PARTY. The recommendation-strength reading holds only where every released
-    sentence about the contained uid is a recommendation, and RM demographic
-    UML/classes/org.openehr.rm.demographic.party.adoc §Invariants carries
+    sentence about the contained uid is a recommendation, and RM UML/classes/party.adoc §Invariants carries
     `Uid_mandatory: uid /= Void` — an invariant, not a recommendation — so a
     served PARTY without a uid does breach a released statement. The party
     cases therefore ASSERT the uid rather than merely recording it, and the
@@ -1922,7 +1918,7 @@ AMB-68:
     most recent item is `items.last`, so the order is most-recent-LAST and
     the Purpose sentence is the defect.
   source: >-
-    RM common UML/classes/org.openehr.rm.common.revision_history.adoc —
+    RM UML/classes/revision_history.adoc —
     Purpose row vs `items` Meaning row vs the two `items.last`
     postconditions; confirmed first-hand.
   handling: >-
@@ -1944,10 +1940,10 @@ AMB-69:
     reverse edge IS normative (EHR.ehr_status.type must equal
     "VERSIONED_EHR_STATUS"), but nothing released fixes the forward one.
   source: >-
-    RM common UML/classes/org.openehr.rm.common.versioned_object.adoc
+    RM UML/classes/versioned_object.adoc
     §Attributes (owner_id meaning); BASE
-    UML/classes/org.openehr.base.base_types.object_ref.adoc (namespace
-    legal values); RM UML/classes/org.openehr.rm.ehr.ehr.adoc §Invariants
+    UML/classes/object_ref.adoc (namespace
+    legal values); RM UML/classes/ehr.adoc §Invariants
     (Ehr_status_valid, the reverse direction) — confirmed first-hand.
   handling: >-
     Fixed handling, in two halves — one per owner situation, each pinned by
@@ -2029,8 +2025,7 @@ AMB-70:
   source: >-
     RM common master06-change_control_package.adoc §Committal and Audits
     (the time_committed anchor) + §Subsequent Local Modifications (the
-    earlier-commit-times query sentence) + RM common
-    UML/classes/org.openehr.rm.common.versioned_object.adoc
+    earlier-commit-times query sentence) + RM UML/classes/versioned_object.adoc
     §Functions (version_at_time, latest_version, latest_trunk_version); SM
     UML/classes/i_ehr_status.adoc §get_ehr_status_at_time ("If no time
     supplied, get the latest."); ITS-REST overview Resources.md §Datetime
@@ -2094,7 +2089,7 @@ AMB-72:
     SM-operation vocabulary the case cores speak.
   source: >-
     SM UML/classes/i_ehr_status.adoc (all five, confirmed first-hand);
-    BASE UML/classes/org.openehr.base.base_types.object_version_id.adoc
+    BASE UML/classes/object_version_id.adoc
     (the version-uid form for defect 3); the SM defines no revision-history
     operation at all (grep across SM/docs = zero hits) — the REST
     revision-history route's abstract counterpart is RM
@@ -2118,7 +2113,7 @@ AMB-73:
     but the schedule is a stalled guide, never the correctness authority.
     A server accepting a template change breaches nothing released.
   source: >-
-    RM UML/classes/org.openehr.rm.ehr.versioned_composition.adoc
+    RM UML/classes/versioned_composition.adoc
     §Invariants (Archetype_node_id_valid + Persistent_validity only); RM
     common master06-change_control_package.adoc §Contributions (no
     content-stability rule); SM i_ehr_composition.adoc §update_composition
@@ -2338,8 +2333,7 @@ AMB-78:
     request syntax, syntactically invalid content" and 422 "well-formed but …
     unable to be followed due to semantic errors" — neither ASSIGNED to a
     body-vs-URL identifier contradiction, though the 422 row is the only one
-    whose description fits it); RM common
-    UML/classes/org.openehr.rm.common.locatable.adoc §Attributes (uid 0..1).
+    whose description fits it); RM UML/classes/locatable.adoc §Attributes (uid 0..1).
     Docs-text silence on the RULE re-confirmed first-hand 2026-07-28 across
     the whole ITS-REST docs tree.
     TIER 2, THE RELEASED OAS, citable because tier 1 is silent (owner ruling
@@ -2493,7 +2487,7 @@ AMB-82:
     text never mentions is_modifiable outside the EHR-creation defaults,
     and no composition/directory operation declares a branch for it.
   source: >-
-    RM UML/classes/org.openehr.rm.ehr.ehr_status.adoc §Attributes ("True if
+    RM UML/classes/ehr_status.adoc §Attributes ("True if
     the EHR, other than the EHR_STATUS object, is allowed to be written to.
     The EHR_STATUS object itself can always be written to." — the
     PERMISSION rule; citation added 2026-08-21) + RM ehr
@@ -2592,8 +2586,7 @@ AMB-84:
     it. The stalled Robot asserts 400 with an invented message.
   source: >-
     ITS-REST specifications/schemas/ehr/NewContribution.yaml (no minItems)
-    vs schemas/common/Contribution.yaml (minItems 1); RM common
-    UML/classes/org.openehr.rm.common.contribution.adoc (invariants
+    vs schemas/common/Contribution.yaml (minItems 1); RM UML/classes/contribution.adoc (invariants
     section absent) — confirmed first-hand.
   handling: >-
     Fixed handling: this server rejects an empty (or missing) versions
@@ -2626,7 +2619,7 @@ AMB-85:
     requires data, contradicting ORIGINAL_VERSION.data 0..1).
   source: >-
     RM common master06-change_control_package.adoc §Logical Deletion +
-    UML/classes/org.openehr.rm.common.original_version.adoc (data 0..1)
+    UML/classes/original_version.adoc (data 0..1)
     vs ITS-REST specifications/schemas/ehr/{UpdateVersion,Version}.yaml
     (data required) — confirmed first-hand.
   handling: >-
@@ -2727,9 +2720,9 @@ AMB-88:
     sentence ("items of types such as COMPOSITION and FOLDER") leans to
     the data-class reading.
   source: >-
-    RM common UML/classes/org.openehr.rm.common.contribution.adoc
+    RM UML/classes/contribution.adoc
     (versions meaning, both sentences); BASE
-    UML/classes/org.openehr.base.base_types.object_ref.adoc (type
+    UML/classes/object_ref.adoc (type
     meaning); ITS-REST specifications/schemas/common/Contribution.yaml
     (the example: type COMPOSITION / FOLDER) — confirmed first-hand.
   handling: >-
@@ -2778,7 +2771,7 @@ AMB-89:
     UpdateVersion.yaml declares — so admitting ORIGINAL_VERSION names the
     class the member BECOMES, never a licence to post a complete RM
     instance: the mandatory `uid` of ORIGINAL_VERSION
-    (UML/classes/org.openehr.rm.common.original_version.adoc §Attributes,
+    (UML/classes/original_version.adoc §Attributes,
     1..1) is filled by this repository's allocation and appears on the
     READ, which is why the member-borne `uid` refusal holds under either
     tag without contradicting that cardinality. Accepting the
@@ -2890,7 +2883,7 @@ AMB-92:
     ITS-REST specifications/parameters/header/Prefer.yaml (the enum) +
     docs/overview/Requests_and_responses.md §"Prefer only identifier" (the
     uid-body contract) vs RM
-    UML/classes/org.openehr.rm.common.item_tag.adoc (no uid attribute) —
+    UML/classes/item_tag.adoc (no uid attribute) —
     confirmed first-hand.
   handling: >-
     Fixed handling: return=identifier on a tag PUT resolves to the APPLIED
@@ -2916,7 +2909,7 @@ AMB-93:
     declare 422, so the same service answers semantic invalidity two
     different ways depending on whether the body is a PARTY or its tags.
   source: >-
-    RM UML/classes/org.openehr.rm.common.item_tag.adoc §Invariants;
+    RM UML/classes/item_tag.adoc §Invariants;
     ITS-REST
     operations/{composition,ehr_status,person,agent,group,organisation,role}_tags_update.yaml
     (responses 200/204/400/404 only — verified identical across the five
@@ -3002,7 +2995,7 @@ AMB-96:
     so a client reading the schema examples would emit "" for an unpathed
     tag as a matter of course.
   source: >-
-    RM UML/classes/org.openehr.rm.common.item_tag.adoc (target_path 0..1;
+    RM UML/classes/item_tag.adoc (target_path 0..1;
     invariants cover key and value only) vs ITS-REST
     specifications/schemas/ehr/ItemTagOfEhrStatus.yaml and
     specifications/schemas/demographic/ItemTagOf{Person,Agent,Group,Organisation,Role}.yaml
@@ -3074,8 +3067,8 @@ AMB-97:
     Requests_and_responses.md L152's DV_EHR_URI points at a released
     class).
   source: >-
-    RM UML/classes/org.openehr.rm.common.item_tag.adoc + BASE
-    foundation_types string.adoc; ITS-REST specifications/
+    RM UML/classes/item_tag.adoc + BASE
+    UML/classes/string.adoc; ITS-REST specifications/
     (operations/*tags*.yaml — including operations/demographic_tags_get.yaml
     L9 "within given EHR" and the
     operations/{person,agent,group,organisation,role}_tags_{get,update,delete}.yaml
@@ -3315,7 +3308,7 @@ AMB-66:
     SM i_ehr_service.adoc §create_ehr and §create_ehr_with_id
     (`Pre_no_subject`: `an_ehr_status.subject = Void`, immediately followed by
     "A default `_subject_` will be generating containing a `PARTY_SELF`
-    object") + RM UML/classes/org.openehr.rm.ehr.ehr_status.adoc §Attributes (`subject`: 1..1
+    object") + RM UML/classes/ehr_status.adoc §Attributes (`subject`: 1..1
     PARTY_SELF — "The subject of this EHR") vs the released ITS-REST EHR API
     (no for-subject create operation; the optional EHR_STATUS body is the only
     subject-bearing input) — contradiction CONFIRMED first-hand.
@@ -4698,7 +4691,7 @@ AMB-129:
     copies the WHOLE three-part
     `87284370-2D4B-4e3d-A3F3-F303D2F4F34B::uk.nhs.ehr1::2`.
   source: >-
-    RM demographic UML/classes/org.openehr.rm.demographic.party.adoc
+    RM UML/classes/party.adoc
     §Description NOTE (the quoted "strongly recommended" sentence and its
     `87284370-…::uk.nhs.ehr1::2` example) vs the same file §Invariants
     (`Uid_mandatory: uid /= Void`) + RM demographic
@@ -4759,15 +4752,15 @@ AMB-130:
     references and can never be True, which leaves the negated form vacuously
     satisfied and the invariant empty.
   source: >-
-    RM demographic UML/classes/org.openehr.rm.demographic.party_relationship.adoc
+    RM UML/classes/party_relationship.adoc
     §Invariants (`Source_valid`: `source /= Void and then
     source.relationships.has (self)`; `Target_valid`: `target /= Void and then
     not target.reverse_relationships.has (self)`) + the same file §Attributes
     (`source`, `target`: PARTY_REF 1..1) + BASE
-    UML/classes/org.openehr.base.base_types.party_ref.adoc (inherits OBJECT_REF;
-    only a Type_validity invariant) + org.openehr.base.base_types.object_ref.adoc
+    UML/classes/party_ref.adoc (inherits OBJECT_REF;
+    only a Type_validity invariant) + object_ref.adoc
     §Attributes (namespace / type / id — no relationship features) + RM
-    demographic UML/classes/org.openehr.rm.demographic.party.adoc §Functions
+    UML/classes/party.adoc §Functions
     (`reverse_relationships (): List<LOCATABLE_REF>` with
     `Post_reverse_relationships_validity`) and §Invariants
     (`Reverse_relationships_validity` — the positive membership assertion) —
@@ -4932,8 +4925,7 @@ AMB-133:
     (parameters: uid_based_id, version_at_time, Accept — no Prefer) and
     versioned_party_{get,revision_history,version_get_at_time,version_get_by_id}.yaml
     (parameters: versioned_object_uid [+ version_at_time / version_uid],
-    Accept, Content-Type — no Prefer) + RM demographic
-    UML/classes/org.openehr.rm.demographic.{party,role,actor}.adoc (the
+    Accept, Content-Type — no Prefer) + RM UML/classes/{party,role,actor}.adoc (the
     PARTY_REF/LOCATABLE_REF-typed attributes listed above) — CONFIRMED
     first-hand.
   handling: >-
@@ -5175,11 +5167,11 @@ AMB-137:
     `namespace: local` and `type: SYSTEM` — not the party, not an EHR, and
     not any resource the demographic API addresses.
   source: >-
-    RM UML/classes/org.openehr.rm.common.item_tag.adoc (`owner_id`: 1..1
+    RM UML/classes/item_tag.adoc (`owner_id`: 1..1
     `OBJECT_REF`, Meaning "Identifier of owner object, such as EHR") + RM
     common master07-tags.adoc §Semantics (a tag "may be associated with any
     information item" — no owner rule anywhere in the package) + RM
-    UML/classes/org.openehr.rm.ehr.ehr.adoc §Attributes (`tags`:
+    UML/classes/ehr.adoc §Attributes (`tags`:
     `List<OBJECT_REF>`, "Optional list of tags associated with this EHR. Tag
     `_target_` values can only be within the same EHR") CONTRASTED with RM
     docs/demographic/master02-demographic_package.adoc and every
@@ -5575,7 +5567,7 @@ AMB-143:
     §physical_ehr_delete (`Pre_has_ehr` and the error `ehr_id_does_not_exist` —
     a PREcondition, with no stated postcondition; contrast
     SM i_definition_query.adoc §delete_query, which does state
-    `Post_query_deleted`) + RM UML/classes/org.openehr.rm.ehr.ehr.adoc
+    `Post_query_deleted`) + RM UML/classes/ehr.adoc
     §Attributes (the aggregate the delete destroys: `compositions`,
     `ehr_status`, `directory`, `folders`, `contributions`, `tags`,
     `ehr_access` — `folders` added 2026-08-21) — the
@@ -5990,7 +5982,7 @@ AMB-150:
     use the `WWW-Authenticate` and/or `Proxy-Authenticate` response headers,
     returning `403 Forbidden`, `401 Unauthorized` or `407 Proxy Authentication`
     as applicable") and §"HTTP status codes" (403 — "The service understood the
-    request but refuses to authorize it") + RM UML/classes/org.openehr.rm.ehr.ehr_status.adoc §Attributes
+    request but refuses to authorize it") + RM UML/classes/ehr_status.adoc §Attributes
     (`subject`: 1..1 PARTY_SELF, whose `external_ref` is the demographic
     reference) — all silences CONFIRMED first-hand.
   handling: >-
@@ -7547,11 +7539,10 @@ AMB-171:
     alone therefore breaches released text, and no case may treat the comma
     as optional behaviour.
   source: >-
-    RM data_types dv_date_time.adoc §Invariants (`Value_valid:
-    valid_iso8601_date_time (value)`) + BASE foundation_types
-    time_definitions.adoc §valid_iso8601_date_time and §valid_iso8601_time +
-    BASE foundation_types iso8601_date_time.adoc §Description and
-    §is_decimal_sign_comma + BASE foundation_types iso8601_timezone.adoc
+    RM UML/classes/dv_date_time.adoc §Invariants (`Value_valid:
+    valid_iso8601_date_time (value)`) + BASE UML/classes/time_definitions.adoc §valid_iso8601_date_time and §valid_iso8601_time +
+    BASE UML/classes/iso8601_date_time.adoc §Description and
+    §is_decimal_sign_comma + BASE UML/classes/iso8601_timezone.adoc
     §Description and §is_extended + ITS-REST
     specifications/docs/overview/Resources.md §Datetime format (the extended
     format is a MUST only for "HTTP query parameters and path segments";
@@ -7784,12 +7775,10 @@ AMB-176:
   source: >-
     RM common docs/common/master03-archetyped_package.adoc §Structural
     Correspondence (the "change_type set to 'synthesised'" sentence) and
-    §Meta-data ("type of change ..."); RM common
-    docs/UML/classes/org.openehr.rm.common.feeder_audit.adoc §Attributes (the
+    §Meta-data ("type of change ..."); RM UML/classes/feeder_audit.adoc §Attributes (the
     five-attribute list, no change_type) and
-    docs/UML/classes/org.openehr.rm.common.feeder_audit_details.adoc
-    §Attributes (the seven-attribute list, no change_type); RM common
-    docs/UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes
+    docs/UML/classes/feeder_audit_details.adoc
+    §Attributes (the seven-attribute list, no change_type); RM UML/classes/audit_details.adoc §Attributes
     (`change_type: DV_CODED_TEXT`) + §Invariants (`Change_type_valid`, bound to
     the openEHR `audit change type` group); TERM
     docs/SupportTerminology/codesets/openehr_terminology-vocabularies.adoc
@@ -7820,8 +7809,7 @@ AMB-176:
 AMB-177:
   ambiguity: >-
     A RELEASED RM INVARIANT RESTS ON A FUNCTION THE SAME CHAPTER LEAVES
-    UNDEFINED. RM common
-    docs/UML/classes/org.openehr.rm.common.locatable.adoc §Invariants states
+    UNDEFINED. RM UML/classes/locatable.adoc §Invariants states
     `Archetyped_valid: is_archetype_root xor archetype_details = Void`. Its
     left operand, `is_archetype_root ()`, is declared one section earlier
     under §Functions with a Meaning sentence and nothing else — "True if this
@@ -7854,7 +7842,7 @@ AMB-177:
     identifier, under either reading of the function), while the positive arm
     exists ONLY under reading (b) and vanishes entirely under reading (a).
   source: >-
-    RM common docs/UML/classes/org.openehr.rm.common.locatable.adoc
+    RM UML/classes/locatable.adoc
     §Functions verbatim and complete for this function — "*is_archetype_root*
     (): `Boolean` | True if this node is the root of an archetyped
     structure." — with no further definition anywhere in the file;
@@ -7987,7 +7975,7 @@ AMB-180:
     RM common master04-generic_package.adoc §Attestation (the "paths to items
     within the item" sentence in the contents list, and the later "nothing
     stopping it including fine-grained items" paragraph) +
-    UML/classes/org.openehr.rm.common.attestation.adoc §Attributes (`items`:
+    UML/classes/attestation.adoc §Attributes (`items`:
     `List<DV_EHR_URI>` 0..1, "attested in some other system") and §Invariants
     (`Items_valid`: `items /= Void implies not items.is_empty` — the ONLY
     declared constraint) — all three read first-hand.
@@ -8036,7 +8024,7 @@ AMB-181:
     RM common master04-generic_package.adoc §Attestation (the openPGP process
     paragraphs, the "proof attribute will be Void at this point" serialisation
     rule, and the `[.tbd]` block) +
-    UML/classes/org.openehr.rm.common.attestation.adoc §Attributes (`proof`:
+    UML/classes/attestation.adoc §Attributes (`proof`:
     `String` 0..1, "Proof of attestation" — no format, no invariant); ITS-REST
     specifications/docs/overview/Requests_and_responses.md §"openehr-version and
     openehr-audit-details" — read first-hand.
@@ -8071,8 +8059,7 @@ AMB-182:
     RM common master04-generic_package.adoc §Revision History (the
     "`VERSIONED_OBJECT` and `AUTHORED_RESOURCE`" sentence) + BASE
     docs/resource/master00-amendment_record.adoc ("Remove `_revision_history_`
-    property", the AOM2 re-engineering row) + BASE resource
-    UML/classes/org.openehr.base.resource.authored_resource.adoc §Attributes
+    property", the AOM2 re-engineering row) + BASE UML/classes/authored_resource.adoc §Attributes
     (no `revision_history`) — read first-hand.
   handling: >-
     Report only, no gate. Our posture already matches the post-removal reality
@@ -8220,7 +8207,7 @@ AMB-185:
     `archetypeNodeId` facet is plain XSD regex and compiles.
     (2d) TWO DIVERGENCES SURVIVE AGAINST nsv2 `latest` AND ARE THE XSDs'
     DEFECT, NOT AN AGE EFFECT: `EHR.tags`, which RM
-    `UML/classes/org.openehr.rm.ehr.ehr.adoc` declares ("Optional list of tags
+    `UML/classes/ehr.adoc` declares ("Optional list of tags
     associated with this EHR") and `RM/latest/Ehr.xsd` does not; and a
     spelling conflict on the EHR-Extract flags, where both lineages spell them
     `includes_multimedia` / `includes_revision_history` / `includes_data`
@@ -8354,11 +8341,9 @@ AMB-186:
     on these change-controlled resources. However, these operations MUST
     internally be executed using the 'native' way." The docs text states
     nothing about which OBJECT_ID subtype a folder reference may carry.
-    (2) THE MODEL — RM common
-    UML/classes/org.openehr.rm.common.folder.adoc §Attributes (`items`:
+    (2) THE MODEL — RM UML/classes/folder.adoc §Attributes (`items`:
     `List<OBJECT_REF>` 0..1, "The list of references to other (usually)
-    versioned objects logically in this folder"); BASE base_types
-    UML/classes/org.openehr.base.base_types.object_ref.adoc §Attributes
+    versioned objects logically in this folder"); BASE UML/classes/object_ref.adoc §Attributes
     (`namespace`/`type`/`id` each 1..1; `id`: `OBJECT_ID`, "Globally unique id
     of an object, regardless of where it is stored"; and the `type` row's own
     "The type name `ANY` can be used to indicate that any type is accepted");
@@ -8438,7 +8423,7 @@ AMB-187:
   source: >-
     RM demographic docs/demographic/master02-demographic_package.adoc §Party
     Relationships L44 + §Versioning Semantics L48 (both quoted above) + RM
-    demographic UML/classes/org.openehr.rm.demographic.party.adoc §Attributes
+    UML/classes/party.adoc §Attributes
     (`relationships`: `List<PARTY_RELATIONSHIP>` — BY VALUE) and §Invariants
     (`Relationships_validity`: `relationships /= Void implies (not
     relationships.is_empty and then relationships.for_all (r | r.source =
@@ -8529,8 +8514,7 @@ AMB-188:
   source: >-
     RM common master06-change_control_package.adoc §Digital Signature (the
     process paragraphs, the two-depths paragraph, the openPGP self-description
-    sentence, and the `[.tbd]` block) + RM common
-    UML/classes/org.openehr.rm.common.version.adoc §Functions
+    sentence, and the `[.tbd]` block) + RM UML/classes/version.adoc §Functions
     (`canonical_form ()`: "A canonical serial form of this Version, created by
     serialising all attributes except signature, suitable for generating
     reliable hashes and signatures") + BASE
@@ -8573,12 +8557,11 @@ AMB-189:
   ambiguity: >-
     `VERSION.Preceding_version_uid_validity` IS UNSATISFIABLE FOR EVERY BRANCH
     VERSION OFF TRUNK NODE 1. The invariant is
-    `uid.version_tree_id.is_first xor preceding_version_uid /= Void` (RM common
-    UML/classes/org.openehr.rm.common.version.adoc §Invariants, L69). Its left
+    `uid.version_tree_id.is_first xor preceding_version_uid /= Void` (RM UML/classes/version.adoc §Invariants, L69). Its left
     operand is defined by BASE, not by the RM:
     `VERSION_TREE_ID.Is_first_validity` is `not is_first xor
     trunk_version.is_equal("1")` (BASE
-    UML/classes/org.openehr.base.base_types.version_tree_id.adoc §Invariants,
+    UML/classes/version_tree_id.adoc §Invariants,
     L64), i.e. `is_first` is TRUE exactly when the TRUNK part is "1" — it says
     nothing about the branch parts, and the same class's `is_first` function
     text agrees: "True if this version identifier corresponds to the first
@@ -8597,10 +8580,10 @@ AMB-189:
     rescues it: `is_first` is a BASE-defined predicate over the trunk part
     alone, and the RM invariant consumes it unqualified.
   source: >-
-    RM common UML/classes/org.openehr.rm.common.version.adoc §Invariants L69
+    RM UML/classes/version.adoc §Invariants L69
     (`Preceding_version_uid_validity`: `uid.version_tree_id.is_first xor
     preceding_version_uid /= Void`) + BASE
-    UML/classes/org.openehr.base.base_types.version_tree_id.adoc §Invariants L64
+    UML/classes/version_tree_id.adoc §Invariants L64
     (`Is_first_validity`: `not is_first xor trunk_version.is_equal("1")`) and
     §Functions (`is_first ()`: "True if this version identifier corresponds to
     the first version, i.e. `_trunk_version_` is 1") + RM common
@@ -8638,14 +8621,14 @@ AMB-190:
     `ATTESTATION._commit_audit_._change_type_` is set to the code
     `666|attestation|`" (L66). There is no such path. `ATTESTATION` has no
     `commit_audit` property: it IS an `AUDIT_DETAILS`
-    (UML/classes/org.openehr.rm.common.attestation.adoc §Inherit:
+    (UML/classes/attestation.adoc §Inherit:
     `AUDIT_DETAILS`), and `change_type` is one of the attributes it inherits
     from that parent
-    (UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes:
+    (UML/classes/audit_details.adoc §Attributes:
     `change_type: DV_CODED_TEXT` 1..1). `commit_audit` is a property of
     `VERSION` — "Audit trail corresponding to the committal of this version to
     the `VERSIONED_OBJECT`"
-    (UML/classes/org.openehr.rm.common.version.adoc §Attributes) — and is
+    (UML/classes/version.adoc §Attributes) — and is
     exactly what the four SIBLING rows in the same list correctly write
     (`ORIGINAL_VERSION._commit_audit_._change_type_` for creation, deletion,
     amendment/modification; `IMPORTED_VERSION._commit_audit_._change_type_` for
@@ -8654,12 +8637,12 @@ AMB-190:
   source: >-
     RM common master06-change_control_package.adoc §Contributions L66 (the
     attestation change-kind row, quoted above) contrasted with the four sibling
-    rows L60–L65 + UML/classes/org.openehr.rm.common.attestation.adoc §Inherit
+    rows L60–L65 + UML/classes/attestation.adoc §Inherit
     (`AUDIT_DETAILS`) and §Attributes (no `commit_audit`) +
-    UML/classes/org.openehr.rm.common.audit_details.adoc §Attributes
+    UML/classes/audit_details.adoc §Attributes
     (`change_type` 1..1, and the `Change_type_valid` invariant binding it to the
     openEHR `audit change type` group) +
-    UML/classes/org.openehr.rm.common.version.adoc §Attributes (`commit_audit`
+    UML/classes/version.adoc §Attributes (`commit_audit`
     is VERSION's) — all read first-hand.
   handling: >-
     Editorial, with the repaired reading implemented. The row is read as
@@ -8695,7 +8678,7 @@ AMB-191:
     RM common master06-change_control_package.adoc §Digital Signature
     ("serialising the entire Version object (note that the signature
     attribute will be Void at this point)") and §Attestation ("at any time
-    after committal of the content being attested") vs org.openehr.rm.common.original_version.adoc
+    after committal of the content being attested") vs original_version.adoc
     §Attributes (attestations: List<ATTESTATION> 0..1 — no committal-time
     discriminator). Confirmed first-hand.
   handling: >-
@@ -8764,8 +8747,8 @@ AMB-193:
     RM ehr_extract master04-common_package.adoc §Content Specification
     ("whereas the request may not specify any entities (it may rely on
     query criteria)") contrasted with
-    UML/classes/org.openehr.rm.ehr_extract.extract_spec.adoc §Attributes
-    (manifest 1..1) + org.openehr.rm.ehr_extract.extract_manifest.adoc
+    UML/classes/extract_spec.adoc §Attributes
+    (manifest 1..1) + extract_manifest.adoc
     §Attributes (entities 1..1 List<EXTRACT_ENTITY_MANIFEST>) + the RM BMMs
     (1.0.4 / released 1.1.0 / 1.2.0), EXTRACT_MANIFEST.entities cardinality
     {lower: 1, upper_unbounded: true} — item count per LANG
@@ -8798,7 +8781,7 @@ AMB-194:
     rather than per-rule. Two conformant implementations may therefore answer
     the same complete-but-incomplete commit 400 or 422.
   source: >-
-    RM common master06-change_control_package.adoc §Incomplete Content ("would
+    RM common master06-change_control_package.adoc §Version Lifecycle (the released home of the incomplete-content rules: "would
     be treated as invalid by the repository and rejected by the API") +
     ITS-REST specifications/docs/overview/Requests_and_responses.md §HTTP status codes +
     ITS-REST specifications/operations/contribution_create.yaml (its `responses` map) +
@@ -8827,12 +8810,7 @@ AMB-194:
 
 AMB-195:
   ambiguity: >-
-    SPEC SILENCE on the WIRE TREATMENT of version-lifecycle transitions. RM
-    common master06 §Version Lifecycle defines a formal state machine (its
-    diagram) and §Abandoned and Inactive States tabulates seven transitions
-    with named triggers (`abandon`, `retrieve`, `deactivate`, `reactivate`,
-    `delete`), but the released REST surface exposes NONE of them as an
-    operation: the only channel is the open `lifecycle_state` code on the
+    SPEC SILENCE on the WIRE TREATMENT of version-lifecycle transitions, WIDENED by a released-set contradiction (re-adjudicated at the #78 oracle re-pin): released RM 1.1.0 §Version Lifecycle enumerates three values (532 complete, 553 incomplete, 523 deleted) while delegating the value set to the openEHR Terminology "version lifecycle state" group, and released TERM 3.0.0 carries FIVE codes there (800 inactive and 801 abandoned added by SPECTERM-10). The state machine for the two released-but-unenumerated codes — the seven-row transition table with named triggers (`abandon`, `retrieve`, `deactivate`, `reactivate`, `delete`) — exists only in UNRELEASED RM development text (master06 §Abandoned and Inactive States), and the released REST surface exposes none of the triggers as an operation: the only channel is the open `lifecycle_state` code on the
     commit wire (`openehr-version` header / `UPDATE_VERSION.lifecycle_state`).
     Two consequences are both unaddressed by released text: (a) nothing says
     whether a server must ENFORCE the table at all, and (b) no status code is
@@ -8840,9 +8818,7 @@ AMB-195:
     The released error responses on the contribution and composition routes
     never name a lifecycle trigger.
   source: >-
-    RM common master06-change_control_package.adoc §Version Lifecycle (the
-    state-machine diagram, RM-version_lifecycle.svg) + §Abandoned and Inactive
-    States (the seven-row transition table) contrasted with ITS-REST
+    RM common master06-change_control_package.adoc §Version Lifecycle (the released three-value enumeration, its state-machine diagram RM-version_lifecycle.svg, and the "coded from the openEHR Terminology" delegation) + TERM SupportTerminology §Version Lifecycle State (codes 800 and 801, released) + the UNRELEASED RM development text master06 §Abandoned and Inactive States (the seven-row transition table this handling anticipates) contrasted with ITS-REST
     specifications/docs/overview/Requests_and_responses.md §"openehr-version
     and openehr-audit-details" (which offers only the code channel and says
     "None of these headers are mandatory, but whatever is provided it MUST be
@@ -8894,7 +8870,7 @@ AMB-196:
     IMPORT commit, one property over.
   source: >-
     RM common master06-change_control_package.adoc §Version Merging +
-    RM UML/classes/org.openehr.rm.common.original_version.adoc §Attributes
+    RM UML/classes/original_version.adoc §Attributes
     (other_input_version_uids) and §Invariants (Is_merged_validity) +
     ITS-REST specifications/schemas/ehr/{UpdateVersion,NewContribution}.yaml
     (no merge shape) + ITS-REST specifications/schemas/ehr/OriginalVersion.yaml (the
@@ -8943,7 +8919,7 @@ AMB-198:
     would otherwise let the OAS ground it — against two other released
     components.
   source: >-
-    RM common UML/classes/org.openehr.rm.common.imported_version.adoc
+    RM UML/classes/imported_version.adoc
     (§Attributes: item only; §Functions: uid / preceding_version_uid /
     lifecycle_state / data all `1..1 (effected)`, data "Original content of
     this Version", derived from item) + RM common
@@ -9043,8 +9019,7 @@ AMB-200:
   source: >-
     RM ehr master04-ehr_package.adoc §Versioning Scenarios (Case 2 + the
     summary sentence that follows the case list) contrasted with SM
-    UML/classes/i_tdd_service.adoc §import_tdd ("Import a TDD"), RM common
-    UML/classes/org.openehr.rm.common.imported_version.adoc (item:
+    UML/classes/i_tdd_service.adoc §import_tdd ("Import a TDD"), RM UML/classes/imported_version.adoc (item:
     ORIGINAL_VERSION 1..1) and RM common master06-change_control_package.adoc
     §Copying. All read first-hand.
   handling: >-
@@ -9101,8 +9076,7 @@ AMB-201:
     the -validation bundles' open flattened ItemTagOf* and the -html
     bundles' closed shape (cited AS the OAS), and with
     specifications/docs/overview/Resources.md §JSON Format (the `_type`
-    polymorphism scoping); RM common
-    UML/classes/org.openehr.rm.common.item_tag.adoc (the class the payload
+    polymorphism scoping); RM UML/classes/item_tag.adoc (the class the payload
     realizes). All read first-hand.
   handling: >-
     Fixed handling: served ITEM_TAGs CARRY `_type: "ITEM_TAG"`, on both the EHR
@@ -9132,8 +9106,7 @@ AMB-201:
 AMB-202:
   ambiguity: >-
     ITEM_TAG.target is typed two incompatible ways by two RELEASED artifacts,
-    and the documented oracle order does not reach the conflict. RM common
-    UML/classes/org.openehr.rm.common.item_tag.adoc types `target:
+    and the documented oracle order does not reach the conflict. RM UML/classes/item_tag.adoc types `target:
     UID_BASED_ID 1..1` — a BARE identifier ("Identifier of target, which may be
     a `VERSIONED_OBJECT<T>` or a `VERSION<T>`"). The released OAS types the
     same attribute as an OBJECT_REF WRAPPER
@@ -9146,7 +9119,7 @@ AMB-202:
     register owns the reason rather than leaving it to a rule that was written
     for a different question.
   source: >-
-    RM common UML/classes/org.openehr.rm.common.item_tag.adoc §Attributes
+    RM UML/classes/item_tag.adoc §Attributes
     (`target: UID_BASED_ID 1..1`) contrasted with ITS-REST
     specifications/schemas/common/ItemTag.yaml (`target: $ref
     ../base_types/UObjectRefOfUidBasedId.yaml`) and
@@ -9188,8 +9161,7 @@ AMB-203:
     escaping rule, and no statement of what a quoted run means. That leaves two
     concrete questions undecided: (a) whether a `;` INSIDE a quoted value ends
     the entry — which is not hypothetical, because the same section's own
-    `target_path` token is a path and RM common
-    UML/classes/org.openehr.rm.common.item_tag.adoc admits an AQL path there,
+    `target_path` token is a path and RM UML/classes/item_tag.adoc admits an AQL path there,
     whose predicates may carry `;` inside quoted strings; and (b) what a server
     does with a syntactically parseable entry that carries no `key`.
   source: >-
@@ -9207,7 +9179,7 @@ AMB-203:
     specifications/headers/openehr-item-tag.yaml is a bare
     `schema: type: string` with NO example and no `pattern`; ITS-REST
     specifications/schemas/common/UpdateItemTag.yaml
-    (`required: [key]`); RM common UML/classes/org.openehr.rm.common.item_tag.adoc
+    (`required: [key]`); RM UML/classes/item_tag.adoc
     (target_path: "archetype (i.e. AQL) or RM path"). All read first-hand.
   handling: >-
     Fixed handling, in two parts. (a) A DOUBLE-QUOTED RUN IS OPAQUE at the
@@ -9261,8 +9233,7 @@ AMB-204:
     directory ops dropped from this list 2026-08-21, they declare no
     item-tag parameter; none of the thirteen declares
     a tag-failure branch); RM ehr master04-ehr_package.adoc §Tags ("they do not
-    cause re-versioning of the content"); RM common
-    UML/classes/org.openehr.rm.common.item_tag.adoc §Invariants. All read
+    cause re-versioning of the content"); RM UML/classes/item_tag.adoc §Invariants. All read
     first-hand.
   handling: >-
     Fixed handling: VALIDATE FIRST, WRITE AFTER. The wrapper headers are parsed
@@ -9348,8 +9319,7 @@ AMB-206:
     error. The RM defines the UNQUALIFIED name (gloss cited 2026-08-21):
     VERSIONED_OBJECT.latest_version() is "the most recently added version
     (i.e. on trunk or any branch)", with latest_trunk_version() the
-    trunk-only sibling (RM common
-    UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions) —
+    trunk-only sibling (RM UML/classes/versioned_object.adoc §Functions) —
     so the RM's own gloss leans most-recently-added, while the extract
     chapter never says WHICH function "latest available version" means (its
     §Description even says "By default, only latest versionS are included",
@@ -9361,11 +9331,9 @@ AMB-206:
     specification, corresponding to the assumption of 'latest available
     version' for each matched item", and the two enumerated possibilities
     (`include_all_versions`, `include_revision_history`) — no third setting
-    and no lineage rule. RM ehr_extract
-    UML/classes/org.openehr.rm.ehr_extract.extract_version_spec.adoc
+    and no lineage rule. RM UML/classes/extract_version_spec.adoc
     §Attributes: `include_all_versions` "forces all versions to be included",
-    so its FALSE branch is exactly the undefined one. RM common
-    UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions:
+    so its FALSE branch is exactly the undefined one. RM UML/classes/versioned_object.adoc §Functions:
     `latest_version()` and `latest_trunk_version()` are separate functions
     over the same container. No released sentence in either component picks
     one for the Extract, and the ITS-REST release publishes no MESSAGE API at
@@ -9458,12 +9426,12 @@ AMB-209:
     resource, but there are semantic validation errors");
     specifications/docs/overview/Requests_and_responses.md §HTTP status codes
     (the two rows, neither drawing the boundary). RM
-    UML/classes/org.openehr.rm.data_types.dv_uri.adoc §Description ("A
+    UML/classes/dv_uri.adoc §Description ("A
     reference to an object which structurally conforms to the Universal
     Resource Identifier (URI) RFC-3986 standard", plus the plain-text
     allowance) and §Invariants (`Value_valid: not value.is_empty` — the ONLY
     declared invariant); RM
-    UML/classes/org.openehr.rm.data_types.dv_ehr_uri.adoc §Invariants
+    UML/classes/dv_ehr_uri.adoc §Invariants
     (`Scheme_valid`). All read first-hand.
   handling: >-
     Fixed handling: a malformed-URI value is refused 422, NOT 400. The
@@ -9564,12 +9532,11 @@ AMB-211:
     ITS-REST specifications/operations/directory_create.yaml +
     directory_update.yaml (declared response sets) +
     specifications/responses/400.yaml + 422.yaml + overview
-    Requests_and_responses.md §HTTP status codes; RM common
-    UML/classes/org.openehr.rm.common.folder.adoc (no Invariants row) + ehr
+    Requests_and_responses.md §HTTP status codes; RM UML/classes/folder.adoc (no Invariants row) + ehr
     master00-amendment_record.adoc (SPEC-49) +
-    UML/classes/org.openehr.rm.ehr.ehr.adoc §Invariants (+ the tags-only
+    UML/classes/ehr.adoc §Invariants (+ the tags-only
     scope sentence); BASE
-    UML/classes/org.openehr.base.base_types.object_ref.adoc §Description +
+    UML/classes/object_ref.adoc §Description +
     §Attributes; SM UML/classes/i_ehr_directory.adoc §create_directory /
     §update_directory + UML/classes/i_validity_checker.adoc §content_valid.
   handling: >-
@@ -9616,8 +9583,7 @@ AMB-212:
     residue: the RM-ch.8-shaped OPT 1.4 XML wire has no assigned
     enforcement seam for the ch.8 invariants.
   source: >-
-    RM common master08-resource_package.adoc (front-matter NOTE) + RM
-    UML/classes/org.openehr.rm.common.{authored_resource,translation_details,resource_description,resource_description_item}.adoc
+    RM common master08-resource_package.adoc (front-matter NOTE) + RM UML/classes/{authored_resource,translation_details,resource_description,resource_description_item}.adoc
     §Invariants; the vendored AM 1.4 BMM
     (tools/openehr-codegen/vendor/bmm/components/AM/json/
     openehr_am_1.4.0.bmm.json — includes: openehr_base_1.3.0, no resource
@@ -9663,7 +9629,7 @@ AMB-213:
     RM docs/data_structures/master04-item_structure_package.adoc §ISO 13606
     Encoding Rules — ITEM_TABLE + §Instance Structures
     (diagrams/instance_item_table.svg); RM
-    UML/classes/org.openehr.rm.data_structures.item_table.adoc §Description +
+    UML/classes/item_table.adoc §Description +
     §Functions as_hierarchy.
   handling: >-
     Fixed handling (issue #2464): the row encoding wins — the dedicated
@@ -9688,7 +9654,7 @@ AMB-214:
     instantaneous event.", describing a state a mandatory attribute cannot
     have.
   source: >-
-    RM UML/classes/org.openehr.rm.data_structures.interval_event.adoc
+    RM UML/classes/interval_event.adoc
     §Attributes (width, existence 1..1); the vendored RM BMMs
     openehr_rm_1.0.2 .. 1.2.0 (class INTERVAL_EVENT, width is_mandatory:
     true); RM docs/data_structures/master06-history_package.adoc §Point
@@ -9714,7 +9680,7 @@ AMB-215:
     class's own Integrity_check_algorithm_validity.
   source: >-
     RM docs/data_types/master09-encapsulated_package.adoc §Examples; RM
-    UML/classes/org.openehr.rm.data_types.dv_multimedia.adoc §Invariants
+    UML/classes/dv_multimedia.adoc §Invariants
     Integrity_check_algorithm_validity; the openEHR terminology integrity
     check algorithms code set (crates/openehr-term/assets).
   handling: >-

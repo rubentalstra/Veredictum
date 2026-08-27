@@ -12,7 +12,7 @@
 # Resources.md §Identifier types says the same thing from the wire side: a
 # version_uid's "`object_id` matches the VERSIONED_OBJECT identifier, taken
 # from VERSIONED_OBJECT.uid.value (i.e. the `versioned_object_uid`)" — here it
-# does not. RM common versioned_object.adoc's `Pre: has_version_id
+# does not. RM UML/classes/versioned_object.adoc's `Pre: has_version_id
 # (a_version_uid)` is therefore false for the addressed container, and
 # ITS-REST overview Requests_and_responses.md §HTTP status codes assigns that
 # state its row: "404 | Not Found | The origin service did not find the target

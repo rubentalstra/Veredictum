@@ -16,13 +16,13 @@ A number of functions provide the path functionality, of which `_item_at_path()_
 
 [source, java]
 ----
-if (path_exists (a_path)) {
-    if (path_unique (a_path)) {
-        x = item_at_path (a_path);
-		// process one item
-	}
+if path_exists (a_path) {
+    if path_unique(a_path) {
+        x := item_at_path(a_path)
+            // process one item
+        }
     else {
-        list_of_x = items_at_path (a_path);
+        list_of_x := items_at_path(a_path)
         //iterate the list
     }
 }
@@ -32,7 +32,7 @@ if (path_exists (a_path)) {
 
 Most classes in the openEHR reference model inherit from the `LOCATABLE` class, which defines the idea of 'locatability in an archetyped structure'. `LOCATABLE` defines a runtime name and an `_archetype_node_id_`. The `_archetype_node_id_` is the standardised semantic code for a node and comes from the corresponding node in the archetype used to create the data. The only exception is at archetype root points in data, where `_archetype_node_id_` carries the archetype identifier in string form rather than an interior node id from an archetype. `LOCATABLE` also provides the attribute `_archetype_details_`, which is non-Void for archetype root points in data, and carries meta-data relevant to root points. The `_name_` attribute carries a name created at runtime. The 'meaning' of any node is derived formally from the archetype by obtaining the text value for the `_archetype_node_id_` code from the archetype `ontology` section, in the language required.
 
-The `_name_` and `_archetype_node_id_` values in a `LOCATABLE` instance are often the same semantically, but may differ. For example, in "problem/SOAP" Sections (i.e. headings), the name of a section at the problem level might be "diabetes", but its meaning might be "problem". The default value for `_name_` should be assumed to be the text value in the local language for the `_archetype_node_id_` code on the node in question, unless explicitly set otherwise.
+The `_name_` and `_archetype_node_id_` valuesin a `LOCATABLE` instance are often the same semantically, but may differ. For example, in "problem/SOAP" Sections (i.e. headings), the name of a section at the problem level might be "diabetes", but its meaning might be "problem". The default value for `_name_` should be assumed to be the text value in the local language for the `_archetype_node_id_` code on the node in question, unless explicitly set otherwise.
 
 ==== Unique Node Identification
 
@@ -130,18 +130,18 @@ The Feeder audit information is included as part of the data of the Composition,
 
 ==== Original Content
 
-The features of the model described so far allow accurate referencing of content as it is known in source systems and intermediate feeder systems. A further feature of the `FEEDER_AUDIT` class, the `_original_content_` attribute allows the original content item itself to be either included inline or pointed to. If a link is used, the usual situation is that the content is in a store associated with the receiving system, such as a message or document database. The content could also be included inline. Since the `_original_content_` link is on a `FEEDER_AUDIT` object, more than one can be used within the same generated Composition if required. It may be deemed preferable to attach only a single link at the top node, i.e. the Composition node, since this establishes basic equivalent between the whole Composition and the whole document or message.
+The features of the model described so far allow accurate referencing of content as it is known in source systems and intermediate feeder systems. A further feature of the `FEEDER_AUDIT` class, the original_content attribute allows the original content item itself to be either included inline or pointed to. If a link is used, the usual situation is that the content is in a store associated with the receiving system, such as a message or document database. The content could also be included inline. Since the original_content link is on a `FEEDER_AUDIT` object, more than one can be used within the same generated Composition if required. It may be deemed preferable to attach only a single link at the top node, i.e. the Composition node, since this establishes basic equivalent between the whole Composition and the whole document or message.
 
 == Class Definitions
 
-include::{uml_export_dir}/classes/{pkg}pathable.adoc[]
+include::{uml_export_dir}/classes/pathable.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}locatable.adoc[]
+include::{uml_export_dir}/classes/locatable.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}archetyped.adoc[]
+include::{uml_export_dir}/classes/archetyped.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}link.adoc[]
+include::{uml_export_dir}/classes/link.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}feeder_audit.adoc[]
+include::{uml_export_dir}/classes/feeder_audit.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}feeder_audit_details.adoc[]
+include::{uml_export_dir}/classes/feeder_audit_details.adoc[]

@@ -1,0 +1,22 @@
+=== BMM_CONDITIONAL_ACTION Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*BMM_CONDITIONAL_ACTION*
+
+h|*Description*
+2+a|Conditional, or 'gated' statement, consisting of a Boolean-returning `_condition_` and the target `_statement_`.
+
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1*
+|*condition*: `<<_el_boolean_expression_class,EL_BOOLEAN_EXPRESSION>>`
+a|The gate condition for the target statement.
+
+h|*1..1*
+|*statement*: `<<_bmm_statement_item_class,BMM_STATEMENT_ITEM>>`
+a|Target statement.
+|===

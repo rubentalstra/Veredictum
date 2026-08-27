@@ -3,8 +3,8 @@
 # route. The version container is per-EHR, so the addressed version is simply
 # not a member of it.
 #
-# RM ehr ehr.adoc types EHR.ehr_status as the EHR's own VERSIONED_EHR_STATUS,
-# and RM common versioned_object.adoc guards the accessor with
+# RM UML/classes/ehr.adoc types EHR.ehr_status as the EHR's own VERSIONED_EHR_STATUS,
+# and RM UML/classes/versioned_object.adoc guards the accessor with
 # `Pre: has_version_id (a_version_uid)` — a uid from a different container
 # fails that precondition. ITS-REST overview Requests_and_responses.md §HTTP
 # status codes assigns the state its row: "404 | Not Found | The origin

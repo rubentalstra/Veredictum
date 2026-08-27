@@ -32,7 +32,7 @@ outcomes:
 # The retrieved resource carries the server-assigned version uid the committed
 # payload lacks — at EVERY FOLDER node, not only the tree root. RM common
 # locatable.adoc types `uid` `0..1`, "Optional globally unique object identifier
-# for root points of archetyped structures", and RM common folder.adoc's NOTE
+# for root points of archetyped structures", and RM UML/classes/folder.adoc's NOTE
 # scopes its population recommendation to the root alone ("It is strongly
 # recommended that the inherited attribute `uid` be populated in _top-level_
 # (i.e. tree-root) `FOLDER` objects"). A uid a server assigns at a nested

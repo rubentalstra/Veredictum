@@ -18,7 +18,7 @@ test_purpose: >-
 description: "commit a composition with the full instruction-family trimmings"
 spec_refs:
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
-  - "RM UML/classes/org.openehr.rm.composition.ism_transition.adoc §Attributes (transition, careflow_step, reason) + org.openehr.rm.composition.instruction_details.adoc §Attributes (instruction_id, activity_id)"
+  - "RM UML/classes/ism_transition.adoc §Attributes (transition, careflow_step, reason) + instruction_details.adoc §Attributes (instruction_id, activity_id)"
   - "RM ehr/master08-entry_package.adoc §Clinical Workflow Definition (wf_definition: any syntax may currently be used) + §Careflow Process to State Machine Mapping"
 applies: { rm: ">=1.0.2" }
 requires:

@@ -23,7 +23,7 @@ This section describes primitive types assumed by all openEHR models. These are 
 |`String`   |represents unicode-enabled strings.
 |===
 
-The figure below illustrates these types. Simple inheritance relationships are shown which facilitate the type descriptions below. Actual inheritance from or substitutability for an `Any` class is not assumed, and is shown only for convenience (e.g. to indicate that the '=' operator is available on any type). The type `Ordered_numeric` is on the other hand is used to indicate assumed substitutability of numeric types, and is intended to be mapped to an equivalent type in a real type system (e.g. in Java, `java.lang.Number`). Data-oriented implementation type systems such as XML-schema do not have such operations.
+The figure below illustrates these types. Simple inheritance relationships are shown which facilitate the type descriptions below. Actual inheritance from or subsitutability for an `Any` class is not assumed, and is shown only for convenience (e.g. to indicate that the '=' operator is available on any type). The type `Ordered_numeric` is on the other hand is used to indicate assumed substitutability of numeric types, and is intended to be mapped to an equivalent type in a real type system (e.g. in Java, `java.lang.Number`). Data-oriented implementation type systems such as XML-schema do not have such operations.
 
 [.text-center]
 .`base.foundation_types.primitive_types` Package
@@ -35,26 +35,26 @@ It is assumed in the openEHR specifications that Unicode is supported by the typ
 
 == Class Definitions
 
-include::{uml_export_dir}/classes/{pkg}boolean.adoc[]
+include::{uml_export_dir}/classes/boolean.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}ordered.adoc[]
+include::{uml_export_dir}/classes/ordered.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}character.adoc[]
+include::{uml_export_dir}/classes/character.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}octet.adoc[]
+include::{uml_export_dir}/classes/octet.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}string.adoc[]
+include::{uml_export_dir}/classes/string.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}uri.adoc[]
+include::{uml_export_dir}/classes/uri.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}numeric.adoc[]
+include::{uml_export_dir}/classes/numeric.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}ordered_numeric.adoc[]
+include::{uml_export_dir}/classes/ordered_numeric.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}integer.adoc[]
+include::{uml_export_dir}/classes/integer.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}integer64.adoc[]
+include::{uml_export_dir}/classes/integer64.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}real.adoc[]
+include::{uml_export_dir}/classes/real.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}double.adoc[]
+include::{uml_export_dir}/classes/double.adoc[]

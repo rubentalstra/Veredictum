@@ -1,12 +1,12 @@
 # ATTESTATION.attested_view — the visual record of what was signed, kept whole.
 #
 # THE ATTRIBUTE (RM common
-# UML/classes/org.openehr.rm.common.attestation.adoc §Attributes):
+# UML/classes/attestation.adoc §Attributes):
 # "*0..1* *attested_view*: `DV_MULTIMEDIA` — Optional visual representation of
 # content attested e.g. screen image." It is the one ATTESTATION attribute
 # carrying an encapsulated binary, and its value must satisfy the DV_MULTIMEDIA
 # invariants (RM data_types
-# UML/classes/org.openehr.rm.data_types.dv_multimedia.adoc §Invariants):
+# UML/classes/dv_multimedia.adoc §Invariants):
 # "__Media_type_valid__: `media_type /= Void and then code_set
 # (Code_set_id_media_types).has_code (media_type)`" — mandatory, and bound to
 # the openEHR `media types` code set, "interface for the IANA MIME types code

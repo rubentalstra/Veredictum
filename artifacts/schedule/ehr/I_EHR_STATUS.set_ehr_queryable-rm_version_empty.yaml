@@ -2,7 +2,7 @@
 # block carries an empty rm_version.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM common UML/classes/org.openehr.rm.common.archetyped.adoc §Invariants
+# RM UML/classes/archetyped.adoc §Invariants
 # states `Rm_version_valid: not rm_version.is_empty`, and §Attributes types
 # `rm_version` 1..1. The fixture is the otherwise-valid minimal EHR_STATUS with
 # that one string emptied — every root-level attribute the sibling

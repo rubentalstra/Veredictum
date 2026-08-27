@@ -16,7 +16,7 @@
 # openehr-version-item-tag, repeated verbatim in
 # operations/person_tags_update.yaml), and the RM types it `String[0..1]` with
 # no non-empty invariant (RM
-# UML/classes/org.openehr.rm.common.item_tag.adoc §Attributes / §Invariants —
+# UML/classes/item_tag.adoc §Attributes / §Invariants —
 # the invariants cover `key` and `value` only). Nothing released says whether
 # `""` is a path or no path; AMB-96 fixes it: "`\"\"` normalizes to ABSENT at
 # the service seam — one identity, not two; served tags never carry an empty

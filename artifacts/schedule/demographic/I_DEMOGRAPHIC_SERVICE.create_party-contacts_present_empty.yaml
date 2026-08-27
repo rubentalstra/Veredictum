@@ -1,5 +1,5 @@
 # DEMOGRAPHIC ARCHETYPE VALIDATION — a cardinality rule of the demographic
-# model: RM demographic UML/classes/org.openehr.rm.demographic.party.adoc
+# model: RM UML/classes/party.adoc
 # §Invariants, `Contacts_valid: contacts /= Void implies not
 # contacts.is_empty`. The attribute is optional (0..1 List<CONTACT>), so the
 # way to say "no contacts" is to OMIT it; an explicitly present, empty list is

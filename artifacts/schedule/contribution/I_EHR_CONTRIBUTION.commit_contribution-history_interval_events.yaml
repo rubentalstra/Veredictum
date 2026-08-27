@@ -19,7 +19,7 @@ description: "commit a periodic HISTORY of POINT_EVENT + INTERVAL_EVENTs (the ma
 spec_refs:
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
   - "RM data_structures/master06-history_package.adoc §History Instance Structures (5-minute Blood Pressure Averages) + §Basic Semantics (a History can contain any mixture of POINT_EVENT and INTERVAL_EVENT instances)"
-  - "RM UML/classes/org.openehr.rm.data_structures.interval_event.adoc §Attributes (width 1..1, math_function 1..1, sample_count 0..1)"
+  - "RM UML/classes/interval_event.adoc §Attributes (width 1..1, math_function 1..1, sample_count 0..1)"
 applies: { rm: ">=1.0.2" }
 requires:
   server: any

@@ -2,7 +2,7 @@
 # newest commit still names the newest VERSION and is answered.
 #
 # No released text closes a version's extancy interval at the next commit or
-# leaves it open — RM common versioned_object.adoc gives only
+# leaves it open — RM UML/classes/versioned_object.adoc gives only
 # `version_at_time (a_time): VERSION` with `Pre: has_version_at_time
 # (a_time)`. Register AMB-70 carries the adjudicated fixed handling this case
 # pins: a future T is a 200 carrying the newest version, never a 404.

@@ -16,9 +16,9 @@
 #   * subject / is_queryable / is_modifiable absent — RM ehr §EHR_STATUS
 #     §Attributes types all three 1..1 (subject as PARTY_SELF, so an EHR_STATUS
 #     whose subject is missing or is not a PARTY_SELF is not a valid one);
-#   * archetype_details absent on an archetype root — RM common locatable.adoc
+#   * archetype_details absent on an archetype root — RM UML/classes/locatable.adoc
 #     `Archetyped_valid` (is_archetype_root xor archetype_details = Void)
-#     together with RM ehr ehr_status.adoc `Is_archetype_root`;
+#     together with RM UML/classes/ehr_status.adoc `Is_archetype_root`;
 #   * other_details without its `_type` discriminator — ITS-REST Resources.md
 #     §JSON Format: `_type` "should be used to specify the RM type whenever
 #     polymorphism is involved, or when the underlying definition in RM type is

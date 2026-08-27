@@ -26,7 +26,7 @@
 # machine proof that TWO attestation commits still leave ONE version.
 #
 # The pending attestation carries no `proof` — `ATTESTATION.proof` is 0..1 (RM
-# common UML/classes/org.openehr.rm.common.attestation.adoc §Attributes) and
+# common UML/classes/attestation.adoc §Attributes) and
 # the signing that produces it has not happened yet; the completed one carries
 # it.
 id: I_EHR_CONTRIBUTION.commit_contribution-attestation_pending_then_final

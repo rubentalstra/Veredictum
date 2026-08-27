@@ -1,6 +1,6 @@
 # DEMOGRAPHIC ARCHETYPE VALIDATION — the value-TYPE arm.
 #
-# RM demographic UML/classes/org.openehr.rm.demographic.party_identity.adoc
+# RM UML/classes/party_identity.adoc
 # §Attributes types the archetyped payload of an identity exactly: `1..1
 # details: ITEM_STRUCTURE` ("The value of the identity. This will often taken
 # the form of a parseable string or a small structure of strings"). A DV_TEXT

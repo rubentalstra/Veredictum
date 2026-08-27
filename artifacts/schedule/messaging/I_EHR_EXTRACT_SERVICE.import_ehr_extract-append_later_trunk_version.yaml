@@ -46,7 +46,7 @@ description: "Import a later trunk version into an already-cloned container"
 spec_refs:
   - "RM common master06-change_control §Copying (the four receiving situations; the already-received container)"
   - "RM common master06-change_control §Copying (local commit times)"
-  - "RM ehr_extract UML/classes/org.openehr.rm.ehr_extract.x_versioned_object.adoc"
+  - "RM UML/classes/x_versioned_object.adoc"
   - "SM openehr_platform §I_EHR_EXTRACT_SERVICE.import_ehr_extract"
 applies: { rm: ">=1.0.2" }
 guards:

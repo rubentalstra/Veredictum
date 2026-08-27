@@ -51,7 +51,7 @@ image::{diagrams_uri}/archetypes_is_a_hierarchy.png[id=archetypes_is_a_hierarchy
 
 == Collections of Archetypes
 
-Within the virtual archetype space described above, we can identify different groups or collections of archetypes, which relate to how tools work, particularly with respect to how identifiers are resolved. For the foreseeable future, all of the following types of collections can be assumed to occur under specific custodian namespaces, i.e. managers and publishers of archetypes.
+Within the virtual archetype space described above, we can identify different groups or collections of archetypes, which relate to how tools work, particularly with respect to how identifiers are resolved. For the forseeable future, all of the following types of collections can be assumed to occur under specific custodian namespaces, i.e. managers and publishers of archetypes.
 
 An Archetype Library corresponds to a coherent collection of archetypes actually available within a single workspace or repository. All archetypes and templates in the Library would typically be based on the same Reference Model, but this need not be so, e.g. in the case of test archetypes. Apart from the latter case, an Archetype Library consists of archetypes that are normally designed to be used together in validating and creating information. These can include non-namespaced (unmanaged) and differently namespaced archetypes, where mixing occurs due to promotion and/or forking. In the latter case, it is up to the Library maintainers to ensure compatibility of all archetypes in the Library.
 
@@ -93,7 +93,7 @@ An XML schema for archetypes is available on the openEHR website.
 
 === Archetype Definition Language (ADL)
 
-ADL uses three sub-syntaxes: cADL (constraint form of ADL), {openehr_odin}[ODIN (Object Data Instance Notation)], and a version of first-order predicate logic (FOPL). The cADL and FOPL parts express constraints on data which are instances of an underlying information model, which may be expressed in UML, relational form, or in a programming language. ADL itself is a very simple ‘glue’ syntax, which connects blocks of the subordinate syntaxes to form an overall artefact. The cADL syntax is used to express the archetype `definition` , while the ODIN syntax is used to express data which appears in the `language` , `description` , `terminology` , and `revision_history` sections of an ADL archetype. The top-level structure of an ADL archetype is shown in the figure below.
+ADL uses three sub-syntaxes: cADL (constraint form of ADL), {openehr_odin}[ODIN (Object Data Instance Notation)], and a version of first-order predicate logic (FOPL). The cADL and FOPL parts express constraints on data which are instances of an underlying information model, which may be expressed in UML, relational form, or in a programming language. ADL itself is a very simple ‘glue’ syntax, which connects blocks of the subordinate syntaxes to form an overall artefact. The cADL syntax is used to express the archetype `definition` , while the ODIN syntax is used to express data which appears in the  language` , `description` , `terminology` , and `revision_history` sections of an ADL archetype. The top-level structure of an ADL archetype is shown in the figure below.
 
 [.text-center]
 .ADL Archetype Structure
@@ -101,7 +101,7 @@ image::{diagrams_uri}/archetype_structure.png[id=archetype_structure, align="cen
 
 == Templates
 
-In practical systems, archetypes are assembled into larger usable structures by the use of templates. A template is expressed in the same source form as a specialised archetype, typically making use of the slot-filling mechanism. It is processed against an archetype library to produce an operational template. The latter is like a large flat-form archetype, and is the form used for runtime validation, and also for the generation of all downstream artefacts derived from templates. Semantically, templates perform three functions: aggregating multiple archetypes, removing elements not needed for the use case of the template, and narrowing some existing constraints, in the same way as specialised archetypes. The effect is to re-use needed elements from the archetype library, arranged in a way that corresponds directly to the use case at hand.
+In practical systems, archetypes are assembled into larger usable structures by the use of templates. A template is expressed in the same source form as a specialised archetype, typically making use of the slot-filling mechanism. It is processed against an archetype library to produce an operational template. The latter is like a large flat-form archetype, and is the form used for runtime validation, and also for the generation of all downstream aretefacts derived from templates. Semantically, templates perform three functions: aggregating multiple archetypes, removing elements not needed for the use case of the template, and narrowing some existing constraints, in the same way as specialised archetypes. The effect is to re-use needed elements from the archetype library, arranged in a way that corresponds directly to the use case at hand.
 
 This job of a template is as follows:
 

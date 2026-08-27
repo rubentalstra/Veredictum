@@ -1,0 +1,18 @@
+=== OPERATOR_DEF_EXTERNAL Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*__OPERATOR_DEF_EXTERNAL (abstract)__*
+
+h|*Description*
+2+a|Ancestor of concrete operator definition types. Adds an optional execution agent, typically implemented by closures / lambdas/ agents in languages supporting functional programming.
+
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1*
+|*evaluation_agent*: `link:/releases/BASE/{base_release}/foundation_types.html#_function_class[FUNCTION^]<link:/releases/BASE/{base_release}/foundation_types.html#_tuple_class[TUPLE^],link:/releases/BASE/{base_release}/foundation_types.html#_any_class[Any^]>`
+a|
+|===

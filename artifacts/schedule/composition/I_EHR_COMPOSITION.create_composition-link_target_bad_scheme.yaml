@@ -2,9 +2,9 @@
 # is committed.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM common UML/classes/org.openehr.rm.common.link.adoc §Attributes types
+# RM UML/classes/link.adoc §Attributes types
 # `target` as `DV_EHR_URI` at 1..1, and RM data_types
-# UML/classes/org.openehr.rm.data_types.dv_ehr_uri.adoc §Invariants states the
+# UML/classes/dv_ehr_uri.adoc §Invariants states the
 # rule verbatim — `Scheme_valid: scheme.is_equal (Ehr_scheme)` — over the
 # symbolic definition `_Ehr_scheme_: String = "ehr"` (RM data_types
 # master10-uri_package.adoc §Definitions). The class description says the same

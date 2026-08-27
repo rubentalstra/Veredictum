@@ -15,11 +15,11 @@
 # RM common master07-tags.adoc is the "detail" that section defers to and adds
 # nothing that softens it; the ITEM_TAG class carries no version, no audit and
 # no contribution attribute at all
-# (RM UML/classes/org.openehr.rm.common.item_tag.adoc).
+# (RM UML/classes/item_tag.adoc).
 #
 # WHAT THE WIRE CAN SHOW, and why these two assertions are the whole of it.
 # "No re-versioning" is observable as the VERSIONED_COMPOSITION's revision
-# history: RM common revision_history.adoc makes it one REVISION_HISTORY_ITEM
+# history: RM UML/classes/revision_history.adoc makes it one REVISION_HISTORY_ITEM
 # per committed version, so a second item after a tag write IS the refutation.
 # "No CONTRIBUTION" rides on the same read plus the VERSION envelope's own
 # `contribution` reference: RM common master06 §Contributions makes a

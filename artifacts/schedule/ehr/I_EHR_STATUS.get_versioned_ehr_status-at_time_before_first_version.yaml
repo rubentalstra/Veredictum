@@ -1,7 +1,7 @@
 # The lower edge on the ENVELOPE route: below the first commit there is no
 # VERSION to envelope.
 #
-# RM common versioned_object.adoc §Functions guards the accessor with
+# RM UML/classes/versioned_object.adoc §Functions guards the accessor with
 # `Pre: has_version_at_time (a_time)`; ITS-REST overview
 # Requests_and_responses.md §HTTP status codes assigns the absent-target state
 # its row: "404 | Not Found | The origin service did not find the target

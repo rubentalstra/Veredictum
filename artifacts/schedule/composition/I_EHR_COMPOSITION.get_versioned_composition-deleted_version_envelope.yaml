@@ -17,7 +17,7 @@
 # here would suppress exactly what this route exists to expose.
 #
 # The lifecycle code is the openEHR terminology's, not a literal invented
-# here: RM common version.adoc's `Lifecycle_state_valid` invariant binds
+# here: RM UML/classes/version.adoc's `Lifecycle_state_valid` invariant binds
 # `lifecycle_state.defining_code` to the `version lifecycle state` group,
 # whose deleted code is 523.
 id: I_EHR_COMPOSITION.get_versioned_composition-deleted_version_envelope

@@ -10,7 +10,7 @@ This section describes typical scenarios to do with artefact development, deploy
 
 
 
-== Templates using Archetypes and Subsets
+== Templates using Archteypes and Subsets
 
 
 

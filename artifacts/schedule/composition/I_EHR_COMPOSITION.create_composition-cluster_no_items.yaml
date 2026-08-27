@@ -1,6 +1,6 @@
 # A CLUSTER with no items is refused: RM data_structures declares
 # `CLUSTER.items: List<ITEM>` with multiplicity `1..*`
-# (`org.openehr.rm.data_structures.cluster.adoc` §Attributes), and the
+# (`cluster.adoc` §Attributes), and the
 # release's own request-body schema says the same — ITS-REST OAS
 # `schemas/data_structures/Clstr.yaml` `required: [items]`.
 #

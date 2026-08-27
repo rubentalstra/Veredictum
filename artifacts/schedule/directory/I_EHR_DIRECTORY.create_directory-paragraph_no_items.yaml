@@ -1,7 +1,7 @@
 # A present-but-empty `DV_PARAGRAPH.items` is refused at the directory-CREATE seam, inside `FOLDER.details`.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM `UML/classes/org.openehr.rm.data_types.dv_paragraph.adoc` §Attributes
+# RM `UML/classes/dv_paragraph.adoc` §Attributes
 # types `DV_PARAGRAPH.items: List<DV_TEXT>` at 1..1 — a MANDATORY list, so a present-but-EMPTY list is the one shape the bound
 # forbids — the way to say "none" is to omit an optional container, never
 # to send [].

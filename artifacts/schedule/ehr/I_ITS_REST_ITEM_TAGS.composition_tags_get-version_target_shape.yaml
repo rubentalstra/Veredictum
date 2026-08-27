@@ -2,7 +2,7 @@
 # the addressed VERSION — the other half of the one RM shape rule, on the same
 # class.
 #
-# THE LAW: RM common item_tag.adoc §Attributes, `target`: `1..1 UID_BASED_ID`,
+# THE LAW: RM UML/classes/item_tag.adoc §Attributes, `target`: `1..1 UID_BASED_ID`,
 # "Identifier of target, which may be a `VERSIONED_OBJECT<T>` or a
 # `VERSION<T>`" — the VERSION case is the OBJECT_VERSION_ID form, which
 # ITS-REST names as the request addressing too ("an OBJECT_VERSION_ID

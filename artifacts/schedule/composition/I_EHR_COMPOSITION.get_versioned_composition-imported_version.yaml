@@ -43,7 +43,7 @@ test_purpose: >-
 description: "Get the IMPORTED_VERSION envelope of a received COMPOSITION version"
 spec_refs:
   - "RM common §change_control (master06 §Copying — the IMPORTED_VERSION wrapper; the received ORIGINAL_VERSION is never modified)"
-  - "RM common UML/classes/org.openehr.rm.common.imported_version.adoc (§Attributes: item only; §Functions: uid / lifecycle_state / data effected)"
+  - "RM UML/classes/imported_version.adoc (§Attributes: item only; §Functions: uid / lifecycle_state / data effected)"
   - "RM common §change_control (master06 §Distributed Versioning — the creating system id of a version)"
   - "ITS-REST overview Requests_and_responses §ETag and Last-Modified"
   - "SM openehr_platform §I_EHR_COMPOSITION.get_versioned_composition"

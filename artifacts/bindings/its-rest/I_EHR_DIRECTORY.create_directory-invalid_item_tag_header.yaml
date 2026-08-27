@@ -6,7 +6,7 @@
 #
 # WHAT MAKES THE HEADER INVALID (one defect, so a red row names one thing):
 # `key=" padded "`. RM common
-# UML/classes/org.openehr.rm.common.item_tag.adoc §Invariants declares
+# UML/classes/item_tag.adoc §Invariants declares
 # `Inv_key_valid: not key.is_empty and key.is_justified`, and the same file's
 # Meaning column for `key` spells out what that means: "May not be empty or
 # contain leading or trailing whitespace". The FOLDER body itself is the valid

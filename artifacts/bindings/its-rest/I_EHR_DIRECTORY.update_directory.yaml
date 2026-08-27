@@ -63,9 +63,9 @@ captures:
   version_uid:
     from: header ETag
     strip: weak-quotes
-# The server-assigned uid, at EVERY FOLDER node: RM common locatable.adoc types
+# The server-assigned uid, at EVERY FOLDER node: RM UML/classes/locatable.adoc types
 # `uid` `0..1` ("Optional globally unique object identifier for root points of
-# archetyped structures") and RM common folder.adoc's NOTE recommends populating
+# archetyped structures") and RM UML/classes/folder.adoc's NOTE recommends populating
 # it only "in _top-level_ (i.e. tree-root) `FOLDER` objects" — a uid at a nested
 # archetype-root FOLDER is permitted and unrequired, so it is a server
 # assignment, never a content difference. `**` matches every depth of the

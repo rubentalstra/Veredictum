@@ -16,11 +16,11 @@ h|*Attributes*
 ^h|*Meaning*
 
 h|*1..1*
-|*true_valid*: `link:/releases/BASE/{base_release}/foundation_types.html#_boolean_class[Boolean^]`
+|*true_valid*: `Boolean`
 a|True if the value True is allowed.
 
 h|*1..1*
-|*false_valid*: `link:/releases/BASE/{base_release}/foundation_types.html#_boolean_class[Boolean^]`
+|*false_valid*: `Boolean`
 a|True if the value False is allowed.
 
 h|*0..1 +

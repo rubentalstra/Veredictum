@@ -1,6 +1,6 @@
 # LOCATABLE.Links_valid — the present-but-empty link list.
 #
-# RM common UML/classes/org.openehr.rm.common.locatable.adoc §Invariants
+# RM UML/classes/locatable.adoc §Invariants
 # states the rule verbatim: `Links_valid: links /= Void implies not
 # links.is_empty`. `links` is 0..1 (§Attributes), so absence is legal and an
 # EMPTY list is not: an instance that serializes `"links": []` asserts the

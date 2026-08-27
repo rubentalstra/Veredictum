@@ -19,13 +19,13 @@
 # catalogue while rejecting a spec-supported deployment style.
 #
 # WHAT THE RM REQUIRES: `PARTY_PROXY.external_ref` is `PARTY_REF [0..1]`
-# (RM common UML/classes/org.openehr.rm.common.party_proxy.adoc §Attributes) and
+# (RM UML/classes/party_proxy.adoc §Attributes) and
 # PARTY_SELF adds no constraint on it — master04 §Referring to Demographic
 # Entities: "in stricter environments ... `PARTY_PROXY._external_ref_` will be
 # non-Void, while in other environments, it will be empty". The reference here is
 # a complete PARTY_REF: an `id` OBJECT_ID (HIER_OBJECT_ID), a `namespace`, and a
 # `type` of PERSON, which `PARTY_REF.Type_validity` admits (BASE base_types
-# UML/classes/org.openehr.base.base_types.party_ref.adoc §Invariants).
+# UML/classes/party_ref.adoc §Invariants).
 #
 # WHY THE INTERIOR ENTRY: `ENTRY._subject_` is `1..1 PARTY_PROXY` (RM ehr
 # master08-entry_package.adoc §The Entry class), so the ENTRY is where a

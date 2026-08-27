@@ -46,9 +46,7 @@ This specification benefited from wide formal and informal input from the openEH
 * Andrew Goodchild, PhD, senior research scientist DSTC, Australia
 * Birger Haarbrandt, MSc, Peter L. Reichertz Institut for Medical Informatics (PLRI)
 * Sam Heard MD, Ocean Informatics, Australia
-* Joost Holslag MD, Netherlands
 * Sebastian Iancu, Architect, Code24, Netherlands
-* Bas Janssen, Nedap, Netherlands
 * Dipak Kalra MD, PhD, Professor Health Informatics, CHIME, UCL, UK
 * Bostjan Lah, Architect, Marand, Slovenia
 * David Lloyd (ret), CHIME, UCL, UK
@@ -60,7 +58,6 @@ This specification benefited from wide formal and informal input from the openEH
 * Erik Sundvall PhD, Linkoping University, Sweden
 * Zar zar Tun, DSTC, Australia
 * Bert Verhees, ROSA Software, The Netherlands.
-* Jelte Zeilstra, Nedap, Netherlands
 
 === Support
 
@@ -85,18 +82,13 @@ Special thanks to David Ingram, Emeritus Professor of Health Informatics at UCL,
 // --------------------------------------------- CHAPTERS -----------------------------------------------
 //
 :sectnums:
-
-ifdef::package_qualifiers[]
-:pkg: org.openehr.rm.common.
-endif::[]
-
 include::master01-preface.adoc[leveloffset=+1]
 include::master02-overview.adoc[leveloffset=+1]
 include::master03-archetyped_package.adoc[leveloffset=+1]
 include::master04-generic_package.adoc[leveloffset=+1]
 include::master05-directory_package.adoc[leveloffset=+1]
 include::master06-change_control_package.adoc[leveloffset=+1]
-include::master07-tags.adoc[leveloffset=+1]
+// include::master07-tags.adoc[leveloffset=+1]
 include::master08-resource_package.adoc[leveloffset=+1]
 
 

@@ -4,9 +4,9 @@
 # itself committed.
 #
 # WHAT THE SERVED RESOURCE MUST BE (RM common
-# UML/classes/org.openehr.rm.common.revision_history.adoc §Attributes): `items`
+# UML/classes/revision_history.adoc §Attributes): `items`
 # is a `List<REVISION_HISTORY_ITEM>` at 1..1; RM common
-# UML/classes/org.openehr.rm.common.revision_history_item.adoc §Attributes gives
+# UML/classes/revision_history_item.adoc §Attributes gives
 # each item `version_id: OBJECT_VERSION_ID [1..1]` and `audits:
 # List<AUDIT_DETAILS> [1..1]` with the invariant `Audit_valid: not
 # audits.is_empty`.

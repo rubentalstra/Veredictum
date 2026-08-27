@@ -2,7 +2,7 @@
 # the directory-create seam, and the EHR is left with no directory.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM common UML/classes/org.openehr.rm.common.link.adoc §Attributes types all
+# RM UML/classes/link.adoc §Attributes types all
 # three of `meaning: DV_TEXT`, `type: DV_TEXT` and `target: DV_EHR_URI` at
 # 1..1. The fixture is cnf.directory.root_with_link with exactly `meaning`
 # removed, so it stays well-formed JSON, keeps a non-empty `links` list

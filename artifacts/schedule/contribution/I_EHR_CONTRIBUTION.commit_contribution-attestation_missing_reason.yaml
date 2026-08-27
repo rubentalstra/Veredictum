@@ -3,7 +3,7 @@
 # `reason`.
 #
 # `ATTESTATION._reason_` is 1..1 (RM common
-# UML/classes/org.openehr.rm.common.attestation.adoc §Attributes: "*1..1* |
+# UML/classes/attestation.adoc §Attributes: "*1..1* |
 # *reason*: DV_TEXT | Reason of this attestation"), and the wire form repeats
 # it — ITS-REST specifications/schemas/common/UpdateAttestation.yaml lists
 # `reason` under `required` (cited AS the OAS: the docs text does not spell the

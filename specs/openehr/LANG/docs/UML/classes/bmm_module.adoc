@@ -1,0 +1,22 @@
+=== BMM_MODULE Class
+
+[cols="^1,3,5"]
+|===
+h|*Class*
+2+^h|*__BMM_MODULE (abstract)__*
+
+h|*Description*
+2+a|Meta-type defining a generalised module concept. Descendants define actual structure and contents.
+
+h|*Inherit*
+2+|`<<_bmm_declaration_class,BMM_DECLARATION>>`
+
+h|*Attributes*
+^h|*Signature*
+^h|*Meaning*
+
+h|*1..1 +
+(redefined)*
+|*scope*: `<<_bmm_model_class,BMM_MODEL>>`
+a|Model within which module is defined.
+|===

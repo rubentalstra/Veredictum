@@ -10,10 +10,6 @@ The second is that `.bmm` files function as schemas that support schema inclusio
 
 We thus talk of the `P_BMM_*` classes as a 'model of a BMM _schema_' and the `BMM_*` classes as a 'model of a BMM _model_', where the latter is understood as the fully computable in-memory object structure with all name references resolved to object references.
 
-A `P_BMM` class definition captures the full feature set of a class: _properties_ (attributes), via the `P_BMM_PROPERTY` family; _functions_ (routines, with their formal parameters and result type), via the `P_BMM_FUNCTION` and `P_BMM_FUNCTION_PARAMETER` families; _constants_, via `P_BMM_CONSTANT`; and class _invariants_. Representing functions and these other features allows a `.bmm` schema to record the full specification of a model (for example, the operation specifications extracted from the openEHR UML models), independently of whether a given tool materialises those features in its in-memory `BMM` form.
-
-In addition to ordinary classes, the model can also represent pure _interfaces_ via `P_BMM_INTERFACE`, i.e. class-like definitions that declare only functions and carry no state.
-
 The `P_BMM` format is not the only serial format possible for BMM, and alternatives, e.g. a more syntactic style reminiscent of OMG IDL, are possible.
 
 The normal use of P_BMM schemas is as follows:

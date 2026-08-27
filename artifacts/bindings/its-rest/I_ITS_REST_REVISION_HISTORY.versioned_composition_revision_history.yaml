@@ -14,7 +14,7 @@
 # so the released OAS grounds every value below, no ETag/Last-Modified declared
 # because a REVISION_HISTORY is neither a VERSION nor a VERSIONED_OBJECT and
 # carries no identity of its own (RM common
-# UML/classes/org.openehr.rm.common.revision_history.adoc), and canonical-json
+# UML/classes/revision_history.adoc), and canonical-json
 # only because ITS-XML publishes no document element for the type (register
 # AMB-167).
 #

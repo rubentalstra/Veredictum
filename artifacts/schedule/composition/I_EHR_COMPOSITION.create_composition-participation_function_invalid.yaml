@@ -2,7 +2,7 @@
 # terminology rules, which the sibling mode case cannot reach.
 #
 # THE INVARIANT IS CONDITIONAL, verbatim (RM common
-# UML/classes/org.openehr.rm.common.participation.adoc §Invariants):
+# UML/classes/participation.adoc §Invariants):
 # "__Function_valid__: `function.generating_type.is_equal ("DV_CODED_TEXT")
 # implies terminology (Terminology_id_openehr).has_code_for_group_id
 # (Group_id_participation_function, function.defining_code)`". The antecedent is

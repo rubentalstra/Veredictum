@@ -12,7 +12,7 @@ image::{uml_diagrams_uri}/BASE-base_types.identification.svg[id=base_identificat
 
 Identification of entities both in the real world and in information systems is a non-trivial problem. The needs for identification across systems in a health information environment include the following:
 
-* real world identifiers such as social security numbers, veterans affairs ids etc. can be recorded as required by health care facilities, enterprise policies, or legislation;
+* real world identifiers such as social security numbers, veterans affairs ids etc can be recorded as required by health care facilities, enterprise policies, or legislation;
 * identifiers for informational entities which represent real world entities or processes should be unique;
 * it should be possible to determine if two identifiers refer to information entities that represent the same real world entity, even if instances of the information entities are maintained in different systems;
 * versions or changes to real-world entity-linked informational entities (which may create new information instances) should be accounted for in two ways:
@@ -21,8 +21,8 @@ Identification of entities both in the real world and in information systems is 
 entity. E.g. there is no guarantee that two systems' "latest" version of the Person "Dr Jones" is the same.
 ** Medico-legal use of information relies on previous states of information being distinguishable from other previous states and the current state.
 * It should be possible for an entity in one system or service (such as the EHR) to refer to an entity in another system or service in such a way that:
-** the target of the reference is easily findable within the shared environment, and
-** the reference is valid regardless of the physical architecture of servers and applications.
+** the target of the reference is easily finable within the shared environment, and
+** the reference does is valid regardless of the physical architecture of servers and applications.
 
 The following subsections describe some of the features and challenges of identification.
 
@@ -37,7 +37,7 @@ As soon as information systems are used to record facts about RWEs, the situatio
 * the same RWE can be represented simultaneously on more than one system ('spatial multiplicity');
 * the same RWE may be represented by more than one "version" of the same IE in a system ('temporal multiplicity').
 
-At first sight, it appears that there can also be _purely_ informational entities, i.e. IEs which do not refer to any RWE, such as books, online-only documents and software. However, as soon as one considers an example it becomes clear that there is always a notional 'definitive' or 'authoritative' (i.e. trusted) version of every such entity. These entities can better be understood as 'virtual RWEs'. Thus, it can still be said that multiple IEs may refer to any given RWE.
+At first sight, it appears that there can also be _purely_ informational entities, i.e. IEs which do not refer to any RWE, such as books, online-only documents and software. However, as soon as one considers an example it becomes clear that there is always a notional 'definitive' or 'authoritative' (i.e. trusted) version of every such entity. These entities can better be understood as 'virtual RWEs'. Thus it can still be said that multiple IEs may refer to any given RWE.
 
 The underlying reason for the multiplicity of IEs is that 'reality' - time and space - in computer systems is not continuous but discrete, and each 'entity' is in fact just a snapshot of certain attribute values of a RWE, at a point in time, in a particular system. If identifiers are assigned to IEs without regard to versions or duplicates, then no assertion can be made about the identified RWE when two IE ids are compared.
 
@@ -60,9 +60,9 @@ Within a distributed information environment, there is a need for entities not c
 
 == Design
 
-This package models only informational identifiers, i.e. transparent identifiers understood by openEHR or related computational systems. Real World Entity Identifiers such as driver's license numbers are modelled using the data type `DV_IDENTIFIER`. This is not to imply that such identifiers are any less systematic or well-managed than the system identifiers defined here, only that from the point of view of openEHR, they have the same status as other informational attributes such as name, address etc. of a Person.
+This package models only informational identifiers, i.e. transparent identifiers understood by openEHR or related computational systems. Real World Entity Identifiers such as driver's license numbers are modelled using the data type `DV_IDENTIFIER`. This is not to imply that such identifiers are any less systematic or well-managed than the system identifiers defined here, only that from the point of view of openEHR, they have the same status as other informational attributes such as name, address etc of a Person.
 
-A key design decision has been to choose a string representation for all identifiers, with sub-parts being made available by appropriate functions which perform simple parsing on the string. This ensures that the data representation of identifiers (e.g. in XML) is as small as possible, while not losing object-oriented typing.
+A key design decision has been to choose a string representation for all identifiers, with subparts being made available by appropriate functions which perform simple parsing on the string. This ensures that the data representation of identifiers (e.g. in XML) is as small as possible, while not losing object-oriented typing.
 
 === Primitive Identifiers
 
@@ -74,7 +74,7 @@ A consequence of the string representation approach used in these classes is tha
 
 === Composite Identifiers
 
-The `OBJECT_ID` type and its hierarchy of subtypes defines all identifier types used within openEHR systems. Most of these have a multi-part structure, and some are 'meaningful' i.e. human-readable. The identifier types can be used to represent identifier values that fall into two groups semantically: those defined by openEHR (which may incorporate generic standard identifiers, such as ISO OIDs etc.) and those defined by external organisations. The groups are as shown in the following table. Identifiers whose form is defined by the `HIER_OBJECT_ID` type are used both by openEHR and many other organisations.
+The `OBJECT_ID` type and its hierarchy of subtypes define all of the identifier types used within openEHR systems. Most of these have a multi-part structure, and some are 'meaningful' i.e. human readable. The identifier types can be used to represent identifier values that fall into two groups semantically: those defined by openEHR (which may incorporate generic standard identifiers, such as ISO Oids etc) and those defined by external organisations. The groups are as shown in the following table. Identifiers whose form is defined by the `HIER_OBJECT_ID` type are used both by openEHR and many other organisations.
 
 [cols="1,1", options="header"]
 |===
@@ -101,8 +101,6 @@ The `ARCHETYPE_ID` subtype defines a multi-axial identifier for archetypes, mean
 
 The three outer sections are delimited by '.' characters, while the parts of the first section are delimited by `-` characters. As with any multi-axial identifier, the underlying principle of an archetype identifier is that all parts of the identifier must be able to be considered immutable. This means that no variable characteristic of an archetype (e.g. accrediting authority, which might change due to later accreditation by another authority, or may be multiple) can be included in its identifier. The explicit inclusion of version as part of the identifier means that two 'versions' of an archetype are actually two distinct archetypes. (The rules for archetype versions, revisions and other variants are given in the {openehr_am_id}[openEHR Archetype Identification specification].)
 
-Besides used as full physical artefact identifier, an ARCHETYPE_ID can also act as a reference used to match artefacts carrying full identification, {openehr_am_id}#_referencing[as defined] by the interface HRID reference (`ihrid_ref`) concept. In this context, it provides a shortened form of the full identifier, typically omitting namespace, with partial version information, including only the major version.
-
 Examples of archetype identifiers include:
 
 * `openEHR-EHR-SECTION.physical_examination.v2`
@@ -112,7 +110,7 @@ Examples of archetype identifiers include:
 
 The grammar of archetype identifiers is given below in <<Syntaxes>>.
 
-WARNING: some archetype authoring tools have historically allowed a nonconforming version part within archetype identifiers which included the lifecycle status. This has led to some archetypes having an incorrect identifier whose version part is of the form `.v1draft` or similar.
+WARNING: some archetype authoring tools have historically allowed a nonconforming version part within archetype identifiers which included the lifecycle status. This has led to some archetypes having an identifier whose version part is of the form `.v1draft` or similar. The openEHR Foundation will publish guidelines and a timeline on its website for dealing with this problem. New and existing archetype tools may have to support this exception, depending on where they are to be used, and it is recommended that it at least be supported via a command line switch or option. Where such non-conforming archetypes are re-used within a new environment, the identifier should be corrected.
 
 ==== Terminology Identifiers
 
@@ -121,14 +119,14 @@ The `TERMINOLOGY_ID` subtype defines a globally unique single string identifier 
 * "SNOMED-CT"
 * "ICD9(1999)"
 
-Currently, the best authoritative source for the name part of the identifier (i.e. the part excluding the optional version part in parentheses) is the {nlm_umls_list}[US National Library of Medicine UMLS identifiers for included terminologies].
+Currently the best authoritative source for the name part of the identifier (i.e. the part excluding the optional version part in parentheses) is the {nlm_umls_list}[US National Library of Medicine UMLS identifiers for included terminologies].
 
 The scheme defined by the `TERMINOLOGY_ID` class provides for the situation where major 'versions' of a terminology such as the World Health Organisation's 'ICD10' and 'ICD10AM' (AM = 'Australian modifications') can accommodate a finer grain of versioning or revisioning, e.g.:
 
 * "ICD10AM(3rd_ed)"
 * "ICD10AM(4th_ed)"
 
-The version part of a terminology identifier is in theory only absolutely necessary for those terminologies which break the rule that the concept being identified with a code loses or changes it's meaning over versions of the terminology. This should not be the case for modern terminologies and ontologies, particularly those designed since the publication of Cimino's 'desiderata' cite:[Cimino1997] of which the principle of 'concept permanence' is applicable here - "A concept's meaning cannot change and it cannot be deleted from the vocabulary". However, there may be older terminologies, or specialised terminologies which may not have obeyed these rules, but which are still used; version ids should always be used for these. At a practical level, versions may be included routinely in some systems to support the potential medico-legal need to prove that a) a given code was in fact defined in the terminology (it may not have existed in an earlier edition) and b) that the meaning assumed in the system
+The version part of a terminology identifier is in theory only absolutely necessary for those terminologies which break the rule that the concept being identified with a code loses or changes its meaning over versions of the terminology. This should not be the case for modern terminologies and ontologies, particularly those designed since the publication of Cimino's 'desiderata' cite:[Cimino1997] of which the principle of 'concept permanance' is applicable here - "A concept's meaning cannot change and it cannot be deleted from the vocabulary". However, there may be older terminologies, or specialised terminologies which may not have obeyed these rules, but which are still used; version ids should always be used for these. At a practical level, versions may be included routinely in some systems to support the potential medico-legal need to prove that a) a given code was in fact defined in the terminology (it may not have existed in an earlier edition) and b) that the meaning assmued in the system
 was indeed the one assigned to it in the particular version or edition.
 
 ==== Equivalence
@@ -151,7 +149,7 @@ The following provides a typical example:
 
 Under this scheme, multiple versions in the same container all have the same value for `_object_id_`, whilst their location in the version tree is given by the combination of the version tree identifier and the identifier of the creating system.
 
-The requirements on the `_creating_system_id_` part of the identifier are that it be unique per system, and that it be easy to obtain or generate. It is also helpful if it is a meaningful identifier. The two most practical candidates appear to be UUIDs (which are not meaningful, but are easy to generate) and reverse domain name identifiers (these are easy to determine if the system has an internet address, and are meaningful and directly processable, however unconnected systems pose a problem). ISO OIDs might also be used. All of these identifier types are accommodated via the use of UID. A full explanation of the version identification scheme and its capabilities is given in the {openehr_rm_common}#_change_control_package[Common IM, `change_control` package].
+The requirements on the `_creating_system_id_` part of the identifier are that it be unique per system, and that it be easy to obtain or generate. It is also helpful if it is a meaningful identifier. The two most practical candidates appear to be UUIDs (which are not meaningful, but are easy to generate) and reverse internet domain identifiers (these are easy to determine if the system has an internet address, and are meaningful and directly processible, however unconnected systems pose a problem). ISO Oids might also be used. All of these identifier types are accommodated via the use of UID. A full explanation of the version identification scheme and its capabilities is given in the {openehr_rm_common}#_change_control_package[Common IM, `change_control` package].
 
 ==== Generic and External Identifiers
 
@@ -178,7 +176,7 @@ These rules do not apply to any identifier constructed in a language in which ca
 
 ==== Composite Identifiers and Language
 
-In all the 'meaningful' identifier types above, with the possible exception of `GENERIC_ID`, the human-readable identifier sections are assumed to use only the basic latin character set, possibly with the addition of other special characters as allowed by the production rules defined below for each identifier. In most cases, the textual parts of these identifiers will be words from the English language, or else they will be recognisable words from other languages, where necessary alliterated into the latin alphabet. Accented and other diacritical letter variants are not allowed. This limitation is made in the interests of practical computability of identifiers, and is in common with class and attribute naming in shared UML models in the standards world, and also with internet domain names and internet URIs.
+In all of the 'meaningful' identifier types above, with the posible exception of `GENERIC_ID`, the human-readable identifier sections are assumed to use only the basic latin character set, possibly with the addition of other special characters as allowed by the production rules defined below for each identifier. In most cases, the textual parts of these identifiers will be words from the English language, or else they will be recognisable words from other languages, where necessary alliterated into the latin alphabet. Accented and other diacritical letter variants are not allowed. This limitation is made in the interests of practical computability of identifiers, and is in common with class and attribute naming in shared UML models in the standards world, and also with internet domain names and internet URIs.
 
 === References
 
@@ -186,37 +184,37 @@ All `OBJECT_IDs` are used as identifier attributes within the thing they identif
 
 == Class Descriptions
 
-include::{uml_export_dir}/classes/{pkg}uid.adoc[]
+include::{uml_export_dir}/classes/uid.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}iso_oid.adoc[]
+include::{uml_export_dir}/classes/iso_oid.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}uuid.adoc[]
+include::{uml_export_dir}/classes/uuid.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}internet_id.adoc[]
+include::{uml_export_dir}/classes/internet_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}object_id.adoc[]
+include::{uml_export_dir}/classes/object_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}uid_based_id.adoc[]
+include::{uml_export_dir}/classes/uid_based_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}hier_object_id.adoc[]
+include::{uml_export_dir}/classes/hier_object_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}object_version_id.adoc[]
+include::{uml_export_dir}/classes/object_version_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}version_tree_id.adoc[]
+include::{uml_export_dir}/classes/version_tree_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}archetype_id.adoc[]
+include::{uml_export_dir}/classes/archetype_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}template_id.adoc[]
+include::{uml_export_dir}/classes/template_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}terminology_id.adoc[]
+include::{uml_export_dir}/classes/terminology_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}generic_id.adoc[]
+include::{uml_export_dir}/classes/generic_id.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}object_ref.adoc[]
+include::{uml_export_dir}/classes/object_ref.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}party_ref.adoc[]
+include::{uml_export_dir}/classes/party_ref.adoc[]
 
-include::{uml_export_dir}/classes/{pkg}locatable_ref.adoc[]
+include::{uml_export_dir}/classes/locatable_ref.adoc[]
 
 [[_syntaxes]]
 == Syntaxes
@@ -231,9 +229,9 @@ iso_oid = number, { '.', number } ;
 uuid    = hex-number, '-', hex-number, '-', hex-number, '-', hex-number, '-', hex-number ;
 
 (* --------------------------- INTERNET_ID --------------------------- *)
-(* According to IETF https://tools.ietf.org/html/rfc1034[RFC 1034] and *)
-(* https://tools.ietf.org/html/rfc1035[RFC 1035], as clarified by      *)
-(* https://tools.ietf.org/html/rfc2181[RFC 2181] (section 11),         *)
+(* According to IETF http://tools.ietf.org/html/rfc1034[RFC 1034] and  *)
+(* http://tools.ietf.org/html/rfc1035[RFC 1035], as clarified by       *)
+(* http://tools.ietf.org/html/rfc2181[RFC 2181] (section 11),          *)
 (* and relaxation of https://tools.ietf.org/html/rfc1123[RFC 1123]     *)
 (* The syntax of a domain name follows the grammar below. Slightly     *)
 (* reduced for the purpose here, plus allows underscores.              *)
@@ -259,15 +257,15 @@ branch_number   = number ;
 branch_version  = number ;
 
 (* -------------------------- ARCHETYPE_ID --------------------------- *)
-archetype_id        = qualified_rm_entity, '.', domain_concept, '.v', version_id ;
-qualified_rm_entity = rm_originator, '-', rm_name, '-', rm_entity ;
-rm_originator       = alphanum-str ;     (* id of org originating the RM on which this archetype is based *)
-rm_name             = alphanum-str ;                      (* id of the RM on which the archetype is based *)
-rm_entity           = alphanum-str ;                                       (* ontological level in the RM *)
-domain_concept      = concept_name, { '-', specialisation } ;
-concept_name        = alphanum-str ;
+archetype_id        = qualified_rm_entity, '.', domain_concept, '.', version_id ;
+qualified-rm-entity = rm_originator, '-', rm_name, '-', rm_entity ;
+rm-originator       = alphanum-str ;     (* id of org originating the RM on which this archetype is based *)
+rm-name             = alphanum-str ;                      (* id of the RM on which the archetype is based *)
+rm-entity           = alphanum-str ;                                       (* ontological level in the RM *)
+domain-concept      = concept-name, { '-', specialisation } ; 
+concept-name        = alphanum-str ;
 specialisation      = alphanum-str ;
-version_id          = '0' | non-zero-digit, [ number ] ;            (* numeric version identifier *)
+version-id          = 'v', ( '0' | non-zero-digit, [ number ] ) ;            (* numeric version identifier *)
 
 (* ------------------------- TERMINOLOGY_ID -------------------------- *)
 terminology_id = name-str, [ '(', name-str, ')' ] ;

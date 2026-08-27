@@ -10,7 +10,7 @@
 # Systems makes coexisting lineages a normal state. The RM names both readings
 # without choosing: VERSIONED_OBJECT declares `latest_version()` AND
 # `latest_trunk_version()` (RM common
-# UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions).
+# UML/classes/versioned_object.adoc §Functions).
 #
 # THE PINNED CHOICE is AMB-206's fixed handling: the default export carries the
 # TRUNK head and no branch head. This case is what makes that choice checkable
@@ -36,7 +36,7 @@ description: "Default export of a branched container carries the trunk head"
 spec_refs:
   - "SM openehr_platform §I_EHR_EXTRACT_SERVICE.export_ehr_extracts"
   - "RM ehr_extract master04-common_package §Version Specification (the no-version-specification default: 'latest available version' for each matched item)"
-  - "RM ehr_extract UML/classes/org.openehr.rm.ehr_extract.extract_version_spec.adoc §Attributes (include_all_versions)"
+  - "RM UML/classes/extract_version_spec.adoc §Attributes (include_all_versions)"
   - "RM common §VERSIONED_OBJECT (latest_version / latest_trunk_version — the two readings the Extract does not choose between)"
   - "RM common master06-change_control §Semantics in Distributed Systems (coexisting lineages)"
 applies: { rm: ">=1.0.2" }

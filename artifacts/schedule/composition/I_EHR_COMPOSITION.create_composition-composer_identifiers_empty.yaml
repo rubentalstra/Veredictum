@@ -1,7 +1,7 @@
 # A COMPOSITION whose composer PARTY_IDENTIFIED carries a present-but-empty `identifiers` list is refused at the composition-CREATE seam.
 #
 # WHAT MAKES THE PAYLOAD INVALID (one defect, so a red row names one thing):
-# RM `UML/classes/org.openehr.rm.common.party_identified.adoc` §Invariants
+# RM `UML/classes/party_identified.adoc` §Invariants
 # states `Identifiers_valid: identifiers /= Void implies not
 # identifiers.is_empty` — the attribute is OPTIONAL, so the present-empty
 # list is precisely the shape it forbids, so a present-but-EMPTY list is the one shape the bound

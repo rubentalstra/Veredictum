@@ -1,7 +1,7 @@
 # The lower edge of the at-time branch: an instant BEFORE the versioned
 # EHR_STATUS existed has no version to serve.
 #
-# RM common versioned_object.adoc §Functions guards the accessor with
+# RM UML/classes/versioned_object.adoc §Functions guards the accessor with
 # `Pre: has_version_at_time (a_time)` — below the first commit the
 # precondition is false, so there is no VERSION for the service to return, and
 # ITS-REST overview Requests_and_responses.md §HTTP status codes assigns that

@@ -13,10 +13,10 @@ h|*Attributes*
 ^h|*Meaning*
 
 h|*1..1*
-|*name*: `link:/releases/BASE/{base_release}/foundation_types.html#_string_class[String^]`
+|*name*: `String`
 a|Name of variable.
 
 h|*1..1*
-|*definition*: `link:/releases/BASE/{base_release}/foundation_types.html#_string_class[String^]`
+|*definition*: `String`
 a|Formal definition of the variable.
 |===

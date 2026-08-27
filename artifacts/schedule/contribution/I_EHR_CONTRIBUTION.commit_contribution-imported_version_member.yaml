@@ -7,7 +7,7 @@
 # in the normal way (i.e. as part of a Contribution)", realized by
 # VERSIONED_OBJECT.commit_imported_version whose description is "Details of
 # version id etc come from the ORIGINAL_VERSION"
-# (UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions). The
+# (UML/classes/versioned_object.adoc §Functions). The
 # released WRITE wire has no shape for it: ITS-REST
 # `schemas/ehr/UpdateVersion.yaml` declares exactly six properties
 # (preceding_version_uid, signature, lifecycle_state, attestations, data,
@@ -42,7 +42,7 @@
 # the RM type "whenever polymorphism is involved", overview Resources.md
 # §Resource representation), not a complete RM instance the request may supply.
 # `ORIGINAL_VERSION.uid` is 1..1
-# (UML/classes/org.openehr.rm.common.original_version.adoc §Attributes) and is
+# (UML/classes/original_version.adoc §Attributes) and is
 # satisfied by the repository's allocation, visible on the READ (step 5) — the
 # only moment at which a version identity exists.
 id: I_EHR_CONTRIBUTION.commit_contribution-imported_version_member
@@ -60,8 +60,8 @@ test_purpose: >-
 description: "Commit CONTRIBUTION whose member declares a foreign version identity"
 spec_refs:
   - "RM common §change_control (master06 §Copying; IMPORTED_VERSION wraps the received ORIGINAL_VERSION)"
-  - "RM common UML/classes/org.openehr.rm.common.versioned_object.adoc §Functions (commit_imported_version)"
-  - "RM common UML/classes/org.openehr.rm.common.imported_version.adoc (item is its sole own attribute)"
+  - "RM UML/classes/versioned_object.adoc §Functions (commit_imported_version)"
+  - "RM UML/classes/imported_version.adoc (item is its sole own attribute)"
   - "ITS-REST OAS schemas/ehr/UpdateVersion.yaml + schemas/ehr/NewContribution.yaml (no import shape; no uid, no item)"
   - "ITS-REST OAS responses/400_CONTRIBUTION.yaml"
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
@@ -169,7 +169,7 @@ flow:
       - { assert: instance_of, rm_type: ORIGINAL_VERSION }
       - { assert: field, path: "item", absent: true }
       # ORIGINAL_VERSION.uid is 1..1
-      # (UML/classes/org.openehr.rm.common.original_version.adoc §Attributes),
+      # (UML/classes/original_version.adoc §Attributes),
       # and THIS is where it is satisfied: the member is the commit-wire
       # partial, so the mandatory identifier is the one the repository
       # allocated — the same value its own ETag named — never one the request

@@ -2,7 +2,7 @@
 # a key deleted through the VERSION-addressed route removes the VERSION's tag
 # and leaves the same-keyed tag on the VERSIONED_PARTY untouched.
 #
-# THE LAW: RM common item_tag.adoc §Attributes types ITEM_TAG.target a
+# THE LAW: RM UML/classes/item_tag.adoc §Attributes types ITEM_TAG.target a
 # UID_BASED_ID and glosses it "Identifier of target, which may be a
 # `VERSIONED_OBJECT<T>` or a `VERSION<T>`" — two targets, two collections. The
 # released party DELETE carries the same dual-form addressing: the

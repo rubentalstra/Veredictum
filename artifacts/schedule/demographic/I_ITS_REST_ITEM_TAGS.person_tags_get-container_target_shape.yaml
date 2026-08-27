@@ -2,7 +2,7 @@
 # — the same one RM class the EHR side serves — and `owner_id` in the shape the
 # five released demographic examples show.
 #
-# TARGET: RM common item_tag.adoc §Attributes types `target` `1..1
+# TARGET: RM UML/classes/item_tag.adoc §Attributes types `target` `1..1
 # UID_BASED_ID` ("Identifier of target, which may be a `VERSIONED_OBJECT<T>` or
 # a `VERSION<T>`"). ITEM_TAG is ONE class, so the served shape cannot differ by
 # space. The released OAS ItemTag schema types `target` as the OBJECT_REF-shaped
