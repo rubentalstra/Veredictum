@@ -96,9 +96,32 @@ version on.
   `veredictum::validate` exposes `citation_clauses`, `expand_braces` and
   `section_candidates`, so a consumer can read a citation the way the validator
   does.
+- A published VEX record under `security/vex/`, in OpenVEX format: the
+  distroless base's adjudicated OpenSSL finding as a hand-authored statement
+  beside its `.trivyignore.yaml` twin, and the Rust advisories `deny.toml`
+  accepts as a GENERATED document whose id set cannot drift from the gate —
+  `scripts/security/vex-generate.sh` refuses on any disagreement and the CI
+  guard tier regenerates and diffs on every pull request. The scheduled
+  published-image scan applies the documents, and
+  `scripts/security/scan-images.sh` reruns that exact scan locally.
 
 ### Changed
 
+- **The container image is the web console now.** `ghcr.io/rubentalstra/veredictum`
+  ships the new `veredictum-console` Leptos server (`app/veredictum-console`,
+  a second workspace package that never publishes to crates.io) instead of the
+  CLI, per the ruling recorded in `docker/Dockerfile` when the image first
+  shipped: the CLI payload was a placeholder, and its no-toolchain paths are
+  `cargo install veredictum` and the attested release binaries. Start the
+  console with `docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD:/work"
+  ghcr.io/rubentalstra/veredictum:<tag>`; it binds loopback through the
+  publish flag because the console has no login. The server answers
+  `/healthz`, the image bakes a `HEALTHCHECK` that probes it (the binary is
+  its own probe, because distroless carries no curl), and the binary drains
+  in-flight requests on SIGTERM, so `docker stop` ends it gracefully. The
+  image build properties are unchanged: pushed by digest, smoke-driven and
+  scanned before any tag applies, SLSA provenance and an SBOM attested on
+  the digest, `:latest` moving only on a release tag.
 - The CKM template breadth pack is re-vendored. CKM published new asset
   versions of `ips-problem-list` and `ips-allergies-and-intolerances` on
   2026-08-19, so those two exports carry different bytes. The library is still

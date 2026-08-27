@@ -33,6 +33,7 @@
 <p align="center">
 <a href="https://scorecard.dev/viewer/?uri=github.com/rubentalstra/Veredictum"><img src="https://api.scorecard.dev/projects/github.com/rubentalstra/Veredictum/badge" alt="OpenSSF Scorecard"></a>
 <a href="https://www.bestpractices.dev/projects/14252"><img src="https://www.bestpractices.dev/projects/14252/badge" alt="OpenSSF Best Practices"></a>
+<a href="https://veredictum.eu/docs/installation.html"><img src="https://slsa.dev/images/gh-badge-level3.svg" alt="SLSA Build L3"></a>
 <a href="https://doi.org/10.5281/zenodo.22113258"><img src="https://zenodo.org/badge/1347360549.svg" alt="DOI"></a>
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-46215C" alt="License: Apache-2.0"></a>
 <a href="https://github.com/rubentalstra/Veredictum/blob/main/rust-toolchain.toml"><img src="https://img.shields.io/badge/rust-1.97-B7431B?logo=rust&logoColor=white" alt="Rust 1.97"></a>
@@ -52,6 +53,13 @@ docs.rs build fails, and the pull count is the package's own. Several read below
 their ceiling today, and the scorecard workflow's header says why check by
 check — Fuzzing waits on a harness (#11). Those are the honest numbers, and they
 are the baseline the next ones are measured against.
+
+The SLSA badge is the one static image here, and its claim is substantiated
+rather than asserted: binaries and images build inside reusable workflows
+(release-build.yml, build-image.yml) per GitHub's documented SLSA Build L3
+construction, each artifact carries a signed provenance attestation on its
+digest, and the linked installation page shows the `gh attestation verify`
+invocation that checks it.
 -->
 
 Veredictum grades openEHR servers. Point it at a running clinical data
@@ -147,20 +155,6 @@ The toolchain pins itself from `rust-toolchain.toml`. The only extra tool is
 
 ### Without a Rust toolchain
 
-The container image carries the runner, so a clone plus Docker is enough.
-Mount the repository at `/work`; the entrypoint is the instrument itself, so
-the arguments are the ordinary subcommands:
-
-```bash
-docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:<tag> \
-    validate --root /work/artifacts --specs /work/specs/openehr
-```
-
-The catalogue and the specification oracle are deliberately not baked into
-the image: the runner reads every root as a path passed at run time, and a
-party may legitimately point at their own. The image is the runner; the data
-comes from the mount.
-
 Prebuilt binaries for `x86_64` and `aarch64` Linux are attached to each
 [release](https://github.com/rubentalstra/Veredictum/releases), each with a
 `sha256sum`, a CycloneDX dependency SBOM and a Sigstore bundle:
@@ -170,6 +164,24 @@ gh attestation verify veredictum-<tag>-<target>.tar.gz \
     -R rubentalstra/Veredictum \
     --signer-workflow rubentalstra/Veredictum/.github/workflows/release-build.yml
 ```
+
+### The web console
+
+The container image is the web console: a browser frontend over the same
+instrument, served by its own binary. Start it against a clone and it serves
+on port 3000:
+
+```bash
+docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD:/work" \
+    ghcr.io/rubentalstra/veredictum:<tag>
+```
+
+The catalogue and the specification oracle are deliberately not baked into
+the image: the instrument reads every root as a path, and a party may
+legitimately point at their own. The console has no login, so the publish
+flag binds it to loopback; exposing it further is the operator's decision,
+behind their own gate. The console is under construction — image tags
+published before its first release still carry the CLI as the payload.
 
 ### With cargo
 

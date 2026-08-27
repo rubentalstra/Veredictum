@@ -39,6 +39,16 @@ assets/
 # Tests and their fixtures: nothing in the image runs them.
 tests/
 
+# The fuzzing workspace: its own nightly workspace, never a compile input for
+# the image. `**/target/` above already drops its 4 GB target tree; this line
+# drops the ~80 MB corpus and seeds, whose weekly churn would otherwise
+# invalidate the COPY layer on every campaign.
+fuzz/
+
+# The documentation site: rendered by its own workflow, read by nothing the
+# image compiles.
+website/
+
 # CI, tooling, agent and editor directories — never a compile input.
 .github/
 .githooks/

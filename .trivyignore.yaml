@@ -17,19 +17,26 @@ vulnerabilities:
     # upgrade it in a layer of our own.
     #
     # THE EVIDENCE that it is unreachable, and it is not an argument from
-    # design — it is the shipped binary's own ELF header, read 2026-08-26:
+    # design — it is the shipped binary's own ELF header, read 2026-08-26 on
+    # the then-shipping `veredictum` CLI payload:
     #
     #   $ readelf -d target/release/veredictum | grep NEEDED
     #     NEEDED  Shared library: [libgcc_s.so.1]
     #     NEEDED  Shared library: [libm.so.6]
     #     NEEDED  Shared library: [libc.so.6]
     #
-    # No `libssl.so`, no `libcrypto.so`. TLS is rustls
-    # (`reqwest` with `default-features = false`) and the JOSE signing is
+    # No `libssl.so`, no `libcrypto.so`. Re-adjudicated 2026-08-27 for the
+    # console payload (`veredictum-console`, the image's binary from #53 on):
+    # the workspace `Cargo.lock` carries no `openssl-sys` — its only
+    # openssl-named crate is `openssl-probe`, a pure-Rust certificate-path
+    # prober with no libssl linkage — and the console adds leptos/axum/tokio,
+    # none of which link OpenSSL. TLS is rustls and the JOSE signing is
     # `aws_lc_rs`, so OpenSSL is linked by nothing this project builds. The
     # image is distroless: there is no shell, no package manager and no second
     # executable, and the entrypoint is that binary — so there is nothing else
-    # in the image that could load the library either.
+    # in the image that could load the library either. The published form of
+    # this adjudication is security/vex/distroless-libssl.openvex.json, edited
+    # with this entry, always.
     #
     # Scoped by PURL to this ONE package, so a finding in a different component
     # still fails the gate.

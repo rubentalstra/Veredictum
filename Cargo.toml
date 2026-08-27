@@ -1,13 +1,25 @@
 [workspace]
-# One package, at the repository root. The table is written out anyway so this
-# directory is unambiguously the workspace root — `[profile.*]` is only honoured
-# at one — and so the resolver is a stated choice rather than an inference
+# Two packages: the instrument at the repository root (the crates.io surface)
+# and the web console (ships only as an OCI image; #6, design in #52). The
+# root directory is the workspace root — `[profile.*]` is only honoured at
+# one — and the resolver is a stated choice rather than an inference
 # (https://doc.rust-lang.org/cargo/reference/resolver.html).
 resolver = "3"
+members = ["app/veredictum-console"]
+# Without this, a bare cargo command at the root operates on the ROOT PACKAGE
+# alone (the current-package rule), so every workspace gate — build, clippy,
+# nextest, doc, the MSRV check — would silently skip the console. Verified
+# empirically at the split: `cargo build --all-targets` left no
+# veredictum-console binary until this list existed.
+default-members = [".", "app/veredictum-console"]
 
 [package]
 name = "veredictum"
 version = "0.1.0-alpha.4"
+# Two binaries exist in the workspace since the console (#53), so a bare
+# `cargo run --` is ambiguous without this; every documented invocation is
+# `cargo run -- <subcommand>` and must keep meaning the instrument.
+default-run = "veredictum"
 edition = "2024"
 rust-version = "1.96"
 license = "Apache-2.0"
@@ -112,6 +124,9 @@ assert_fs = "1"
 # unify. A deliberate pin, not drift.
 rand = "0.8"
 
+[lints]
+workspace = true
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PROFILES
 # ─────────────────────────────────────────────────────────────────────────────
@@ -140,11 +155,26 @@ panic = "unwind"
 # (rustc book, -Cstrip) — never enable it for size.
 debug = "line-tables-only"
 
+# The console's WASM client bundle, selected by cargo-leptos through the
+# crate's `lib-profile-release` (size-optimized per the Leptos deployment
+# guide, https://book.leptos.dev/deployment/binary_size.html). Tests never
+# use this profile, and wasm32-unknown-unknown carries no unwinder, so
+# `abort` here states what the target does anyway; the instrument's own
+# release profile above stays `unwind` per `.claude/rules/reliability.md`.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
 # ─────────────────────────────────────────────────────────────────────────────
-# LINTS
+# LINTS — defined once at the workspace, inherited by every member through
+# `[lints] workspace = true`, so the console is held to the identical tables
+# (https://doc.rust-lang.org/cargo/reference/workspaces.html#the-lints-table).
 # ─────────────────────────────────────────────────────────────────────────────
 
-[lints.clippy]
+[workspace.lints.clippy]
 # Zero re-exports: every import names its defining module. This tree carries
 # none, so the rule holds as a compile error for free.
 pub_use = "deny"
@@ -234,7 +264,7 @@ wildcard_dependencies = "deny"
 negative_feature_names = "deny"     # `no-foo` features invert additive semantics
 redundant_feature_names = "deny"    # `use-x`/`with-x` placeholder words (C-FEATURE)
 
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"              # NOTE: forbid cannot be relaxed by attribute — not even
                                     # #[allow] compiles under it (rustc book, lint levels); a
                                     # need for unsafe would have to stop inheriting this table
@@ -281,7 +311,7 @@ ambiguous_negative_literals = "deny"  # `-x.pow(2)` reads wrong — numeric clar
 # table exists to prevent. It is a CLIPPY restriction lint, so a bare entry in
 # this rust table would be inert and only emit a deprecated-lint-name warning.
 
-[lints.rustdoc]
+[workspace.lints.rustdoc]
 # Enforced by `cargo doc` under RUSTDOCFLAGS=-D warnings — the levels here apply
 # to every doc run, local and CI
 # (https://doc.rust-lang.org/rustdoc/lints.html).

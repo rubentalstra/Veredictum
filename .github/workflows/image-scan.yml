@@ -113,6 +113,16 @@ jobs:
           fi
           echo "published=true" >> "$GITHUB_OUTPUT"
 
+          # Every OpenVEX document under security/vex/, passed as repeated
+          # --vex flags — the published, machine-readable adjudications bind
+          # here beside the .trivyignore.yaml entries trivy.yaml already wires,
+          # and scripts/security/scan-images.sh passes the same set locally.
+          vex_args=()
+          for doc in security/vex/*.openvex.json; do
+            [ -e "$doc" ] || continue
+            vex_args+=(--vex "$doc")
+          done
+
           # ONE platform per Trivy invocation (`--platform`, default
           # linux/amd64 — the container-image guide) while the published index is
           # dual-arch, so every variant is scanned explicitly. An image scanned
@@ -124,10 +134,10 @@ jobs:
             arch="${platform##*/}"
             echo "::group::veredictum ${platform} (${digest})"
             trivy image --config trivy.yaml --scanners vuln --platform "$platform" \
-              -f json -o "veredictum.${arch}.json" "$ref"
+              "${vex_args[@]}" -f json -o "veredictum.${arch}.json" "$ref"
             count="$(jq '[.Results[]?.Vulnerabilities // [] | .[]] | length' "veredictum.${arch}.json")"
             trivy image --config trivy.yaml --scanners vuln --platform "$platform" \
-              -f table "$ref" || true
+              "${vex_args[@]}" -f table "$ref" || true
             echo "::endgroup::"
             echo "| \`${platform}\` | \`${digest}\` | ${count} |" >> findings.md
             total=$((total + count))

@@ -1,0 +1,6 @@
+/* SPDX-FileCopyrightText: Veredictum contributors */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+/* Tailwind v4 standalone entry point (no Node): cargo-leptos compiles this
+   through the tailwindcss binary named by `tailwind-input-file`. */
+@import "tailwindcss";

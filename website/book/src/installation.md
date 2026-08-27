@@ -51,15 +51,17 @@ The library target is published with the binary, so you can consume the typed
 artifact model and the published JSON Schemas directly rather than
 reimplementing the format.
 
-## With Docker
+## With Docker: the web console
 
-The container image carries the runner, so a clone plus Docker is enough and no
-Rust toolchain is involved. Mount the repository at `/work`; the entrypoint is
-the instrument itself, so the arguments are the ordinary subcommands:
+The container image is the web console: a browser frontend over the same
+instrument, served by its own binary. The CLI is deliberately not distributed
+as an image — a static binary needs no container, and the release binaries
+below are its no-toolchain path. Start the console against a clone and it
+serves on port 3000:
 
 ```bash
-docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:<tag> \
-    validate --root /work/artifacts --specs /work/specs/openehr
+docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD:/work" \
+    ghcr.io/rubentalstra/veredictum:<tag>
 ```
 
 Substitute a published tag from the
@@ -70,13 +72,15 @@ passed.
 
 The catalogue and the specification oracle are not baked into the image. That is
 the same 347 MB reason as above, and it means the data you grade against is the
-data you can see in your own checkout.
+data you can see in your own checkout. The console has no login, so the
+publish flag above binds it to loopback; exposing it further is the
+operator's decision, behind their own gate.
 
 > [!NOTE]
-> A run against a server on your host machine needs the container to reach it.
-> On Docker Desktop that is `host.docker.internal`; on Linux, either run the
-> container on the host network or put the instrument and the server on the same
-> Docker network and address the server by its service name.
+> The console is under construction: image tags published before its first
+> release still carry the CLI as the payload, invoked as
+> `docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:<tag>
+> validate --root /work/artifacts --specs /work/specs/openehr`.
 
 ## From a release binary
 

@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The REASONING half of the generated Rust-advisory VEX document. The id set
+# itself lives in deny.toml [advisories].ignore — the gate that decides whether
+# a build passes — and scripts/security/vex-generate.sh refuses to emit
+# security/vex/rust-advisories.openvex.json unless the two agree in both
+# directions. Fields per [[accepted]] entry: id, aliases (optional), crate,
+# version (optional), status, justification (OpenVEX vocabulary), impact.
+# [[lockfile_only]] entries document advisories OSV-style lock-file scanners
+# report for crates this feature set never compiles; deny.toml must NOT ignore
+# those (its own header explains why they need no entry).
+
+[document]
+id = "https://veredictum.eu/vex/rust-advisories"
+author = "Veredictum project"
+role = "vendor"
+# Bumped (with version) whenever a statement changes; the generator reads it
+# rather than the clock so the output is byte-deterministic.
+timestamp = "2026-08-27T00:00:00Z"
+version = 1
+products = ["pkg:cargo/veredictum", "pkg:oci/veredictum"]
+
+[[accepted]]
+id = "RUSTSEC-2023-0071"
+aliases = ["CVE-2023-49092"]
+crate = "rsa"
+status = "not_affected"
+justification = "vulnerable_code_cannot_be_controlled_by_adversary"
+impact = """
+The Marvin attack is a timing sidechannel in RSA decryption and signing, which
+leaks PRIVATE-key operations. The `rsa` crate reaches this graph only through
+`pgp` 0.20, which the instrument uses to VERIFY detached OpenPGP signatures on
+version content (RM common master06 §Digital Signature): a verification-only
+path over public keys. The instrument holds no RSA private key and performs no
+RSA decryption or signing, so there is no secret for the sidechannel to leak.
+No fixed release exists upstream; the deleting event is the rsa 0.10 release,
+taken the day it ships (deny.toml carries the same adjudication as the gate).
+"""
