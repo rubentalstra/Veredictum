@@ -32,11 +32,14 @@ const SLUG_OF: &[(&str, &str)] = &[
 const PENDING: &[(&str, &str)] = &[];
 
 /// The repository root, from this crate's manifest directory.
-fn repo_root() -> PathBuf {
+///
+/// # Errors
+/// The canonicalize failure when the crate does not live two levels under
+/// the repository root.
+fn repo_root() -> Result<PathBuf, std::io::Error> {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
-        .expect("the crate lives two levels under the repository root")
 }
 
 /// Extracts the routed paths from `app.rs`'s segment literals.
@@ -54,7 +57,9 @@ fn routed_paths(app_rs: &str) -> BTreeSet<String> {
         let Some(view_end) = path_attr.find("view=") else {
             continue;
         };
-        let decl = &path_attr[..view_end];
+        let Some(decl) = path_attr.get(..view_end) else {
+            continue;
+        };
         // One left-to-right scan keeps the segments in declaration order.
         let mut segments = Vec::new();
         let mut rest = decl;
@@ -101,7 +106,7 @@ fn routed_paths(app_rs: &str) -> BTreeSet<String> {
 )]
 #[test]
 fn every_routed_surface_has_its_captures() -> Result<(), std::io::Error> {
-    let root = repo_root();
+    let root = repo_root()?;
     let app_rs = std::fs::read_to_string(root.join("app/veredictum-console/src/app.rs"))?;
     let img = root.join("website/book/src/console/img");
 
