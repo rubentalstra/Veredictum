@@ -54,47 +54,72 @@ check — Fuzzing waits on a harness (#11). Those are the honest numbers, and th
 are the baseline the next ones are measured against.
 -->
 
-Point it at a running openEHR CDR and it tells you, with citations, which parts
-of the specification that server actually implements.
+Veredictum grades openEHR servers. Point it at a running clinical data
+repository (CDR) and it tells you, with a specification citation on every
+finding, which parts of the released openEHR specifications that server
+actually implements, and what load it sustains while doing so.
 
-It executes a machine-readable catalogue of 1103 spec-cited test cases against
-the server's own wire, records every exchange, and computes verdicts as pure
-functions over what it recorded. Functional conformance, measured performance and
-step-load stress come from one tool. The released openEHR specifications are the
-only authority it accepts: every expectation in the catalogue names the section
-it comes from, so it can be refuted by a better reading of the specification and
-by nothing else. The case and binding counts quoted on this page come from the
-line `veredictum validate` prints over `artifacts/`, which step 1 below runs.
+## What it does
+
+The instrument is one binary plus a data tree. The data tree is a
+machine-readable catalogue of 1103 test cases. Each case cites the
+specification section it enforces, and the released specification text is
+vendored in this repository, so every citation resolves against text you can
+read. The case and binding counts on this page are the line
+`veredictum validate` prints over `artifacts/`.
+
+A grading run is three commands:
+
+1. **`validate`** checks the catalogue itself before any server is involved:
+   id uniqueness, citation resolution against the vendored specs, binding
+   completeness, and coverage of the enumerated wire surface. Zero findings
+   is the only passing result.
+2. **`run`** drives the applicable cases against your server over its own
+   REST wire and records every request and response.
+3. **`verdicts`** computes the verdict from those recordings and renders the
+   report and certificate documents.
+
+Three further subcommands share the same catalogue and recordings
+discipline: `perf` measures a hospital-simulation workload against the
+performance-class thresholds, `stress` finds the knee of the throughput
+curve under stepped load, and `aql-probe` explores a server's AQL behaviour.
+`veredictum --help` lists everything.
 
 ## Why an independent instrument
 
-A server vendor's own test suite cannot answer the question a hospital is asking.
-The suite and the server are written by the same people against the same reading
-of the specification, and when the two disagree it is usually the suite that gets
-adjusted.
+A vendor's own test suite cannot answer the question a hospital procurement
+is asking. The suite and the server come from the same people, built on the
+same reading of the specification, and when the two disagree it is usually
+the suite that gets adjusted.
 
-Veredictum is built so that cannot happen here. The vendored specification text
-is the oracle and is never a suspect. When a run goes red the failure is
-attributed before anything is changed, to exactly one of three suspects, by
-comparing what the specification requires against what the catalogue expects
-against what the server did:
+Veredictum is built so that adjustment has nowhere to happen. The released
+specifications are the only authority it accepts: every expectation in the
+catalogue names the section it comes from, so it can be refuted by a better
+reading of that text and by nothing else. No server's behaviour, no vendor's
+documentation, and no stalled upstream test suite ever sets an expected
+value. Where the released text is genuinely silent or contradicts itself,
+the gap goes to the ambiguity register with a typed disposition and is
+reported back upstream. A private resolution never happens.
+
+Every failure is attributed before anything is changed. A red row has
+exactly three possible causes, and the instrument itself is a suspect ahead
+of the server:
 
 | Suspect | Fix path |
 |---|---|
 | **The server under test** violates the specification | a defect report to that CDR, carrying the reproduced exchange and the citation |
-| **The instrument** misdrove the case or misjudged the response | fix the runner. Those rows were inconclusive, never failures |
+| **The instrument** misdrove the case or misjudged the response | fix the runner; those rows were inconclusive, never failures |
 | **The catalogue** expectation is wrong against the specification | fix the artifact, with a new cited source for the corrected expectation |
 
-The instrument is a first-class suspect on every red row, ahead of the server.
-The first live triage attributed 7 of 7 diagnosed defects to the runner and none
-to the server under test. An instrument that presumes itself correct is worth
-nothing to the people who are supposed to rely on its verdicts.
+The first live triage attributed 7 of 7 diagnosed defects to the runner and
+none to the server under test. An instrument that presumes itself correct is
+worth nothing to the people who rely on its verdicts.
 
-## Run it
+## Quick start
 
-Work from a clone. The published crate carries the code, and the catalogue and
-the vendored specification oracle are 347 MB of data that no registry accepts —
-so `veredictum` reads both as paths you pass it, and the repository is where
+Work from a clone. The published crate carries the code; the catalogue and
+the vendored specification oracle are 347 MB of data no registry accepts, so
+`veredictum` reads both as paths you pass it, and this repository is where
 they live.
 
 ```bash
@@ -117,25 +142,24 @@ cargo run -- verdicts --root artifacts --statement party/mine/statement.json \
     --results out/results.json --out out/
 ```
 
-`cargo run -- --help` lists every subcommand, `perf`, `stress` and `aql-probe`
-among them. The toolchain pins itself from `rust-toolchain.toml`; the only extra
-tool is `cargo-nextest`, and only if you intend to run the test suite.
+The toolchain pins itself from `rust-toolchain.toml`. The only extra tool is
+`cargo-nextest`, and only if you intend to run the test suite.
 
 ### Without a Rust toolchain
 
-The container image carries the runner, so a clone plus Docker is enough. Mount
-the repository at `/work` and the arguments are the ordinary subcommands — the
-entrypoint is the instrument itself:
+The container image carries the runner, so a clone plus Docker is enough.
+Mount the repository at `/work`; the entrypoint is the instrument itself, so
+the arguments are the ordinary subcommands:
 
 ```bash
 docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:<tag> \
     validate --root /work/artifacts --specs /work/specs/openehr
 ```
 
-The catalogue and the vendored specification oracle are **not** baked in: they
-are 347 MB, the runner reads every root as a path passed at run time, and a
-party may legitimately want to point at their own. The image is the runner, and
-the data comes from the mount.
+The catalogue and the specification oracle are deliberately not baked into
+the image: the runner reads every root as a path passed at run time, and a
+party may legitimately point at their own. The image is the runner; the data
+comes from the mount.
 
 Prebuilt binaries for `x86_64` and `aarch64` Linux are attached to each
 [release](https://github.com/rubentalstra/Veredictum/releases), each with a
@@ -149,85 +173,134 @@ gh attestation verify veredictum-<tag>-<target>.tar.gz \
 
 ### With cargo
 
-The binary is on crates.io, which is the path to take if you want the command on
-your `PATH` and intend to point it at a catalogue you already have:
+Installing from crates.io puts the command on your `PATH`, which is the path
+to take if you already have a catalogue checkout to point it at:
 
 ```bash
 cargo install veredictum --version 0.1.0-alpha.3   # pre-release: name the version
 veredictum validate --root <catalogue> --specs <spec-tree>
 ```
 
-The library target is published with it, so an integrator can consume the typed
-artifact model and the published JSON Schemas directly rather than reimplementing
-the format.
+The library target is published with the binary, so an integrator can
+consume the typed artifact model and the published JSON Schemas directly
+instead of reimplementing the format.
 
 ## What is in the box
 
 | | |
 |---|---|
 | **1103 case cores** | `artifacts/schedule/` — one small isolated case per behaviour, so a red row names one defect. Grouped by chapter: EHR, composition, content, contribution, directory, query, definition, demographic, admin, messaging, security, SMART, simplified formats, system. `schedule/performance/` holds the four measured-workload journey definitions, which are their own family and are not case cores |
-| **247 operation bindings** | `artifacts/bindings/` — a case says what the operation IS, in the Service Model's own vocabulary; a binding says how it reaches the wire. A case core carries no status code, header or media type |
-| **The vocabularies** | `artifacts/vocab/` — the capability matrix, the wire surface the coverage gate enumerates, the outcome and selector grammars, and the journey catalogue the measured workload decomposes through |
-| **The corpora** | `artifacts/corpus/` — payload fixtures with their adjudicated verdicts, plus breadth packs vendored verbatim from upstream libraries. Every invalid shape is kept as a negative case, so a lenient server fails it |
-| **The ambiguity register** | `artifacts/registers/ambiguities.yaml` — where the specification is silent or contradicts itself, with a typed disposition. Never a private resolution |
-| **The published schemas** | `schemas/` — JSON Schema for every artifact family, emitted and drift-tested, so an integrator can author against the format |
+| **247 operation bindings** | `artifacts/bindings/` — a case core says what an operation means, in the Service Model's own vocabulary; a binding says how it reaches the wire. A case core carries no status code, header or media type, so a new protocol adds binding files, never a new catalogue |
+| **The vocabularies** | `artifacts/vocab/` — the capability matrix behind the CORE, STANDARD and OPTIONS profiles, the wire surface the coverage gate enumerates, the outcome and selector grammars, and the journey catalogue the measured workload decomposes through |
+| **The corpora** | `artifacts/corpus/` — payload fixtures with their adjudicated verdicts, plus breadth packs vendored verbatim from upstream clinical-model libraries. Every invalid shape is kept as its own negative case, so a lenient server that accepts it fails |
+| **The ambiguity register** | `artifacts/registers/ambiguities.yaml` — every place the specification is silent or contradicts itself, each with a typed disposition and, where we reported it, the upstream issue |
+| **The published schemas** | `schemas/` — JSON Schema for every artifact family, emitted by the instrument and drift-tested, so an integrator can author against the format |
+| **The verification pack** | `verification-pack/` — a recorded transcript with adjudicated verdicts. A runner claiming to implement this catalogue replays it and must reproduce every verdict, so no harness, this one included, is trusted on its word |
 | **The oracle** | `specs/openehr/` — the released specification text, vendored verbatim, plus the released XSD, JSON Schema and OpenAPI bundles a citation resolves against |
+
+## How a verdict is computed
+
+A verdict is a pure function of four inputs: the party's statement (the
+capabilities the server claims), the recorded results, the catalogue, and
+the capability matrix. Nothing else enters. Two independent runners given
+the same four inputs must compute identical verdicts, and the verification
+pack exists to check exactly that. A certificate row a human typed is a
+defect.
+
+Two verdict machineries share that discipline
+([`ARCHITECTURE.md`](ARCHITECTURE.md) §8):
+
+- **Conformance by assertion:** the statement selects the applicable cases,
+  typed assertions judge each recorded exchange, and case results roll up
+  through capabilities to a profile verdict against the CORE / STANDARD /
+  OPTIONS matrix. `NotEvidenced` and `NoCases` are printed as first-class
+  results, so a thin claim is visible instead of silently green.
+- **Conformance by measurement:** a performance class is earned when every
+  threshold holds in one measured run. The class verdict is re-derived from
+  the HDR histograms embedded in the record, so a stored summary is
+  tamper-checked rather than trusted.
+
+Load is offered open-loop: arrivals follow a seeded schedule of planned
+instants, and latency is measured from the planned instant rather than the
+actual send. A stalled server therefore accumulates the delay it caused,
+which is what stops coordinated omission from hiding a stall behind a
+slowed-down client.
+
+The performance classes anchor to population served rather than to a
+concurrent-user guess, with the full derivation from OECD, Eurostat and NHS
+activity statistics in [`ARCHITECTURE.md`](ARCHITECTURE.md) §8.14:
+
+| Class | Population served | Corpus | Sustained arrival floor | p99 budget | Error rate |
+|---|---|---|---|---|---|
+| POC | demonstration | 10k EHRs | 2/s | ≤ 1 s | 0 |
+| S | 100 thousand | 100k EHRs | 15/s | ≤ 1 s | 0 |
+| L | 1 million | 1M EHRs | 150/s | ≤ 1 s | 0 |
+| R | 10 million | 10M EHRs | 1,500/s | ≤ 1 s | 0 |
 
 ## Coverage is a mandate
 
-A green run over a thin catalogue proves nothing, so coverage is machine-checked
-rather than asserted. The `surface-coverage` gate enumerates the wire surface
-from the released sources alone — the Service Model's platform interfaces crossed
-with their ITS-REST branches — and fails on any operation, status-code branch,
-header rule, negotiation variant or error family that has neither a covering case
-nor a cited exception. A behaviour the specification defines and the catalogue
-misses is a gap to close or an honest boundary in the register.
+A green run over a thin catalogue proves nothing, so coverage is
+machine-checked rather than asserted. The `surface-coverage` gate enumerates
+the wire surface from the released sources alone, the Service Model's
+platform interfaces crossed with their ITS-REST branches, and fails on any
+operation, status-code branch, header rule, negotiation variant or error
+family that has neither a covering case nor a cited exception. A behaviour
+the specification defines and the catalogue misses is a gap to close or an
+honest boundary in the register.
 
 Cases are added. They are never removed to make a run go green.
 
-## Verdicts are computed, never asserted
+## Lineage
 
-A verdict is a pure function of the party's statement, the recorded results, the
-catalogue and the capability matrix. Performance works the same way: a class
-verdict is re-derived from the HDR histograms embedded in the record, so the
-stored summary is tamper-checked rather than trusted, and latency is measured
-from the planned arrival instant under open-loop offered load, which is what
-stops coordinated omission from hiding a stall.
+None of the vocabulary here is invented. ISO/IEC 9646 standardized this
+architecture in 1991: a supplier's conformance statement (ICS) selects the
+applicable cases from an Abstract Test Suite, the supplier's IXIT provides
+the instance parameters to run them, and verdicts land in a standardized
+report. ETSI, the Bluetooth SIG and USB-IF still run on it. In those terms
+the catalogue is the ATS, `statement.json` is the ICS, and `ixit.json` is
+the IXIT.
+
+openEHR's own conformance component defined the right concepts and then
+stalled: its last content amendment is from March 2022, its assessment layer
+was never written, and it carries zero AQL test cases. That component
+remains the structural guide for which behaviours need covering. It is never
+the correctness authority; the released specifications are.
 
 ## Origin of the name
 
-*Veredictum* is medieval Latin for "truly spoken", *vere dictum*, and it is the
-word that became the English *verdict*. That is what this instrument produces: it
-runs the catalogue against a running CDR and speaks a verdict about what it
-observed. The seal above is the mark of that verdict.
+*Veredictum* is medieval Latin for "truly spoken", *vere dictum*, and it is
+the word that became the English *verdict*. That is what this instrument
+produces: it runs the catalogue against a running CDR and speaks a verdict
+about what it observed. The seal above is the mark of that verdict.
 
-## Architecture
+## Design record
 
-[`ARCHITECTURE.md`](ARCHITECTURE.md) is the design record, and it is where the
-reasoning lives rather than a summary of it: the testable surface and the
-case-core field definitions, the per-operation wire bindings, the outcome
-taxonomy and the ambiguity register, the assertion vocabulary, how a verdict is
-computed, and the population-anchored performance-class model — the POC / S / L /
-R volumetric floors derived from OECD, Eurostat and NHS statistics, with the
-hospital-simulation journey decomposition behind the measured runs. It also
-carries the evidence base for why the instrument exists in this shape: the state
-of the official CNF component, how other standards run conformance, and the
-ISO/IEC 9646 and CASCO vocabulary the scheme is built in.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) carries the reasoning rather than a
+summary of it: the testable surface and the case-core field definitions, the
+per-operation wire bindings, the outcome taxonomy and the ambiguity
+register, the assertion vocabulary, the verdict computation, and the
+population-anchored performance-class model with its hospital-simulation
+journey decomposition. It also records the evidence base for why the
+instrument exists in this shape: the state of the official openEHR CNF
+component, how other standards run conformance, and the ISO/IEC 9646 and
+CASCO vocabulary the scheme is built in.
 
 ## Contributing
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) has the gates and the review bar.
-[`CLAUDE.md`](CLAUDE.md) is the working discipline the project holds itself to,
-including the attribution law above. Security reports go through
-[`SECURITY.md`](SECURITY.md), and questions through [`SUPPORT.md`](SUPPORT.md).
+[`CLAUDE.md`](CLAUDE.md) is the working discipline the project holds itself
+to, including the attribution law above. Security reports go through
+[`SECURITY.md`](SECURITY.md), and questions through
+[`SUPPORT.md`](SUPPORT.md).
 
-If you maintain a CDR and want it graded, open an issue. A defect this instrument
-finds in your server arrives with the exchange and the citation, and a defect you
-find in this instrument is a first-class bug here.
+If you maintain a CDR and want it graded, open an issue. A defect this
+instrument finds in your server arrives with the reproduced exchange and the
+citation, and a defect you find in this instrument is a first-class bug
+here.
 
 ## License
 
 Apache-2.0. Attribution travels with every copy and derivative through the
 license and the `NOTICE` file, as its section 4 requires. The vendored
-specification text and clinical models keep their upstream terms, recorded per
-tree in `PROVENANCE.md` and declared machine-readably in `REUSE.toml`.
+specification text and clinical models keep their upstream terms, recorded
+per tree in `PROVENANCE.md` and declared machine-readably in `REUSE.toml`.
