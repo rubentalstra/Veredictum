@@ -5239,6 +5239,7 @@ dependencies = [
  "leptos_icons",
  "leptos_meta",
  "leptos_router",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 2.0.20",

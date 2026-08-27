@@ -16,7 +16,11 @@ at the scaffold (#53); the mandates carry over, re-grounded on this product.
    the pinned `veredictum` CLI binary as a subprocess. Never a `path =`
    dependency on the root package, never a reimplemented parser or judgement,
    and never console code speaking to a CDR itself — the spawned instrument
-   is the only thing that touches the SUT.
+   is the only thing that touches the SUT — with ONE carved-out exception:
+   the connect screen's reachability probe (`run_api::read::probe`), a single
+   GET whose answer renders verbatim and is never judged. A diagnostic about
+   the network path is not conformance traffic; everything that grades stays
+   engine-only.
 3. **Every `#[server]` fn is a publicly reachable HTTP endpoint**, and the
    console has no login by design: it binds `127.0.0.1` by default, wider
    exposure is the operator's decision with their own gate in front. So every

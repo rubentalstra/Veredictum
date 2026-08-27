@@ -115,7 +115,7 @@ pub mod read {
     use crate::state::ConsoleState;
 
     /// The chapter directory a loaded case file sits under.
-    fn chapter_of(path: &std::path::Path) -> String {
+    pub fn chapter_of(path: &std::path::Path) -> String {
         let mut components = path.components();
         for component in components.by_ref() {
             if component.as_os_str() == "schedule" {

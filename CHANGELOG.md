@@ -20,6 +20,18 @@ version on.
 
 ### Added
 
+- **The console's run wizard, first half (#65).** Connect: the CDR base URL,
+  display name and version label, the authentication choice exactly as the
+  ixit's vocabulary (none, basic, bearer), and a probe-before-continue whose
+  answer — status line, elapsed, or the transport's own words — renders
+  verbatim, with Continue gated on 2xx and a stated "continue anyway".
+  Scope: the statement picker over the mounted party declarations, the
+  case-id filter, and the honest preview: N cases in scope with the
+  per-chapter breakdown, held by a test to what the engine then actually
+  processes. Credential values live in the server-side draft and reach only
+  the spawned run's environment — the client-safe view carries no secret by
+  construction, tested. The probe is the one carved-out console request to a
+  CDR (a diagnostic, never a judgement), recorded in the crate's mandates.
 - **The console's read surfaces (#64).** The instrument landing shows the
   catalogue's own numbers — case cores, bindings, party statements, findings
   — read once at startup through the published lib, from the same
