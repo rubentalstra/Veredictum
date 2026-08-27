@@ -109,6 +109,12 @@ silence. A new maintainer receives write access, a row in
 identities move separately and only where the identity permits a second holder;
 that table is in MAINTAINERS.md and is kept truthful.
 
+A second maintainer's arrival also re-opens the branch-protection
+adjudication (SECURITY.md's Scorecard Branch-Protection section, issue #26):
+the approver-class requirements (required reviews, CODEOWNERS review,
+last-push approval) become satisfiable and are enabled, and the
+repository-admin bypass is re-adjudicated with two admins holding it.
+
 **A maintainer from a competing CDR is welcome.** Independence here means no
 single implementation's behaviour decides an expectation, and more vendors at
 the table makes that stronger. The discipline above is what keeps it safe, and
