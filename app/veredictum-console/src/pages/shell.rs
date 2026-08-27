@@ -5,9 +5,13 @@
 //!
 //! The static sidebar — seal, one entry per surface, the versions in the
 //! footer — around the routed `<Outlet/>`. The chrome renders exactly once
-//! outside any Suspense (`.claude/rules/leptos-ui.md` §4), and dark mode is
-//! re-applied after hydration inside an `Effect` so the initial render stays
-//! deterministic (§8).
+//! outside any Suspense: a `Suspend` closure re-runs on every notification of
+//! the resources it awaits and re-creates everything inside it, so a resource
+//! owned there gets a different id on the server than on the client and
+//! hydration reads the wrong serialized slot. Dark mode is re-applied after
+//! hydration inside an `Effect` for the same reason — the initial render must
+//! be identical on both passes
+//! (<https://book.leptos.dev/ssr/24_hydration_bugs.html>).
 
 use leptos::prelude::{
     AddAnyAttr, AriaAttributes, ClassAttribute, CollectView, Effect, ElementChild, Get, IntoView,

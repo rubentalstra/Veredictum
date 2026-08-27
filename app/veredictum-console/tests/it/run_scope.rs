@@ -22,7 +22,7 @@ struct ExceptionRow {
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
 )]
 #[test]
 fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn std::error::Error>> {
@@ -113,7 +113,7 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
 )]
 #[test]
 fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> {
@@ -192,7 +192,7 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
 /// but the schema forbids is refused, and non-JSON is refused.
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
 )]
 #[test]
 fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dyn std::error::Error>>
@@ -238,7 +238,7 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
 /// party tree — anything else is refused, path traversal included.
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
 )]
 #[test]
 fn the_example_loader_refuses_paths_outside_the_party_tree()

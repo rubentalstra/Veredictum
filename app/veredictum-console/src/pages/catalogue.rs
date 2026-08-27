@@ -4,8 +4,9 @@
 //! S2 — the catalogue explorer (#61, #64).
 //!
 //! Chapters → cases → one case in full, read through the published lib's
-//! typed model. Filter, search and page state live in the URL
-//! (`.claude/rules/leptos-ui.md` §9).
+//! typed model. Filter, search and page state live in the URL, so a view is
+//! shareable, refresh-safe and works without WASM loaded
+//! (<https://book.leptos.dev/router/20_form.html>).
 
 use leptos::prelude::{
     AddAnyAttr, ClassAttribute, CollectView, ElementChild, Get, IntoAny, IntoView, Memo, Resource,

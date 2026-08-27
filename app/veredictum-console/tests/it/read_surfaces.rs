@@ -32,7 +32,7 @@ fn committed_state() -> veredictum_console::state::ConsoleState {
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
 )]
 #[test]
 fn the_landing_counts_are_the_validate_summary_counts() -> Result<(), Box<dyn std::error::Error>> {

@@ -3,14 +3,14 @@
 
 //! The vendored archetype and template packs, exercised as bytes.
 //!
-//! A vendored tree is 100% exercised with adjudicated skips only
-//! (`.claude/rules/testing.md`). This instrument reads a corpus as a wire
-//! payload and ships no ADL parser, no OPT reader and no WebTemplate builder,
-//! so the exercise a pack gets here is the one the instrument can perform
-//! first-hand: every file is read and decoded, and checked against the dialect
-//! and the identity its `PROVENANCE.md` records. The counts are pinned, so a
-//! re-vendor that silently returns fewer files, a 404 body, or the wrong
-//! dialect fails instead of shrinking a pack unnoticed.
+//! A vendored tree is 100% exercised, with adjudicated skips only. No openEHR
+//! spec governs that bar — it is our own design. This instrument reads a
+//! corpus as a wire payload and ships no ADL parser, no OPT reader and no
+//! WebTemplate builder, so the exercise a pack gets here is the one the
+//! instrument can perform first-hand: every file is read and decoded, and
+//! checked against the dialect and the identity its `PROVENANCE.md` records.
+//! The counts are pinned, so a re-vendor that silently returns fewer files, a
+//! 404 body, or the wrong dialect fails instead of shrinking a pack unnoticed.
 //!
 //! Three packs are covered, each with its own provenance record: the CKM ADL
 //! 1.4 archetype pack with its AM 1.4 XML twins, the upstream ADL 2 pair pack

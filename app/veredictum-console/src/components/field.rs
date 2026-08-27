@@ -5,8 +5,8 @@
 //! selects, textareas and buttons.
 //!
 //! Class constants rather than wrapper components on purpose: the kit
-//! standardizes the LOOK, each screen keeps its own behaviour (controlled or
-//! uncontrolled, per `.claude/rules/leptos-ui.md` §5).
+//! standardizes the LOOK, each screen keeps its own behaviour — controlled or
+//! uncontrolled (<https://book.leptos.dev/view/05_forms.html>).
 
 /// A single-line text input.
 pub const INPUT: &str = "rounded-control border border-edge-strong bg-raised px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-accent focus:border-accent disabled:opacity-50 disabled:pointer-events-none";

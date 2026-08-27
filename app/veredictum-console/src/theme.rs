@@ -5,9 +5,10 @@
 //! (`style/tailwind.css`), and the choice persists to `localStorage`.
 //!
 //! Browser-only by construction: the persisted choice is re-applied after
-//! hydration inside an `Effect`, keeping the initial render deterministic
-//! (`.claude/rules/leptos-ui.md` §8) — the first paint is light, and a dark
-//! preference flips within the hydration frame.
+//! hydration inside an `Effect`, keeping the initial render deterministic:
+//! a server pass and a client pass that disagree are a hydration mismatch
+//! (<https://book.leptos.dev/ssr/24_hydration_bugs.html>). The first paint is
+//! light, and a dark preference flips within the hydration frame.
 
 use leptos::prelude::document;
 
