@@ -323,3 +323,14 @@ Apache-2.0. Attribution travels with every copy and derivative through the
 license and the `NOTICE` file, as its section 4 requires. The vendored
 specification text and clinical models keep their upstream terms, recorded
 per tree in `PROVENANCE.md` and declared machine-readably in `REUSE.toml`.
+
+## openEHR
+
+openEHR® is the registered trademark of the openEHR Foundation. Veredictum
+is an independent, community-driven conformance instrument: it names openEHR
+descriptively, to say what is being tested against, and it is not an
+official openEHR Foundation product, not the Foundation's CNF program, and
+not endorsed by or affiliated with the Foundation. The released openEHR
+specifications are this instrument's oracle by its own choice, and every
+expectation cites them — that fidelity is a design discipline here, never a
+claim of official status.

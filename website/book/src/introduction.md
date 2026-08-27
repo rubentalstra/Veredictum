@@ -67,6 +67,8 @@ register.
 Cases are added. They are never removed to make a run go green.
 
 > [!NOTE]
-> openEHR® is the registered trademark of the openEHR Foundation. This
-> instrument names openEHR descriptively, to say what is being tested. It is
-> not an openEHR Foundation endorsement.
+> openEHR® is the registered trademark of the openEHR Foundation. Veredictum
+> is an independent, community-driven conformance instrument: it names
+> openEHR descriptively, to say what is being tested, and it is not an
+> official openEHR Foundation product, not the Foundation's CNF program, and
+> not endorsed by or affiliated with the Foundation.
