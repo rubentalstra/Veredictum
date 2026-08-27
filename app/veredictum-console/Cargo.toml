@@ -120,6 +120,10 @@ ssr = [
 [dev-dependencies]
 # Scratch directories for the engine gate test's out trees and fixture ixit.
 assert_fs = "1"
+# The journeys build the tamper fixture archives themselves. The shipping
+# dependency above stays optional behind `ssr`; the TEST target compiles in
+# the featureless clippy pass too, so its copy is unconditional.
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # The browser journeys (#69): a Rust-native WebDriver client over headless
 # Chromium, never Playwright — the console admits no hand-written JavaScript,
 # its test suite included. The gate reads the browser log through
