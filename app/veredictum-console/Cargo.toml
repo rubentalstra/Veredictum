@@ -65,7 +65,21 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls"], o
 serde_json = { version = "1", optional = true }
 thiserror = { version = "2", optional = true }
 leptos_axum = { version = "0.8", optional = true }
-axum = { version = "0.8", optional = true }
+# `multipart` carries the /verify/upload reader: S9 takes a bundle from a
+# plain HTML form, which is the only zero-JS file upload there is.
+axum = { version = "0.8", features = ["multipart"], optional = true }
+# The export download and the S9 upload speak one archive format. Reading is
+# the untrusted direction: every entry name is refused unless it is a plain
+# file name, mirroring the lib's own `UnsafeFileName` rule.
+zip = { version = "8", default-features = false, features = ["deflate"], optional = true }
+# Wall-clock time comes from jiff, never `std::time::SystemTime::now` (the
+# `disallowed-methods` ban): S9 sweeps its transient scratch directories by
+# age, which is the one place the console reads a clock.
+jiff = { version = "0.2", optional = true }
+# The record digest the seal card, the badge and the report all carry is the
+# SHA-256 of `record-manifest.json`'s exact bytes. The console fingerprints a
+# file the engine wrote; it never re-derives a manifest or a judgement.
+sha2 = { version = "0.11", optional = true }
 # `signal` carries the SIGTERM handler: the binary is PID 1 in the image, so
 # graceful shutdown on `docker stop` is its own duty (src/main.rs).
 tokio = { version = "1", features = ["rt-multi-thread", "signal"], optional = true }
@@ -96,6 +110,9 @@ ssr = [
     "leptos_router/ssr",
     "dep:leptos_axum",
     "dep:axum",
+    "dep:zip",
+    "dep:jiff",
+    "dep:sha2",
     "dep:tokio",
     "dep:anyhow",
 ]

@@ -29,6 +29,28 @@ pub const PARTY_ENV: &str = "VEREDICTUM_PARTY";
 /// as a terminal run would.
 pub const OUT_ENV: &str = "VEREDICTUM_OUT";
 
+/// The environment variable naming the armored OpenPGP secret key the export
+/// seals with.
+///
+/// Unset is a first-class state: the export section then renders the
+/// instruction to mount a key, and offers no button.
+pub const SIGN_KEY_ENV: &str = "VEREDICTUM_SIGN_KEY";
+
+/// The environment variable naming the armored OpenPGP public key `/verify`
+/// checks a bundle against.
+///
+/// Unset is a first-class state: the page explains what to configure.
+pub const VERIFY_KEY_ENV: &str = "VEREDICTUM_VERIFY_KEY";
+
+/// The environment variable carrying the passphrase that unlocks
+/// [`SIGN_KEY_ENV`].
+///
+/// The console never reads this into its own state: it is read at spawn time
+/// and placed in the child process's environment, which is the same variable
+/// the pinned CLI already documents. It reaches no signal, no file and no log
+/// line.
+pub const SIGN_PASSPHRASE_ENV: &str = "VEREDICTUM_SIGN_PASSPHRASE";
+
 /// The loaded catalogue, or the explanation of why there is none.
 #[derive(Debug, Clone)]
 pub struct ConsoleState {
@@ -40,6 +62,11 @@ pub struct ConsoleState {
     pub party: PathBuf,
     /// The run-output tree job artifacts land under.
     pub out: PathBuf,
+    /// The armored secret key the export seals with, when one is mounted.
+    pub sign_key: Option<PathBuf>,
+    /// The armored public key `/verify` checks a bundle against, when one is
+    /// mounted.
+    pub verify_key: Option<PathBuf>,
     /// The one startup validation pass, shared by every request; `Err` is
     /// the verbatim reason the catalogue could not be opened.
     pub catalogue: Arc<Result<veredictum::pipeline::catalogue::Validation, String>>,
@@ -64,6 +91,8 @@ impl ConsoleState {
         let party =
             PathBuf::from(std::env::var(PARTY_ENV).unwrap_or_else(|_| String::from("party")));
         let out = PathBuf::from(std::env::var(OUT_ENV).unwrap_or_else(|_| String::from("out")));
+        let sign_key = std::env::var(SIGN_KEY_ENV).ok().map(PathBuf::from);
+        let verify_key = std::env::var(VERIFY_KEY_ENV).ok().map(PathBuf::from);
         let catalogue = veredictum::pipeline::catalogue::validate_tree(&root, Some(&specs))
             .map_err(|e| e.to_string());
         Self {
@@ -71,6 +100,8 @@ impl ConsoleState {
             specs,
             party,
             out,
+            sign_key,
+            verify_key,
             catalogue: Arc::new(catalogue),
             draft: Arc::new(std::sync::Mutex::new(None)),
             jobs: crate::run_job::JobSlot::default(),

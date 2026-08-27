@@ -26,6 +26,8 @@ fn committed_state() -> veredictum_console::state::ConsoleState {
         out: repo_root().join("out"),
         catalogue: std::sync::Arc::new(catalogue),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        sign_key: None,
+        verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
     }
 }
@@ -85,6 +87,8 @@ fn a_missing_catalogue_names_the_mounts_it_looked_at() {
         out: "/nonexistent/out".into(),
         catalogue: std::sync::Arc::new(Err(String::from("no such directory"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        sign_key: None,
+        verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
     };
     match veredictum_console::catalogue_api::read::instrument_view(&state) {

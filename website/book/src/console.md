@@ -86,6 +86,78 @@ documents byte-for-byte.
 ![The verdicts surface in light mode](console/img/verdicts-light.png)
 ![The verdicts surface in dark mode](console/img/verdicts-dark.png)
 
+## The export: one signed record
+
+A verdict nobody can check is an opinion. The export step on the verdicts
+screen hands the run to the pinned instrument's own `verdicts --sign-key`,
+which writes the rendered documents, a digest manifest over them, and a
+detached OpenPGP signature over that manifest. The console adds no sealing of
+its own; it supplies the key path and reads the result back.
+
+![Preparing the export on the verdicts screen](console/img/verdicts-export-light.png)
+
+Beside the sealed set the console renders three files a party publishes. Each
+carries the record digest prefix, so the artwork names the bytes it certifies
+rather than being a logo anyone could copy:
+
+- **The seal card** is the brand's certificate master with its three slots
+  filled: the product under test, the profile verdict, and the moment the
+  verdict was spoken — read back from the signature's own creation time,
+  because the record carries no wall clock.
+- **The badge** is a compact SVG for a README, with the digest prefix in its
+  title and the verify path in its source.
+- **The report** is one self-contained HTML file of everything the results and
+  verdicts screens show, with the full digest, the signer fingerprint and the
+  signing time in its footer.
+
+All three are pure functions of the record: the same bundle in produces the
+same bytes out, which is what lets anyone re-render them and compare.
+
+The seal card, the badge and the report sit deliberately outside the manifest.
+The manifest covers what the instrument judged; these are renderings about
+that judgement, and signing a rendering of a rendering would say nothing extra.
+
+Two keys are configuration. `VEREDICTUM_SIGN_KEY` names the armored secret key
+the bundle is sealed with, and `VEREDICTUM_VERIFY_KEY` names the public half.
+The console asks for both because it will not print a signing time it has not
+checked: after sealing, it verifies its own bundle before stating who signed
+it and when. With neither mounted the section says so and offers no button.
+
+## Verify: checking a record without trusting us
+
+`/verify` is public. It needs no run, no server and no account: upload a
+bundle, and the published library recomputes every digest the manifest names
+and checks the detached signature over it.
+
+![A bundle verifying clean](console/img/verify-light.png)
+![The same page in dark mode](console/img/verify-dark.png)
+
+The upload is a plain HTML form posting to a server route. There is no
+JavaScript in it, so it works before the client bundle has loaded and works
+with scripting switched off. Uploaded bundles are transient: they unpack into
+a scratch directory, are checked, and are swept on a short timer.
+
+A tampered file names itself. Change one byte of one document and the row for
+that file reads `mismatched`, with the digest the bytes actually produce
+beside the digest the manifest promised. Change the manifest instead and the
+signature is rejected while every remaining digest still matches, which says
+precisely which of the two claims failed.
+
+Two things are permanent furniture on that page. The first is the honesty box,
+which renders on every outcome including a clean one: a valid signature proves
+integrity and origin since signing, and nothing else. It does not prove the
+conditions the run executed under, that the system under test is what the
+record says it is, or that the catalogue covered everything the specification
+defines. The second is the command line that does the same job:
+
+```text
+veredictum verify-record --record <dir> --key <public-key>
+```
+
+The manifest's signature is an ordinary detached OpenPGP signature, so
+`gpg --verify` accepts a bundle too. Nobody has to trust this console to check
+this console.
+
 ## Two real servers, side by side
 
 The same catalogue, the same wizard, the same judgement — driven against two

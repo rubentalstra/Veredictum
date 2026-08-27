@@ -197,6 +197,8 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
             statement_product: Some(String::from("EHRbase 2.34.0")),
             filter: None,
         }))),
+        sign_key: None,
+        verify_key: None,
         jobs: JobSlot::default(),
     };
     let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;

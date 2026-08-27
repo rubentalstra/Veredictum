@@ -176,6 +176,8 @@ VEREDICTUM_ROOT="artifacts" \
 VEREDICTUM_SPECS="specs/openehr" \
 VEREDICTUM_OUT="target/ui-e2e/out" \
 VEREDICTUM_ENGINE="$ENGINE_BIN" \
+VEREDICTUM_SIGN_KEY="artifacts/corpus/keys/cnf-signing.sec.asc" \
+VEREDICTUM_VERIFY_KEY="artifacts/corpus/keys/cnf-signing.pub.asc" \
   "$CONSOLE_BIN" &
 CONSOLE_PID=$!
 wait_http "$PROBE_URL/healthz" 90 "the console"
@@ -203,8 +205,16 @@ curl -sf "$PROBE_URL/" \
     done
 
 # ── 2. The browser endpoint ─────────────────────────────────────────────────
+# The S9 upload journey hands the browser a real file, so the browser must be
+# able to READ it. A containerised browser has its own filesystem, so the
+# directory is bind-mounted and the journey is told both names for it: where to
+# write (host) and what to type into the file control (browser).
+UPLOAD_DIR="$ROOT/target/ui-e2e/upload"
+mkdir -p "$UPLOAD_DIR"
+
 if [[ -n "${UI_E2E_CHROMEDRIVER:-}" ]]; then
   echo "── starting the local chromedriver ($UI_E2E_CHROMEDRIVER)"
+  UPLOAD_DIR_REMOTE="$UPLOAD_DIR"
   command -v "$UI_E2E_CHROMEDRIVER" >/dev/null \
     || { echo "FATAL: $UI_E2E_CHROMEDRIVER is not executable" >&2; exit 1; }
   "$UI_E2E_CHROMEDRIVER" --port="$DRIVER_PORT" >"$SHOTS_DIR/chromedriver.log" 2>&1 &
@@ -216,10 +226,12 @@ else
   # --add-host: the host-gateway mapping is what makes CONSOLE_URL resolve
   # from inside the container on a Linux engine (Docker Desktop already
   # provides the name, and re-declaring it there is a no-op).
+  UPLOAD_DIR_REMOTE="/uploads"
   docker run -d --rm --name "$SELENIUM_NAME" \
     --shm-size=2g \
     --add-host=host.docker.internal:host-gateway \
     -p "127.0.0.1:$DRIVER_PORT:4444" \
+    -v "$UPLOAD_DIR:$UPLOAD_DIR_REMOTE:ro" \
     "$SELENIUM_IMAGE" >/dev/null
 fi
 wait_http "$DRIVER_URL/status" 120 "the browser endpoint"
@@ -269,6 +281,8 @@ UI_E2E_DOCS_SHOTS="${UI_E2E_DOCS_SHOTS:-}" \
 UI_E2E_FERROEHR_URL="$FERROEHR_SUT_URL" \
 UI_E2E_EHRBASE_URL="$EHRBASE_SUT_URL" \
 UI_E2E_ENGINE_DRIFT="${ENGINE_DRIFT:-}" \
+UI_E2E_UPLOAD_DIR="$UPLOAD_DIR" \
+UI_E2E_UPLOAD_REMOTE="$UPLOAD_DIR_REMOTE" \
   cargo nextest run --locked -p veredictum-console --features ssr \
     -j 1 --no-fail-fast "${NEXTEST_FILTER[@]}"
 

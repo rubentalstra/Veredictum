@@ -66,6 +66,31 @@ async fn main() -> anyhow::Result<()> {
         // tree: it must answer even if the WASM bundle or the app shell is
         // broken, because it claims only "the server accepts connections".
         .route("/healthz", axum::routing::get(|| async { "ok" }))
+        // The two server-owned routes S8 and S9 need, outside the Leptos
+        // route tree because neither answers with a view: one streams the
+        // sealed bundle as an archive, the other takes a plain
+        // multipart form post — a file upload with zero JavaScript, working
+        // before the WASM bundle loads and with it disabled entirely. Both
+        // are wrapped in the same context provision the Leptos routes get,
+        // so their handlers reach the console state through `expect_context`.
+        .route(
+            veredictum_console::export_api::DOWNLOAD_PATH,
+            axum::routing::get(veredictum_console::export_api::route::record_zip),
+        )
+        .route(
+            veredictum_console::verify_api::UPLOAD_PATH,
+            axum::routing::post(veredictum_console::verify_api::route::upload),
+        )
+        // axum defaults to a 2 MiB body; the upload route needs its own cap,
+        // and the page refuses anything past the same number itself so the
+        // reader gets a sentence rather than a bare 413.
+        .layer(axum::extract::DefaultBodyLimit::max(
+            usize::try_from(veredictum_console::verify_api::unpack::MAX_UPLOAD_BYTES)
+                .unwrap_or(usize::MAX),
+        ))
+        // These two handlers are outside the reactive route tree, so they
+        // take the state as an extension rather than through `expect_context`.
+        .layer(axum::Extension(state.clone()))
         .leptos_routes_with_context(
             &leptos_options,
             routes,
