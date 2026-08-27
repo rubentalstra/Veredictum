@@ -66,15 +66,16 @@ bash scripts/checks/comment-style.sh --all   # comment form and budgets
 ```
 
 plus the attribution rule below, which the `.claude/hooks/` guards enforce
-locally at the moment a command runs. When the runner lands, the gates it
-brings are the ones listed in [`CLAUDE.md`](CLAUDE.md) § Build and test, and
-`veredictum validate` becomes the gate that must be clean before any server is
-composed.
+locally at the moment a command runs. The full gate list is
+[`CLAUDE.md`](CLAUDE.md) § Build and test, and `veredictum validate` is the
+gate that must be clean before any server is composed. A change to the web
+console has its own gate set: `app/veredictum-console/CLAUDE.md` § Gates
+(clippy on both targets, the E2E journeys, and the screenshot guard).
 
 Changing a reader that parses text from outside — a grammar, the citation
 splitter, an artifact or a party document — also means running its fuzz target.
 The harnesses live in [`fuzz/`](fuzz/README.md), in their own nightly
-workspace, and CI compiles them on every pull request that touches `src/` or
+workspace, and CI compiles them on every pull request that touches `app/` or
 `fuzz/`:
 
 ```shell

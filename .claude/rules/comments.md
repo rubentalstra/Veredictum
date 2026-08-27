@@ -84,11 +84,11 @@ history carries it. A comment describes the code as it IS.
 
 - `scripts/checks/comment-style.sh` — block comments, TODO(#N) form, banned
   marker vocabulary, NOTE ≤ 3 lines, `//` runs ≤ 8 lines. Runs per-edit via
-  the `rust_fmt_clippy.sh` PostToolUse hook. The `--all` CI job arrives with
-  the CI lanes (FerroEHR#2789).
+  the `rust_fmt_clippy.sh` PostToolUse hook, and per-PR through the `--all`
+  step in the CI guards job.
 - `clippy::too_long_first_doc_paragraph` (nursery cherry-pick, CI
   `-D warnings`) — the RFC 1574 summary line.
-- Doc lints to keep active once the crate lands: `doc_markdown`,
+- Doc lints, all live: `doc_markdown`,
   `missing_errors_doc`, `missing_panics_doc` (pedantic = deny),
   `unnecessary_safety_comment`, `unnecessary_safety_doc`, the
   `[lints.rustdoc]` table plus a CI doc job.

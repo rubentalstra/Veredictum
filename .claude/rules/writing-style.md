@@ -5,7 +5,7 @@
 > repository's surfaces.
 
 Applies to every piece of prose a human reads as text: the `README.md`, the
-docs site once it exists, `CONTRIBUTING.md` and its siblings, issue and PR
+docs site under `website/`, `CONTRIBUTING.md` and its siblings, issue and PR
 bodies, release notes, upstream reports, forum and announcement drafts, and
 doc comments where they carry prose. It does not rewrite the vendored specs,
 which are never edited, and it does not loosen the technical rules: citations,

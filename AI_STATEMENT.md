@@ -152,9 +152,9 @@ the maintainer's cooperation.**
 - **Static and supply-chain gates.** No `unsafe`, deny-tier lints on panicking
   shortcuts, typed errors, machine-checked comment style, `cargo deny` policy,
   and workflow security audits — all running in this repository's CI. Signed
-  release artifacts are the one part still pending: there is no release pipeline
-  yet (#12), and this row says so rather than claiming a control that has not
-  landed.
+  release artifacts ship through `release.yml` (#12): per-architecture
+  tarballs with checksums, a CycloneDX SBOM and a Sigstore provenance
+  attestation on each digest, built in the SLSA Build L3 lane.
 
 What these controls do **not** prove is stated in §12.
 

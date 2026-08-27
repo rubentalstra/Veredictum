@@ -146,7 +146,7 @@ worth nothing to the people who rely on its verdicts.
 ## Quick start
 
 Work from a clone. The published crate carries the code; the catalogue and
-the vendored specification oracle are 347 MB of data no registry accepts, so
+the vendored specification oracle are over 300 MB of data no registry accepts, so
 `veredictum` reads both as paths you pass it, and this repository is where
 they live.
 

@@ -204,8 +204,8 @@ rustdoc books.
   unfinished work is `// TODO(#NNNN):`, a settled decision is a `// NOTE:`
   citation plus one sentence at most 3 lines, plain `//` runs at most 8 lines,
   and `// SAFETY:` is reserved for `unsafe`. Enforcement:
-  `scripts/checks/comment-style.sh` per-edit through the hook, and per-PR once
-  the CI lanes land.
+  `scripts/checks/comment-style.sh` per-edit through the hook, and per-PR in
+  the CI guards job.
 - **The build pipeline is code, and it is analysed like code** (audited against
   the OWASP GitHub Actions Security Cheat Sheet,
   <https://cheatsheetseries.owasp.org/cheatsheets/GitHub_Actions_Security_Cheat_Sheet.html>).
@@ -216,8 +216,8 @@ rustdoc books.
   context value interpolated into a `run:` block, since it arrives through
   `env:`. A lane that PUBLISHES restores no build cache unless no untrusted run
   can write its cache keys, with the proof recorded at the step. Enforcement is
-  the `zizmor` job at `--min-severity=low` plus CodeQL's `actions` language,
-  both of which arrive with the CI lanes (#2789).
+  the live `zizmor` guard job at `--min-severity=low` plus CodeQL's `actions`
+  language (`codeql.yml`).
 
 ## Recorded posture decisions
 
@@ -227,10 +227,10 @@ rustdoc books.
   material keeps its upstream terms, and each vendored tree carries a
   `PROVENANCE.md` naming its license with the upstream `LICENSE` beside it.
   Dependencies stay license-gated by `deny.toml`.
-- **crates.io publication posture is undecided** and is a checklist item on
-  FerroEHR#2789 (the binary, the schema types as a library, or neither).
-  Until it is decided, the API-shape lints stay live and no stability claim is
-  made anywhere.
+- **crates.io publication posture: decided and executed** — the binary and
+  the library publish as one crate (#5; the console consumes the lib and
+  spawns the pinned binary). The API-shape lints stay live, and the
+  pre-release line makes no stability claim yet.
 
 ## When a lint fights a legitimate case
 
