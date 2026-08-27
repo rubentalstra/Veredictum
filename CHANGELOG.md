@@ -20,6 +20,13 @@ version on.
 
 ### Added
 
+- **`run --progress` (#81).** One machine-parseable stdout line per processed
+  case — `progress: 0/<n>` once the selection is final, then
+  `progress: <k>/<n> <case-id>` — line-flushed so a driver reading through a
+  pipe sees each case as it happens. Off by default: without the flag,
+  existing output is byte-identical. The lib reports the same facts as typed
+  `run::Progress` events through a callback on `execute_run`, a peer of the
+  warning channel, and a unit test pins the line grammar.
 - **The console's run wizard, first half (#65).** Connect: the CDR base URL,
   display name and version label, the authentication choice exactly as the
   ixit's vocabulary (none, basic, bearer), and a probe-before-continue whose

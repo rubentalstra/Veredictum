@@ -18,7 +18,7 @@
 use crate::artifacts::ArtifactSet;
 use crate::exec::driver::HttpDriver;
 use crate::exec::{CaseRecord, RowOutcome, run_case};
-use crate::ids::{CapabilityName, InstanceName, SmOperationRef};
+use crate::ids::{CapabilityName, CaseId, InstanceName, SmOperationRef};
 use crate::ixit::Ixit;
 use crate::model::assertion::assertion_refs;
 use crate::model::case::{CaseCore, PartyRelationshipRequirement};
@@ -48,7 +48,7 @@ pub struct RunReport {
     /// One record per executed case×format, in execution order.
     pub records: Vec<CaseRecord>,
     /// Cases the interpreter could not drive, each with its reason.
-    pub exceptions: Vec<(crate::ids::CaseId, Exception)>,
+    pub exceptions: Vec<(CaseId, Exception)>,
     /// Cases the interpreter drove end-to-end.
     pub interpreter_run: usize,
     /// All active assertion-machinery cases considered.
@@ -851,6 +851,43 @@ fn selection_exception(
     Ok(None)
 }
 
+/// One step of a run, reported as it happens — the driver-facing progress
+/// channel (#81), a peer of the `warn` channel: typed events for a caller to
+/// render, never console text.
+#[derive(Debug, Clone, Copy)]
+pub enum Progress<'a> {
+    /// The selection is final: `total` cases will be processed.
+    Selected {
+        /// How many cases the run will process.
+        total: usize,
+    },
+    /// Case number `completed` of `total` is being processed.
+    Driving {
+        /// The 1-based position in the run.
+        completed: usize,
+        /// How many cases the run processes.
+        total: usize,
+        /// The case being processed.
+        case: &'a CaseId,
+    },
+}
+
+impl Progress<'_> {
+    /// The stable one-line rendering the CLI's `--progress` flag prints —
+    /// machine-parseable, pinned by a unit test, so a driver may parse it.
+    #[must_use]
+    pub fn render_line(&self) -> String {
+        match self {
+            Self::Selected { total } => format!("progress: 0/{total}"),
+            Self::Driving {
+                completed,
+                total,
+                case,
+            } => format!("progress: {completed}/{total} {case}"),
+        }
+    }
+}
+
 /// Execute every runnable case against the ixit's default topology.
 ///
 /// `statement` (the party ICS), when supplied, drives ISO/IEC 9646-style
@@ -866,6 +903,7 @@ pub fn execute(
     set: &ArtifactSet,
     ixit: &Ixit,
     statement: Option<&crate::party::Statement>,
+    progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<RunReport, String> {
     let mut report = RunReport::default();
     // Exclusive-server cases (global-state grounds like an empty template
@@ -878,8 +916,17 @@ pub fn execute(
             Some(crate::vocab::ServerState::Exclusive)
         )
     });
-    for case in ordered {
+    let total = ordered.len();
+    progress(Progress::Selected { total });
+    for (index, case) in ordered.into_iter().enumerate() {
         report.considered += 1;
+        // Reported up front, so a long-driving case is visible WHILE it
+        // drives rather than only once it lands.
+        progress(Progress::Driving {
+            completed: index.saturating_add(1),
+            total,
+            case: &case.id,
+        });
         if !matches!(case.status, CaseStatus::Active) {
             report.exceptions.push((
                 case.id.clone(),
@@ -1070,6 +1117,26 @@ pub fn synthesize_content_case(case: &CaseCore) -> CaseCore {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_progress_line_grammar_is_stable() {
+        // The documented driver-facing grammar (#81): a driver parses these
+        // exact shapes, so a change here is a breaking surface change.
+        let case = CaseId::parse("I_EHR_SERVICE.create_ehr-main").unwrap();
+        assert_eq!(
+            Progress::Selected { total: 14 }.render_line(),
+            "progress: 0/14"
+        );
+        assert_eq!(
+            Progress::Driving {
+                completed: 3,
+                total: 14,
+                case: &case
+            }
+            .render_line(),
+            "progress: 3/14 I_EHR_SERVICE.create_ehr-main"
+        );
+    }
+
     use super::*;
 
     /// The authored `rejected` token covers TWO wire outcomes, and the row's
