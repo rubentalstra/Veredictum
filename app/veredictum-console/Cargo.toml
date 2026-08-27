@@ -37,6 +37,19 @@ leptos = "0.8"
 leptos_meta = "0.8"
 leptos_router = "0.8"
 
+# Pure-Rust SVG icons (no JS, both targets): the Lucide pack alone plus the
+# leptos Icon component — the icondata umbrella crate pulls every pack and
+# bloats the WASM binary (the FerroEHR lesson, #61's ratified stack).
+leptos_icons = "0.7"
+icondata_lu = "0.1"
+icondata_core = "0.1"
+
+# Isomorphic browser-API wrappers (the clipboard copy in the format_view
+# kit). Its `ssr` feature MUST ride the ssr gate below or its browser
+# primitives compile the wasm path into the native binary and panic at SSR
+# (the FerroEHR lesson recorded in .claude/rules/leptos-ui.md §1).
+leptos-use = "0.19"
+
 # server-only (behind `ssr`)
 serde_json = { version = "1", optional = true }
 thiserror = { version = "2", optional = true }
@@ -62,6 +75,7 @@ hydrate = [
 ]
 ssr = [
     "dep:veredictum",
+    "leptos-use/ssr",
     "dep:serde_json",
     "dep:thiserror",
     "leptos/ssr",
@@ -87,6 +101,9 @@ output-name = "veredictum-console"
 site-root = "target/site"
 site-pkg-dir = "pkg"
 tailwind-input-file = "style/tailwind.css"
+# Static assets copied into the site root; seal.svg is a SYMLINK to the one
+# brand original under assets/brand/, so the mark cannot fork.
+assets-dir = "public"
 site-addr = "127.0.0.1:3000"
 reload-port = 3001
 bin-features = ["ssr"]

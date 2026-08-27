@@ -32,9 +32,20 @@
 #[cfg(all(feature = "hydrate", feature = "ssr"))]
 compile_error!("features \"hydrate\" and \"ssr\" cannot be enabled at the same time");
 
+/// The exact engine version this console is built against.
+///
+/// One fact, in lock-step with the manifest's crates.io pin
+/// (`veredictum = "=…"`; the engine module's unit test holds the two
+/// together). The shell footer shows it, and the ssr-side engine seam
+/// refuses a binary reporting anything else.
+pub const ENGINE_PIN: &str = "0.1.0-alpha.4";
+
 pub mod app;
+pub mod components;
 #[cfg(feature = "ssr")]
 pub mod engine;
+pub mod pages;
+pub mod theme;
 
 /// The browser entry point: installs the panic hook so a client-side panic
 /// reports a real stack trace, then hydrates the server-rendered body.

@@ -72,6 +72,9 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/.session-start-head
 .claude/.session-start-time
+# Agent worktrees: the harness checks out isolated worktrees here for
+# delegated implementation work; they are working copies, never content.
+.claude/worktrees/
 
 # ── Documentation site build output ─────────────────────────────────────────
 # `scripts/site/build.sh` assembles the deployable tree here; the Docs workflow

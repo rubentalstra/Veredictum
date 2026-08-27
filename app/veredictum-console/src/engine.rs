@@ -18,11 +18,12 @@ use std::path::{Path, PathBuf};
 
 /// The exact engine version this console is built against.
 ///
-/// It is the same version the manifest pins from crates.io
-/// (`veredictum = "=…"`); a unit test locks the two together, and
-/// [`Engine::verified`] refuses a binary that reports anything else, so the
-/// "one engine" property cannot rot into "whichever binary was on PATH".
-pub const ENGINE_VERSION: &str = "0.1.0-alpha.4";
+/// One fact with the manifest's crates.io pin and the lib-level
+/// [`crate::ENGINE_PIN`] the chrome displays; the unit test below locks the
+/// pin to the manifest, and [`Engine::verified`] refuses a binary that
+/// reports anything else, so the "one engine" property cannot rot into
+/// "whichever binary was on PATH".
+pub const ENGINE_VERSION: &str = crate::ENGINE_PIN;
 
 /// The environment variable that names the engine binary explicitly. Without
 /// it, [`locate`] falls back to `veredictum` on `PATH`.
