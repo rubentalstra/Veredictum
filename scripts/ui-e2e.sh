@@ -128,16 +128,30 @@ CONSOLE_BIN="$ROOT/target/ui-e2e/veredictum-console"
 mkdir -p "$ROOT/target/ui-e2e"
 cp "$ROOT/target/debug/veredictum-console" "$CONSOLE_BIN"
 
-# The driven-run journey spawns the instrument itself, so the harness builds
-# the engine binary and hands it over the same copy-then-point path.
-if [[ -z "${UI_E2E_NO_BUILD:-}" ]]; then
-  echo "── building the engine (cargo build -p veredictum)"
-  cargo build --locked -p veredictum --bin veredictum
-fi
+# The driven-run journey spawns the instrument itself. The console only ever
+# runs the engine version it PINS, so the harness serves exactly that: the
+# workspace build while the workspace version matches the pin, and the
+# published pinned crate during a release-cut window, when the workspace is
+# deliberately one version ahead of what is on crates.io.
+ENGINE_PIN="$(grep -m1 'pub const ENGINE_PIN' app/veredictum-console/src/lib.rs | cut -d'"' -f2)"
+WORKSPACE_VERSION="$(grep -m1 '^version = ' app/veredictum/Cargo.toml | cut -d'"' -f2)"
 ENGINE_BIN="$ROOT/target/ui-e2e/veredictum"
-[[ -e "$ROOT/target/debug/veredictum" ]] \
-  || { echo "FATAL: target/debug/veredictum is missing — drop UI_E2E_NO_BUILD" >&2; exit 1; }
-cp "$ROOT/target/debug/veredictum" "$ENGINE_BIN"
+if [[ "$ENGINE_PIN" == "$WORKSPACE_VERSION" ]]; then
+  if [[ -z "${UI_E2E_NO_BUILD:-}" ]]; then
+    echo "── building the engine (cargo build -p veredictum)"
+    cargo build --locked -p veredictum --bin veredictum
+  fi
+  [[ -e "$ROOT/target/debug/veredictum" ]] \
+    || { echo "FATAL: target/debug/veredictum is missing — drop UI_E2E_NO_BUILD" >&2; exit 1; }
+  cp "$ROOT/target/debug/veredictum" "$ENGINE_BIN"
+else
+  echo "── release-cut window (workspace $WORKSPACE_VERSION, console pins $ENGINE_PIN): installing the published pin"
+  PINNED_ROOT="$ROOT/target/ui-e2e/pinned-$ENGINE_PIN"
+  if [[ ! -x "$PINNED_ROOT/bin/veredictum" ]]; then
+    cargo install veredictum --version "$ENGINE_PIN" --locked --debug --root "$PINNED_ROOT"
+  fi
+  cp "$PINNED_ROOT/bin/veredictum" "$ENGINE_BIN"
+fi
 # An arm64 macOS binary carries an ad-hoc signature that a copy invalidates,
 # and the kernel then SIGKILLs the copy at exec. Re-signing is a no-op
 # elsewhere, because `codesign` exists only on macOS.
