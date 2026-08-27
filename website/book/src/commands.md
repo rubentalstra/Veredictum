@@ -22,7 +22,7 @@ veredictum validate --root <ROOT> [--specs <SPECS>] [--write-report]
 |---|---|
 | `--root <ROOT>` | The artifact root holding `schedule/`, `bindings/`, `vocab/`, `corpus/` and `registers/`. Required |
 | `--specs <SPECS>` | The vendored openEHR specification tree. Supplying it enables Service-Model operation resolution and citation resolution |
-| `--write-report` | Also refresh the wire-surface coverage report from `--specs` |
+| `--write-report` | Also refresh the wire-surface coverage report, at `<ROOT>/coverage-report.md`, from `--specs` |
 
 Every machine check over the catalogue: identifier uniqueness, citation
 resolution, binding completeness, coverage of the enumerated wire surface, and
@@ -31,7 +31,8 @@ per finding and a summary line, and exits `1` if the finding count is not zero.
 
 `--write-report` is off by default on purpose. A check verb that rewrites a file
 on every run is a trap for read-only invocations, so the pipelines that publish
-the coverage report ask for it explicitly.
+the coverage report ask for it explicitly. The report lands at
+`<ROOT>/coverage-report.md`, beside the artifact families it measures.
 
 ## run
 

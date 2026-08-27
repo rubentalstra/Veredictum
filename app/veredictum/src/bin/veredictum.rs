@@ -168,7 +168,7 @@ enum Command {
         /// resolution.
         #[arg(long)]
         specs: Option<PathBuf>,
-        /// Also refresh `docs/conformance/coverage-report.md` from `--specs`.
+        /// Also refresh `<ROOT>/coverage-report.md` from `--specs`.
         ///
         /// OFF by default: `validate` is a check verb, and a check that
         /// mutates the working tree is a trap for read-only and fenced
@@ -558,10 +558,8 @@ fn validate_command(root: &Path, specs: Option<&Path>, write_report: bool) -> Ex
     for finding in &validation.findings {
         println!("{finding}");
     }
-    if write_report
-        && let Some(specs) = specs
-        && let Some(path) = coverage_report_path(specs)
-    {
+    if write_report && let Some(specs) = specs {
+        let path = coverage_report_path(root);
         match write_coverage_report(&validation.loaded.set, specs, &path) {
             Ok(()) => println!("wrote {}", path.display()),
             Err(e) => eprintln!("warning: {e}"),

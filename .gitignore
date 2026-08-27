@@ -76,6 +76,13 @@ CLAUDE.local.md
 # delegated implementation work; they are working copies, never content.
 .claude/worktrees/
 
+# ── Catalogue coverage report ───────────────────────────────────────────────
+# `validate --write-report` regenerates this deterministically from the tree it
+# sits in. Not committed: nothing re-runs the flag on a catalogue change, so a
+# checked-in copy would go stale silently, and a stale coverage record is worse
+# than asking for a fresh one.
+/artifacts/coverage-report.md
+
 # ── Documentation site build output ─────────────────────────────────────────
 # `scripts/site/build.sh` assembles the deployable tree here; the Docs workflow
 # rebuilds it from `website/` on every run, so nothing under it is committed.

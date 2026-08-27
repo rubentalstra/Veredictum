@@ -50,18 +50,16 @@ pub fn validate_tree(root: &Path, specs: Option<&Path>) -> Result<Validation, Er
     Ok(Validation { loaded, findings })
 }
 
-/// Returns where the wire-surface coverage report belongs, derived from the
-/// vendored spec tree it is measured against.
+/// Returns where the wire-surface coverage report belongs for the catalogue
+/// rooted at `root`: `<root>/coverage-report.md`.
 ///
-/// The report lives beside the committed conformance artifacts, two levels
-/// above the spec component directory, so the path follows whichever tree
-/// the caller validated against.
+/// The report enumerates what that artifact tree covers, so it lands beside
+/// the artifact families it measures. Deriving it by climbing out of the spec
+/// tree instead would put it wherever the caller happened to mount the specs,
+/// which is a directory this repository does not own.
 #[must_use]
-pub fn coverage_report_path(specs: &Path) -> Option<PathBuf> {
-    specs
-        .parent()
-        .and_then(Path::parent)
-        .map(|docs| docs.join("conformance/coverage-report.md"))
+pub fn coverage_report_path(root: &Path) -> PathBuf {
+    root.join("coverage-report.md")
 }
 
 /// Renders the wire-surface coverage report and writes it to `path`.
@@ -78,4 +76,68 @@ pub fn write_coverage_report(set: &ArtifactSet, specs: &Path, path: &Path) -> Re
             path: path.to_owned(),
             source,
         })
+}
+
+#[cfg(test)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Result-returning tests in the Book ch11 shape, each asserting; \
+              clippy offers no allow-in-tests knob for this lint"
+)]
+mod tests {
+    use super::{coverage_report_path, write_coverage_report};
+    use crate::artifacts::load_root;
+    use std::path::{Path, PathBuf};
+
+    /// This package's directory is `app/veredictum`, so the repository root is
+    /// two levels above it.
+    fn repo_root() -> PathBuf {
+        Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).to_path_buf()
+    }
+
+    #[test]
+    fn the_report_home_is_a_directory_this_repository_has() {
+        let root = repo_root().join("artifacts");
+        let path = coverage_report_path(&root);
+
+        assert_eq!(path, root.join("coverage-report.md"));
+        let parent = path.parent().expect("a joined path should have a parent");
+        assert!(
+            parent.is_dir(),
+            "the coverage report's home {} must be a directory that exists",
+            parent.display()
+        );
+    }
+
+    #[test]
+    fn the_report_never_escapes_the_root_it_describes() {
+        for root in [
+            Path::new("artifacts"),
+            Path::new("/srv/some/other/catalogue"),
+            Path::new("../relative/root"),
+        ] {
+            let path = coverage_report_path(root);
+            assert!(
+                path.starts_with(root),
+                "{} escaped its root {}",
+                path.display(),
+                root.display()
+            );
+            assert_eq!(path.parent(), Some(root));
+        }
+    }
+
+    #[test]
+    fn write_coverage_report_writes_at_the_derived_path() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let out = assert_fs::TempDir::new()?;
+        let loaded = load_root(&repo_root().join("artifacts"))?;
+        let path = coverage_report_path(out.path());
+
+        write_coverage_report(&loaded.set, &repo_root().join("specs/openehr"), &path)?;
+
+        assert!(path.is_file(), "{} was not written", path.display());
+        assert!(!std::fs::read_to_string(&path)?.is_empty());
+        Ok(())
+    }
 }

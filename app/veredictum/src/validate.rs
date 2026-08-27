@@ -4707,9 +4707,9 @@ fn check_axis3_section_derivation(
 }
 
 /// Render the deterministic coverage report
-/// (`docs/conformance/coverage-report.md`): per-interface SM-operation
-/// status, per-binding outcome/format coverage, and the cross-cutting
-/// wire-surface table.
+/// (`<root>/coverage-report.md`): per-interface SM-operation status,
+/// per-binding outcome/format coverage, and the cross-cutting wire-surface
+/// table.
 ///
 /// Stable ordering, no timestamps — the same inputs always render
 /// byte-identical output.
