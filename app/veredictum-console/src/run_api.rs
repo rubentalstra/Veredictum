@@ -100,6 +100,67 @@ pub struct ClaimSummary {
     pub capabilities: u64,
 }
 
+/// A profile tier the Scope screen can build a claim from.
+///
+/// The four the verdict machinery computes a profile answer for; the
+/// Enterprise rungs have no verdict rule, so they are not offerable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScopeTier {
+    /// Platform CORE.
+    Core,
+    /// Platform STANDARD, which requires CORE.
+    Standard,
+    /// Platform OPTIONS: the optional Platform capabilities, rated when
+    /// present.
+    Options,
+    /// The Security family's basic rung.
+    SecBasic,
+}
+
+impl ScopeTier {
+    /// Every offerable tier, in the order the row renders.
+    pub const ALL: [ScopeTier; 4] = [
+        ScopeTier::Core,
+        ScopeTier::Standard,
+        ScopeTier::Options,
+        ScopeTier::SecBasic,
+    ];
+
+    /// The tier token, the statement's own vocabulary.
+    #[must_use]
+    pub fn token(self) -> &'static str {
+        match self {
+            Self::Core => "CORE",
+            Self::Standard => "STANDARD",
+            Self::Options => "OPTIONS",
+            Self::SecBasic => "SEC-BASIC",
+        }
+    }
+
+    /// The id of the tier's checkbox control.
+    #[must_use]
+    pub fn control_id(self) -> &'static str {
+        match self {
+            Self::Core => "tier-core",
+            Self::Standard => "tier-standard",
+            Self::Options => "tier-options",
+            Self::SecBasic => "tier-sec-basic",
+        }
+    }
+}
+
+/// One tier row: what checking the tier claims, and how much of the catalogue
+/// that claim reaches.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TierRow {
+    /// The tier.
+    pub tier: ScopeTier,
+    /// The capabilities the matrix puts in the tier's member set.
+    pub capabilities: u64,
+    /// The distinct catalogue cases those capabilities gate.
+    pub cases: u64,
+}
+
 /// The probe's verbatim answer.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProbeAnswer {
@@ -144,7 +205,9 @@ pub struct ScopePreview {
 pub mod read {
     //! The component-free ssr readers and writers behind the endpoints.
 
-    use super::{ClaimSummary, DraftView, RunDraft, ScopePreview, StatementRow};
+    use super::{
+        ClaimSummary, DraftView, RunDraft, ScopePreview, ScopeTier, StatementRow, TierRow,
+    };
     use crate::state::ConsoleState;
 
     /// The pasted-claim size cap: far above any real ICS, far below abuse.
@@ -284,26 +347,13 @@ pub mod read {
     /// # Errors
     /// The verbatim read failure when the party tree cannot be listed.
     pub fn statement_rows(state: &ConsoleState) -> Result<Vec<StatementRow>, String> {
-        let mut rows = Vec::new();
-        let entries = std::fs::read_dir(&state.party)
-            .map_err(|e| format!("{}: {e}", state.party.display()))?;
-        for entry in entries {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let candidate = entry.path().join("statement.json");
-            if !candidate.is_file() {
-                continue;
-            }
-            let body = std::fs::read_to_string(&candidate)
-                .map_err(|e| format!("{}: {e}", candidate.display()))?;
-            let statement: veredictum::party::Statement =
-                serde_json::from_str(&body).map_err(|e| format!("{}: {e}", candidate.display()))?;
-            rows.push(StatementRow {
-                path: candidate.display().to_string(),
+        Ok(committed_statements(state)?
+            .into_iter()
+            .map(|(path, statement)| StatementRow {
+                path: path.display().to_string(),
                 product: format!("{} {}", statement.product.name, statement.product.version),
-            });
-        }
-        rows.sort_by(|a, b| a.path.cmp(&b.path));
-        Ok(rows)
+            })
+            .collect())
     }
 
     /// The scope preview over the loaded catalogue.
@@ -332,6 +382,295 @@ pub mod read {
             total: count(total),
             chapters: chapters.into_iter().collect(),
         })
+    }
+
+    /// The lib's tier for one offerable tier — the single mapping every walk
+    /// here goes through.
+    fn lib_tier(tier: ScopeTier) -> veredictum::vocab::Tier {
+        match tier {
+            ScopeTier::Core => veredictum::vocab::Tier::Core,
+            ScopeTier::Standard => veredictum::vocab::Tier::Standard,
+            ScopeTier::Options => veredictum::vocab::Tier::Options,
+            ScopeTier::SecBasic => veredictum::vocab::Tier::SecBasic,
+        }
+    }
+
+    /// The loaded capability matrix.
+    fn capability_matrix(
+        validation: &veredictum::pipeline::catalogue::Validation,
+    ) -> Result<&veredictum::model::capability::CapabilityMatrix, String> {
+        validation
+            .loaded
+            .set
+            .matrix
+            .as_ref()
+            .map(|(_, matrix)| matrix)
+            .ok_or_else(|| {
+                String::from(
+                    "the mounted catalogue carries no capability matrix, so no tier resolves to capabilities",
+                )
+            })
+    }
+
+    /// The tier row: each tier's member capabilities and the distinct cases
+    /// they gate.
+    ///
+    /// The member set is the published lib's own `tier_members` walk, which
+    /// is what the judgement computes each profile verdict from, so the count
+    /// cannot drift from the answer the verdict gives.
+    ///
+    /// # Errors
+    /// The catalogue's verbatim load failure, or the absent capability matrix.
+    pub fn tier_rows(state: &ConsoleState) -> Result<Vec<TierRow>, String> {
+        let validation = state.catalogue.as_ref().as_ref().map_err(Clone::clone)?;
+        let matrix = capability_matrix(validation)?;
+        let mut rows = Vec::with_capacity(ScopeTier::ALL.len());
+        for tier in ScopeTier::ALL {
+            let members = veredictum::verdict::tier_members(lib_tier(tier), matrix);
+            let mut cases: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+            for (_, case) in &validation.loaded.set.cases {
+                if case.capabilities.iter().any(|cap| members.contains(cap)) {
+                    cases.insert(case.id.as_str());
+                }
+            }
+            rows.push(TierRow {
+                tier,
+                capabilities: count(members.len()),
+                cases: count(cases.len()),
+            });
+        }
+        Ok(rows)
+    }
+
+    /// Every committed statement under the mounted party tree, path-sorted
+    /// and parsed through the published lib.
+    ///
+    /// # Errors
+    /// The verbatim read or parse failure.
+    fn committed_statements(
+        state: &ConsoleState,
+    ) -> Result<Vec<(std::path::PathBuf, veredictum::party::Statement)>, String> {
+        let mut found = Vec::new();
+        let entries = std::fs::read_dir(&state.party)
+            .map_err(|e| format!("{}: {e}", state.party.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let candidate = entry.path().join("statement.json");
+            if !candidate.is_file() {
+                continue;
+            }
+            let body = std::fs::read_to_string(&candidate)
+                .map_err(|e| format!("{}: {e}", candidate.display()))?;
+            let statement: veredictum::party::Statement =
+                serde_json::from_str(&body).map_err(|e| format!("{}: {e}", candidate.display()))?;
+            found.push((candidate, statement));
+        }
+        found.sort_by(|a, b| a.0.cmp(&b.0));
+        Ok(found)
+    }
+
+    /// The schedule release a composed claim targets.
+    ///
+    /// The console never invents one: the committed statements under the
+    /// mounted party tree declare it, and they must agree.
+    ///
+    /// # Errors
+    /// The party tree's verbatim read failure, an empty party tree, or
+    /// committed statements that disagree.
+    fn schedule_release(state: &ConsoleState) -> Result<String, String> {
+        let declared: std::collections::BTreeSet<String> = committed_statements(state)?
+            .into_iter()
+            .map(|(_, statement)| statement.schedule_release)
+            .collect();
+        let mut declared = declared.into_iter();
+        match (declared.next(), declared.next()) {
+            (Some(release), None) => Ok(release),
+            (Some(first), Some(second)) => Err(format!(
+                "the committed statements declare different schedule releases ({first} and {second}), so the console cannot pick the one a composed claim targets"
+            )),
+            _ => Err(format!(
+                "{}: no committed statement declares the schedule release a composed claim targets",
+                state.party.display()
+            )),
+        }
+    }
+
+    /// The spec-component versions a composed claim declares.
+    ///
+    /// A statement that declares no version for a component puts every case
+    /// gated on it OUT of scope, because an undeclared version fails the
+    /// `applies` filter by design, and this catalogue dates nearly every case
+    /// to a Reference Model floor. The declaration is therefore derived from
+    /// the catalogue itself: the highest floor its own case and operation
+    /// ranges name, which is the release at which every one of them is in
+    /// scope. The operator sees it in the composed document and may edit it
+    /// down before saving.
+    ///
+    /// # Errors
+    /// When the derived declaration does not satisfy some range after all
+    /// (an upper-bounded range), naming the artifact — a silent narrowing is
+    /// never an acceptable answer.
+    fn catalogue_spec_versions(
+        validation: &veredictum::pipeline::catalogue::Validation,
+    ) -> Result<veredictum::party::SpecVersions, String> {
+        use veredictum::vocab::SpecComponent;
+
+        let set = &validation.loaded.set;
+        let mut floors: std::collections::BTreeMap<SpecComponent, (u64, u64, u64)> =
+            std::collections::BTreeMap::new();
+        let mut raise = |applies: &veredictum::model::case::Applies| {
+            for (component, range) in applies.entries() {
+                for comparator in &range.req().comparators {
+                    let candidate = (
+                        comparator.major,
+                        comparator.minor.unwrap_or(0),
+                        comparator.patch.unwrap_or(0),
+                    );
+                    let floor = floors.entry(component).or_insert((0, 0, 0));
+                    if candidate > *floor {
+                        *floor = candidate;
+                    }
+                }
+            }
+        };
+        for (_, case) in &set.cases {
+            raise(&case.applies);
+        }
+        for (_, binding) in &set.bindings {
+            if let Some(applies) = &binding.applies {
+                raise(applies);
+            }
+        }
+
+        let mut versions = veredictum::party::SpecVersions::default();
+        for (component, (major, minor, patch)) in &floors {
+            let text = format!("{major}.{minor}.{patch}");
+            match component {
+                SpecComponent::Rm => versions.rm = Some(text),
+                SpecComponent::Base => versions.base = Some(text),
+                SpecComponent::Am => versions.am = Some(text),
+                SpecComponent::Aql => versions.aql = Some(text),
+                SpecComponent::ItsRest => versions.its_rest = Some(text),
+                SpecComponent::Term => versions.term = Some(text),
+            }
+        }
+
+        let unsatisfied = set
+            .cases
+            .iter()
+            .map(|(path, case)| (path, Some(&case.applies)))
+            .chain(
+                set.bindings
+                    .iter()
+                    .map(|(path, binding)| (path, binding.applies.as_ref())),
+            )
+            .find(|(_, applies)| applies.is_some_and(|a| !a.satisfied_by(&versions)));
+        if let Some((path, _)) = unsatisfied {
+            return Err(format!(
+                "{}: no single spec-version declaration satisfies every range this catalogue names, so a composed claim cannot be derived from it",
+                path.display()
+            ));
+        }
+        Ok(versions)
+    }
+
+    /// The composed claim's product identifier, derived from the identity the
+    /// Connect step collected.
+    fn identifier_of(name: &str, version: &str) -> String {
+        let slug = |text: &str| {
+            text.chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() {
+                        c.to_ascii_lowercase()
+                    } else {
+                        '-'
+                    }
+                })
+                .collect::<String>()
+        };
+        format!("urn:veredictum:console:{}:{}", slug(name), slug(version))
+    }
+
+    /// Composes the ad-hoc claim for a tier selection.
+    ///
+    /// The product identity is the connection draft's own SUT name and
+    /// version; the claimed capabilities are exactly the published lib's
+    /// member set for the checked tiers, in capability-matrix order. The
+    /// answer is a statement document the operator reads and saves like a
+    /// pasted one — nothing is stored here.
+    ///
+    /// # Errors
+    /// An empty selection, a missing connection draft or product identity,
+    /// the catalogue's load failure, and the schedule-release and
+    /// spec-version derivations above, each verbatim.
+    pub fn compose_claim(state: &ConsoleState, tiers: &[ScopeTier]) -> Result<String, String> {
+        // The selection is normalized against the vocabulary itself, so a
+        // repeated or reordered list from a public endpoint composes the same
+        // claim as the row that sent it.
+        let selected: Vec<ScopeTier> = ScopeTier::ALL
+            .into_iter()
+            .filter(|tier| tiers.contains(tier))
+            .collect();
+        if selected.is_empty() {
+            return Err(String::from(
+                "check at least one tier: a claim with no profile certifies nothing",
+            ));
+        }
+        let validation = state.catalogue.as_ref().as_ref().map_err(Clone::clone)?;
+        let matrix = capability_matrix(validation)?;
+        let (name, version) = {
+            let guard = state.draft.lock().map_err(|e| e.to_string())?;
+            let draft = guard.as_ref().ok_or_else(|| {
+                String::from("no connection draft: complete the Connect step first")
+            })?;
+            (
+                draft.sut_name.trim().to_owned(),
+                draft.sut_version.trim().to_owned(),
+            )
+        };
+        if name.is_empty() || version.is_empty() {
+            return Err(String::from(
+                "the composed claim's product identity is the Connect step's display name and version: fill both in first",
+            ));
+        }
+        let members: std::collections::BTreeSet<String> = selected
+            .iter()
+            .flat_map(|tier| veredictum::verdict::tier_members(lib_tier(*tier), matrix))
+            .map(|name| name.to_string())
+            .collect();
+        let capabilities: Vec<veredictum::ids::CapabilityName> = matrix
+            .entries()
+            .iter()
+            .filter(|(name, _)| members.contains(name.as_str()))
+            .map(|(name, _)| name.clone())
+            .collect();
+        let profiles: Vec<veredictum::vocab::Tier> =
+            selected.iter().copied().map(lib_tier).collect();
+        let statement = veredictum::party::Statement {
+            product: veredictum::party::Product {
+                identifier: identifier_of(&name, &version),
+                name,
+                version,
+                vendor: String::from("unknown"),
+            },
+            schedule_release: schedule_release(state)?,
+            spec_versions: catalogue_spec_versions(validation)?,
+            claims: veredictum::party::Claims {
+                capabilities,
+                profiles,
+            },
+            tech_profiles: Vec::new(),
+            options: Vec::new(),
+            served_extensions: Vec::new(),
+            performance: None,
+            non_functional: std::collections::BTreeMap::new(),
+            evidence: Vec::new(),
+            attestation: None,
+        };
+        let mut document = serde_json::to_string_pretty(&statement)
+            .map_err(|e| format!("the composed claim did not serialize: {e}"))?;
+        document.push('\n');
+        Ok(document)
     }
 
     /// Renders the draft's ixit document.
@@ -496,7 +835,10 @@ pub mod fns {
 
     use leptos::prelude::{ServerFnError, server};
 
-    use super::{AuthChoice, ClaimSummary, DraftView, ProbeAnswer, ScopePreview, StatementRow};
+    use super::{
+        AuthChoice, ClaimSummary, DraftView, ProbeAnswer, ScopePreview, ScopeTier, StatementRow,
+        TierRow,
+    };
 
     /// Probes the connection and, on any answer, stores the draft with these
     /// facts (the probe outcome seed-gates Continue client-side). The secret
@@ -638,6 +980,41 @@ pub mod fns {
             record_exchanges,
         )
         .map_err(ServerFnError::new)
+    }
+
+    /// The four tiers with the capabilities they claim and the cases those
+    /// gate.
+    ///
+    /// # Errors
+    /// The catalogue's verbatim load failure, or the absent capability
+    /// matrix.
+    #[server]
+    pub async fn fetch_tier_counts() -> Result<Vec<TierRow>, ServerFnError> {
+        let state: crate::state::ConsoleState = leptos::prelude::expect_context();
+        super::read::tier_rows(&state).map_err(ServerFnError::new)
+    }
+
+    /// Composes the ad-hoc claim for a tier selection, answering with the
+    /// statement document itself.
+    ///
+    /// The tier list is untrusted input on a public endpoint: it is a closed
+    /// vocabulary, so an unknown token never decodes, and duplicates collapse
+    /// into the same claim. Nothing is stored — the operator saves the
+    /// document through the same schema-validated path a pasted one takes.
+    ///
+    /// The argument is optional because the default URL-encoded server-fn
+    /// encoding carries an empty sequence as an ABSENT field
+    /// (<https://book.leptos.dev/server/25_server_functions.html>), and an
+    /// empty selection has to reach the composer's own refusal rather than a
+    /// deserialization error.
+    ///
+    /// # Errors
+    /// An empty selection, a missing connection draft, and the composer's
+    /// catalogue failures, each verbatim.
+    #[server]
+    pub async fn compose_claim(tiers: Option<Vec<ScopeTier>>) -> Result<String, ServerFnError> {
+        let state: crate::state::ConsoleState = leptos::prelude::expect_context();
+        super::read::compose_claim(&state, &tiers.unwrap_or_default()).map_err(ServerFnError::new)
     }
 
     /// One committed statement's body, for the example fillers.
