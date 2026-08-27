@@ -62,6 +62,9 @@ pub struct RunDraft {
     pub statement_product: Option<String>,
     /// The case-id filter, when any.
     pub filter: Option<String>,
+    /// Whether the run persists its wire exchanges as `transcript.json`
+    /// beside the results (#96). Off unless the operator asks for it.
+    pub record_exchanges: bool,
 }
 
 /// What the client may read back of the draft: no secret, by construction.
@@ -81,6 +84,8 @@ pub struct DraftView {
     pub statement: Option<String>,
     /// The case-id filter, when any.
     pub filter: Option<String>,
+    /// Whether the run will record its wire exchanges.
+    pub record_exchanges: bool,
 }
 
 /// The accepted claim, summarized for the overview the operator reads
@@ -163,6 +168,7 @@ pub mod read {
             probed_ok: draft.probed_ok,
             statement: draft.statement_product.clone(),
             filter: draft.filter.clone(),
+            record_exchanges: draft.record_exchanges,
         })
     }
 
@@ -193,6 +199,7 @@ pub mod read {
         state: &ConsoleState,
         statement_json: Option<String>,
         filter: Option<String>,
+        record_exchanges: bool,
     ) -> Result<Option<ClaimSummary>, String> {
         let summary = statement_json
             .as_deref()
@@ -241,6 +248,7 @@ pub mod read {
         draft.statement_product = summary.as_ref().map(|claim| claim.product.clone());
         draft.statement_json = statement_json;
         draft.filter = filter;
+        draft.record_exchanges = record_exchanges;
         Ok(summary)
     }
 
@@ -399,6 +407,7 @@ pub mod read {
             filter: draft.filter.clone(),
             credentials: std::mem::take(&mut draft.credentials),
             progress: true,
+            record_exchanges: draft.record_exchanges,
         };
         let sut_name = draft.sut_name.clone();
         drop(guard);
@@ -534,6 +543,7 @@ pub mod fns {
                 statement_json: None,
                 statement_product: None,
                 filter: None,
+                record_exchanges: false,
             },
         )
         .map_err(ServerFnError::new)?;
@@ -611,12 +621,14 @@ pub mod fns {
     pub async fn save_scope(
         statement_json: Option<String>,
         filter: Option<String>,
+        record_exchanges: bool,
     ) -> Result<Option<ClaimSummary>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         super::read::save_scope(
             &state,
             statement_json.filter(|s| !s.trim().is_empty()),
             filter.filter(|f| !f.is_empty()),
+            record_exchanges,
         )
         .map_err(ServerFnError::new)
     }

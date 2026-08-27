@@ -76,6 +76,7 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
             statement: None,
             filter: Some(String::from(SCOPE_FILTER)),
             progress: false,
+            record_exchanges: false,
             credentials: vec![
                 Credential {
                     name: String::from("GATE_SUT_USER"),
@@ -141,6 +142,7 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
             statement_json: None,
             statement_product: None,
             filter: None,
+            record_exchanges: false,
         },
     )
     .map_err(|e| format!("save: {e}"))?;
@@ -182,6 +184,7 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
             statement_json: None,
             statement_product: None,
             filter: None,
+            record_exchanges: false,
         }))),
         jobs: veredictum_console::run_job::JobSlot::default(),
     }
@@ -200,7 +203,7 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
     let state = drafted_state();
     let body =
         std::fs::read_to_string(engine_gate::repo_root().join("party/ehrbase/statement.json"))?;
-    let summary = veredictum_console::run_api::read::save_scope(&state, Some(body), None)
+    let summary = veredictum_console::run_api::read::save_scope(&state, Some(body), None, false)
         .map_err(|e| format!("a committed example must pass: {e}"))?
         .ok_or("a pasted claim must yield a summary")?;
     assert_eq!(summary.product, "EHRbase 2.34.0");
@@ -217,18 +220,23 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
             r#"{"product":{"name":"x","version":"1","vendor":"v","identifier":"urn:x"},"schedule_release":"cnf-2.0-w2","claims":{},"stray_key":true}"#,
         )),
         None,
+        false,
     );
     assert!(
         stray.is_err(),
         "an undeclared key must be refused by the schema"
     );
 
-    let not_json =
-        veredictum_console::run_api::read::save_scope(&state, Some(String::from("not json")), None);
+    let not_json = veredictum_console::run_api::read::save_scope(
+        &state,
+        Some(String::from("not json")),
+        None,
+        false,
+    );
     assert!(not_json.is_err(), "non-JSON must be refused");
 
     // The honest no-claim run stays legal: nothing pasted, no summary.
-    let none = veredictum_console::run_api::read::save_scope(&state, None, None)
+    let none = veredictum_console::run_api::read::save_scope(&state, None, None, false)
         .map_err(|e| format!("no-claim save: {e}"))?;
     assert_eq!(none, None);
     Ok(())

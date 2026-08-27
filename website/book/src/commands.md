@@ -43,7 +43,7 @@ report.
 veredictum run --root <ROOT> --ixit <IXIT> --out <OUT> \
     [--sut-name <NAME>] [--sut-version <VERSION>] \
     [--filter <SUBSTRING>] [--statement <STATEMENT>] \
-    [--sign-key <KEY>]
+    [--record-exchanges] [--sign-key <KEY>]
 ```
 
 | Flag | Meaning |
@@ -57,6 +57,7 @@ veredictum run --root <ROOT> --ixit <IXIT> --out <OUT> \
 | `--statement <STATEMENT>` | The party statement. When supplied, an option-gated case whose option the statement does not declare is recorded not-applicable at drive time instead of driven |
 | `--sign-key <KEY>` | An armored OpenPGP secret key. Seals the emitted documents with `record-manifest.json` and its detached signature |
 | `--sign-passphrase <PASSPHRASE>` | The passphrase unlocking `--sign-key`, read from `VEREDICTUM_SIGN_PASSPHRASE` |
+| `--record-exchanges` | Persist the wire exchanges beside `results.json` as `transcript.json`. Off by default. The artifact records a SUT's response bodies verbatim, so it can carry real patient data: it is operator-controlled output, never a log, and belongs wherever the record itself is stored. The `authorization` request header's value is withheld. With `--sign-key` the sealed manifest covers the transcript too |
 | `--progress` | Print one machine-parseable line per processed case: `progress: 0/<n>` once the selection is final, then `progress: <k>/<n> <case-id>` as each case is processed. Off by default, so existing output is byte-identical without it |
 
 Drives every applicable case and records the exchange. Exits `1` if any case

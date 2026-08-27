@@ -43,6 +43,7 @@ pub mod render;
 pub mod run;
 pub mod schema;
 pub mod stress;
+pub mod transcript;
 pub mod validate;
 pub mod verdict;
 pub mod vocab;
