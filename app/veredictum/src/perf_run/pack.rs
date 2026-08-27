@@ -58,7 +58,7 @@ pub struct PackTemplate {
     /// The committed example composition skeleton.
     pub skeleton: Value,
     /// The numeric-leaf ranges read out of `opt_xml`, which bound the
-    /// per-arrival jitter [`stamped`] applies to the skeleton.
+    /// per-arrival jitter `stamped` applies to the skeleton.
     pub constraints: LeafConstraints,
 }
 
