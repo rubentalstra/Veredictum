@@ -67,7 +67,7 @@ fn pilot_world_is_clean_under_all_gates() {
 }
 
 /// The two 1.1.0-dated header rules are scoped TOTALLY, by ONE mechanism
-/// (issue #627): the affected set is DERIVED from the committed bindings —
+/// (issue FerroEHR#627): the affected set is DERIVED from the committed bindings —
 /// never a hand-kept list that a new binding can quietly escape — and every
 /// member carries the `applies: { its_rest: ">=1.1.0" }` floor.
 ///

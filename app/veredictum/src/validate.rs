@@ -16,7 +16,7 @@
 #![allow(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694); the carriers here are cfg(test)-only, so \
+              exchanges) — not the application (FerroEHR#1694); the carriers here are cfg(test)-only, so \
               #[expect] would be unfulfilled in the non-test build"
 )]
 
@@ -66,13 +66,13 @@ pub enum CheckId {
     /// `<sm_operation>[-<variant>]`.
     BindingFilename,
     /// Every `with:` key a flow step authors is CONSUMED by the binding the
-    /// driver would select for it (issue #1830): an argument no request form
+    /// driver would select for it (issue FerroEHR#1830): an argument no request form
     /// reads is decoration the SUT never sees, so the case's assertion about
     /// it passes vacuously — the whole reason the gate exists.
     StepArguments,
     /// Every `pattern:` header-matcher placeholder a driven outcome declares
-    /// can RESOLVE at the step it is judged on (issue #1852, the un-evaluable
-    /// side of #1830): a name that is neither a structural token nor a
+    /// can RESOLVE at the step it is judged on (issue FerroEHR#1852, the un-evaluable
+    /// side of FerroEHR#1830): a name that is neither a structural token nor a
     /// variable in scope refuses at drive time, reddening the row on the
     /// runner's own resolution failure instead of on the SUT's behaviour.
     MatcherPlaceholder,
@@ -92,7 +92,7 @@ pub enum CheckId {
     /// reconciliation of every performance workload (write share inside the
     /// 10:1..50:1 derivation band; stage templates resolve in the corpus).
     JourneyEnvelope,
-    /// Claim completeness (issue #622): a capability a committed party
+    /// Claim completeness (issue FerroEHR#622): a capability a committed party
     /// statement claims has ≥ 1 verdict-bearing catalogue case, and a
     /// capability whose every case resolves excused/deselected names the
     /// register entry that adjudicated that. Declaring a capability IS the
@@ -100,7 +100,7 @@ pub enum CheckId {
     /// even enter a run — the gate is at validate time, before any SUT is
     /// composed.
     ClaimCompleteness,
-    /// Guard scope (issue #2378): a `guards:` entry may not state a
+    /// Guard scope (issue FerroEHR#2378): a `guards:` entry may not state a
     /// CAPABILITY-scoped selection rule. That rule is global, implemented once
     /// in the runner's selection over the case's own `capabilities:` list; a
     /// prose restatement either duplicates it (free to drift, undetectably) or
@@ -108,23 +108,23 @@ pub enum CheckId {
     /// nothing implements.
     GuardScope,
     /// A party statement's declared `served_extensions` families (issue
-    /// #2377): each resolves in the catalogue's outward wire-surface axis and
+    /// FerroEHR#2377): each resolves in the catalogue's outward wire-surface axis and
     /// is declared once. A statement publishes the route families ITS OWN
     /// party declares — never the catalogue's global table, which is one
     /// product's own design and a false claim about any other vendor.
     ServedExtensionDeclaration,
-    /// Per-capability case-count floors (issue #622): one token case never
+    /// Per-capability case-count floors (issue FerroEHR#622): one token case never
     /// certifies a capability. The capability matrix records each row's
     /// `min_cases`; a battery below its floor is a finding naming the
     /// shortfall. Floors ratchet UP only.
     CapabilityDepth,
-    /// Measured-workload coverage (issue #622): every claimed capability is
+    /// Measured-workload coverage (issue FerroEHR#622): every claimed capability is
     /// either exercised by the hospital-simulation journeys the performance
     /// workloads name, or carries a register-linked `workload_exclusion` the
     /// certificate renders. A bare `NO — catalogue gap` row is an undecided
     /// hole, never a publishable one.
     WorkloadCoverage,
-    /// Realization scoping (issue #623): an `extension` binding drives a
+    /// Realization scoping (issue FerroEHR#623): an `extension` binding drives a
     /// route no openEHR specification governs, so it is fenced off from every
     /// released-wire judgement — its family and path must resolve in the
     /// `served_extensions` axis, its adjudication must resolve in the
@@ -133,7 +133,7 @@ pub enum CheckId {
     /// bites too: an `extension` matrix row whose cases drive released wire
     /// is mislabelled, and understates the conformance the product earned.
     RealizationScope,
-    /// Total wire-surface coverage (issue #271): every spec-defined wire
+    /// Total wire-surface coverage (issue FerroEHR#271): every spec-defined wire
     /// behaviour — SM operations (Axis 1), per-binding outcome/format branches
     /// (Axis 2), cross-cutting behaviours (Axis 3) — is exercised by ≥ 1 case
     /// or carries an adjudicated `vocab/wire_surface.yaml` exception. Silence
@@ -285,7 +285,7 @@ pub fn validate(ctx: &Context<'_>) -> Vec<Finding> {
     findings
 }
 
-// ── claim completeness, depth floors, workload coverage (issue #622) ────────
+// ── claim completeness, depth floors, workload coverage (issue FerroEHR#622) ────────
 
 /// How a catalogue case will resolve for verdict purposes, as far as the
 /// CATALOGUE alone can say — the static twin of [`crate::verdict::Evidence`].
@@ -473,7 +473,7 @@ fn check_guard_scope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
         for guard in &case.guards {
             let lowered = guard.to_lowercase();
             if declaration_phrases.iter().any(|p| lowered.contains(p)) {
-                // The INSTANCE shape (#2378's sibling, #2389): the typed shape
+                // The INSTANCE shape (FerroEHR#2378's sibling, FerroEHR#2389): the typed shape
                 // is the flow's own `on:` addressing — `run.rs` excuses a case
                 // addressing an instance the party does not declare, with the
                 // citation, once and globally.
@@ -645,7 +645,7 @@ fn check_capability_depth(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     }
 }
 
-// ── realization scoping (issue #623) ────────────────────────────────────────
+// ── realization scoping (issue FerroEHR#623) ────────────────────────────────────────
 
 /// A route path with every `{parameter}` segment collapsed to `{}` — the shape
 /// two artifacts can be compared on when each names its parameters locally.
@@ -692,7 +692,7 @@ fn drives_only_extension_bindings(set: &ArtifactSet, case: &CaseCore) -> bool {
 /// 3. a capability whose cases drive only extension bindings is
 ///    `realization: extension` in the matrix — and, since
 ///    `check_realization_scoping` forbids `required` there, no openEHR
-///    profile tier can ever rest on it (owner ruling 2026-07-28, #610);
+///    profile tier can ever rest on it (owner ruling 2026-07-28, FerroEHR#610);
 /// 4. the reverse: an `extension` row whose cases drive released wire is
 ///    mislabelled and understates what the product earned.
 fn check_realization_scope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
@@ -1817,10 +1817,10 @@ impl<'a> SpecIndex<'a> {
     /// `README.adoc` stubs while the released XSD bundles live at
     /// `crates/openehr-its/schemas/xml/` as the canonical-XML codec's input —
     /// an XSD-element citation therefore resolved nowhere. Adjudication
-    /// (issue #1833): the gate learns the bundle as a SECOND ROOT — one
+    /// (issue FerroEHR#1833): the gate learns the bundle as a SECOND ROOT — one
     /// vendored copy, two readers — rather than the bundle being copied into
     /// the docs tree, which would fork the schemas the codec and the
-    /// citations speak about. The same law (issue #2545) covers **ITS-JSON**
+    /// citations speak about. The same law (issue FerroEHR#2545) covers **ITS-JSON**
     /// (the validation-oracle schema at `crates/openehr-its/schemas/json/`)
     /// and **ITS-REST**'s released OAS BUNDLE artifacts
     /// (`crates/openehr-its/vendor/rest-oas/` — the assembled
@@ -2162,7 +2162,7 @@ fn table_cell_label(line: &str) -> Option<String> {
 /// what an ITS-XML citation addresses with `§`: a globally declared element
 /// (`§composition`), a `complexType` (`§COMPOSITION`), an attribute or a
 /// group. A schema is the one vendored artifact with no headings, so without
-/// this its `§` citations could never resolve (issue #1833).
+/// this its `§` citations could never resolve (issue FerroEHR#1833).
 ///
 /// Deliberately a lexical scan, not an XML parse: the gate needs the set of
 /// declared names, and an XSD's `name` attribute is unambiguous — nothing
@@ -2622,8 +2622,8 @@ fn check_citations(
             }
             // Each root is resolved independently and the hits pooled: an
             // ITS-XML citation may name a docs-tree chapter OR an XSD of the
-            // vendored schema bundle (issue #1833). Brace shorthands expand
-            // first, and EVERY variant must resolve (issue #2545) — a
+            // vendored schema bundle (issue FerroEHR#1833). Brace shorthands expand
+            // first, and EVERY variant must resolve (issue FerroEHR#2545) — a
             // half-phantom `{a,b}` still fails, naming the missing variant.
             let mut documents: Vec<(&PathBuf, PathBuf)> = Vec::new();
             let mut unmatched: Option<String> = None;
@@ -2713,7 +2713,7 @@ const REGISTER_CLAUSE_PREFIX: &str = "register amb-";
 ///
 /// 1. **Every clause is accounted for.** [`citation_clauses`] silently DROPS
 ///    a fragment that does not open with a known component token — that is
-///    what let these fields escape the citation gate (issue #1832): a
+///    what let these fields escape the citation gate (issue FerroEHR#1832): a
 ///    derivation written `SM x.adoc … vs ITS-REST y.yaml …` reads as ONE
 ///    clause, so the ITS-REST half was never checked, and a typo in a
 ///    component token vanished with it. Here a fragment must open with a
@@ -2785,7 +2785,7 @@ fn check_binding_sources(
     }
 }
 
-/// The ambiguity register's own `source` citations resolve (issue #2545).
+/// The ambiguity register's own `source` citations resolve (issue FerroEHR#2545).
 ///
 /// A register entry is a claim that the released text is silent, and its
 /// `source` field is where that claim grounds — so a phantom file, a moved
@@ -2839,7 +2839,7 @@ fn check_corpus_spec_refs(set: &ArtifactSet, spec: &SpecIndex<'_>, findings: &mu
 const BODY_ROLE_ALIASES: [&str; 2] = ["composition", "opt"];
 /// The two keys the bundled-CONTRIBUTION construct reads when the declared
 /// body role is `contribution`: the version set and the client-supplied
-/// commit audit (the latter is what issue #1818 wired through).
+/// commit audit (the latter is what issue FerroEHR#1818 wired through).
 const CONTRIBUTION_KEYS: [&str; 2] = ["versions", "audit"];
 
 /// Every `${name}` a template addresses as a capture/handle.
@@ -3037,7 +3037,7 @@ fn consumed_with_keys(
 /// all — `crate::run::synthesize_content_case` turns its decision table into
 /// the generate→commit→expect flow the driver actually runs — so the gates
 /// judge that synthesis instead of skipping the case, which is how a content
-/// case's one driven step used to escape both of them (issue #1903).
+/// case's one driven step used to escape both of them (issue FerroEHR#1903).
 fn driven_case(case: &CaseCore) -> std::borrow::Cow<'_, CaseCore> {
     if matches!(case.kind, CaseKind::Content) {
         std::borrow::Cow::Owned(crate::run::synthesize_content_case(case))
@@ -3078,7 +3078,7 @@ fn step_binding<'a>(
 }
 
 /// Every `pattern:` header matcher a driven step could be judged by resolves
-/// (issue #1852).
+/// (issue FerroEHR#1852).
 ///
 /// `crate::exec::headers::resolve_placeholders` substitutes a `<name>`
 /// placeholder from exactly two sources: the closed STRUCTURAL vocabulary
@@ -3160,7 +3160,7 @@ fn check_matcher_placeholders(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     }
 }
 
-/// No flow step authors a `with:` key its binding never reads (issue #1830).
+/// No flow step authors a `with:` key its binding never reads (issue FerroEHR#1830).
 ///
 /// A `with:` key is an ARGUMENT, and an argument the request form does not
 /// consume never leaves the runner: the SUT is driven exactly as if the key
@@ -3446,7 +3446,7 @@ mod binding_filename_tests {
             )
             .is_empty()
         );
-        // The exact drift #558 caught: an abbreviated stem for a longer
+        // The exact drift FerroEHR#558 caught: an abbreviated stem for a longer
         // declared variant.
         let findings = findings_for("I_EHR_SERVICE.create_ehr-with_id.yaml", Some("with_ehr_id"));
         assert_eq!(findings.len(), 1);
@@ -3530,7 +3530,7 @@ mod matcher_placeholder_tests {
         findings
     }
 
-    /// The #1852 vocabulary gap, at VALIDATE time: a placeholder that is
+    /// The FerroEHR#1852 vocabulary gap, at VALIDATE time: a placeholder that is
     /// neither a structural token nor in the step's template scope guarantees
     /// a refused matcher at drive time, and the parse-time compile probe
     /// (which wildcards every placeholder) cannot see it.
@@ -3575,7 +3575,7 @@ mod matcher_placeholder_tests {
 
     /// A CONTENT case authors no flow — the driver runs
     /// `crate::run::synthesize_content_case`'s generate→commit→expect flow —
-    /// so both step-level gates judge THAT (issue #1903). `content_path` is
+    /// so both step-level gates judge THAT (issue FerroEHR#1903). `content_path` is
     /// the create binding's request path: dropping `{ehr_id}` from it makes
     /// the synthesized `with.ehr_id` unread, which is the `step-arguments`
     /// half of the same escape.
@@ -3683,7 +3683,7 @@ fn check_corpus_integrity(set: &ArtifactSet, findings: &mut Vec<Finding>) {
                 );
             }
         }
-        // A DECLARED view must have a REGISTERED evaluator (#971): the
+        // A DECLARED view must have a REGISTERED evaluator (FerroEHR#971): the
         // resolver errors on an unregistered view only at RUN time, so the
         // cross-check lives here where a dead declaration fails before any
         // SUT is composed.
@@ -3753,7 +3753,7 @@ fn check_vocab_drift(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     }
 }
 
-// ── surface coverage (issue #271) ───────────────────────────────────────────
+// ── surface coverage (issue FerroEHR#271) ───────────────────────────────────────────
 
 /// The platform interfaces the CNF catalogue speaks — the Axis-1 SM-operation
 /// enumeration domain. The set is the openEHR SM Platform Service Model's
@@ -4731,7 +4731,7 @@ pub fn render_coverage_report(set: &ArtifactSet, spec_root: Option<&Path>) -> St
     let mut out = String::new();
     out.push_str(
         "# CNF wire-surface coverage report\n\n\
-         Generated by `veredictum validate --specs …` (the `surface-coverage` gate, issue #271). \
+         Generated by `veredictum validate --specs …` (the `surface-coverage` gate, issue FerroEHR#271). \
          Deterministic — regenerated in place, never hand-edited. The wire surface is enumerated \
          from the RELEASED spec components (the SM platform interfaces + the ITS-REST docs text), \
          never the vendored OAS. Every un-exercised behaviour is either a covering case or a \
@@ -4908,7 +4908,7 @@ mod surface_tests {
     use super::*;
 
     /// The Axis-1 enumeration source is the vendored SM class tree, never the
-    /// OAS (exit criterion 5, issue #271; owner ruling 2026-07-24). The path
+    /// OAS (exit criterion 5, issue FerroEHR#271; owner ruling 2026-07-24). The path
     /// [`sm_class_file`] builds is under `SM/docs/UML/classes/` and names no
     /// OAS artifact.
     #[test]
@@ -4996,7 +4996,7 @@ h|*1..1*\n\
         findings
     }
 
-    /// The register-source convention (#2545): prose fragments pass, citation
+    /// The register-source convention (FerroEHR#2545): prose fragments pass, citation
     /// clauses resolve, and a register-shaped mix of both is clean when its
     /// citations are real.
     #[test]
@@ -5016,7 +5016,7 @@ h|*1..1*\n\
 
     /// A register source with NO citation clause at all is accused through
     /// the unknown-component fallback — a silence claim must ground on at
-    /// least one resolvable citation (#2545).
+    /// least one resolvable citation (FerroEHR#2545).
     #[test]
     fn register_source_without_any_citation_clause_is_accused() {
         let dir = spec_tree_fixture();
@@ -5027,7 +5027,7 @@ h|*1..1*\n\
     }
 
     /// Seeded defects a register source must fail on: a phantom document and
-    /// a phantom section in a real document (#2545).
+    /// a phantom section in a real document (FerroEHR#2545).
     #[test]
     fn register_source_phantom_document_and_section_fail() {
         let dir = spec_tree_fixture();
@@ -5042,7 +5042,7 @@ h|*1..1*\n\
     }
 
     /// `{a,b}` brace shorthands expand — every variant must resolve, so a
-    /// half-phantom shorthand still fails, naming the missing variant (#2545).
+    /// half-phantom shorthand still fails, naming the missing variant (FerroEHR#2545).
     #[test]
     fn brace_shorthand_expands_and_a_half_phantom_variant_fails() {
         let dir = spec_tree_fixture();
@@ -5090,7 +5090,7 @@ h|*1..1*\n\
         dir
     }
 
-    /// ITS-XML is the one component with TWO roots (issue #1833): the docs
+    /// ITS-XML is the one component with TWO roots (issue FerroEHR#1833): the docs
     /// tree carries only prose, the released XSDs are vendored once under
     /// `crates/openehr-its/schemas/xml`, and a citation of an XSD element
     /// must resolve without the bundle being duplicated into the docs tree.
@@ -5198,7 +5198,7 @@ h|*1..1*\n\
     fn spec_ref_gate_refuses_a_phantom_document() {
         let dir = spec_tree_fixture();
         let spec = SpecIndex::new(dir.path());
-        // Seeded defect: the chapter number does not exist. The pre-#1807
+        // Seeded defect: the chapter number does not exist. The pre-FerroEHR#1807
         // gate passed this on the `ehr_extract` token alone.
         let findings = citation_findings(
             "RM ehr_extract master99-invented_package §Version Specification",
@@ -5228,7 +5228,7 @@ h|*1..1*\n\
         let dir = spec_tree_fixture();
         let spec = SpecIndex::new(dir.path());
         // Seeded defect: the document resolves, the section does not — the
-        // phantom-citation class (#1738): a real chapter plus a §heading that
+        // phantom-citation class (FerroEHR#1738): a real chapter plus a §heading that
         // exists nowhere in it.
         let findings = citation_findings(
             "RM ehr_extract master04-common_package §Invented Section",
@@ -5248,7 +5248,7 @@ h|*1..1*\n\
     }
 
     /// A binding `extension`/`unrealized` `source` is a DERIVATION, and every
-    /// clause of it is read (issue #1832): before this gate a derivation
+    /// clause of it is read (issue FerroEHR#1832): before this gate a derivation
     /// written `SM x.adoc … vs ITS-REST y.yaml …` was ONE clause to
     /// [`citation_clauses`], so the ITS-REST half — and any typo in it —
     /// never reached the resolver.
@@ -5371,7 +5371,7 @@ h|*1..1*\n\
     /// A key every request path reads is not accused: a path param, a
     /// declared query parameter, and the two keys the bundled-CONTRIBUTION
     /// construct reads — `versions` and `audit`, the client-supplied
-    /// committal metadata issue #1818 wired through.
+    /// committal metadata issue FerroEHR#1818 wired through.
     #[test]
     fn step_arguments_gate_credits_every_read_key() {
         let out = step_argument_findings(
@@ -5388,7 +5388,7 @@ h|*1..1*\n\
 
     /// A `with:` key the driver reads on no request path never reaches the
     /// SUT, so anything the case asserts about it passes vacuously (issue
-    /// #1830 — the live instance was the SEC audit case's client-supplied
+    /// FerroEHR#1830 — the live instance was the SEC audit case's client-supplied
     /// `audit.time_committed`, dropped for its whole life).
     ///
     /// The seeded defect is that very block on a binding whose body role is

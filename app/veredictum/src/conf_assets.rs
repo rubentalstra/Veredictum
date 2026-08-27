@@ -924,7 +924,7 @@ mod tests {
         assert!(a.contains("ev-failed"));
         assert!(a.contains('✕'));
         // The unmapped capability renders as not-evidenced with its glyph
-        // (the former no-cases state — variant deleted, #626).
+        // (the former no-cases state — variant deleted, FerroEHR#626).
         assert!(a.contains("ev-not-evidenced"));
         assert!(a.contains('○'));
         // The LEGEND carries every evidence state the grid can render —

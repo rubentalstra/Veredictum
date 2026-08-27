@@ -4,7 +4,7 @@
 //! Per-row OPT synthesis for the *structural* content families, plus the
 //! single dispatch entry the driver calls for every synthesized content row.
 //!
-//! Issue #228: a content decision table whose `constraint_context.constraint_columns`
+//! Issue FerroEHR#228: a content decision table whose `constraint_context.constraint_columns`
 //! name constraint-axis columns needs one OPT per row (the archetype/template
 //! constraint varies per row, so no single baked template makes every row's
 //! verdict correct). This module owns the STRUCTURAL families — the ones whose
@@ -27,7 +27,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use crate::exec::opt_synth::{self, SynthError};

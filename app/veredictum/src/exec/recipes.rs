@@ -12,7 +12,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use serde_json::{Value, json};
@@ -155,7 +155,7 @@ pub fn deterministic_ehr_id(case: &str, row_index: usize) -> String {
 
 /// The deterministic per-row constraint-template id for a content case.
 ///
-/// For a case declaring `constraint_context.constraint_columns` (issue #228)
+/// For a case declaring `constraint_context.constraint_columns` (issue FerroEHR#228)
 /// the runner
 /// synthesizes one OPT per decision-table row and uploads it under this id, and
 /// the row's committed carrier stamps the same id into
@@ -1238,7 +1238,7 @@ mod tests {
 
     #[test]
     fn structural_rm_class_builds_per_row_carrier() {
-        // Issue #228: a structural rm_class no longer injects an ELEMENT.value —
+        // Issue FerroEHR#228: a structural rm_class no longer injects an ELEMENT.value —
         // it builds a per-row-shaped carrier (here `content_count` content items)
         // committed against the per-row synthesized cardinality OPT.
         let c = cols(&["cardinality", "content_count", "expected"]);

@@ -12,7 +12,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use serde::de::Error as DeError;
@@ -118,7 +118,7 @@ pub enum StripRule {
 /// version in different case — BASE `master05` §"Composite Identifiers and
 /// Case" makes two identifiers "identical apart from case … identify the
 /// same thing"), which the reference grammar itself cannot express
-/// (issue #403).
+/// (issue FerroEHR#403).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum TransformRule {
     /// The leading `object_id` — the `VERSIONED_OBJECT` identifier.

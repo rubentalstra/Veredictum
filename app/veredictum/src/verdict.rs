@@ -23,7 +23,7 @@
 #![allow(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694); the carriers here are cfg(test)-only, so \
+              exchanges) — not the application (FerroEHR#1694); the carriers here are cfg(test)-only, so \
               #[expect] would be unfulfilled in the non-test build"
 )]
 
@@ -68,7 +68,7 @@ pub enum Evidence {
     /// (all not-applicable / skipped / not driven / errored / excused) — OR
     /// the catalogue names no case at all. This is the WHOLE not-evidenced
     /// space: the former `Unrealized` and `NoCases` variants are DELETED
-    /// (#626, the final #610 ratchet) because the states they excused are
+    /// (FerroEHR#626, the final FerroEHR#610 ratchet) because the states they excused are
     /// unrepresentable now — the claim-completeness gate refuses a claimed
     /// capability with zero verdict-bearing cases before any SUT composes,
     /// and every excused claim is realized or corrected. The
@@ -81,7 +81,7 @@ pub enum Evidence {
     /// ever selected. Distinct from `NotEvidenced`, which means CLAIMED and
     /// unevidenced: the matrix row is published for every capability (the
     /// matrix is the Profiles book as data, not a claim list), so without this
-    /// token an unclaimed row reads under a claimed party's token (#2363).
+    /// token an unclaimed row reads under a claimed party's token (FerroEHR#2363).
     /// It satisfies no tier — a claimed profile whose required capability is
     /// unclaimed still fails, exactly as before.
     NotClaimed,
@@ -92,7 +92,7 @@ pub enum Evidence {
 ///
 /// The headline `Evidence` is a single worst-wins token, so an inconclusive
 /// row inside a capability that also has passes is invisible in it (issue
-/// #629: 98 errored rows contributed nothing a reader of the report could
+/// FerroEHR#629: 98 errored rows contributed nothing a reader of the report could
 /// see). The tally is published beside the token so an inconclusive — which
 /// is never a SUT failure, but is also never evidence of conformance — is
 /// always countable, and a real divergence can never hide behind an errored
@@ -271,7 +271,7 @@ pub fn compute(
     // being certified — stale results, or a run driven without the statement.
     // Surfaced as a review finding, never silently tolerated (a narrower
     // recorded profile deselects failed rows: the false-green shape found on
-    // the #288 convergence run, 2026-07-28).
+    // the FerroEHR#288 convergence run, 2026-07-28).
     if let Some(claimed) = statement
         .tech_profiles
         .iter()
@@ -710,7 +710,7 @@ fn capability_evidence(
         return Evidence::Passed;
     }
     // All-excused, nothing-selected, and no-case-at-all are ONE state now:
-    // not evidenced (#626 — the excuse variants are deleted; the
+    // not evidenced (FerroEHR#626 — the excuse variants are deleted; the
     // claim-completeness gate already refuses the catalogue shapes that
     // used to need them).
     Evidence::NotEvidenced
@@ -788,7 +788,7 @@ fn required_all_passed(
         .iter()
         .filter(|(_, e)| e.required && tiers.contains(&e.tier))
         .all(|(name, _)| {
-            // ABSOLUTE (#626): only executed passing evidence satisfies a
+            // ABSOLUTE (FerroEHR#626): only executed passing evidence satisfies a
             // required capability — no excuse arm. A tier claimed without
             // the evidence FAILS, whoever the party is.
             matches!(evidence_of(caps, name), Some(Evidence::Passed))
@@ -927,7 +927,7 @@ mod tests {
         serde_json::from_value(value).unwrap()
     }
 
-    /// The System-manifest advertisement check (#634): a served
+    /// The System-manifest advertisement check (FerroEHR#634): a served
     /// `restapi_specs_version` that disagrees with the statement's
     /// `spec_versions.its_rest` is a static-review finding; agreement (or an
     /// absent member — it is optional in the released `Options` schema)
@@ -1149,7 +1149,7 @@ mod tests {
     #[test]
     fn no_cases_coverage_prints() {
         // No catalogue case names AqlBasic -> the whole not-evidenced space
-        // is one variant now (#626); selected/driven zero. The shape itself
+        // is one variant now (FerroEHR#626); selected/driven zero. The shape itself
         // (a claim with zero cases) is refused upstream by the
         // claim-completeness gate before any SUT composes.
         let cases: Vec<CaseCore> = Vec::new();
@@ -1194,7 +1194,7 @@ mod tests {
     }
 
     /// An UNCLAIMED capability reads `not_claimed`, never `not_evidenced`
-    /// (#2363): the published grid carries the whole matrix, and
+    /// (FerroEHR#2363): the published grid carries the whole matrix, and
     /// `not_evidenced` means claimed-and-unevidenced. The distinction is
     /// presentational only — neither token satisfies a tier.
     #[test]

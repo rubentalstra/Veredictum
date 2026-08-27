@@ -11,7 +11,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (#1694)"
+              exchanges) — not the application (FerroEHR#1694)"
 )]
 
 use std::collections::BTreeMap;
@@ -129,7 +129,7 @@ impl<'a> Resolver<'a> {
     pub fn bind_row(&mut self, case: &CaseCore, row: usize) {
         self.case_id = case.id.to_string();
         // A content case whose constraint_context declares constraint-axis
-        // columns is committed against a PER-ROW synthesized OPT (issue #228):
+        // columns is committed against a PER-ROW synthesized OPT (issue FerroEHR#228):
         // the carrier stamps the deterministic per-row template id, matching the
         // OPT the driver synthesizes+uploads for this row. Otherwise the carrier
         // uses the single baked template from `requires.templates`.
@@ -269,7 +269,7 @@ impl<'a> Resolver<'a> {
     /// Every view name the evaluator match in [`Self::view`] can answer — the
     /// single list the `corpus-integrity` validate gate cross-checks the
     /// manifest's DECLARED views against, so a declared view without an
-    /// evaluator fails at validate time instead of at run time (#971).
+    /// evaluator fails at validate time instead of at run time (FerroEHR#971).
     pub const REGISTERED_VIEWS: &'static [&'static str] = &[
         "current_state_code",
         "signature",
@@ -618,7 +618,7 @@ mod tests {
     }
 
     /// A `raw-json` data set reaches the driver as the file's BYTES (issue
-    /// #1725): `canonical-json` round-trips through `serde_json::Value` and
+    /// FerroEHR#1725): `canonical-json` round-trips through `serde_json::Value` and
     /// silently repairs the very defects a byte-level negative case exists to
     /// deliver — a repeated member, member ordering, an exotic number lexeme.
     /// The `Value::String` carrier is what makes `driver::send` write the

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//! The claim-completeness battery (issue #622): the four gates that make a
+//! The claim-completeness battery (issue FerroEHR#622): the four gates that make a
 //! hollow certification claim unrepresentable are each proven by SEEDING the
 //! violation into a copy of the production world and asserting the gate
 //! fires. A gate that has never been seen to fail proves nothing — no openEHR
@@ -109,7 +109,7 @@ const EHR_OPS_HEAD: &str =
 
 /// A matrix row no catalogue case names, seeded to construct the hollow claim
 /// the `claim-completeness` gate exists to reject. Every committed row now
-/// carries a battery (#610/#624), so the violation is BUILT rather than
+/// carries a battery (FerroEHR#610/FerroEHR#624), so the violation is BUILT rather than
 /// borrowed from a transient catalogue hole — the test can no longer pass or
 /// fail for reasons unrelated to the gate.
 const SEEDED_HOLLOW_ROW: &str = "SeededHollowCapability: { family: Platform, tier: OPTIONS, \
@@ -144,7 +144,7 @@ fn the_committed_world_including_party_claims_is_clean() {
     );
 }
 
-/// The RESTING STATE of the measured workload (issue #625): the committed
+/// The RESTING STATE of the measured workload (issue FerroEHR#625): the committed
 /// hospital simulation exercises every claimed capability except a pinned,
 /// per-capability-adjudicated set — the destructive admin pair and the
 /// capabilities with no HTTP surface at all. The set is spelled out here so
@@ -163,7 +163,7 @@ fn the_measured_workload_exercises_every_claimed_capability_but_the_adjudicated_
         "DemographicArchive",
         "EhrArchive",
         // A whole-repository dump/load is one-shot by SHAPE, not for want of a
-        // route (#659 landed POST /admin/dump + /admin/load): a repeated
+        // route (FerroEHR#659 landed POST /admin/dump + /admin/load): a repeated
         // arrival would re-dump the entire population-anchored corpus the
         // measured window is bound to, and the load half would grow it.
         "EhrDumpLoad",
@@ -458,7 +458,7 @@ const RELATIONSHIP_READ_BINDING: &str =
 const RELATIONSHIP_ROW_HEAD: &str = "PartyRelationshipOperations: { family: Platform, tier: \
                                      OPTIONS, required: false, realization: extension,";
 
-/// (5) Realization scoping, issue #623 — an extension binding may only drive a
+/// (5) Realization scoping, issue FerroEHR#623 — an extension binding may only drive a
 /// route the SUT DECLARES outwardly, so an undeclared family is a finding. The
 /// fence is what keeps "our own extension" from becoming an unaudited way to
 /// claim capabilities over routes nobody wrote down.
@@ -557,7 +557,7 @@ const FERROEHR_STATEMENT: &str = "party/ferroehr/statement.json";
 const SIGNING_CASE: &str = "artifacts/schedule/security/SIG-VERSION-signature_present.yaml";
 
 /// A party may declare only extension families the catalogue axis carries
-/// (#2377): the statement renders the ROUTE DETAIL of what it declares, so a
+/// (FerroEHR#2377): the statement renders the ROUTE DETAIL of what it declares, so a
 /// name with nothing behind it would publish an empty promise.
 #[test]
 fn a_party_declaring_an_unknown_extension_family_fails_validate() {
@@ -592,7 +592,7 @@ fn a_party_declaring_one_family_twice_fails_validate() {
     );
 }
 
-/// A guard may not restate the capability-scoping selection rule (#2378): the
+/// A guard may not restate the capability-scoping selection rule (FerroEHR#2378): the
 /// runner decides it globally from `capabilities:`, and a per-case prose copy
 /// is free to drift from what the runner does with nothing to catch it.
 #[test]
@@ -613,7 +613,7 @@ fn a_guard_restating_capability_scoping_fails_validate() {
 }
 
 /// A guard may not restate the undeclared-INSTANCE selection rule either
-/// (#2389): the typed shape is the flow's own `on:` addressing, and the
+/// (FerroEHR#2389): the typed shape is the flow's own `on:` addressing, and the
 /// runner excuses a case addressing an instance the party does not declare —
 /// once, globally, with the citation.
 #[test]
@@ -661,7 +661,7 @@ fn a_guard_restating_a_terminology_requirement_fails_validate() {
 }
 
 /// …and a guard scoped to a capability the case does NOT gate states a rule
-/// nothing implements — the shape #2378 was opened on.
+/// nothing implements — the shape FerroEHR#2378 was opened on.
 #[test]
 fn a_guard_scoped_to_an_ungated_capability_fails_validate() {
     let world = World::new();
