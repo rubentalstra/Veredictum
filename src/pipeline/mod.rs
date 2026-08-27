@@ -110,8 +110,10 @@ pub enum Error {
         source: serde_json::Error,
     },
     /// The party results violate their own invariants, as read by the
-    /// judging seam.
-    #[error("{}", join_lines(.0))]
+    /// judging seam. Rendered with the same prefix as
+    /// [`Error::RecordedInvariants`] so both seams report one violation the
+    /// same way.
+    #[error("{}", join_prefixed(.0, "results invariant: "))]
     ResultsInvariants(Vec<crate::party::PartyError>),
     /// The results a live run just produced violate their own invariants.
     #[error("{}", join_prefixed(.0, "results invariant: "))]

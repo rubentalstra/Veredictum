@@ -15,8 +15,10 @@ check-incompatible-msrv-in-tests = true # clippy::incompatible_msrv reaches test
 
 # ── the ~15 API-shape lints this option suppresses report real findings here ──
 #    Nothing downstream is protected by hiding an API-shape finding: the crate
-#    is not published (Cargo.toml `publish = false`), so no consumer version
-#    range spans a break. Re-adjudicate if that posture changes (Veredictum#5).
+#    publishes on the 0.x line (crates.io `veredictum`, #5), where cargo treats
+#    every release as its own compatibility set, so no consumer version range
+#    spans a break — and version bumps ride content PRs. Re-adjudicate if the
+#    line ever graduates past 0.x.
 avoid-breaking-exported-api = false
 
 # ── clippy::doc_markdown domain vocabulary (".." appends to the defaults) ────

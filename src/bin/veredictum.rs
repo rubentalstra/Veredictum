@@ -711,8 +711,12 @@ fn run_command(request: &RunRequest<'_>) -> ExitCode {
     if let Err(e) = write_file(&outcome.results_path, &document) {
         return fail(&e);
     }
-    if let Ok(document) = outcome.exceptions_document() {
-        let _write = std::fs::write(&outcome.exceptions_path, document);
+    let exceptions = match outcome.exceptions_document() {
+        Ok(document) => document,
+        Err(e) => return fail(&e),
+    };
+    if let Err(e) = write_file(&outcome.exceptions_path, &exceptions) {
+        return fail(&e);
     }
     println!(
         "{} case-records: {} passed / {} failed / {} errored / {} n-a; interpreter coverage {:.1}% ({} exceptions); wrote {}",
