@@ -561,12 +561,30 @@ async fn e2e_run_wizard_reaches_connect_and_scope() {
     h.wait_xpath("//button[contains(., 'Preview selection')]")
         .await;
     h.wait_xpath("//button[contains(., 'Save scope')]").await;
+    // #100: the tier row and its counts, and the refusal an empty selection
+    // earns. Both are draft-independent: the composer refuses a claim with no
+    // profile before it ever reads the draft, so this journey stays order-free.
+    for tier in ["core", "standard", "options", "sec-basic"] {
+        h.wait_css(&format!("input#tier-{tier}")).await;
+    }
+    h.wait_xpath("//label[contains(., 'CORE') and contains(., 'cases')]")
+        .await;
+    h.wait_xpath("//button[contains(., 'Compose the claim')]")
+        .await
+        .click()
+        .await
+        .expect("compose with nothing checked");
+    h.wait_xpath("//body[contains(., 'check at least one tier')]")
+        .await;
     // The connection pane resolves either way — a draft summary labelled
     // `connection`, or the honest "No connection draft" answer — so what is
     // asserted is that the Suspense RESOLVED, never which of the two it
     // landed on.
     h.wait_xpath("//body[contains(., 'connection')]").await;
-    h.assert_console_clean(&[]).await;
+    // A refused server function answers 500, which the browser logs as a
+    // failed resource: the refusal above is the assertion, and this ONE
+    // endpoint's status line is what driving it deliberately costs.
+    h.assert_console_clean(&["/api/compose_claim"]).await;
     h.finish().await;
 }
 
@@ -696,6 +714,37 @@ struct DrivenSut<'a> {
     finish_budget: Duration,
 }
 
+/// Checks CORE and composes the tier claim into the paste box (#100).
+///
+/// The vendor's own document replaces it immediately after, so the driven
+/// journey still holds exactly one draft and grades exactly one claim.
+async fn compose_tier_claim(h: &Harness) {
+    h.wait_css("input#tier-core")
+        .await
+        .click()
+        .await
+        .expect("check the CORE tier");
+    h.wait_xpath("//button[contains(., 'Compose the claim')]")
+        .await
+        .click()
+        .await
+        .expect("compose the tier claim");
+    h.wait_xpath("//p[contains(., 'Composed from the checked tiers')]")
+        .await;
+    // The box is driven by `prop:value`, so its DOM text never changes: the
+    // live value is the property, which is what the operator reads.
+    let composed = h
+        .wait_css("textarea#statement-json")
+        .await
+        .prop("value")
+        .await
+        .expect("read the claim box");
+    assert!(
+        composed.is_some_and(|body| body.contains("urn:veredictum:console:")),
+        "the composed claim must land in the paste box"
+    );
+}
+
 /// Drives connect → probe → scope → start → live, returning with the run
 /// finished on the Live screen. Captures are the caller's business.
 async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>) {
@@ -746,6 +795,7 @@ async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>
         .expect("continue");
 
     h.wait_xpath("//h1[contains(., 'Scope')]").await;
+    compose_tier_claim(h).await;
     // The claim goes in as the document itself (#101): the example button
     // fills the paste box the way a vendor pastes their own statement.json.
     h.wait_xpath(&format!(

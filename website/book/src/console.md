@@ -54,7 +54,19 @@ answer renders verbatim before anything continues.
 
 Scope takes the claim the run grades: the vendor's own statement.json (the
 ICS, the document that says which profiles and capabilities are claimed)
-pasted into the box, or a committed example loaded into it. The document is
+pasted into the box, or a committed example loaded into it.
+
+The claim can also be built on the screen. The tier row offers CORE,
+STANDARD, OPTIONS and SEC-BASIC with the capabilities the capability matrix
+puts in each tier and the number of catalogue cases those capabilities gate,
+counted through the instrument's own matrix walk — the one the judgement
+computes each profile verdict from. Composing writes that claim into the same
+box, product identity taken from the Connect step, so the operator reads the
+exact document the run will be graded against. Option branches stay
+undeclared there: only the party running the server knows which branch it
+realizes.
+
+The document is
 held to the published statement schema before anything is stored, and saving
 answers with the claim overview — product, claimed tiers, capability count —
 beside the selection preview, so the screen says what will run before

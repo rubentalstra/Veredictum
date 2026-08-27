@@ -10,7 +10,8 @@
 use leptos::prelude::{
     Action, AddAnyAttr, ClassAttribute, CollectView, Effect, ElementChild, Get, GlobalAttributes,
     IntoAny, IntoView, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal,
-    ServerAction, Set, StyleAttribute, Suspend, Suspense, Transition, Update, component, view,
+    ServerAction, Set, StyleAttribute, Suspend, Suspense, Transition, Update, With, component,
+    view,
 };
 use leptos_meta::Title;
 use leptos_router::components::{A, Redirect};
@@ -21,10 +22,10 @@ use crate::components::page_header::{Crumb, PageHeader};
 use crate::components::surface::{CARD_PAD, CARD_TITLE};
 use crate::components::toast;
 use crate::run_api::fns::{
-    ProbeAndSave, cancel_run, fetch_draft, fetch_job, fetch_scope_preview, fetch_statement_body,
-    fetch_statements, save_scope, start_run,
+    ProbeAndSave, cancel_run, compose_claim, fetch_draft, fetch_job, fetch_scope_preview,
+    fetch_statement_body, fetch_statements, fetch_tier_counts, save_scope, start_run,
 };
-use crate::run_api::{AuthChoice, ClaimSummary, ProbeAnswer, ScopePreview};
+use crate::run_api::{AuthChoice, ClaimSummary, ProbeAnswer, ScopePreview, ScopeTier};
 use crate::run_job::{JobStatus, JobView};
 
 /// `/run` — the wizard's entry: always the first step.
@@ -280,14 +281,15 @@ pub fn Connect() -> impl IntoView {
     }
 }
 
-/// S4 — the scope: the pasted claim, the filter, and the honest preview.
+/// S4 — the scope: the tier row that builds a claim, the pasted claim, the
+/// filter, and the honest preview.
 #[expect(
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"
 )]
 #[expect(
     clippy::too_many_lines,
-    reason = "the statement pick, the filter, the preview and the save answer — one cohesive screen, its sections erased per rules §1"
+    reason = "the tier row, the statement pick, the filter, the preview and the save answer — one cohesive screen, its sections erased per rules §1"
 )]
 #[component]
 pub fn Scope() -> impl IntoView {
@@ -306,6 +308,43 @@ pub fn Scope() -> impl IntoView {
                     example_note.set(Some(Ok(format!("Loaded {path}."))));
                 }
                 Err(e) => example_note.set(Some(Err(e.to_string()))),
+            }
+        }
+    });
+    let tier_counts = Resource::new(|| (), |()| fetch_tier_counts());
+    let checked_tiers = RwSignal::new(Vec::<ScopeTier>::new());
+    let toggle_tier = move |tier: ScopeTier, on: bool| {
+        checked_tiers.update(|selection| {
+            selection.retain(|held| *held != tier);
+            if on {
+                selection.push(tier);
+            }
+            // NOTE: no openEHR spec governs this — our own design: the
+            // published judgement refuses a STANDARD claim that does not also
+            // claim CORE, so the row keeps the two paired.
+            match (tier, on) {
+                (ScopeTier::Standard, true) => {
+                    if !selection.contains(&ScopeTier::Core) {
+                        selection.push(ScopeTier::Core);
+                    }
+                }
+                (ScopeTier::Core, false) => selection.retain(|held| *held != ScopeTier::Standard),
+                _ => {}
+            }
+        });
+    };
+    let composed_note = RwSignal::new(None::<Result<String, String>>);
+    let compose = Action::new(move |selection: &Vec<ScopeTier>| {
+        let selection = selection.clone();
+        async move {
+            match compose_claim(Some(selection)).await {
+                Ok(document) => {
+                    statement_json.set(document);
+                    composed_note.set(Some(Ok(String::from(
+                        "Composed from the checked tiers. Read it, edit it if you need to, then save the scope.",
+                    ))));
+                }
+                Err(e) => composed_note.set(Some(Err(e.to_string()))),
             }
         }
     });
@@ -363,9 +402,7 @@ pub fn Scope() -> impl IntoView {
                     let body = e.to_string();
                     toast::error(
                         "The scope was refused",
-                        &format!(
-                            "The pasted claim was not stored: {body}. Correct it and save again."
-                        ),
+                        &format!("The claim was not stored: {body}. Correct it and save again."),
                     );
                     saved.set(Some(Err(body)));
                 }
@@ -397,7 +434,7 @@ pub fn Scope() -> impl IntoView {
         <Title text="Scope · Run · Veredictum console" />
         <PageHeader
             title="Scope"
-            subtitle="Paste the claim this run grades, and preview what will process before anything starts."
+            subtitle="Build the claim from tiers or paste the vendor's own, then preview what will process before anything starts."
             crumbs=vec![Crumb::new("Run", "/run/connect")]
         >
             <div class="flex items-center gap-1">{steps("scope")}</div>
@@ -442,6 +479,80 @@ pub fn Scope() -> impl IntoView {
         <section class=format!("{CARD_PAD} mt-4 max-w-2xl")>
             <h2 class=CARD_TITLE>"Selection"</h2>
             <div class="space-y-4">
+                <div>
+                    <span class=LABEL>"Build the claim from tiers"</span>
+                    <p class="mt-1 text-sm text-ink-muted">
+                        "Checking a tier claims the capabilities the matrix requires for it; the counts say how many catalogue cases those capabilities gate. Composing writes the claim into the box below, where you read it before anything runs. Option branches stay undeclared, because only the party running the server knows which branch it realizes."
+                    </p>
+                    <Suspense fallback=|| {
+                        view! { <p class="text-sm text-ink-muted">"Counting the tiers…"</p> }
+                    }>
+                        {move || Suspend::new(async move {
+                            match tier_counts.await {
+                                Ok(rows) => {
+                                    let boxes = rows
+                                        .into_iter()
+                                        .map(|row| {
+                                            let tier = row.tier;
+                                            let label = format!(
+                                                "{} · {} capabilities · {} cases",
+                                                tier.token(),
+                                                row.capabilities,
+                                                row.cases,
+                                            );
+                                            view! {
+                                                <label
+                                                    class="flex items-center gap-2 text-sm text-ink"
+                                                    for=tier.control_id()
+                                                >
+                                                    <input
+                                                        id=tier.control_id()
+                                                        type="checkbox"
+                                                        class="size-4 accent-accent"
+                                                        prop:checked=move || {
+                                                            checked_tiers.with(|held| held.contains(&tier))
+                                                        }
+                                                        on:change:target=move |ev| {
+                                                            toggle_tier(tier, ev.target().checked());
+                                                        }
+                                                    />
+                                                    {label}
+                                                </label>
+                                            }
+                                        })
+                                        .collect_view();
+                                    view! {
+                                        <div class="mt-2 grid gap-2 sm:grid-cols-2">{boxes}</div>
+                                    }
+                                        .into_any()
+                                }
+                                Err(e) => inline_error(&e.to_string()).into_any(),
+                            }
+                        })}
+                    </Suspense>
+                    <div class="mt-3 flex items-center gap-2">
+                        <button
+                            type="button"
+                            class=BTN_SECONDARY
+                            on:click=move |_| {
+                                compose.dispatch(checked_tiers.get());
+                            }
+                        >
+                            "Compose the claim"
+                        </button>
+                    </div>
+                    {move || {
+                        composed_note
+                            .get()
+                            .map(|note| match note {
+                                Ok(line) => {
+                                    view! { <p class="mt-2 text-sm text-ink-muted">{line}</p> }
+                                        .into_any()
+                                }
+                                Err(e) => inline_error(&e).into_any(),
+                            })
+                    }}
+                </div>
                 <div>
                     <label class=LABEL for="statement-json">
                         "Party statement (ICS) — the claim this run grades"

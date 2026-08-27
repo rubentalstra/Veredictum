@@ -20,6 +20,22 @@ version on.
 
 ### Added
 
+- **Scope builds the claim from CNF tiers (#100).** The run wizard's Scope
+  screen gains a row of tier checkboxes — CORE, STANDARD, OPTIONS, SEC-BASIC —
+  each carrying the capabilities the capability matrix puts in that tier and
+  the number of catalogue cases those capabilities gate. Both counts come from
+  the published library's own `tier_members` walk, the one every profile
+  verdict is computed from, so the row cannot drift from the answer the
+  judgement gives. Composing writes an ad-hoc statement into the same paste box
+  the vendor path uses: the product identity from the Connect step, the checked
+  tiers as claimed profiles, their required capabilities as the claimed
+  capabilities, the schedule release read from the committed statements under
+  the mounted party tree, and the spec-component versions derived from the
+  catalogue's own `applies` floors. The operator reads the document before
+  saving it, and it is then validated, stored and written into the run's output
+  directory exactly like a pasted one, so a verdict stays a pure function of a
+  statement. Option branches stay undeclared, because only the party running
+  the server knows which branch it realizes.
 - **The console exports a signed record, and anyone can check one (#68).** The
   verdicts screen gains one step that hands the finished run to the pinned
   instrument's own `verdicts --sign-key`: the rendered documents, a digest
