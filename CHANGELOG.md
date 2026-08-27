@@ -18,6 +18,11 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-28
+
+The first stable release: the milestone closed at zero open issues, and
+the pre-release alpha line ends here.
+
 ### Added
 
 - **Scope builds the claim from CNF tiers (#100).** The run wizard's Scope
@@ -716,7 +721,8 @@ tag stands; 0.1.0-alpha.6 ships the same tree plus the pipeline fix.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.6...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.6...v0.1.0
 [0.1.0-alpha.6]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
 [0.1.0-alpha.4]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
