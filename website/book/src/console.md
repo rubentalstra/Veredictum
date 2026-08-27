@@ -61,6 +61,14 @@ beside the selection preview, so the screen says what will run before
 anything starts. An empty box is an honest no-claim run. The verdict later
 certifies exactly the pasted claim against the recorded evidence.
 
+Scope also decides whether the run keeps its wire. "Record the wire exchanges"
+is off by default; ticked, the run writes `transcript.json` beside its
+`results.json`, carrying every request and response it drove. The artifact
+records a server's response bodies verbatim, so it can hold real patient data
+from the deployment being graded: it lands in the operator's own output
+directory, the sealed record covers it, and the `authorization` request
+header's value is withheld.
+
 ![The scope step in light mode](console/img/scope-light.png)
 
 The live screen renders the engine's own progress stream: the case counter,
@@ -76,6 +84,10 @@ Results reads the finished run's own record, red rows first. A row links to
 its detail: the recorded reason beside the case's specification citations,
 because a red row names a defect in exactly one of three suspects — the
 server, the runner, or the catalogue — and the cited text is the reference.
+
+The detail ends with the wire. A run driven with the recording box ticked
+shows each exchange as its request and response panes, verbatim, which is
+where a triage starts. A run driven without it says so in the same place.
 
 ![The results surface with a detail open](console/img/results-light.png)
 

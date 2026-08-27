@@ -587,6 +587,8 @@ struct DrivenSut<'a> {
     statement: &'a str,
     /// The case-id filter for the run.
     filter: &'a str,
+    /// Whether the journey ticks "Record the wire exchanges" on Scope (#96).
+    record_exchanges: bool,
     /// The probe outcome the connect screen must show before continuing.
     probe_answer: &'a str,
     /// The continue control's label ("Continue" on a 2xx probe).
@@ -661,6 +663,13 @@ async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>
         .send_keys(sut.filter)
         .await
         .expect("type the filter");
+    if sut.record_exchanges {
+        h.wait_css("input#record-exchanges")
+            .await
+            .click()
+            .await
+            .expect("tick the wire-recording box");
+    }
     if let Some(slug) = scope_shot {
         h.capture(slug).await;
     }
@@ -687,8 +696,15 @@ async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>
 }
 
 /// Walks the finished run's record: results with one URL-addressed detail,
-/// then verdicts, capturing each under the given slugs.
-async fn read_record(h: &Harness, case_needle: &str, results_shot: &str, verdicts_shot: &str) {
+/// then verdicts, capturing each under the given slugs. `wire` asserts the
+/// drawer shows the recorded exchanges (#96) rather than the absence line.
+async fn read_record(
+    h: &Harness,
+    case_needle: &str,
+    wire: bool,
+    results_shot: &str,
+    verdicts_shot: &str,
+) {
     h.goto("/run/results").await;
     h.wait_xpath("//h1[contains(., 'Results')]").await;
     h.wait_xpath(&format!("//td//a[contains(., '{case_needle}')]"))
@@ -697,6 +713,10 @@ async fn read_record(h: &Harness, case_needle: &str, results_shot: &str, verdict
         .await
         .expect("open the detail");
     h.wait_xpath("//body[contains(., 'Spec citations')]").await;
+    if wire {
+        h.wait_xpath("//body[contains(., 'exchange 1')]").await;
+        h.wait_xpath("//span[contains(., 'response body')]").await;
+    }
     h.capture(results_shot).await;
 
     h.goto("/run/verdicts").await;
@@ -728,6 +748,7 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
         basic: None,
         statement: "EHRbase",
         filter: "I_EHR_SERVICE.create_ehr-main",
+        record_exchanges: true,
         probe_answer: "HTTP 500",
         continue_label: "Continue anyway",
         finish_budget: Duration::from_mins(1),
@@ -737,6 +758,7 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
     read_record(
         &h,
         "I_EHR_SERVICE.create_ehr-main",
+        true,
         "results-light",
         "verdicts-light",
     )
@@ -775,6 +797,7 @@ async fn e2e_wizard_grades_the_real_cdrs() {
             basic: Some(("ferroehr", "ferroehr")),
             statement: "FerroEHR",
             filter: "I_EHR_SERVICE.",
+            record_exchanges: false,
             probe_answer: "The server answered",
             continue_label: "Continue",
             finish_budget: Duration::from_mins(5),
@@ -785,6 +808,7 @@ async fn e2e_wizard_grades_the_real_cdrs() {
             basic: Some(("ehrbase-user", "SuperSecretPassword")),
             statement: "EHRbase",
             filter: "I_EHR_SERVICE.",
+            record_exchanges: false,
             probe_answer: "The server answered",
             continue_label: "Continue",
             finish_budget: Duration::from_mins(5),
@@ -797,6 +821,7 @@ async fn e2e_wizard_grades_the_real_cdrs() {
         read_record(
             &h,
             "I_EHR_SERVICE.",
+            false,
             &format!("results-{slug}-light"),
             &format!("verdicts-{slug}-light"),
         )

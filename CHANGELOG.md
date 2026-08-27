@@ -18,6 +18,28 @@ version on.
 
 ## [Unreleased]
 
+### Added
+
+- **`run --record-exchanges` persists the wire (#96).** The flag writes
+  `transcript.json` beside `results.json`: per case, in send order, the
+  request line, request headers and request body, and the response status,
+  headers and body. It is off by default, and persistence is a serialization
+  of exchanges the driver already holds, so a recorded run sends nothing extra
+  and reaches the same verdicts as an unrecorded one. The artifact records a
+  SUT's response bodies verbatim, so it can carry real patient data: it is
+  operator-controlled output, never a log, and the `authorization` request
+  header's value is withheld. With `--sign-key` the sealed record manifest
+  covers the transcript.
+- **`run-transcript.schema.json` joins the published schema set.** The run
+  transcript is its own artifact family, separate from the verification pack's
+  replay `transcript.schema.json`, which requires an adjudicated verdict per
+  entry and carries no request side at all.
+- **The console records and reads the wire.** Scope gains a "Record the wire
+  exchanges" checkbox, off by default with the clinical-data caution beside
+  it, and the results drawer renders each recorded exchange as request and
+  response panes. A run driven without the flag says so where the wire would
+  be.
+
 ### Fixed
 
 - **`validate --write-report` writes somewhere that exists (#91).** The

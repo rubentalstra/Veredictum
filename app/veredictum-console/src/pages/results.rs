@@ -24,7 +24,7 @@ use crate::components::stat_card::StatCard;
 use crate::components::surface::{CARD_PAD, CARD_TITLE, WELL};
 use crate::pages::run::steps;
 use crate::record_api::fns::{fetch_result_detail, fetch_results};
-use crate::record_api::{ResultDetail, ResultsScreen};
+use crate::record_api::{ExchangeView, ResultDetail, ResultsScreen, TranscriptView};
 
 /// The `?case=` selection from the URL.
 fn query_case() -> Memo<String> {
@@ -183,6 +183,60 @@ fn results_view(results: &ResultsScreen) -> impl IntoView + use<> {
     }
 }
 
+/// One exchange as its request and response panes.
+fn exchange_view(exchange: &ExchangeView) -> impl IntoView + use<> {
+    let seq = exchange.seq;
+    let request = format!("{}\n{}", exchange.request_line, exchange.request_headers);
+    let response = format!("{}\n{}", exchange.status_line, exchange.response_headers);
+    let request_body = exchange
+        .request_body
+        .clone()
+        .map(|body| view! { <Pane label="request body" body=body /> });
+    let response_body = exchange
+        .response_body
+        .clone()
+        .map(|body| view! { <Pane label="response body" body=body /> });
+    view! {
+        <div class="space-y-2 border-t border-line pt-3">
+            <p class="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                {format!("exchange {seq}")}
+            </p>
+            <Pane label="request" body=request />
+            {request_body}
+            <Pane label="response" body=response />
+            {response_body}
+        </div>
+    }
+}
+
+/// The wire section: the recorded exchanges, or the honest line saying why
+/// there are none.
+fn transcript_view(transcript: &TranscriptView) -> impl IntoView + use<> {
+    match transcript {
+        TranscriptView::NotRecorded => {
+            view! {
+                <p class="text-sm text-ink-muted">
+                    "This run was driven without --record-exchanges, so the record carries no wire transcript. Re-run with the box ticked on Scope to keep the exchanges."
+                </p>
+            }
+                .into_any()
+        }
+        TranscriptView::Unreadable(diagnostic) => inline_error(diagnostic).into_any(),
+        TranscriptView::Recorded(exchanges) if exchanges.is_empty() => {
+            view! {
+                <p class="text-sm text-ink-muted">
+                    "The run recorded its wire, and this case drove no exchange: it was excused or refused before any request went out."
+                </p>
+            }
+                .into_any()
+        }
+        TranscriptView::Recorded(exchanges) => {
+            let panes = exchanges.iter().map(exchange_view).collect_view();
+            view! { <div class="space-y-3">{panes}</div> }.into_any()
+        }
+    }
+}
+
 /// The selected outcome's detail: the record's evidence beside the case's
 /// citations, and the attribution law stated where a red row is read.
 fn detail_view(detail: &ResultDetail) -> impl IntoView + use<> {
@@ -212,6 +266,7 @@ fn detail_view(detail: &ResultDetail) -> impl IntoView + use<> {
     let reason = detail.row.reason.clone().map(|reason| {
         view! { <Pane label="recorded reason" body=reason /> }
     });
+    let wire = transcript_view(&detail.transcript);
     let citation = detail.citation.clone().map(|citation| {
         view! {
             <p class="text-sm text-ink">
@@ -254,8 +309,10 @@ fn detail_view(detail: &ResultDetail) -> impl IntoView + use<> {
                 {failed_rows}
                 <h3 class=CARD_TITLE>"Spec citations"</h3>
                 <ul class=format!("{WELL} space-y-1")>{refs}</ul>
+                <h3 class=CARD_TITLE>"The wire"</h3>
+                {wire}
                 <p class="text-sm text-ink-muted">
-                    "A red row names a defect in exactly one of three suspects — the server, the runner, or the catalogue — and the cited text is the reference, never any side's confidence. The record carries no wire transcript yet (#96); the evidence above is what it does carry."
+                    "A red row names a defect in exactly one of three suspects — the server, the runner, or the catalogue — and the cited text is the reference, never any side's confidence."
                 </p>
             </div>
         </section>

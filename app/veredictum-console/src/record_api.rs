@@ -46,6 +46,43 @@ pub struct FailedRowView {
     pub evidence: String,
 }
 
+/// One recorded exchange, rendered as the two panes the drawer shows.
+///
+/// The bodies are the wire's own bytes, pretty-printed when they parsed as
+/// JSON. The engine withholds the `authorization` request header before the
+/// transcript is ever written, so nothing here can carry a credential.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExchangeView {
+    /// The exchange's ordinal within the case, in send order.
+    pub seq: u32,
+    /// The request line, `METHOD url`.
+    pub request_line: String,
+    /// The request headers, one `name: value` line each.
+    pub request_headers: String,
+    /// The request body, when the request carried one.
+    pub request_body: Option<String>,
+    /// The status line, `HTTP <status>`.
+    pub status_line: String,
+    /// The response headers, one `name: value` line each.
+    pub response_headers: String,
+    /// The response body, when the SUT sent one.
+    pub response_body: Option<String>,
+}
+
+/// Whether the finished run carries a wire transcript, and what it holds for
+/// the selected case.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TranscriptView {
+    /// The run was driven without `--record-exchanges`, so no transcript file
+    /// sits beside the record.
+    NotRecorded,
+    /// A transcript exists; the exchanges are this case's, in send order
+    /// (empty when the case drove none).
+    Recorded(Vec<ExchangeView>),
+    /// The transcript exists but could not be read; the message is verbatim.
+    Unreadable(String),
+}
+
 /// The result drawer: the outcome joined to its catalogue case.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResultDetail {
@@ -61,6 +98,8 @@ pub struct ResultDetail {
     pub test_purpose: Option<String>,
     /// The case's citations, from the catalogue.
     pub spec_refs: Vec<String>,
+    /// The wire this outcome was reached over, when the run recorded it.
+    pub transcript: TranscriptView,
 }
 
 /// One rendered judgement document, name and body verbatim.
@@ -95,7 +134,8 @@ pub mod read {
     //! The ssr readers over the finished job and the lib's judgement.
 
     use super::{
-        DocumentView, FailedRowView, ResultDetail, ResultRow, ResultsScreen, VerdictsScreen,
+        DocumentView, ExchangeView, FailedRowView, ResultDetail, ResultRow, ResultsScreen,
+        TranscriptView, VerdictsScreen,
     };
     use crate::state::ConsoleState;
 
@@ -183,6 +223,154 @@ pub mod read {
         }))
     }
 
+    // TODO(#129): read the transcript through `veredictum::transcript` and
+    // delete these mirrors; the console's engine pin predates that module, so
+    // the published lib cannot supply the types yet.
+    mod wire {
+        //! The run wire transcript, as the engine writes it.
+
+        #![expect(
+            clippy::disallowed_types,
+            reason = "the wire-bodies family: a recorded request or response body is whatever the SUT sent, which has no typed model here"
+        )]
+
+        use serde::Deserialize;
+
+        /// One recorded request.
+        #[derive(Debug, Deserialize)]
+        pub(super) struct Request {
+            pub(super) method: String,
+            pub(super) url: String,
+            pub(super) headers: std::collections::BTreeMap<String, String>,
+            #[serde(default)]
+            pub(super) body: Option<serde_json::Value>,
+        }
+
+        /// One recorded response.
+        #[derive(Debug, Deserialize)]
+        pub(super) struct Response {
+            pub(super) status: u16,
+            pub(super) headers: std::collections::BTreeMap<String, String>,
+            #[serde(default)]
+            pub(super) body: Option<serde_json::Value>,
+        }
+
+        /// One exchange: what went out, and what came back.
+        #[derive(Debug, Deserialize)]
+        pub(super) struct Exchange {
+            pub(super) seq: u32,
+            pub(super) request: Request,
+            pub(super) response: Response,
+        }
+
+        /// Every exchange one case×format execution drove.
+        #[derive(Debug, Deserialize)]
+        pub(super) struct Entry {
+            pub(super) case: String,
+            #[serde(default)]
+            pub(super) format: Option<veredictum::vocab::FormatName>,
+            pub(super) exchanges: Vec<Exchange>,
+        }
+
+        /// The whole run's transcript.
+        #[derive(Debug, Deserialize)]
+        pub(super) struct Transcript {
+            pub(super) cases: Vec<Entry>,
+        }
+    }
+
+    /// The transcript file name the engine writes beside `results.json`.
+    const TRANSCRIPT_FILE: &str = "transcript.json";
+
+    /// One `name: value` line per header, name-sorted by the document's own
+    /// `BTreeMap` ordering.
+    fn header_lines(headers: &std::collections::BTreeMap<String, String>) -> String {
+        headers
+            .iter()
+            .map(|(name, value)| format!("{name}: {value}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// A recorded body as text: pretty JSON when it is a JSON structure, the
+    /// string itself when the wire carried text the reader kept as a string.
+    #[expect(
+        clippy::disallowed_types,
+        reason = "the wire-bodies family: a recorded body is whatever the SUT sent, which has no typed model here"
+    )]
+    fn body_text(body: Option<&serde_json::Value>) -> Option<String> {
+        match body? {
+            serde_json::Value::String(text) => Some(text.clone()),
+            value => serde_json::to_string_pretty(value).ok(),
+        }
+    }
+
+    /// The transcript beside the run's `results.json`, narrowed to one case.
+    ///
+    /// An absent file is the honest [`TranscriptView::NotRecorded`]: the run
+    /// was driven without `--record-exchanges`. A file that exists and will
+    /// not read or parse is reported verbatim, never silently as absence.
+    fn transcript_of(
+        results_path: &std::path::Path,
+        case: &str,
+        format: Option<&str>,
+    ) -> TranscriptView {
+        let Some(path) = results_path.parent().map(|dir| dir.join(TRANSCRIPT_FILE)) else {
+            return TranscriptView::NotRecorded;
+        };
+        let body = match std::fs::read_to_string(&path) {
+            Ok(body) => body,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return TranscriptView::NotRecorded;
+            }
+            Err(e) => return TranscriptView::Unreadable(format!("{}: {e}", path.display())),
+        };
+        narrow(&body, case, format)
+            .unwrap_or_else(|e| TranscriptView::Unreadable(format!("{}: {e}", path.display())))
+    }
+
+    /// Narrows one transcript document to a single case's exchanges.
+    ///
+    /// A case the document does not carry yields an EMPTY
+    /// [`TranscriptView::Recorded`]: the run recorded its wire, and this case
+    /// drove nothing.
+    ///
+    /// # Errors
+    /// The parse failure verbatim, when the body is not a transcript.
+    pub fn narrow(
+        body: &str,
+        case: &str,
+        format: Option<&str>,
+    ) -> Result<TranscriptView, serde_json::Error> {
+        let transcript: wire::Transcript = serde_json::from_str(body)?;
+        let exchanges = transcript
+            .cases
+            .iter()
+            .find(|entry| {
+                entry.case == case && entry.format.as_ref().map(token).as_deref() == format
+            })
+            .map(|entry| {
+                entry
+                    .exchanges
+                    .iter()
+                    .map(|exchange| ExchangeView {
+                        seq: exchange.seq,
+                        request_line: format!(
+                            "{} {}",
+                            exchange.request.method, exchange.request.url
+                        ),
+                        request_headers: header_lines(&exchange.request.headers),
+                        request_body: body_text(exchange.request.body.as_ref()),
+                        status_line: format!("HTTP {}", exchange.response.status),
+                        response_headers: header_lines(&exchange.response.headers),
+                        response_body: body_text(exchange.response.body.as_ref()),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Ok(TranscriptView::Recorded(exchanges))
+    }
+
     /// One outcome joined to its catalogue case, or `Ok(None)` when the
     /// record does not carry the id.
     ///
@@ -193,7 +381,7 @@ pub mod read {
         case: &str,
         format: Option<&str>,
     ) -> Result<Option<ResultDetail>, String> {
-        let Some((results, _)) = finished_results(state)? else {
+        let Some((results, results_path)) = finished_results(state)? else {
             return Ok(None);
         };
         let Some(outcome) = results.outcomes.iter().find(|outcome| {
@@ -228,6 +416,7 @@ pub mod read {
                 .collect(),
             test_purpose,
             spec_refs,
+            transcript: transcript_of(&results_path, case, format),
         }))
     }
 
@@ -330,5 +519,137 @@ pub mod fns {
     pub async fn fetch_verdicts() -> Result<VerdictsScreen, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         super::read::verdicts_screen(&state).map_err(ServerFnError::new)
+    }
+}
+
+#[cfg(all(test, feature = "ssr"))]
+mod tests {
+    use super::TranscriptView;
+    use super::read::narrow;
+
+    /// One transcript document as the engine writes it, authored as raw bytes
+    /// so the reader is held to the wire form rather than to a value this
+    /// crate serialized itself.
+    const DOCUMENT: &str = r#"{
+      "sut": { "name": "example-cdr", "version": "0.0.0" },
+      "schedule_release": "cnf-2.0-w2",
+      "cases": [
+        {
+          "case": "I_EHR_SERVICE.create_ehr-main",
+          "format": "canonical-json",
+          "exchanges": [
+            {
+              "seq": 1,
+              "row": 0,
+              "request": {
+                "method": "POST",
+                "url": "http://cdr.example/ehr",
+                "headers": { "authorization": "«redacted»", "content-type": "application/json" },
+                "body": { "_type": "EHR_STATUS" }
+              },
+              "response": {
+                "status": 201,
+                "headers": { "etag": "\"abc\"" },
+                "body": "created"
+              }
+            }
+          ]
+        },
+        {
+          "case": "I_EHR_SERVICE.get_ehr-main",
+          "exchanges": [
+            {
+              "seq": 1,
+              "row": 0,
+              "request": { "method": "GET", "url": "http://cdr.example/ehr/x", "headers": {} },
+              "response": { "status": 404, "headers": {} }
+            }
+          ]
+        }
+      ]
+    }"#;
+
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+    )]
+    #[test]
+    fn a_recorded_case_renders_both_sides_of_its_wire() -> Result<(), serde_json::Error> {
+        let view = narrow(
+            DOCUMENT,
+            "I_EHR_SERVICE.create_ehr-main",
+            Some("canonical-json"),
+        )?;
+        let TranscriptView::Recorded(exchanges) = view else {
+            panic!("a document that carries the case is recorded: {view:?}");
+        };
+        let first = exchanges.first().expect("one exchange");
+        assert_eq!(first.seq, 1);
+        assert_eq!(first.request_line, "POST http://cdr.example/ehr");
+        assert!(
+            first.request_headers.contains("authorization: «redacted»"),
+            "{}",
+            first.request_headers
+        );
+        assert_eq!(first.status_line, "HTTP 201");
+        assert_eq!(first.response_headers, "etag: \"abc\"");
+        // A JSON body pretty-prints; a body the reader kept as a string is
+        // the string itself, never a re-quoted one.
+        assert_eq!(
+            first.request_body.as_deref(),
+            Some("{\n  \"_type\": \"EHR_STATUS\"\n}")
+        );
+        assert_eq!(first.response_body.as_deref(), Some("created"));
+        Ok(())
+    }
+
+    /// The format is part of the identity: the same case id on another format
+    /// is a different row, and it selects nothing.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+    )]
+    #[test]
+    fn the_format_discriminates_the_case() -> Result<(), serde_json::Error> {
+        let TranscriptView::Recorded(matched) =
+            narrow(DOCUMENT, "I_EHR_SERVICE.get_ehr-main", None)?
+        else {
+            panic!("the format-less case is carried by the document");
+        };
+        assert_eq!(matched.len(), 1);
+        let mismatched = narrow(
+            DOCUMENT,
+            "I_EHR_SERVICE.get_ehr-main",
+            Some("canonical-xml"),
+        )?;
+        assert_eq!(
+            mismatched,
+            TranscriptView::Recorded(vec![]),
+            "another format is another row"
+        );
+        Ok(())
+    }
+
+    /// A case the transcript does not carry is an honest empty recording, not
+    /// an error and not an absent transcript.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+    )]
+    #[test]
+    fn an_unrecorded_case_is_an_empty_recording() -> Result<(), serde_json::Error> {
+        assert_eq!(
+            narrow(DOCUMENT, "I_EHR_SERVICE.delete_ehr-main", None)?,
+            TranscriptView::Recorded(vec![])
+        );
+        Ok(())
+    }
+
+    /// A body that is not a transcript is a parse failure the caller reports
+    /// verbatim, never silence.
+    #[test]
+    fn a_body_that_is_not_a_transcript_is_refused() {
+        assert!(narrow("{ not json", "any", None).is_err());
+        assert!(narrow(r#"{"cases":"nope"}"#, "any", None).is_err());
     }
 }
