@@ -277,7 +277,7 @@ pub fn Connect() -> impl IntoView {
     }
 }
 
-/// S4 — the scope: statement pick, filter, and the honest preview.
+/// S4 — the scope: the pasted claim, the filter, and the honest preview.
 #[expect(
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"
@@ -315,7 +315,7 @@ pub fn Scope() -> impl IntoView {
         <Title text="Scope · Run · Veredictum console" />
         <PageHeader
             title="Scope"
-            subtitle="Pick the statement the selection applies, and preview what the run will process."
+            subtitle="Paste the claim this run grades, and preview what will process before anything starts."
             crumbs=vec![Crumb::new("Run", "/run/connect")]
         >
             <div class="flex items-center gap-1">{steps("scope")}</div>

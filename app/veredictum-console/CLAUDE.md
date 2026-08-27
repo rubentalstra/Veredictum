@@ -39,9 +39,9 @@ at the scaffold (#53); the mandates carry over, re-grounded on this product.
 - Business logic lives in component-free plain-Rust modules with ordinary
   unit tests; components stay thin.
 - Stack pins live in this crate's `Cargo.toml` (Leptos 0.8 stable; 0.9 is
-  adopted at stable, never at beta). Thaw, leptos-use, leptos_icons and
-  leptos-chartistry arrive with the first real screens, at the pins the
-  design record (#52) names.
+  adopted at stable, never at beta). The widget kit is this crate's own
+  (`src/components/`) over leptos-use and leptos_icons; Thaw was not
+  adopted, and a chart kit arrives with the measured instruments (#70).
 - **Views are built in `.into_any()`-erased sections** (rules §1): plain
   cargo builds have no `erase_components`, and monolithic component-library
   view trees blow rustc's layout-recursion depth in `cargo test` codegen
