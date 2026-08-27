@@ -13,6 +13,13 @@ use crate::engine_gate;
 /// seconds.
 const SCOPE_FILTER: &str = "I_EHR_SERVICE.create_ehr";
 
+/// One row of the engine's exception document — typed, per the banned
+/// `serde_json::Value` carrier rule.
+#[derive(serde::Deserialize)]
+struct ExceptionRow {
+    case: String,
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (.claude/rules/testing.md)"
@@ -79,7 +86,7 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
         },
         |_line| {},
     )?;
-    let exceptions: Vec<serde_json::Value> =
+    let exceptions: Vec<ExceptionRow> =
         serde_json::from_str(&std::fs::read_to_string(&finished.exceptions_path)?)?;
     // Outcome records are per case × FORMAT, so the case-level scope is the
     // distinct id set across outcomes and exceptions.
@@ -90,9 +97,7 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
         .map(|outcome| outcome.case.to_string())
         .collect();
     for exception in &exceptions {
-        if let Some(case) = exception.get("case").and_then(|c| c.as_str()) {
-            processed.insert(case.to_owned());
-        }
+        processed.insert(exception.case.clone());
     }
     assert_eq!(
         u64::try_from(processed.len())?,
