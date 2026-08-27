@@ -22,6 +22,15 @@ use std::fmt;
 
 use thiserror::Error;
 
+/// How deep a list or tuple may nest before the grammar refuses it.
+///
+/// The grammar's own forms reach three levels (a list of scale tuples whose
+/// symbol is a coded list), so this bounds only pathological input. Without it
+/// the reader recurses once per `[` or `|`, and a Rust stack overflow aborts
+/// the process instead of unwinding — a validator run would die rather than
+/// report a finding. Found by the `literal_grammar` fuzz target.
+pub const MAX_NESTING: usize = 32;
+
 /// Literal-grammar parse error.
 #[derive(Debug, Error)]
 #[error("invalid decision-table literal {text:?}: {reason}")]
@@ -139,24 +148,35 @@ impl Literal {
     ///
     /// # Errors
     /// Returns [`LiteralError`] when the string carries grammar-significant
-    /// markers but fails the corresponding production.
+    /// markers but fails the corresponding production, or when it nests past
+    /// [`MAX_NESTING`].
     pub fn from_text(s: &str) -> Result<Self, LiteralError> {
+        Self::from_text_nested(s, 0)
+    }
+
+    fn from_text_nested(s: &str, depth: usize) -> Result<Self, LiteralError> {
+        if depth > MAX_NESTING {
+            return Err(LiteralError::new(
+                s,
+                format!("literal nests past the {MAX_NESTING}-level ceiling"),
+            ));
+        }
         let t = s.trim();
         if t.starts_with('[') {
-            return Self::parse_list(t);
+            return Self::parse_list(t, depth);
         }
         if let Some((value, symbol)) = t.split_once('|') {
             // Ordinal tuple `1|[local::at0005]` (integer head — `DV_ORDINAL`);
             // scale tuple `1.5|[local::at0005]` (real head — `DV_SCALE`).
             if let Ok(value) = value.trim().parse::<i64>() {
-                let symbol = Self::from_text(symbol)?;
+                let symbol = Self::from_text_nested(symbol, depth + 1)?;
                 return Ok(Self::Ordinal {
                     value,
                     symbol: Box::new(symbol),
                 });
             }
             if let Ok(value) = value.trim().parse::<f64>() {
-                let symbol = Self::from_text(symbol)?;
+                let symbol = Self::from_text_nested(symbol, depth + 1)?;
                 return Ok(Self::Scale {
                     value,
                     symbol: Box::new(symbol),
@@ -181,7 +201,7 @@ impl Literal {
         Ok(Self::Text(t.to_owned()))
     }
 
-    fn parse_list(t: &str) -> Result<Self, LiteralError> {
+    fn parse_list(t: &str, depth: usize) -> Result<Self, LiteralError> {
         let inner = t
             .strip_prefix('[')
             .and_then(|rest| rest.strip_suffix(']'))
@@ -192,7 +212,7 @@ impl Literal {
             if item.is_empty() {
                 return Err(LiteralError::new(t, "empty list item"));
             }
-            items.push(Self::from_text(item)?);
+            items.push(Self::from_text_nested(item, depth + 1)?);
         }
         Ok(Self::List(items))
     }
@@ -506,6 +526,25 @@ mod tests {
         assert!(Literal::from_text("5.0..").is_err());
         assert!(Literal::from_text("[cm 5.0..10.0, m").is_err());
         assert!(Literal::from_text("openehr:: (length").is_err());
+    }
+
+    /// The `literal_grammar` fuzz target's first two findings: both recursive
+    /// productions ran off the stack, and a Rust stack overflow aborts the
+    /// process rather than unwinding, so the validator died instead of
+    /// reporting. Depth 4000 was where the sanitized build went down.
+    #[test]
+    fn deep_nesting_is_refused_rather_than_overflowing_the_stack() {
+        let lists = format!("{}1{}", "[".repeat(4000), "]".repeat(4000));
+        let error = Literal::from_text(&lists).expect_err("nested lists past the ceiling");
+        assert!(error.to_string().contains("ceiling"), "{error}");
+
+        let tuples = format!("{}1", "1|".repeat(4000));
+        let error = Literal::from_text(&tuples).expect_err("chained tuples past the ceiling");
+        assert!(error.to_string().contains("ceiling"), "{error}");
+
+        // The grammar's own depth is unaffected: a list of scale tuples whose
+        // symbol is a coded list is three levels.
+        assert!(Literal::from_text("[1.5|[local::at0005], 2.4|[local::at0006]]").is_ok());
     }
 
     #[test]

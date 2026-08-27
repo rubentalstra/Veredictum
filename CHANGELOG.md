@@ -71,6 +71,24 @@ version on.
   to root at `template` in `http://schemas.openehr.org/v1` carrying a template
   id, and its file list is compared against the record's own vendored table
   rather than against its count alone.
+- A fuzzing lane over the readers that parse text or bytes the instrument did
+  not write, in its own nightly `fuzz/` workspace: six libFuzzer targets
+  covering the `${…}` reference and identifier grammars, the decision-table
+  literal grammar, the citation reader, a case core end to end through YAML and
+  the published schema into the typed model, the IXIT, statement and results
+  documents a party publishes, and the HDR histogram V2 decode path a measured
+  verdict is re-derived from. Seeds come from the catalogue and the party
+  declarations already committed here; recorded findings live in
+  `fuzz/regressions/` and are re-checked by every run. The harnesses compile on
+  the pull-request path as a gating CI job, and a weekly campaign fuzzes each
+  target with its corpus kept between runs. `fuzz/README.md` carries the threat
+  model and the commands, `.claude/rules/fuzzing.md` the discipline and the
+  crash-to-regression-test procedure.
+- `veredictum::load::yaml_str_to_value` parses artifact YAML from a string under
+  the same budget and duplicate-key refusal the file reader uses, and
+  `veredictum::validate` exposes `citation_clauses`, `expand_braces` and
+  `section_candidates`, so a consumer can read a citation the way the validator
+  does.
 
 ### Changed
 
@@ -82,6 +100,18 @@ version on.
 
 ### Fixed
 
+- Three ways a document the instrument was JUDGING could stop the instrument,
+  all found by the new fuzzing lane on its first local campaign. A
+  decision-table cell nesting 4000 lists deep, or chaining 4000 ordinal tuples,
+  ran `Literal::from_text` off the stack; a Rust stack overflow aborts rather
+  than unwinding, so a validator run died instead of reporting a finding. And a
+  113-byte citation carrying 22 `{a,b}` groups in one path hint asked citation
+  resolution for four million strings, hanging the run: the 32-variant ceiling
+  was applied across a clause's tokens but not within one. Literal nesting is
+  now bounded at `literal::MAX_NESTING` and brace expansion at
+  `validate::MAX_CITATION_VARIANTS`, both refusing with a typed finding. The
+  grammars' own forms are unaffected — a literal reaches three levels and an
+  authored shorthand names two or three sibling documents.
 - The README quoted 1107 spec-cited cases, which was the file count under
   `artifacts/schedule/`. The instrument reports 1103, because the four
   `schedule/performance/` journey definitions load as measured-workload

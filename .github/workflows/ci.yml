@@ -138,8 +138,11 @@ jobs:
           echo "$changed"
           # website/ is in the CODE tier deliberately (#35): the test job holds
           # the site's hand-typed catalogue counts to the artifacts, so a
-          # website-only PR must run it too.
-          if echo "$changed" | grep -qE '^(src/|tests/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|scripts/vendor/|scripts/checks/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
+          # website-only PR must run it too. fuzz/ is in it for the mirror
+          # reason (#11): the fuzz-build job compiles the harnesses, and the
+          # harnesses read `src/`, so either side changing must compile the
+          # other.
+          if echo "$changed" | grep -qE '^(src/|tests/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
@@ -540,6 +543,47 @@ jobs:
           tool: cargo-deny
       - run: cargo deny check
 
+  # Do the libFuzzer harnesses still COMPILE? That is the whole question on a
+  # pull request, and it is the one the weekly campaign in `fuzz.yml` cannot
+  # answer in time to be useful: a scheduled-only lane stops running silently
+  # the moment a renamed function breaks a harness, and nobody learns until the
+  # next campaign. This job is the guard, and it lives HERE rather than beside
+  # the campaign because branch protection requires only `conclusion` — a job in
+  # another workflow would go red without gating the merge.
+  #
+  # `fuzz/` is its own Cargo workspace (cargo-fuzz needs nightly; this
+  # repository is pinned to stable), so nothing above compiles it.
+  fuzz-build:
+    name: fuzz harnesses build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          toolchain: nightly
+          cache-workspaces: fuzz
+          cache-key: fuzz-build
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        with:
+          tool: cargo-fuzz@0.13.2
+      # The seeder is part of the lane and breaks the same way a harness does:
+      # a renamed catalogue directory or a harvest that stops matching makes it
+      # exit non-zero, which is the whole point of its loud failures.
+      - run: bash fuzz/seeds.sh
+      # `--target` is mandatory. cargo-fuzz otherwise builds for the triple IT
+      # was built for rather than the runner's, and install-action resolves it
+      # through a binstall fallback to the musl asset — whose static libc cannot
+      # carry a sanitizer.
+      - run: cargo fuzz build --target x86_64-unknown-linux-gnu
+
   # A dependency nothing imports is attack surface and audit weight carried for
   # free. cargo-machete reads the sources rather than the manifest, so it catches
   # the entry that stopped being used without being removed.
@@ -580,6 +624,7 @@ jobs:
       - doc
       - msrv
       - deny
+      - fuzz-build
       - unused-deps
     runs-on: ubuntu-latest
     timeout-minutes: 5

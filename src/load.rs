@@ -92,6 +92,20 @@ fn saphyr_options() -> serde_saphyr::Options {
     options
 }
 
+/// Parse YAML text to a JSON value, under the anti-bomb budget and the
+/// duplicate-key refusal every artifact is read with.
+///
+/// `name` names the source in the error only; nothing is read from disk.
+///
+/// # Errors
+/// [`LoadError::Yaml`] on a parse failure, a budget breach, or a duplicate key.
+pub fn yaml_str_to_value(text: &str, name: &Path) -> Result<serde_json::Value, LoadError> {
+    serde_saphyr::from_str_with_options(text, saphyr_options()).map_err(|e| LoadError::Yaml {
+        path: name.to_owned(),
+        message: e.to_string(),
+    })
+}
+
 /// Parse one YAML file to a JSON value.
 ///
 /// # Errors
@@ -101,10 +115,7 @@ pub fn yaml_file_to_value(path: &Path) -> Result<serde_json::Value, LoadError> {
         path: path.to_owned(),
         source,
     })?;
-    serde_saphyr::from_str_with_options(&text, saphyr_options()).map_err(|e| LoadError::Yaml {
-        path: path.to_owned(),
-        message: e.to_string(),
-    })
+    yaml_str_to_value(&text, path)
 }
 
 /// Validate a value against a compiled schema.
