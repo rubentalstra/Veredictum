@@ -143,6 +143,10 @@ fn the_generated_ixit_carries_names_and_never_values() {
     clippy::panic_in_result_fn,
     reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
 )]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one gate walks the whole chain — run, red-first, join, judgement — and splitting it would hide the chain it exists to assert"
+)]
 #[test]
 fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std::error::Error>> {
     let binary = engine_gate::gate_binary();

@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The EHRbase half of the E2E real-SUT pair (#99): the official EHRbase image
+# beside its own PostgreSQL, the upstream quickstart pairing
+# (https://github.com/ehrbase/ehrbase, docker-compose.yml). Deliberately
+# `:latest` — the SUT is the thing being graded, not an input to any published
+# artifact, so the digest discipline does not apply to it (owner ruling on
+# #99). Auth is the image's own default: BASIC, ehrbase-user /
+# SuperSecretPassword (EHRbase application.yml `security:` defaults).
+#
+# The host port is 127.0.0.1-bound and parameterized so the pair coexists
+# with FerroEHR's quickstart on 8080. The database publishes no port at all.
+
+services:
+  ehrdb:
+    image: ehrbase/ehrbase-v2-postgres:16.2
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      EHRBASE_USER_ADMIN: ehrbase
+      EHRBASE_PASSWORD_ADMIN: ehrbase
+      EHRBASE_USER: ehrbase_restricted
+      EHRBASE_PASSWORD: ehrbase_restricted
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  ehrbase:
+    image: ehrbase/ehrbase:latest
+    depends_on:
+      ehrdb:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://ehrdb:5432/ehrbase
+      DB_USER_ADMIN: ehrbase
+      DB_PASS_ADMIN: ehrbase
+      DB_USER: ehrbase_restricted
+      DB_PASS: ehrbase_restricted
+      SECURITY_AUTHTYPE: BASIC
+    ports:
+      - "127.0.0.1:${EHRBASE_PORT:-8090}:8080"

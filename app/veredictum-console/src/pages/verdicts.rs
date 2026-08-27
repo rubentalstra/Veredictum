@@ -25,14 +25,20 @@ use crate::record_api::VerdictsScreen;
 use crate::record_api::fns::fetch_verdicts;
 
 /// The evidence chip classes: verdict semantics, coverage bounds visible.
+///
+/// The tokens are the lib's own serde vocabulary — `pass`/`fail`/`not_claimed`
+/// for a profile tier, `passed`/`failed`/`inconclusive`/`not_evidenced`/
+/// `not_claimed` for a capability. An unclaimed row is neutral (no claim, no
+/// alarm); the unevidenced and inconclusive bounds stay visibly amber.
 fn evidence_chip(token: &str) -> &'static str {
     match token {
-        "Passed" | "earned" => {
+        "pass" | "passed" => {
             "rounded-control bg-ok-subtle px-1.5 py-0.5 text-xs font-medium text-ink"
         }
-        "Failed" | "not-earned" => {
+        "fail" | "failed" => {
             "rounded-control bg-danger-subtle px-1.5 py-0.5 text-xs font-medium text-ink"
         }
+        "not_claimed" => "rounded-control bg-sunken px-1.5 py-0.5 text-xs text-ink-muted",
         _ => "rounded-control bg-warn-subtle px-1.5 py-0.5 text-xs text-ink",
     }
 }
@@ -165,7 +171,7 @@ fn judged_view(
             <section class=CARD_PAD>
                 <h2 class=CARD_TITLE>"Capability evidence"</h2>
                 <p class="mb-2 text-sm text-ink-muted">
-                    "NotEvidenced and NoCases are printed coverage bounds, never silent."
+                    "not_evidenced and inconclusive are printed coverage bounds, never silent."
                 </p>
                 <div class=format!("{TABLE_WRAP} max-h-96 overflow-y-auto")>
                     <table class=TABLE>
