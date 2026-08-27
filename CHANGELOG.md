@@ -18,6 +18,20 @@ version on.
 
 ## [Unreleased]
 
+### Added
+
+- **The console's engine seam (#54).** `app/veredictum-console` consumes the
+  instrument as `veredictum = "=0.1.0-alpha.4"` from crates.io — never a path
+  dependency — and a console-started run spawns that same pinned binary as a
+  subprocess (`engine::Engine`), located on `PATH` or through
+  `VEREDICTUM_ENGINE` and refused unless `--version` reports the exact pin.
+  Reads parse through the published lib's typed record. SUT credentials reach
+  only the spawned run's environment, redacted from every rendering. The
+  byte-identity gate runs in CI: the same fixture campaign driven through the
+  seam and through the CLI must emit byte-identical `results.json` and
+  `run-exceptions.json` — no tolerated delta, since the record carries no
+  wall-clock stamp.
+
 ### Changed
 
 - **The repository is restructured: both products live under `app/`.** The

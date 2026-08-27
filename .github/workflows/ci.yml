@@ -482,6 +482,11 @@ jobs:
       # The `ci` profile: never stop at the first failure, so one run reports the
       # whole failure surface.
       - run: cargo nextest run --locked --workspace --profile ci
+      # The console's ssr shape: the featureless pass above compiles out
+      # every ssr-gated test, the engine byte-identity gate (#54) among
+      # them. The engine binary the gate spawns is target/debug/veredictum,
+      # built by the workspace build step above.
+      - run: cargo nextest run --locked -p veredictum-console --features ssr --profile ci
       - name: The artifact tree passes every machine gate
         run: cargo run --locked -- validate --root artifacts --specs specs/openehr
       # The website's hand-typed catalogue counts cannot drift from the
