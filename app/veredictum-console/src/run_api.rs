@@ -234,6 +234,76 @@ pub mod read {
         })
     }
 
+    /// Renders the draft's ixit document.
+    ///
+    /// The three instances point at the CDR, each carrying env-var NAMES
+    /// only — the values live in the draft and reach the spawned run's
+    /// environment alone. The secrecy test pins it.
+    #[must_use]
+    pub fn ixit_document(draft: &RunDraft) -> String {
+        let auth = match draft.auth {
+            super::AuthChoice::None => String::from(r#"{ "mode": "none" }"#),
+            super::AuthChoice::Basic => String::from(
+                r#"{ "mode": "basic", "user_env": "CONSOLE_SUT_USER", "password_env": "CONSOLE_SUT_PASS" }"#,
+            ),
+            super::AuthChoice::Bearer => {
+                String::from(r#"{ "mode": "bearer", "token_env": "CONSOLE_SUT_TOKEN" }"#)
+            }
+        };
+        let base = &draft.base_url;
+        format!(
+            r#"{{
+  "instances": {{
+    "sut": {{ "base_url": "{base}", "auth": {auth} }},
+    "admin": {{ "base_url": "{base}", "auth": {auth} }},
+    "unauthenticated": {{ "base_url": "{base}", "auth": {{ "mode": "none" }} }}
+  }}
+}}
+"#
+        )
+    }
+
+    /// Starts the drafted run.
+    ///
+    /// Writes the ixit under the job's own output directory, locates and
+    /// verifies the engine, and hands the spec to the job slot. The
+    /// credentials MOVE out of the draft into the spawned run's environment.
+    ///
+    /// # Errors
+    /// "no connection draft" before S3, the engine's own locate/spawn
+    /// refusals, the slot's busy refusal, and the filesystem's verbatim
+    /// failures.
+    pub fn start_run(state: &ConsoleState) -> Result<u64, String> {
+        let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
+        let draft = guard
+            .as_mut()
+            .ok_or_else(|| String::from("no connection draft: complete the Connect step first"))?;
+        let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
+        let out_dir = state.out.join(format!("console-job-{id}"));
+        std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
+        let ixit_path = out_dir.join("ixit.json");
+        std::fs::write(&ixit_path, ixit_document(draft))
+            .map_err(|e| format!("{}: {e}", ixit_path.display()))?;
+        let engine = crate::engine::locate().map_err(|e| e.to_string())?;
+        let spec = crate::engine::RunSpec {
+            root: state.root.clone(),
+            ixit: ixit_path,
+            out_dir,
+            sut_name: draft.sut_name.clone(),
+            sut_version: draft.sut_version.clone(),
+            statement: draft.statement.clone().map(std::path::PathBuf::from),
+            filter: draft.filter.clone(),
+            credentials: std::mem::take(&mut draft.credentials),
+            progress: true,
+        };
+        let sut_name = draft.sut_name.clone();
+        drop(guard);
+        state
+            .jobs
+            .start(id, &engine, &spec, sut_name)
+            .map_err(|e| e.to_string())
+    }
+
     /// The reachability probe.
     ///
     /// ONE GET of the template list with the supplied credentials, the
@@ -393,6 +463,37 @@ pub mod fns {
     pub async fn fetch_scope_preview(filter: String) -> Result<ScopePreview, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         super::read::scope_preview(&state, &filter).map_err(ServerFnError::new)
+    }
+
+    /// Starts the drafted run and answers with the job id.
+    ///
+    /// # Errors
+    /// "no connection draft" before S3, the engine's refusals, the busy
+    /// slot, and filesystem failures — each verbatim.
+    #[server]
+    pub async fn start_run() -> Result<u64, ServerFnError> {
+        let state: crate::state::ConsoleState = leptos::prelude::expect_context();
+        super::read::start_run(&state).map_err(ServerFnError::new)
+    }
+
+    /// The live job view, when a job exists.
+    ///
+    /// # Errors
+    /// The slot's poisoned-state diagnostic only.
+    #[server]
+    pub async fn fetch_job() -> Result<Option<crate::run_job::JobView>, ServerFnError> {
+        let state: crate::state::ConsoleState = leptos::prelude::expect_context();
+        state.jobs.view().map_err(ServerFnError::new)
+    }
+
+    /// Cancels the in-flight run.
+    ///
+    /// # Errors
+    /// "no run is in flight", or the kill's own failure.
+    #[server]
+    pub async fn cancel_run() -> Result<(), ServerFnError> {
+        let state: crate::state::ConsoleState = leptos::prelude::expect_context();
+        state.jobs.cancel().map_err(ServerFnError::new)
     }
 
     /// Stores the scope half onto the draft.

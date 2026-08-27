@@ -42,3 +42,12 @@ refuted by a better reading of the cited text, and by nothing else.
 
 ![A case detail in light mode](console/img/case-light.png)
 ![A case detail in dark mode](console/img/case-dark.png)
+
+## The run wizard
+
+Grading starts at Connect: the CDR base URL, the display identity, the
+authentication choice from the ixit's own vocabulary, and a probe whose
+answer renders verbatim before anything continues.
+
+![The connect step in light mode](console/img/connect-light.png)
+![The connect step in dark mode](console/img/connect-dark.png)

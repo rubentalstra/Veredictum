@@ -20,6 +20,19 @@ version on.
 
 ### Added
 
+- **The console runs the campaign live (#66).** Scope's save gains "Start
+  the run": the console writes the job's ixit (env-var names only, pinned by
+  a test and parsed back through the published lib's own reader), spawns the
+  pinned engine with `--progress`, and supervises it server-side — one run
+  at a time, in memory, the artifacts landing in the mounted output
+  directory exactly as a terminal run leaves them. The live screen polls the
+  job: a progress bar and counter fed by the engine's own stream (degrading
+  to elapsed-only on a binary predating the flag — never a fabricated
+  counter), a moving-median remainder always labelled an estimate, the
+  current case, the output tail verbatim, cancel (which kills the
+  subprocess and says so), and the finished tally with the results path.
+  Refresh rejoins the running job, because the job is server state and the
+  page only polls it.
 - **The catalogue speaks the CNF profile language (#87).** Case rows carry
   their tier badges (CORE / STANDARD / OPTIONS / SEC-BASIC, the capability
   matrix's own vocabulary), a `?tier=` filter narrows any chapter to one

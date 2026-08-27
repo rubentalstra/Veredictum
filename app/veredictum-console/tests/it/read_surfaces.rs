@@ -23,8 +23,10 @@ fn committed_state() -> veredictum_console::state::ConsoleState {
         root,
         specs,
         party: repo_root().join("party"),
+        out: repo_root().join("out"),
         catalogue: std::sync::Arc::new(catalogue),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        jobs: veredictum_console::run_job::JobSlot::default(),
     }
 }
 
@@ -80,8 +82,10 @@ fn a_missing_catalogue_names_the_mounts_it_looked_at() {
         root: "/nonexistent/artifacts".into(),
         specs: "/nonexistent/specs".into(),
         party: "/nonexistent/party".into(),
+        out: "/nonexistent/out".into(),
         catalogue: std::sync::Arc::new(Err(String::from("no such directory"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        jobs: veredictum_console::run_job::JobSlot::default(),
     };
     match veredictum_console::catalogue_api::read::instrument_view(&state) {
         veredictum_console::catalogue_api::InstrumentView::Missing(missing) => {

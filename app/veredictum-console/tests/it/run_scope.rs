@@ -49,10 +49,12 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
         root: root.clone(),
         specs,
         party: engine_gate::repo_root().join("party"),
+        out: engine_gate::repo_root().join("out"),
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
         ),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        jobs: veredictum_console::run_job::JobSlot::default(),
     };
     let preview = veredictum_console::run_api::read::scope_preview(&state, SCOPE_FILTER)
         .map_err(|e| format!("preview: {e}"))?;
@@ -73,6 +75,7 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
             sut_version: String::from("0.0.0-gate"),
             statement: None,
             filter: Some(String::from(SCOPE_FILTER)),
+            progress: false,
             credentials: vec![
                 Credential {
                     name: String::from("GATE_SUT_USER"),
@@ -118,8 +121,10 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
         root: "artifacts".into(),
         specs: "specs/openehr".into(),
         party: "party".into(),
+        out: "out".into(),
         catalogue: std::sync::Arc::new(Err(String::from("unused"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        jobs: veredictum_console::run_job::JobSlot::default(),
     };
     veredictum_console::run_api::read::save_connection(
         &state,
