@@ -5,8 +5,7 @@
 //!
 //! Every rule in `.claude/rules/leptos-ui.md` governs this module: identical
 //! view structure on both targets, valid HTML, every routed page sets a
-//! `<Title>`, and screens grow as `.into_any()`-erased sections rather than
-//! monolithic `view!` trees.
+//! `<Title>`, and the chrome renders exactly once around the `<Outlet/>`.
 
 use leptos::prelude::{
     AutoReload, ElementChild, GlobalAttributes, HydrationScripts, IntoView, LeptosOptions,
@@ -15,8 +14,14 @@ use leptos::prelude::{
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
     StaticSegment,
-    components::{Route, Router, Routes},
+    components::{ParentRoute, Route, Router, Routes},
 };
+
+use crate::pages::catalogue::Catalogue;
+use crate::pages::instrument::Instrument;
+use crate::pages::run::Run;
+use crate::pages::shell::Shell;
+use crate::pages::verify::Verify;
 
 /// The HTML document the server renders around the application: the head with
 /// the hydration bootstrap, and the body the client takes over.
@@ -39,12 +44,13 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
-/// The root component: meta context, the stylesheet, and the route tree.
-#[component]
+/// The root component: meta context, the stylesheet, and the route tree —
+/// every surface nested under the one [`Shell`].
 #[expect(
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"
 )]
+#[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
 
@@ -52,25 +58,14 @@ pub fn App() -> impl IntoView {
         <Stylesheet id="leptos" href="/pkg/veredictum-console.css" />
         <Title text="Veredictum console" />
         <Router>
-            <main>
-                <Routes fallback=|| "Page not found.">
-                    <Route path=StaticSegment("") view=Landing />
-                </Routes>
-            </main>
+            <Routes fallback=|| "Page not found.">
+                <ParentRoute path=StaticSegment("") view=Shell>
+                    <Route path=StaticSegment("") view=Instrument />
+                    <Route path=StaticSegment("catalogue") view=Catalogue />
+                    <Route path=StaticSegment("run") view=Run />
+                    <Route path=StaticSegment("verify") view=Verify />
+                </ParentRoute>
+            </Routes>
         </Router>
-    }
-}
-
-/// The landing page: what the console is, until the real screens land (#6).
-#[component]
-fn Landing() -> impl IntoView {
-    view! {
-        <section>
-            <h1>"Veredictum console"</h1>
-            <p>
-                "The web frontend of the independent conformance instrument "
-                "for openEHR clinical data repositories."
-            </p>
-        </section>
     }
 }

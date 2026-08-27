@@ -23,3 +23,6 @@ apply" part so a future session can act on it without re-deriving it.
   Publishing matches `workflow_ref`, which names the CALLING workflow, so the
   shared publish logic is a script and each entry point needs its own publisher
   entry; the Zenodo concept DOI
+- [Console UI direction](console-ui-direction.md) — FerroEHR shell + Veredictum
+  palette, everything-in-the-UI, signed verifiable records; design record #61,
+  engine signing #62

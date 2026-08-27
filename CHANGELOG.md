@@ -20,6 +20,16 @@ version on.
 
 ### Added
 
+- **The console's shell and design system (#63).** The sidebar chrome — the
+  seal, one entry per surface, the engine pin and a dark-mode toggle in the
+  footer — around every routed page, in the brand palette as semantic design
+  tokens (warm paper surfaces, the teal action accent, the orange reserved
+  for the running state and the seal, green and red only as verdict
+  semantics). The shared kits every screen composes from: page header, stat
+  card, surfaces, form controls, empty state, listing table with URL-state
+  pagination, toast plus inline message bar, and the verbatim pane with a
+  copy affordance. Surfaces still under construction render an honest
+  placeholder naming their tracker issue.
 - **The console's engine seam (#54).** `app/veredictum-console` consumes the
   instrument as `veredictum = "=0.1.0-alpha.4"` from crates.io — never a path
   dependency — and a console-started run spawns that same pinned binary as a

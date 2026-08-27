@@ -1,6 +1,130 @@
 /* SPDX-FileCopyrightText: Veredictum contributors */
 /* SPDX-License-Identifier: Apache-2.0 */
 
-/* Tailwind v4 standalone entry point (no Node): cargo-leptos compiles this
-   through the tailwindcss binary named by `tailwind-input-file`. */
+/* Tailwind CSS v4 entry point (standalone binary via cargo-leptos — no
+   Node/npm; pin the binary with LEPTOS_TAILWIND_VERSION).
+
+   The console design system (#61, ratified): every screen styles against the
+   SEMANTIC tokens below (bg-surface / bg-raised / text-ink / border-edge /
+   text-accent …), never against raw palette utilities and never with
+   per-element `dark:` overrides — dark mode is the same tokens redefined
+   under `.dark`, so both themes stay in lockstep and a screen cannot be
+   half-light half-dark. The architecture is FerroEHR's console token file;
+   the VALUES are Veredictum's brand (website/landing/style.css): warm paper
+   surfaces, the teal #258bb0 as the one action accent, and the brand orange
+   reserved for the RUNNING state and the seal — never decoration. Green and
+   red exist only as verdict semantics. */
+
 @import "tailwindcss";
+
+/* Class-driven dark mode: the shell toggle owns the `dark` class on the
+   root element (the Tailwind v4 default variant follows the OS media
+   query, which the in-app toggle cannot drive). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── The palette (warm paper neutrals, one teal accent, the seal orange) ── */
+:root {
+  --surface: #fff9f2; /* page background (--ver-paper) */
+  --raised: #fffdfa; /* cards, panels, the sidebar */
+  --sunken: #fdf1e6; /* code panes, wells, table header rows */
+  --edge: #e8dccf; /* hairline borders */
+  --edge-strong: #d9c9b6; /* control borders, dividers that must read */
+  --ink: #363636; /* primary text (--ver-ink) */
+  --ink-heading: #1f2a30; /* headings */
+  --ink-muted: #6a6259; /* secondary text, labels */
+  --ink-faint: #9a9187; /* placeholders, disabled */
+  --accent: #258bb0; /* the ONE action accent (--ver-teal) */
+  --accent-hover: #1b6e92; /* (--ver-teal-deep) */
+  --accent-subtle: #e2f1f7; /* accent-tinted chips/backgrounds */
+  --accent-ink: #14566f; /* text on accent-subtle (--ver-teal-field) */
+  --on-accent: #ffffff; /* text on solid accent */
+  --run: #ff861c; /* the RUNNING state and the seal (--ver-orange) */
+  --run-subtle: #ffe9d4;
+  --run-ink: #8a4a12;
+  --ok: #2e7d4f; /* verdict: passed */
+  --ok-subtle: #ddefe2;
+  --warn: #b96b00; /* verdict: inconclusive / carried warnings */
+  --warn-subtle: #f7e8cf;
+  --danger: #bd3434; /* verdict: failed */
+  --danger-subtle: #f7dede;
+  --scrim: rgb(31 42 48 / 0.4); /* the dim behind an overlay */
+}
+
+.dark {
+  --surface: #10222b; /* the teal-field end of the brand */
+  --raised: #17313d;
+  --sunken: #0b1820;
+  --edge: #28454f;
+  --edge-strong: #3a5a66;
+  --ink: #ede7de;
+  --ink-heading: #f6f1ea;
+  --ink-muted: #a8b4ba;
+  --ink-faint: #6f8087;
+  --accent: #4fb3d5;
+  --accent-hover: #7ccbe6;
+  --accent-subtle: #14566f;
+  --accent-ink: #bfe4f2;
+  --on-accent: #06222e;
+  --run: #ff9a45;
+  --run-subtle: #4a2c10;
+  --run-ink: #ffd0a3;
+  --ok: #4fbf7f;
+  --ok-subtle: #123a26;
+  --warn: #e0a340;
+  --warn-subtle: #40300f;
+  --danger: #e06c6c;
+  --danger-subtle: #451d1d;
+  /* A dark page needs a deeper dim than a light one to read as "behind". */
+  --scrim: rgb(4 12 16 / 0.6);
+}
+
+/* ── Semantic utilities (bg-surface, text-ink, border-edge, …) ─────────── */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-edge: var(--edge);
+  --color-edge-strong: var(--edge-strong);
+  --color-ink: var(--ink);
+  --color-ink-heading: var(--ink-heading);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-accent-ink: var(--accent-ink);
+  --color-on-accent: var(--on-accent);
+  --color-run: var(--run);
+  --color-run-subtle: var(--run-subtle);
+  --color-run-ink: var(--run-ink);
+  --color-ok: var(--ok);
+  --color-ok-subtle: var(--ok-subtle);
+  --color-warn: var(--warn);
+  --color-warn-subtle: var(--warn-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  /* `bg-scrim` — the ONE overlay backdrop; never a raw `bg-black/40`, which
+     ignores the theme and drifts per screen. */
+  --color-scrim: var(--scrim);
+
+  /* Shape + elevation: 8px cards, 6px controls, ONE soft shadow level. */
+  --radius-card: 0.5rem;
+  --radius-control: 0.375rem;
+  --shadow-card: 0 1px 2px 0 rgb(31 42 48 / 0.06);
+}
+
+/* ── Base ──────────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    background-color: var(--surface);
+    color: var(--ink);
+  }
+  h1,
+  h2,
+  h3 {
+    color: var(--ink-heading);
+  }
+  ::placeholder {
+    color: var(--ink-faint);
+  }
+}
