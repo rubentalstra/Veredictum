@@ -20,5 +20,6 @@ mod claim_completeness;
 mod corpus_packs;
 mod defect_rejection;
 mod perf_driver;
+mod pipeline_seams;
 mod schema_drift;
 mod verification_pack;

@@ -264,3 +264,296 @@ fn carried_measurements(
     }
     Ok(prior.measurements)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::cell::RefCell;
+    use std::path::{Path, PathBuf};
+
+    use super::*;
+
+    /// The committed example results document, the one real record in the
+    /// tree (`examples/results.example.json`): one measurement, and one
+    /// outcome of each rolled-up status.
+    fn example_results() -> Results {
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/examples/results.example.json"
+        ))
+        .expect("the committed example results document");
+        serde_json::from_str(&text).expect("the example document parses as results")
+    }
+
+    fn request<'a>(out_dir: &'a Path, sut_name: &'a str, sut_version: &'a str) -> RunRequest<'a> {
+        RunRequest {
+            root: Path::new("artifacts"),
+            ixit: Path::new("ixit.json"),
+            out_dir,
+            sut_name,
+            sut_version,
+            filter: None,
+            statement: None,
+        }
+    }
+
+    fn outcome(case: &str, status: OutcomeStatus) -> OutcomeRecord {
+        OutcomeRecord {
+            case: crate::ids::CaseId::parse(case).expect("a well-formed case id"),
+            format: None,
+            status,
+            rows_driven: 1,
+            rows_total: 1,
+            failing_step: None,
+            reason: None,
+            citation: Some("citation".to_owned()),
+            failed_rows: Vec::new(),
+        }
+    }
+
+    /// Writes `results` as the prior record of `dir`, at the name
+    /// [`carried_measurements`] reads.
+    fn write_prior(dir: &Path, results: &Results) -> PathBuf {
+        let path = dir.join("results.json");
+        let text = serde_json::to_string(results).expect("the record serializes");
+        std::fs::write(&path, text).expect("writing the prior record");
+        path
+    }
+
+    /// A warning sink that records what the run reported, in order.
+    fn sink() -> RefCell<Vec<String>> {
+        RefCell::new(Vec::new())
+    }
+
+    #[test]
+    fn skipped_and_not_applicable_tally_into_one_selection_bucket() {
+        let outcomes = vec![
+            outcome("I_EHR_SERVICE.create_ehr-a", OutcomeStatus::Passed),
+            outcome("I_EHR_SERVICE.create_ehr-b", OutcomeStatus::Passed),
+            outcome("I_EHR_SERVICE.create_ehr-c", OutcomeStatus::Failed),
+            outcome("I_EHR_SERVICE.create_ehr-d", OutcomeStatus::Errored),
+            outcome("I_EHR_SERVICE.create_ehr-e", OutcomeStatus::Skipped),
+            outcome("I_EHR_SERVICE.create_ehr-f", OutcomeStatus::NotApplicable),
+        ];
+        let counts = tally(&outcomes);
+        assert_eq!(counts.passed, 2);
+        assert_eq!(counts.failed, 1);
+        assert_eq!(counts.errored, 1);
+        // `skipped` and `not_applicable` are both selection records, so they
+        // share the bucket a verdict never counts as a driven outcome.
+        assert_eq!(counts.not_applicable, 2);
+    }
+
+    #[test]
+    fn a_campaign_is_clean_only_when_nothing_failed_or_errored() {
+        let clean = OutcomeCounts {
+            passed: 3,
+            failed: 0,
+            errored: 0,
+            not_applicable: 4,
+        };
+        let outcome_of = |counts: OutcomeCounts| RunOutcome {
+            results: example_results(),
+            report: RunReport::default(),
+            counts,
+            results_path: PathBuf::from("results.json"),
+            exceptions_path: PathBuf::from("run-exceptions.json"),
+        };
+        assert!(outcome_of(clean).is_clean());
+        assert!(
+            !outcome_of(OutcomeCounts { failed: 1, ..clean }).is_clean(),
+            "a failed row is never clean"
+        );
+        assert!(
+            !outcome_of(OutcomeCounts {
+                errored: 1,
+                ..clean
+            })
+            .is_clean(),
+            "an inconclusive row is never clean either"
+        );
+    }
+
+    /// With no statement there is no declared profile to narrow selection by,
+    /// and the verdict pipeline selects gating records by the recorded
+    /// profile — so every format is recorded, which is what keeps a red row
+    /// in an unlisted format from vanishing behind a PASS.
+    #[test]
+    fn an_absent_statement_records_every_format() {
+        let profile = tech_profile(None);
+        assert_eq!(profile.its, crate::vocab::ItsName::ItsRest);
+        assert_eq!(profile.formats, crate::vocab::FormatName::ALL.to_vec());
+    }
+
+    #[test]
+    fn a_statement_records_its_own_declared_its_rest_formats() {
+        let statement: Statement = serde_json::from_value(serde_json::json!({
+            "product": {
+                "vendor": "v", "name": "n", "version": "1", "identifier": "urn:test:n"
+            },
+            "schedule_release": "cnf-2.0-w2",
+            "claims": { "profiles": [], "capabilities": [] },
+            "tech_profiles": [
+                { "its": "its-rest", "formats": ["canonical-json"] }
+            ]
+        }))
+        .expect("a minimal statement parses");
+        let profile = tech_profile(Some(&statement));
+        assert_eq!(
+            profile.formats,
+            vec![crate::vocab::FormatName::CanonicalJson]
+        );
+        assert_ne!(
+            profile.formats,
+            crate::vocab::FormatName::ALL.to_vec(),
+            "a declared profile narrows the recorded formats"
+        );
+    }
+
+    /// The digest binds the results to the exact topology bytes, so equal
+    /// text digests equally and one changed character does not.
+    #[test]
+    fn the_ixit_digest_is_a_function_of_the_topology_bytes() {
+        let text = r#"{"instances":{}}"#;
+        assert_eq!(ixit_digest(text), ixit_digest(text));
+        assert_ne!(ixit_digest(text), ixit_digest(r#"{"instances":{ }}"#));
+        assert_eq!(ixit_digest(text).len(), 16, "16 lowercase hex characters");
+        assert!(ixit_digest(text).chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn no_prior_record_carries_nothing_and_warns_about_nothing() {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let seen = sink();
+        let carried = carried_measurements(
+            &request(dir.path(), "example-cdr", "0.0.0-example"),
+            &|warning| seen.borrow_mut().push(format!("{warning:?}")),
+        )
+        .expect("an absent prior record is absence, never a defect");
+        assert!(carried.is_empty());
+        assert!(seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_prior_record_of_another_sut_never_carries_forward() {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let prior = example_results();
+        assert!(!prior.measurements.is_empty(), "the example is measured");
+        write_prior(dir.path(), &prior);
+        let seen = sink();
+        let carried = carried_measurements(
+            &request(dir.path(), "another-cdr", "0.0.0-example"),
+            &|warning| seen.borrow_mut().push(format!("{warning:?}")),
+        )
+        .expect("a foreign prior record is not a defect");
+        assert!(
+            carried.is_empty(),
+            "measurements never travel between systems under test"
+        );
+        assert!(seen.borrow().is_empty());
+    }
+
+    #[test]
+    fn measurements_carry_forward_silently_at_the_same_version() {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let prior = example_results();
+        write_prior(dir.path(), &prior);
+        let seen = sink();
+        let carried = carried_measurements(
+            &request(dir.path(), &prior.sut.name, &prior.sut.version),
+            &|warning| seen.borrow_mut().push(format!("{warning:?}")),
+        )
+        .expect("the same SUT at the same version");
+        assert_eq!(carried.len(), prior.measurements.len());
+        assert!(
+            seen.borrow().is_empty(),
+            "an unchanged version needs no attestation"
+        );
+    }
+
+    /// The version-binding rule: a record measured at another version is
+    /// carried, and the run says so, because it wants either a re-measure or
+    /// an attested-unchanged surface.
+    #[test]
+    fn a_version_change_carries_the_records_and_warns() {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let prior = example_results();
+        write_prior(dir.path(), &prior);
+        let seen = sink();
+        let carried = carried_measurements(
+            &request(dir.path(), &prior.sut.name, "9.9.9-next"),
+            &|warning| match warning {
+                RunWarning::CarriedMeasurements {
+                    count,
+                    measured_at,
+                    running_at,
+                } => seen
+                    .borrow_mut()
+                    .push(format!("{count} {measured_at} {running_at}")),
+            },
+        )
+        .expect("carry-forward across versions is a warning, not a refusal");
+        assert_eq!(carried.len(), prior.measurements.len());
+        assert_eq!(
+            *seen.borrow(),
+            vec![format!(
+                "{} {} 9.9.9-next",
+                prior.measurements.len(),
+                prior.sut.version
+            )]
+        );
+    }
+
+    /// A prior file that exists but will not parse is a runner defect:
+    /// carrying zero measurements past it would silently drop the measured
+    /// evidence the party already holds.
+    #[test]
+    fn an_unparsable_prior_record_is_a_defect_not_an_empty_carry() {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        std::fs::write(dir.path().join("results.json"), "{ not json")
+            .expect("writing the broken record");
+        let error = carried_measurements(&request(dir.path(), "example-cdr", "0.0.0"), &|_| {})
+            .expect_err("a broken prior record must stop the run");
+        let message = error.to_string();
+        assert!(
+            message.contains("does not parse as results.json"),
+            "{message}"
+        );
+        assert!(message.contains("cannot be carried forward"), "{message}");
+    }
+
+    #[test]
+    fn the_documents_render_the_record_and_one_entry_per_exception() {
+        let results = example_results();
+        let case = crate::ids::CaseId::parse("I_EHR_SERVICE.create_ehr-main").expect("case id");
+        let outcome = RunOutcome {
+            results,
+            report: RunReport {
+                exceptions: vec![(
+                    case.clone(),
+                    crate::run::Exception::Unrealized("no wire on this ITS".to_owned()),
+                )],
+                ..RunReport::default()
+            },
+            counts: OutcomeCounts::default(),
+            results_path: PathBuf::from("results.json"),
+            exceptions_path: PathBuf::from("run-exceptions.json"),
+        };
+
+        let document = outcome
+            .results_document()
+            .expect("the record serializes as a document");
+        assert!(document.ends_with('\n'), "documents end with a newline");
+        let parsed: Results =
+            serde_json::from_str(&document).expect("the rendered document parses back");
+        assert_eq!(parsed.sut.name, outcome.results.sut.name);
+
+        let exceptions = outcome
+            .exceptions_document()
+            .expect("the exceptions serialize");
+        let entries: Vec<serde_json::Value> =
+            serde_json::from_str(&exceptions).expect("the exception document parses");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["case"], case.to_string());
+        assert_eq!(entries[0]["exception"]["kind"], "unrealized");
+    }
+}

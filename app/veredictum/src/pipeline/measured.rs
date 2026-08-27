@@ -591,3 +591,173 @@ fn merge_measurement(
     observe(MeasuredEvent::Merged(request.results));
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+
+    /// The committed example results document — the one real record in the
+    /// tree, carrying one measurement of the POC class.
+    fn example_results() -> crate::party::Results {
+        let text = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/examples/results.example.json"
+        ))
+        .expect("the committed example results document");
+        serde_json::from_str(&text).expect("the example document parses as results")
+    }
+
+    fn committed_catalogue() -> Loaded {
+        crate::artifacts::load_root(Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../artifacts"
+        )))
+        .expect("the committed catalogue loads")
+    }
+
+    /// Writes `results` into a temp directory and returns the path plus the
+    /// directory guard, which must outlive the path.
+    fn staged(results: &crate::party::Results) -> (assert_fs::TempDir, std::path::PathBuf) {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let path = dir.path().join("results.json");
+        let text = to_json_document(results, "serialize").expect("the record serializes");
+        std::fs::write(&path, text).expect("staging the record");
+        (dir, path)
+    }
+
+    /// A merge over the committed catalogue: one record per case, no orphans,
+    /// the set written back sorted.
+    #[test]
+    fn a_merge_replaces_the_record_of_its_own_case() {
+        let loaded = committed_catalogue();
+        let prior = example_results();
+        let (_dir, path) = staged(&prior);
+        let mut measurement = prior
+            .measurements
+            .first()
+            .expect("the example is measured")
+            .clone();
+        // A second window over the same case, holding a longer sustained load.
+        measurement.duration_s = measurement.duration_s.saturating_mul(2);
+
+        let events = Mutex::new(Vec::new());
+        let request = MeasuredRequest {
+            root: Path::new("artifacts"),
+            ixit: Path::new("ixit.json"),
+            results: &path,
+            class: "POC",
+            seed_workers: 1,
+            window: SustainedWindow::default(),
+        };
+        merge_measurement(&request, &loaded, measurement.clone(), &|event| {
+            events
+                .lock()
+                .expect("the observer lock is uncontended")
+                .push(format!("{event:?}"));
+        })
+        .expect("the merge writes the document");
+
+        let merged: crate::party::Results = serde_json::from_str(
+            &std::fs::read_to_string(&path).expect("the merged document is readable"),
+        )
+        .expect("the merged document parses");
+        assert_eq!(
+            merged.measurements.len(),
+            1,
+            "the new record replaces the prior one for the same case"
+        );
+        assert_eq!(
+            merged.measurements[0].duration_s, measurement.duration_s,
+            "the merged record is the new one"
+        );
+        let seen = events.lock().expect("the observer lock is uncontended");
+        assert_eq!(seen.len(), 1, "one event: the merge itself ({seen:?})");
+        assert!(seen[0].starts_with("Merged("), "{seen:?}");
+    }
+
+    /// A record whose case the catalogue no longer carries is pruned, and the
+    /// pruning is reported rather than done silently — an orphan the verdict
+    /// review would otherwise flag.
+    #[test]
+    fn a_record_of_a_retired_case_is_pruned_visibly() {
+        let loaded = committed_catalogue();
+        let mut prior = example_results();
+        let mut orphan = prior
+            .measurements
+            .first()
+            .expect("the example is measured")
+            .clone();
+        orphan.case =
+            CaseId::parse("PERF-hospital_sim-class_RETIRED").expect("a well-formed case id");
+        prior.measurements.push(orphan.clone());
+        let (_dir, path) = staged(&prior);
+        let measurement = prior.measurements[0].clone();
+
+        let pruned = Mutex::new(Vec::new());
+        let request = MeasuredRequest {
+            root: Path::new("artifacts"),
+            ixit: Path::new("ixit.json"),
+            results: &path,
+            class: "POC",
+            seed_workers: 1,
+            window: SustainedWindow::default(),
+        };
+        merge_measurement(&request, &loaded, measurement, &|event| {
+            if let MeasuredEvent::PrunedOrphan(case) = event {
+                pruned
+                    .lock()
+                    .expect("the observer lock is uncontended")
+                    .push(case.to_string());
+            }
+        })
+        .expect("the merge writes the document");
+
+        assert_eq!(
+            *pruned.lock().expect("the observer lock is uncontended"),
+            vec![orphan.case.to_string()],
+            "the orphan is named as it is dropped"
+        );
+        let merged: crate::party::Results = serde_json::from_str(
+            &std::fs::read_to_string(&path).expect("the merged document is readable"),
+        )
+        .expect("the merged document parses");
+        assert!(
+            merged.measurements.iter().all(|m| m.case != orphan.case),
+            "the orphan record does not survive the merge"
+        );
+    }
+
+    /// The merge reads the results document through its published schema, so
+    /// a document that is not a results record is refused before anything is
+    /// written.
+    #[test]
+    fn a_merge_refuses_a_document_that_is_not_a_results_record() {
+        let loaded = Loaded::default();
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let path = dir.path().join("results.json");
+        std::fs::write(&path, "{}").expect("staging the wrong document");
+        let measurement = example_results()
+            .measurements
+            .first()
+            .expect("the example is measured")
+            .clone();
+        let request = MeasuredRequest {
+            root: Path::new("artifacts"),
+            ixit: Path::new("ixit.json"),
+            results: &path,
+            class: "POC",
+            seed_workers: 1,
+            window: SustainedWindow::default(),
+        };
+        let error = merge_measurement(&request, &loaded, measurement, &|_| {})
+            .expect_err("an empty object is not a results record");
+        assert!(matches!(error, Error::Party(_)), "{error}");
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("the staged document is readable"),
+            "{}",
+            "a refused merge writes nothing"
+        );
+    }
+}
