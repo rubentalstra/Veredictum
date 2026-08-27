@@ -40,7 +40,7 @@
 </p>
 
 <p align="center">
-<strong>openEHR ITS-REST 1.1.0</strong> &nbsp;·&nbsp; <strong>AQL 1.1</strong> &nbsp;·&nbsp; <strong>RM 1.2.0</strong> &nbsp;·&nbsp; <strong>1103 spec-cited cases</strong> &nbsp;·&nbsp; <strong>247 operation bindings</strong>
+<strong>the released openEHR specifications, version-aware per case</strong> &nbsp;·&nbsp; <strong>1103 spec-cited cases</strong> &nbsp;·&nbsp; <strong>247 operation bindings</strong>
 </p>
 
 <!--
@@ -232,8 +232,12 @@ Two verdict machineries share that discipline
 - **Conformance by assertion:** the statement selects the applicable cases,
   typed assertions judge each recorded exchange, and case results roll up
   through capabilities to a profile verdict against the CORE / STANDARD /
-  OPTIONS matrix. `NotEvidenced` and `NoCases` are printed as first-class
-  results, so a thin claim is visible instead of silently green.
+  OPTIONS matrix. Version selection lives in the same two documents: each
+  case declares the spec-version ranges it applies to, the statement declares
+  the versions the product implements, and a case outside the declared
+  versions is out of scope — the instrument is version-aware per case, never
+  fixed to one release. `not_evidenced` and `not_claimed` are printed as
+  first-class results, so a thin claim is visible instead of silently green.
 - **Conformance by measurement:** a performance class is earned when every
   threshold holds in one measured run. The class verdict is re-derived from
   the HDR histograms embedded in the record, so a stored summary is
