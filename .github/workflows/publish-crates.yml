@@ -72,7 +72,10 @@ jobs:
       # This also proves the `include` allowlist in Cargo.toml is complete: the
       # packaged tree is compiled on its own, so a source directory the
       # allowlist forgot fails here rather than after an irreversible upload.
-      - run: cargo publish --dry-run --locked
+      # -p: the workspace carries the unpublishable console beside the crate
+      # (publish = false), and a bare publish refuses on it — the v0.1.0-alpha.4
+      # publish leg failed on exactly that.
+      - run: cargo publish --dry-run --locked -p veredictum
 
   publish:
     name: publish to crates.io
