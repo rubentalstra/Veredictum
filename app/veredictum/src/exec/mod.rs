@@ -37,6 +37,7 @@ pub mod resolve;
 pub mod resultset;
 pub mod signature;
 pub mod state;
+pub mod versioned;
 
 use crate::ids::CaseId;
 use crate::model::case::{CaseCore, FlowStep};

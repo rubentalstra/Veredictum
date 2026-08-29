@@ -30,7 +30,7 @@ use crate::exec::state::{Captured, VarStore};
 use crate::exec::{Provisioned, StepDriver, StepObservation};
 use crate::ids::{CaptureName, SmOperationRef};
 use crate::ixit::{AuthMode, Instance, Ixit};
-use crate::model::assertion::{Assertion, EquivalentTarget, RowsSpec};
+use crate::model::assertion::{Assertion, EquivalentTarget, RowsSpec, SingleRef};
 use crate::model::binding::{
     OperationBinding, RequestBody, RequestSpec, StripRule, WireCapture, WireFrom,
 };
@@ -85,6 +85,10 @@ pub struct HttpDriver<'a> {
     /// binds it, and a server could dodge every dated MUST by
     /// under-advertising — divergence surfaces as a static-review finding.
     observed_restapi_specs_version: Option<String>,
+    /// Versioned-object reads the `version` assertion family performed,
+    /// keyed by row and absolute URL, so several assertions over the same
+    /// envelope or revision history cost one exchange.
+    wire_reads: BTreeMap<(u32, String), Value>,
     /// Whether the wire is being recorded for the transcript artifact.
     recording: Recording,
     /// The row the driver is on, stamped onto each recorded exchange.
@@ -134,6 +138,7 @@ impl<'a> HttpDriver<'a> {
             last_body: None,
             last_version_uid: None,
             observed_restapi_specs_version: None,
+            wire_reads: BTreeMap::new(),
             recording: Recording::Off,
             row: 0,
             exchanges: Vec::new(),
@@ -691,7 +696,7 @@ impl<'a> HttpDriver<'a> {
     )]
     fn eval_assertions(
         &mut self,
-        _case: &CaseCore,
+        case: &CaseCore,
         binding: &OperationBinding,
         assertions_list: &[Assertion],
         exchange: &Exchange,
@@ -825,12 +830,32 @@ impl<'a> HttpDriver<'a> {
                     signing,
                     vars,
                 ),
-                // The version family still needs a versioned-object read the
-                // ITS does not surface uniformly for change_type/lifecycle
-                // (in-case verification carries them); unique is aggregate
-                // (law e); message_exemplar/state are informative.
-                Assertion::Version { .. }
-                | Assertion::Unique { .. }
+                // The version family is judged against the VERSION envelope it
+                // names, read back off the versioned object when the step's
+                // own body is not already that envelope.
+                Assertion::Version {
+                    of,
+                    for_each,
+                    change_type,
+                    lifecycle_state,
+                    count,
+                    uid_pattern,
+                } => self.eval_version_assertion(
+                    case,
+                    exchange.body.as_ref(),
+                    VersionFacts {
+                        of: of.as_ref(),
+                        for_each: for_each.as_ref(),
+                        change_type: *change_type,
+                        lifecycle_state: lifecycle_state.as_deref(),
+                        count: *count,
+                        uid_pattern: uid_pattern.as_ref(),
+                    },
+                    vars,
+                ),
+                // unique is aggregate (law e); message_exemplar/state are
+                // informative (AMB-1 / the `verified_by` machinery).
+                Assertion::Unique { .. }
                 | Assertion::MessageExemplar { .. }
                 | Assertion::State { .. } => Ok(()),
             };
@@ -3497,17 +3522,42 @@ impl StepDriver for HttpDriver<'_> {
                         failures.push(m);
                     }
                 }
+                // A version postcondition reads the versioned object back:
+                // the flow's last body is only its envelope when the flow
+                // ended on a version read.
+                Assertion::Version {
+                    of,
+                    for_each,
+                    change_type,
+                    lifecycle_state,
+                    count,
+                    uid_pattern,
+                } => {
+                    if let Err(AssertionFailure(m)) = self.eval_version_assertion(
+                        case,
+                        Some(&body),
+                        VersionFacts {
+                            of: of.as_ref(),
+                            for_each: for_each.as_ref(),
+                            change_type: *change_type,
+                            lifecycle_state: lifecycle_state.as_deref(),
+                            count: *count,
+                            uid_pattern: uid_pattern.as_ref(),
+                        },
+                        vars,
+                    ) {
+                        failures.push(m);
+                    }
+                }
                 // Equivalent/returns/result_set/instance_of postconditions
                 // ride the flow's read step (the verification carrier);
-                // version/signature need versioned-object reads (registered
-                // exceptions in the run report); unique is aggregate (law e);
-                // message_exemplar/state are informative.
+                // signature needs the version-envelope read step; unique is
+                // aggregate (law e); message_exemplar/state are informative.
                 Assertion::Equivalent { .. }
                 | Assertion::Returns { .. }
                 | Assertion::ResultSet { .. }
                 | Assertion::InstanceOf { .. }
                 | Assertion::XmlRoot { .. }
-                | Assertion::Version { .. }
                 | Assertion::Signature { .. }
                 | Assertion::Unique { .. }
                 | Assertion::MessageExemplar { .. }
@@ -3532,6 +3582,373 @@ impl StepDriver for HttpDriver<'_> {
             }
         }
         Ok(failures)
+    }
+}
+
+/// The versioned-object family a case addresses, which selects the reads the
+/// `version` assertion family is judged against.
+///
+/// Closed by construction: an operation outside the five is NOT a versioned
+/// family, and a case whose flow reaches none of them (or more than one) makes
+/// `assert: version` unaddressable, which is a loud failure rather than a
+/// guess.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum VersionedFamily {
+    /// `VERSIONED_COMPOSITION` (RM ehr `versioned_composition.adoc`).
+    Composition,
+    /// `VERSIONED_EHR_STATUS` (RM ehr `versioned_ehr_status.adoc`).
+    EhrStatus,
+    /// `VERSIONED_PARTY` (RM demographic, served under `/demographic`).
+    Party,
+    /// The demographic `PARTY_RELATIONSHIP` container.
+    PartyRelationship,
+    /// `VERSIONED_FOLDER`, the EHR directory.
+    Directory,
+}
+
+impl VersionedFamily {
+    /// The family an SM operation addresses, if it addresses one.
+    ///
+    /// `I_DEMOGRAPHIC_SERVICE` carries both demographic families, so the
+    /// operation name discriminates: the relationship operations all spell
+    /// `party_relationship` (SM `master06-demographic_service.adoc`
+    /// §`i_demographic_service`).
+    fn of_operation(op: &SmOperationRef) -> Option<Self> {
+        match op.interface() {
+            "I_EHR_COMPOSITION" => Some(Self::Composition),
+            "I_EHR_STATUS" => Some(Self::EhrStatus),
+            "I_EHR_DIRECTORY" => Some(Self::Directory),
+            "I_PARTY" | "I_ITS_REST_VERSIONED_PARTY" => Some(Self::Party),
+            "I_PARTY_RELATIONSHIP" => Some(Self::PartyRelationship),
+            "I_DEMOGRAPHIC_SERVICE" if op.operation().contains("party_relationship") => {
+                Some(Self::PartyRelationship)
+            }
+            "I_DEMOGRAPHIC_SERVICE" if op.operation().contains("party") => Some(Self::Party),
+            _ => None,
+        }
+    }
+
+    /// The family a committed member's concrete RM type belongs to.
+    ///
+    /// A CONTRIBUTION names no family of its own — its members do (RM common
+    /// `master06-change_control_package.adoc` §Contributions: a contribution
+    /// lists the affected `VERSION` objects) — so a commit case's family is
+    /// the one its members' `data._type` names.
+    fn of_rm_type(rm_type: &str) -> Option<Self> {
+        match rm_type {
+            "COMPOSITION" => Some(Self::Composition),
+            "EHR_STATUS" => Some(Self::EhrStatus),
+            "FOLDER" => Some(Self::Directory),
+            "PERSON" | "AGENT" | "GROUP" | "ORGANISATION" | "ROLE" => Some(Self::Party),
+            "PARTY_RELATIONSHIP" => Some(Self::PartyRelationship),
+            _ => None,
+        }
+    }
+
+    /// The operation (and binding variant) serving one `ORIGINAL_VERSION`
+    /// envelope of this family, or `None` where the released ITS-REST
+    /// realizes no such read.
+    fn envelope_read(self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Self::Composition => Some(("I_EHR_COMPOSITION.get_versioned_composition", "version")),
+            Self::EhrStatus => Some(("I_EHR_STATUS.get_versioned_ehr_status", "version")),
+            Self::Party => Some(("I_PARTY.get_party_at_version", "versioned_party")),
+            Self::PartyRelationship | Self::Directory => None,
+        }
+    }
+
+    /// The operation serving this family's `REVISION_HISTORY`, or `None`
+    /// where the released ITS-REST realizes no such read.
+    fn revision_history_read(self) -> Option<&'static str> {
+        match self {
+            Self::Composition => {
+                Some("I_ITS_REST_REVISION_HISTORY.versioned_composition_revision_history")
+            }
+            Self::EhrStatus => {
+                Some("I_ITS_REST_REVISION_HISTORY.versioned_ehr_status_revision_history")
+            }
+            Self::Party => Some("I_ITS_REST_REVISION_HISTORY.versioned_party_revision_history"),
+            Self::PartyRelationship | Self::Directory => None,
+        }
+    }
+}
+
+/// The facts one `version` assertion declares, passed as one value so the
+/// evaluator mirrors the assertion's own shape.
+#[derive(Clone, Copy)]
+struct VersionFacts<'a> {
+    of: Option<&'a SingleRef>,
+    for_each: Option<&'a SingleRef>,
+    change_type: Option<crate::vocab::ChangeType>,
+    lifecycle_state: Option<&'a str>,
+    count: Option<u64>,
+    uid_pattern: Option<&'a Template>,
+}
+
+impl HttpDriver<'_> {
+    /// The versioned family a `version` assertion is judged against: the
+    /// case's own SM anchor first, then the single family its flow calls
+    /// reach, then the single family its committed members name.
+    fn version_family(&self, case: &CaseCore) -> Result<VersionedFamily, AssertionFailure> {
+        let anchor = case.sm_operation.as_ref();
+        if let Some(family) = anchor.and_then(VersionedFamily::of_operation) {
+            return Ok(family);
+        }
+        let called: std::collections::BTreeSet<VersionedFamily> = case
+            .flow
+            .iter()
+            .filter_map(|step| {
+                if step.call.contains('.') {
+                    SmOperationRef::parse(&step.call).ok()
+                } else {
+                    anchor.map(|a| a.sibling(&step.call))
+                }
+            })
+            .filter_map(|op| VersionedFamily::of_operation(&op))
+            .collect();
+        Self::one_family(called)
+            .or_else(|| Self::one_family(self.committed_families()))
+            .ok_or_else(|| {
+                AssertionFailure(format!(
+                    "version: case {} reaches no single versioned-object family, so the assertion names no container to read",
+                    case.id
+                ))
+            })
+    }
+
+    /// The families the payloads this row committed name.
+    fn committed_families(&self) -> std::collections::BTreeSet<VersionedFamily> {
+        let mut found = std::collections::BTreeSet::new();
+        let rm_type = |v: &Value| {
+            v.get("_type")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        };
+        for payload in &self.committed {
+            match payload.get("versions").and_then(Value::as_array) {
+                Some(members) => {
+                    for member in members {
+                        if let Some(t) = member.get("data").and_then(rm_type)
+                            && let Some(family) = VersionedFamily::of_rm_type(&t)
+                        {
+                            found.insert(family);
+                        }
+                    }
+                }
+                None => {
+                    if let Some(t) = rm_type(payload)
+                        && let Some(family) = VersionedFamily::of_rm_type(&t)
+                    {
+                        found.insert(family);
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    /// The one family of a set, or `None` when the set does not name exactly
+    /// one — a guess between two containers is never made.
+    fn one_family(
+        families: std::collections::BTreeSet<VersionedFamily>,
+    ) -> Option<VersionedFamily> {
+        let mut found = families.into_iter();
+        match (found.next(), found.next()) {
+            (Some(one), None) => Some(one),
+            _ => None,
+        }
+    }
+
+    /// Perform one versioned read and cache the served body for this row.
+    fn versioned_read(
+        &mut self,
+        case: &CaseCore,
+        call: &str,
+        variant: Option<&str>,
+        with: &BTreeMap<String, Value>,
+        vars: &VarStore,
+    ) -> Result<Value, AssertionFailure> {
+        let fail = |e: String| AssertionFailure(format!("version: {e}"));
+        let binding = self
+            .binding_for_variant(case, call, variant)
+            .map_err(fail)?;
+        if binding.variant.as_deref() != variant {
+            return Err(fail(format!(
+                "{call} declares no {} realization to read the envelope through",
+                variant.unwrap_or("<variant-less>")
+            )));
+        }
+        let instance = self.provisioning_instance(case).map_err(fail)?;
+        let request_spec = binding
+            .request
+            .as_ref()
+            .ok_or_else(|| fail(format!("{call} is unrealized on this ITS")))?;
+        let base = instance.base_url.trim_end_matches('/');
+        let url = Self::build_url(binding, base, with, vars).map_err(fail)?;
+        let key = (self.row, url.clone());
+        if let Some(cached) = self.wire_reads.get(&key) {
+            return Ok(cached.clone());
+        }
+        let headers = Self::compose_headers(
+            self.set,
+            self.ixit,
+            case,
+            None,
+            binding,
+            instance,
+            vars,
+            None,
+            self.spec_versions,
+        )
+        .map_err(fail)?;
+        let exchange = self
+            .send(request_spec.method, &url, &headers, None, true)
+            .map_err(fail)?;
+        if !exchange.status.is_success() {
+            return Err(fail(format!(
+                "the versioned read {call} answered {} — the asserted version is unreadable",
+                exchange.status.as_u16()
+            )));
+        }
+        let body = exchange
+            .body
+            .ok_or_else(|| fail(format!("the versioned read {call} served no body")))?;
+        self.wire_reads.insert(key, body.clone());
+        Ok(body)
+    }
+
+    /// The `ORIGINAL_VERSION` envelope of one version: the step's own body
+    /// when that body already IS the envelope, else the family's version read.
+    fn version_envelope(
+        &mut self,
+        case: &CaseCore,
+        family: VersionedFamily,
+        in_hand: Option<&Value>,
+        version_uid: &str,
+        vars: &VarStore,
+    ) -> Result<Value, AssertionFailure> {
+        if let Some(body) = in_hand
+            && crate::exec::versioned::envelope_uid(body) == Some(version_uid)
+        {
+            return Ok(body.clone());
+        }
+        let (call, variant) = family.envelope_read().ok_or_else(|| {
+            AssertionFailure(format!(
+                "version: the released ITS-REST realizes no VERSION envelope read for the {family:?} family, so change_type/lifecycle_state/uid_pattern are unjudgeable here"
+            ))
+        })?;
+        let with = BTreeMap::from([(
+            "version_uid".to_owned(),
+            Value::String(version_uid.to_owned()),
+        )]);
+        self.versioned_read(case, call, Some(variant), &with, vars)
+    }
+
+    /// Evaluate one `version` assertion.
+    fn eval_version_assertion(
+        &mut self,
+        case: &CaseCore,
+        in_hand: Option<&Value>,
+        facts: VersionFacts<'_>,
+        vars: &VarStore,
+    ) -> Result<(), AssertionFailure> {
+        let family = self.version_family(case)?;
+        if let Some(want) = facts.count {
+            let call = family.revision_history_read().ok_or_else(|| {
+                AssertionFailure(format!(
+                    "version count: the released ITS-REST realizes no REVISION_HISTORY read for the {family:?} family, so the version count is unjudgeable here"
+                ))
+            })?;
+            let history = self.versioned_read(case, call, None, &BTreeMap::new(), vars)?;
+            crate::exec::versioned::eval_count(&history, want)?;
+        }
+        let targets = self.version_targets(&facts, vars)?;
+        for version_uid in targets {
+            let envelope = self.version_envelope(case, family, in_hand, &version_uid, vars)?;
+            if let Some(template) = facts.uid_pattern {
+                let pattern = self.uid_pattern_regex(template, vars)?;
+                crate::exec::versioned::eval_uid_pattern(&envelope, &pattern, template.raw())?;
+            }
+            if let Some(want) = facts.change_type {
+                crate::exec::versioned::eval_change_type(&envelope, want)?;
+            }
+            if let Some(want) = facts.lifecycle_state {
+                crate::exec::versioned::eval_lifecycle_state(&envelope, want)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The version uids one assertion judges: the single `of:` reference, or
+    /// every member of the `for_each:` list capture.
+    fn version_targets(
+        &mut self,
+        facts: &VersionFacts<'_>,
+        vars: &VarStore,
+    ) -> Result<Vec<String>, AssertionFailure> {
+        // `count` alone is legal and names no version (the assertion's own
+        // invariant); anything else was refused at parse time.
+        let ((Some(SingleRef(reference)), None) | (None, Some(SingleRef(reference)))) =
+            (facts.of, facts.for_each)
+        else {
+            return Ok(Vec::new());
+        };
+        let resolved = self
+            .resolver
+            .resolve_ref(reference, vars)
+            .map_err(|e| AssertionFailure(format!("version: {reference} is unresolvable ({e})")))?;
+        match resolved {
+            Value::String(uid) => Ok(vec![uid]),
+            Value::Array(items) => items
+                .iter()
+                .map(|item| {
+                    item.as_str().map(ToOwned::to_owned).ok_or_else(|| {
+                        AssertionFailure(format!(
+                            "version: {reference} carries a non-scalar member, which names no version"
+                        ))
+                    })
+                })
+                .collect(),
+            other => Err(AssertionFailure(format!(
+                "version: {reference} resolved to {}, which names no version",
+                json_shape(&other)
+            ))),
+        }
+    }
+
+    /// Compile a `uid_pattern` into an anchored regex: each `${…}` reference
+    /// contributes its resolved value, each `<…>` token its released grammar.
+    fn uid_pattern_regex(
+        &mut self,
+        template: &Template,
+        vars: &VarStore,
+    ) -> Result<regex::Regex, AssertionFailure> {
+        let mut pattern = String::from("^");
+        for segment in template.segments() {
+            match segment {
+                crate::refgrammar::Segment::Lit(text) => {
+                    let expanded = crate::exec::versioned::expand_uid_literal(text).map_err(|name| {
+                        AssertionFailure(format!(
+                            "version uid_pattern: <{name}> is not one of the closed OBJECT_VERSION_ID tokens (uuid | system | n)"
+                        ))
+                    })?;
+                    pattern.push_str(&expanded);
+                }
+                crate::refgrammar::Segment::Ref(reference) => {
+                    let value = self.resolver.resolve_ref(reference, vars).map_err(|e| {
+                        AssertionFailure(format!(
+                            "version uid_pattern: {reference} is unresolvable ({e})"
+                        ))
+                    })?;
+                    let text = scalar_text(&value)
+                        .map_err(|e| AssertionFailure(format!("version uid_pattern: {e}")))?;
+                    pattern.push_str(&regex::escape(&text));
+                }
+            }
+        }
+        pattern.push('$');
+        regex::Regex::new(&pattern)
+            .map_err(|e| AssertionFailure(format!("version uid_pattern: {e}")))
     }
 }
 
