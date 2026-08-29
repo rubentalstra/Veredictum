@@ -1014,6 +1014,7 @@ mod tests {
                     readings: vec![reading(Bracket::Before), reading(Bracket::After)],
                 })
                 .collect(),
+            comparability: Vec::new(),
         }
     }
 

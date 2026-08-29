@@ -124,6 +124,20 @@ fn posture_section(result: &BenchResult) -> String {
         "A `verified` item was observed black-box at BOTH ends of the measured window; a `declared-only` item is a claim this record carries because nothing on the wire discloses it. A canary that contradicted the declaration would have refused the run rather than reaching this table."
     );
     let _written = writeln!(out);
+    for divergence in &result.posture.comparability {
+        let _written = writeln!(
+            out,
+            "Comparability: profile `{}` declares `{}` for `{}`, and the deployment measured here configures `{}` ({}).",
+            result.posture.profile,
+            divergence.profile_declares,
+            divergence.item,
+            divergence.deployment_configures,
+            divergence.source
+        );
+    }
+    if !result.posture.comparability.is_empty() {
+        let _written = writeln!(out);
+    }
     out
 }
 

@@ -56,7 +56,9 @@ What each flag is doing, and why the gate insists on it:
   audit trail. Declare the profile your deployment actually runs. The canaries
   check each item against the running system before and after the measured
   window, and a run whose deployment disagrees with its declaration is refused
-  rather than recorded, so a wrong declaration costs you the run.
+  rather than recorded, so a wrong declaration costs you the run. The board
+  groups rows by profile and ranks only inside a group, so declaring the
+  profile you actually run costs you nothing in position.
 
 Leave `--scale` and `--seed-workers` alone. Either one takes the run off the
 pack's pinned configuration, the record says so, and the board marks the row.
@@ -119,6 +121,7 @@ request on any of these:
 | Failed-arrival ceiling | any repetition, phase and operation, on the target or on any baseline, above the ceiling the pack pins in `pack.max_failed_share` |
 | Fingerprint | no environment block, or no core count in it |
 | Failed arrivals | any operation in any repetition, on the target or on either baseline, where every recorded arrival failed |
+| Posture verification | an item the canaries observe that the record does not stand behind, on the target or on either baseline: the signing scheme read off the run's own committed versions, the fate of the invalid twin, the uncredentialed read, the base URL scheme, the encoded response. Audit and tenancy stay declared-only, and a record claiming either was verified is refused too |
 | File name | the date is not an ISO 8601 calendar date, or the host prefix does not digest from the record's own environment block |
 | Append-only | the pull request modifies, deletes or renames a record that is already merged |
 | Board freshness | `website/landing/benchmarks.html` no longer matches the committed records |

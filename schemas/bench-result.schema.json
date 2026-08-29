@@ -1381,6 +1381,76 @@
                 "type": "string",
                 "minLength": 1
               },
+              "comparability": {
+                "description": "Every item on which the measured deployment's own configuration departs from the profile named above. A same-machine baseline is composed from somebody else's pinned recipe, so where that recipe configures an item differently the run declares, and the canaries check, what the deployment actually does; this block is how the record says so. Absent for a run that declared its profile as the pack defines it.",
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "item",
+                    "profile_declares",
+                    "deployment_configures",
+                    "source"
+                  ],
+                  "properties": {
+                    "item": {
+                      "enum": [
+                        "audit",
+                        "version_signing",
+                        "commit_validation",
+                        "authn",
+                        "tls",
+                        "compression",
+                        "tenancy"
+                      ]
+                    },
+                    "profile_declares": {
+                      "enum": [
+                        "basic",
+                        "bearer",
+                        "digest",
+                        "external-sink",
+                        "internal",
+                        "multi",
+                        "none",
+                        "off",
+                        "on",
+                        "pgp",
+                        "queryable-api",
+                        "response",
+                        "single",
+                        "syntax",
+                        "template"
+                      ]
+                    },
+                    "deployment_configures": {
+                      "enum": [
+                        "basic",
+                        "bearer",
+                        "digest",
+                        "external-sink",
+                        "internal",
+                        "multi",
+                        "none",
+                        "off",
+                        "on",
+                        "pgp",
+                        "queryable-api",
+                        "response",
+                        "single",
+                        "syntax",
+                        "template"
+                      ]
+                    },
+                    "source": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
               "items": {
                 "type": "array",
                 "minItems": 1,
@@ -1692,6 +1762,76 @@
         "summary": {
           "type": "string",
           "minLength": 1
+        },
+        "comparability": {
+          "description": "Every item on which the measured deployment's own configuration departs from the profile named above. A same-machine baseline is composed from somebody else's pinned recipe, so where that recipe configures an item differently the run declares, and the canaries check, what the deployment actually does; this block is how the record says so. Absent for a run that declared its profile as the pack defines it.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item",
+              "profile_declares",
+              "deployment_configures",
+              "source"
+            ],
+            "properties": {
+              "item": {
+                "enum": [
+                  "audit",
+                  "version_signing",
+                  "commit_validation",
+                  "authn",
+                  "tls",
+                  "compression",
+                  "tenancy"
+                ]
+              },
+              "profile_declares": {
+                "enum": [
+                  "basic",
+                  "bearer",
+                  "digest",
+                  "external-sink",
+                  "internal",
+                  "multi",
+                  "none",
+                  "off",
+                  "on",
+                  "pgp",
+                  "queryable-api",
+                  "response",
+                  "single",
+                  "syntax",
+                  "template"
+                ]
+              },
+              "deployment_configures": {
+                "enum": [
+                  "basic",
+                  "bearer",
+                  "digest",
+                  "external-sink",
+                  "internal",
+                  "multi",
+                  "none",
+                  "off",
+                  "on",
+                  "pgp",
+                  "queryable-api",
+                  "response",
+                  "single",
+                  "syntax",
+                  "template"
+                ]
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
         },
         "items": {
           "type": "array",

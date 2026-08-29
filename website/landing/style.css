@@ -584,6 +584,25 @@ td strong {
   gap: 1rem;
 }
 
+/* One section per declared posture profile. Rows rank inside a group and never
+   across two, so the heading carries part of the claim. */
+.board-group + .board-group {
+  margin-top: 2.2rem;
+}
+
+.board-group-head {
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  color: var(--heading);
+  margin: 0 0 0.2rem;
+}
+
+.board-group-note {
+  margin: 0 0 0.9rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
 /* The rank sits in its own narrow column, the identity, the index block and
    the absolute block share the rest, and the disclosure spans the full width
    beneath. */
@@ -615,7 +634,7 @@ td strong {
   font-variant-numeric: tabular-nums;
 }
 
-.board-head h3 {
+.board-head h4 {
   font-family: var(--serif);
   font-size: 1.15rem;
   color: var(--heading);
@@ -632,6 +651,14 @@ td strong {
 .board-meta {
   margin: 0;
   font-size: 0.86rem;
+  color: var(--muted);
+}
+
+/* What was switched on behind the row's numbers, and how much of it the
+   canaries stood behind. */
+.board-posture {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 
