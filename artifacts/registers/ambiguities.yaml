@@ -9959,3 +9959,67 @@ AMB-224:
     checking VCAEX only on STATED constraints is conformant.
   disposition: fixed_handling
   upstream_issue: 212
+AMB-225:
+  ambiguity: >-
+    No released text says WHEN EHR_STATUS.is_modifiable is evaluated relative
+    to a CONTRIBUTION commit. The RM defines what the flag forbids and makes
+    the commit one atomic act, but a change set carrying an EHR_STATUS member
+    beside content members has no stated evaluation point: against the state
+    the act found, against the state it leaves, or once per member in list
+    order. The three readings return different answers for two real change
+    sets — one that reactivates a deactivated EHR and commits content in the
+    same act, one that deactivates an EHR while carrying its final content.
+    This is the TIMING half only; the refusal CODE for a content write into a
+    deactivated EHR is adjudicated in AMB-82 and not restated here.
+  source: >-
+    RM ehr master04-ehr_package.adoc §EHR Active Status ("The
+    `EHR_STATUS._is_modifiable_` attribute is used to indicate whether _the
+    contents of an EHR_ are modifiable ... An EHR's 'contents' consist of
+    everything other than the `EHR_STATUS` object", and the first
+    deactivation scenario, "the patient has died, and no further updates
+    (typically relating to the death) are required" — death-related updates
+    are expected, with no sentence saying whether they may travel in the
+    deactivating act); RM UML/classes/ehr_status.adoc §EHR_STATUS Class
+    ("This object is always modifiable, in order to change the status of the
+    EHR as a whole"); RM common master06-change_control_package.adoc
+    §Committal and Audits ("In terms of database management, Contributions
+    are similar to nested transactions. An attempt to commit a Contribution
+    should only succeed if each Version and/or Attestation in the
+    Contribution is committed successfully." — atomic, with no member order
+    and no rule for state one member observes from another); RM
+    UML/classes/contribution.adoc §CONTRIBUTION Class (versions is declared
+    `List<OBJECT_REF>` and described as a "Set of references to Versions
+    causing changes to this EHR", and no released sentence gives a member's
+    position any meaning); SM UML/classes/i_ehr_contribution.adoc
+    §I_EHR_CONTRIBUTION Interface (commit_contribution carries the single
+    precondition Pre_has_ehr and the single error ehr_id_does_not_exist,
+    neither mentioning modifiability); ITS-REST specifications/docs/ (grep:
+    is_modifiable does not occur in the docs text at all, and in the
+    computable artifacts only in operations/ehr_create.yaml,
+    operations/ehr_create_with_id.yaml and schemas/ehr/EhrStatus.yaml, while
+    operations/contribution_create.yaml declares no deactivated-EHR branch);
+    QUERY docs/ (grep: the component never writes is_modifiable). Verified
+    first-hand 2026-08-29.
+  handling: >-
+    Fixed handling: the flag is evaluated ONCE over the CONTRIBUTION as a
+    whole, order-independently. A content member is refused exactly when the
+    EHR is deactivated AND the change set carries no EHR_STATUS member
+    setting is_modifiable = true; AMB-82 carries the 409 that refusal uses.
+    A member's position in versions never changes the answer, because no
+    released text gives that position meaning. The schedule TESTS this
+    reading and gates on it, one corner per case. A reactivating set unlocks
+    its own content however its members are ordered
+    (-reactivating_mixed_change_set lists the content FIRST, which an
+    in-list-order evaluation refuses). A deactivating set may carry its final
+    content, master04's own first deactivation scenario being the
+    death-related updates (-deactivating_mixed_change_set, which an
+    evaluation against the state the act LEAVES refuses). An EHR_STATUS
+    member that keeps is_modifiable = false unlocks nothing, and the whole
+    act fails atomically (-mixed_change_set_stays_deactivated, which an
+    evaluation reading the mere PRESENCE of a status member accepts).
+    Content with no status member at all stays refused
+    (-ehr_not_modifiable), and an EHR_STATUS-only set is always accepted,
+    deactivated EHR or not, because the object "is always modifiable"
+    (-ehr_status_only_deactivated_ehr).
+  disposition: fixed_handling
+  upstream_issue: 215

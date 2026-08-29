@@ -12,9 +12,9 @@
 # `versions` list an application order (its own description calls it a "Set
 # of references"), so the gate is evaluated order-independently over the
 # whole change set — the content member is listed FIRST here on purpose.
-# Per-member gate timing is spec-silent (AMB-82's mechanics side);
-# adjudicated in-repo on issue #2673: content is refused exactly when the
-# EHR is deactivated AND the change set does not reactivate it.
+# WHEN the gate is evaluated is spec-silent, adjudicated as register AMB-225:
+# content is refused exactly when the EHR is deactivated AND the change set
+# carries no EHR_STATUS member setting is_modifiable = true.
 id: I_EHR_CONTRIBUTION.commit_contribution-reactivating_mixed_change_set
 kind: functional
 component: EHR_CONTRIBUTION
@@ -22,7 +22,7 @@ sm_operation: I_EHR_CONTRIBUTION.commit_contribution
 capabilities: [ChangeSets]
 exercises: [EhrStatus]
 profiles: [CORE]
-ambiguities: [AMB-82]
+ambiguities: [AMB-82, AMB-225]
 test_purpose: >-
   A CONTRIBUTION carrying a content member beside an EHR_STATUS member that
   sets is_modifiable = true is accepted against a deactivated EHR, atomically

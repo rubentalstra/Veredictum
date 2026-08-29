@@ -19,6 +19,17 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **`is_modifiable` judges the whole CONTRIBUTION, in any member order
+  (#201).** No released text says when `EHR_STATUS.is_modifiable` is evaluated
+  relative to a commit, so register entry AMB-225 records the atomic-set
+  reading and the schedule gates on it: a content member is refused exactly
+  when the EHR is deactivated and the change set carries no `EHR_STATUS`
+  member setting `is_modifiable = true`, whatever position the members hold.
+  Two new cases close the open corners — a mixed set whose status member keeps
+  `is_modifiable = false` is refused whole, and an `EHR_STATUS`-only set is
+  accepted against a deactivated EHR because the object is always modifiable.
+  The catalogue carries 1116 cases, and the `ChangeSets` depth floor moves to
+  111. Reported upstream as #215.
 - Register entries AMB-223 and AMB-224 (#206): the BMM type-conformance
   algorithm's missing simple-descendant-of-generic-ancestor rule (report_only,
   upstream #211) and ADL 1.4's stated {1..1} existence default that the

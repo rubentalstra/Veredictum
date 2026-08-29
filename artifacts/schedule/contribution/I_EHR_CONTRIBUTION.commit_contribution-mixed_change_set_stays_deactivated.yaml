@@ -1,0 +1,83 @@
+# The refusal twin of -reactivating_mixed_change_set: an EHR_STATUS member
+# that keeps `is_modifiable = false` unlocks nothing. The EHR is deactivated,
+# the change set rewrites its EHR_STATUS (always permitted) but leaves the EHR
+# inactive, so the content member is refused and, the commit being one act,
+# the status rewrite the set carried does not land either.
+#
+# This is the corner that separates the adjudicated reading from the lazy one.
+# An implementation that gates on the mere PRESENCE of an EHR_STATUS member in
+# the change set accepts this commit; the reading AMB-225 records — the flag
+# evaluated once over the whole set, unlocked only by a member setting
+# `is_modifiable = true` — refuses it. The status member here is a REAL change
+# (`is_queryable` flips to false), so an accepted commit is observable in the
+# EHR_STATUS lineage rather than indistinguishable from a no-op.
+#
+# The RM grounds both halves. The flag scopes to "everything other than the
+# `EHR_STATUS` object" (RM ehr master04 §EHR Active Status), so the status
+# member is committable and the COMPOSITION is not; and the commit is one
+# atomic act — RM common master06 §Committal and Audits: "An attempt to commit
+# a Contribution should only succeed if each Version and/or Attestation in the
+# Contribution is committed successfully" — so one refused member refuses the
+# whole CONTRIBUTION. The refusal code is AMB-82's 409: the request conflicts
+# with the resource's current state.
+id: I_EHR_CONTRIBUTION.commit_contribution-mixed_change_set_stays_deactivated
+kind: functional
+component: EHR_CONTRIBUTION
+sm_operation: I_EHR_CONTRIBUTION.commit_contribution
+capabilities: [ChangeSets]
+exercises: [EhrStatus]
+profiles: [CORE]
+ambiguities: [AMB-82, AMB-225]
+test_purpose: >-
+  A CONTRIBUTION carrying a content member beside an EHR_STATUS member that
+  keeps is_modifiable = false is refused against a deactivated EHR, and the
+  whole act commits nothing — neither the content nor the status rewrite.
+description: "Commit mixed CONTRIBUTION that leaves the EHR deactivated"
+spec_refs:
+  - "RM ehr §EHR Active Status (master04 — is_modifiable scopes to everything other than the EHR_STATUS object)"
+  - "RM common §Committal and Audits (master06 — a Contribution commits only if every Version in it commits)"
+  - "ITS-REST overview Requests_and_responses §HTTP status codes"
+  - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  templates: [cnf.opt.minimal_event]
+  ehr: { commits: none }                 # mints ${ehr_id}; its EHR_STATUS v1 is is_modifiable = true
+data_sets: [cnf.composition.minimal_event.v1]
+flow:
+  - step: 1
+    call: I_EHR_STATUS.get_ehr_status    # the payload the PUT modifies + the If-Match precondition
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid }
+  - step: 2                              # deactivate through the wire: is_modifiable -> false
+    call: I_EHR_STATUS.clear_ehr_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    expect: updated
+    capture: { status_version_uid: updated.status_version_uid }
+  - step: 3                              # a status member that keeps the EHR inactive, then content
+    call: commit_contribution
+    with:
+      ehr_id: "${ehr_id}"
+      versions:
+        - data:
+            _type: EHR_STATUS
+            archetype_node_id: "openEHR-EHR-EHR_STATUS.generic.v1"
+            archetype_details:
+              _type: ARCHETYPED
+              archetype_id: { _type: ARCHETYPE_ID, value: "openEHR-EHR-EHR_STATUS.generic.v1" }
+              rm_version: "1.2.0"
+            name: { value: "EHR Status" }
+            subject: { _type: PARTY_SELF }
+            is_modifiable: false
+            is_queryable: false
+          change_type: modification
+          preceding_version_uid: "${status_version_uid}"   # body property: OAS UpdateVersion.preceding_version_uid
+        - { data: "${ds:cnf.composition.minimal_event.v1}", change_type: creation }
+    expect: conflict
+postconditions:
+  - assert: state
+    text: >-
+      The refused commit landed nothing: no COMPOSITION version, and the
+      EHR_STATUS lineage still ends at the deactivating modification
+  - { assert: version, count: 2 }        # the default EHR_STATUS + the deactivating modification
