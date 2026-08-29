@@ -2081,6 +2081,183 @@ Enterprise: D/M/X. The SEC-BASIC points above enter as
 version-signature integrity, which enters under the existing Signing
 capability (`family: Platform, tier: STANDARD`) per its own row.
 
+### 8.16 The universal benchmark instrument
+
+§8.14 rates a platform against a normative class. The bench instrument answers
+the neighbouring question a procurer and a vendor both ask first: how fast is
+this deployment compared with that one, on this machine, under a load both were
+offered identically. It runs against any reachable CDR with no catalogue, no
+ixit and no artifact root, from a base URL plus one credential whose secret
+never rides argv, as the `bench`, `bench-compare` and `bench-packs` subcommands
+(#163).
+
+**The boundary, stated first, because every number below is read through it.**
+A bench result is a benchmark record for comparative speed. It is not a
+conformance record, not a certificate, and not a §8.14 performance-class
+rating. The class cases stay the only performance surface a certificate may
+cite: a class is earned when every threshold of that class holds in one
+sustained run at the normative offered load, and a ratio against a reference
+deployment tests none of those thresholds. A bench result may motivate a class
+run and never substitutes for one. The engine carries that sentence verbatim in
+the emitted artifact, on the command line's own summary, in every rendered
+comparison, and on the public board, so a number cannot travel away from it.
+
+**The pack model.** A pack is a versioned load definition compiled into the
+binary, so a run has nothing to fetch and nothing to tune. It carries its
+phases, its operation mix over a closed operation vocabulary, its posture
+profiles, the seed its arrival streams draw from, the failed-arrival ceiling it
+is judged by, and its fixtures, each pinned by sha256, verified when the pack
+loads and recorded in the result. Two records describe the same work when the
+pack id, the pack version and the fixture digests agree, and a reader checks
+that from the documents alone. Inside a run every choice is a seeded draw off
+separated FNV-1a streams (the operation, the EHR, the composition, the payload
+variant, the query parameter), so read targets come from the population the run
+itself created and payload bytes vary while the schedule stays a pure function
+of the pack's seed. Two repetitions offer the same work in the same order, and
+a server cannot special-case a request set it cannot predict. `bench-packs`
+emits the whole embedded set as a byte-deterministic manifest, which is what the
+published methodology page is generated from.
+
+The embedded packs: `smoke`, one blood-pressure template over a small corpus,
+which proves the engine; `community-vitals`, the openEHR community's own
+vital-signs harness reproduced from its published source (#164), with the CKM
+`Vital signs` operational template and that thread's own composition instance
+vendored byte-identically under their digests, the same 100 EHRs, the same
+1,000 commits into each, and the same seven composition reads per committed
+composition; and `aql-mix`, six query classes at equal share over a `Vital
+signs` population seeded from those same fixtures, so a query figure and a read
+figure describe one corpus shape. Each pack also embeds the invalid twin of its
+composition, the mandatory `COMPOSITION.composer` deleted and nothing else,
+which is what the commit-validation canary offers.
+
+**Three phase disciplines, each labelled in the record with what it honestly
+measures** (#163):
+
+| Phase | Regime | What it reports | Why it is there |
+|---|---|---|---|
+| `Seed` | closed-loop: fixed counts on a closed worker pool | bulk-load throughput | it builds the population every later phase reads and writes against, and a bulk load has no arrival schedule to be faithful to |
+| `Sweep` | closed-loop: each request issued only after the previous one answered | the whole-loop average a sequential single-client harness produces | it is the figure that compares with a published community number |
+| `Measure` | open-loop: a pack-pinned aggregate arrival rate, warmup then a measured window | per-operation arrivals, failures by class, throughput, p50/p75/p90/p99/p99.9/max in microseconds, and the HDR-V2 histogram every percentile recomputes from | latency is taken from the PLANNED arrival instant, so a stall lands in every arrival queued behind it instead of quietly reducing the request count |
+
+The two regimes answer different questions and are never interchangeable, so
+the record labels every figure with the regime that produced it and
+`community-vitals` runs its read phase both ways. A run seeds once and repeats
+its measured phases N times, three by default. The measured span uses the same
+histogram bounds as the §8.14 instrument (1 µs to 10 min at three significant
+figures), so a bench histogram and a class histogram are read the same way.
+
+**The result family.** A run emits one JSON document in its own artifact
+family, `schemas/bench-result.schema.json`, emitted and drift-guarded like
+every other schema here. It carries the pack block (id, version, seed, fixture
+pins, ceiling), the declared scale and any worker override, the environment
+fingerprint of the machine that offered the load, the target's label and its
+self-reported version where an endpoint discloses one, the methodology
+sentence, the boundary sentence, every repetition in full, and the
+cross-repetition median and inter-quartile range per phase, operation and
+metric. Rankings read the median, and the IQR is what tells a reader how far
+the repetitions spread. Quantiles use the linear interpolation between order
+statistics that R's `quantile(type = 7)` and NumPy's `percentile` both take as
+their default, pinned here rather than left to a library, because at three
+repetitions the interpolation choice is visible in the number. Field ordering
+is ordered-map throughout, so re-rendering the same run's document produces
+the same bytes.
+
+**Same-machine baselines and the relative index (#184).** An absolute
+millisecond describes a system and the machine it ran on together, so a record
+taken on one host cannot be read against a record taken on another. The anchor
+is a reference run: the same pack, at the same seed, under the same container
+ceilings, against a reference CDR composed on the host that just measured the
+target, in the same session. `bench --with-baselines` composes EHRbase and
+FerroEHR from digest-pinned images, writes the compose document itself rather
+than fetching one, drives the pack against each, and tears each stack down with
+its volumes so the next baseline starts on an empty database. Every reference
+runs its own published deployment recipe at an immutable tag with that recipe's
+defaults, never a re-tuned composition, and the pin discloses the recipe
+reference and the posture that recipe actually configures, recorded first-hand
+from the recipe rather than left for a canary to discover (#204). From the
+target and each baseline the record derives the **relative index**: per phase,
+per operation and per metric, the target's cross-repetition median over the
+baseline's. It is dimensionless, so it travels between machines where
+milliseconds do not, and every ratio carries the two medians it came from.
+A place where no ratio could be formed is recorded as a typed gap with its
+reason, because silence in a comparison reads as agreement.
+
+**Posture profiles and bracketed canaries (#165).** A deployment running with
+no audit trail is not playing the same sport as one running with audit and
+signing on, so comparability needs the configuration on the record. Every pack
+defines named posture profiles and a run declares exactly one. `minimal` is the
+bare spec-conformant surface and is what every pack's default declares;
+`clinical-default`, which the board's reference pack also defines, is that
+surface with an audit trail written to the deployment's own store. Validation
+sits at `template` even
+in `minimal`, because the specification puts it there (ITS-REST
+`specifications/responses/422.yaml` defines the commit refusal as the case where
+the underlying template is not validating the supplied resource), so a server
+that accepts anything is below the floor rather than lightly configured. The
+disclosure block carries the audit sink, the version-signing scheme, the
+commit-validation depth, compression, tenancy, the authentication mode and TLS.
+The first five are profile choices and part of the versioned pack definition;
+the last two are facts of the invocation.
+
+A declaration alone is a promise, so each item is probed black-box wherever an
+observable exists and the record labels it `verified` or `declared-only`:
+
+| Item | Probe | Assurance |
+|---|---|---|
+| Version signing | versions committed by the run's OWN seed traffic are read back and their `signature` inspected, so signing cannot be switched on for a probe alone (RM `UML/classes/version.adoc` §Attributes: `signature` is `0..1`, an OpenPGP signature or a digest, so the armor header separates the schemes) | verified |
+| Commit validation | the pack's own invalid twin is committed inside the run window; acceptance falsifies the declared depth (ITS-REST `specifications/responses/422.yaml`, `422` on `specifications/operations/composition_create.yaml`) | verified |
+| Authentication | one request carrying no credential at all, the only way to see whether the declared mode is enforced | verified |
+| Compression | one request stating `Accept-Encoding`, read over a client that does not decompress, so `Content-Encoding` survives | verified |
+| TLS | the recorded base URL's scheme, which is first-hand | verified |
+| Audit, tenancy | released ITS-REST surfaces no read resource for either | `declared-only`, said plainly |
+
+The canaries **bracket** the measured window: the declaration is checked
+against the running system after the seed phases and again after the last
+repetition. A reading that contradicts the declaration refuses the run, and a
+pair of readings that disagree with each other refuses it too, because the
+numbers would straddle two configurations. Neither is ever a footnote under a
+published number.
+
+**Submittability and the public board (#187).** A record is always valid for
+local exploration. Offering it for public ranking asks more, and the record
+names which requirements it misses rather than only that it misses some:
+at least three repetitions, because one repetition measures a moment;
+at least one same-machine baseline block with a relative index derived from it;
+and an **error share (#197)** at or below the failed-arrival ceiling its pack
+version pins, for every repetition, phase and operation, on the target and on
+every baseline. Percentiles taken over failed arrivals measure the failure
+rather than the system, so a completely failed run is unrankable by
+construction: the ceiling is part of the versioned pack definition, the engine
+refuses the record, the rendered summary prints the failed share per phase, and
+the submission gate refuses it again.
+
+The submission channel is a pull request against this repository. A submitter
+runs the pack with baselines and adds the record the engine wrote under
+`benchmarks/submissions/<system>/<date>-<host>.json`, where the host segment
+digests the record's own environment block, so a copied file name fails.
+`scripts/checks/bench-submission.sh` is the whole gate and runs before anyone
+reads the numbers: the published schema, the pack pins against what this
+release embeds, the repetition count, the baselines and their derived indices,
+the failed-arrival ceiling, the environment fingerprint, the posture
+verification (an item the canaries can observe may not sit at `declared-only`,
+and an item nothing can observe may not claim verification), the file name, and
+the append-only rule over every record already merged. The merge is the
+acceptance. The board is a static page generated from the committed records and
+committed beside them, so it has a reviewable diff and a stale page fails the
+same gate. Each row carries one index per reference CDR, the fingerprint of the
+machine the absolute numbers came from, the pack version, the repetition count,
+the regime label on every figure, and the tier badge (`self-reported` until a
+maintainer reproduces the run). Rows are grouped by declared posture profile
+and ranked only inside their group (#204), because ranking a `minimal` row
+against a `clinical-default` one republishes exactly the incomparability the
+posture block exists to close. Absolute milliseconds render second, and never
+without their machine.
+
+A bench row and a §8.14 class verdict are separate records behind separate
+gates, and nothing in this pipeline promotes one into the other: the
+certificate reports the earned class with its environment (§8.14), never a
+relative index.
+
 ## 9. Certification governance — the ladder as a conformity-assessment scheme
 
 **Scheme owner: openEHR International** (the CIC that operationally runs the
