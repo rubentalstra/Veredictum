@@ -261,7 +261,8 @@ fn arm_attribution(
                     &c.db,
                     "ALTER SYSTEM SET pg_stat_statements.track_planning = on;",
                 )
-                .and_then(|_| db_sql(&c.db, "SELECT pg_reload_conf();"));
+                .and_then(|_| db_sql(&c.db, "SELECT pg_reload_conf();"))
+                .and_then(|_| confirm_track_planning(&c.db));
                 if let Err(e) = armed {
                     progress(format!(
                         "track_planning unavailable (plan share reads 0): {e}"
@@ -275,6 +276,24 @@ fn arm_attribution(
             }
         }
     })
+}
+
+/// Blocks until a fresh session reads `track_planning = on`, or reports why.
+///
+/// `pg_reload_conf()` only signals the postmaster; the new value reaches
+/// backends asynchronously (PostgreSQL docs §20.1.2, "The signal is sent to
+/// the postmaster … which then sends it on"). A probe that samples before the
+/// value lands attributes a zero plan share while claiming the knob is armed,
+/// so armed means CONFIRMED: a new session shows the value.
+fn confirm_track_planning(db_container: &str) -> Result<(), String> {
+    for _ in 0..20 {
+        let shown = db_sql(db_container, "SHOW pg_stat_statements.track_planning;")?;
+        if shown.trim() == "on" {
+            return Ok(());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    Err("the reload never surfaced track_planning = on".to_owned())
 }
 
 /// Execute the probe set against a live, seeded SUT.
