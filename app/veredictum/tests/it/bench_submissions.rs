@@ -299,10 +299,11 @@ fn every_submission_carries_a_readable_environment_fingerprint() {
 /// divides by one of their medians: a denominator taken from an operation that
 /// never answered is worse than a missing row, which the record would at least
 /// have recorded as a typed gap.
-// TODO(#197): submittability counts repetitions and baselines and never reads
-// an error count, so the engine stamps `submittable: true` on a run whose every
-// arrival failed. Until it does, this is the only thing standing between such a
-// record and the public board.
+///
+/// The engine's own error-share requirement is the standing rule and refuses a
+/// far smaller contamination than this floor does; the two are asserted
+/// together here, so a record claiming `submittable` while the engine's
+/// arithmetic disagrees fails the gate as loudly as one this floor catches.
 #[test]
 fn no_submission_ranks_an_operation_that_never_answered() {
     for (relative, path) in submissions() {
@@ -314,6 +315,20 @@ fn no_submission_ranks_an_operation_that_never_answered() {
                 &relative,
                 &format!("the {} baseline", baseline.cdr),
                 &baseline.repetitions,
+            );
+        }
+        if record.submittable {
+            assert!(
+                record.failed_share_breaches().is_empty(),
+                "{relative} claims submittable while the engine's failed-arrival ceiling of \
+                 {} is crossed: {}",
+                record.pack.max_failed_share,
+                record
+                    .failed_share_breaches()
+                    .iter()
+                    .map(|breach| breach.sentence(record.pack.max_failed_share))
+                    .collect::<Vec<_>>()
+                    .join("; ")
             );
         }
     }

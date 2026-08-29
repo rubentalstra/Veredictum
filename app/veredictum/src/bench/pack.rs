@@ -709,6 +709,28 @@ pub enum BenchPhase {
     Measure(MeasurePhase),
 }
 
+/// The failed-arrival ceiling every embedded pack pins.
+///
+/// Deliberately conservative: one arrival in a hundred is already more than a
+/// system answering its own pinned load should lose, and a record above it
+/// reports percentiles taken over failures. No openEHR spec governs this — our
+/// own design.
+pub const DEFAULT_MAX_FAILED_SHARE: f64 = 0.01;
+
+/// The sentence every embedded pack's description carries about its ceiling.
+///
+/// It is built from [`DEFAULT_MAX_FAILED_SHARE`] itself, so the number a
+/// description states and the number the engine judges by cannot drift.
+#[must_use]
+pub fn failed_share_statement() -> String {
+    format!(
+        "This pack version pins a failed-arrival ceiling of {DEFAULT_MAX_FAILED_SHARE:.2}: a \
+         record in which any repetition, phase and operation loses a larger share of its \
+         arrivals, on the target or on any baseline, is not submittable, because percentiles \
+         taken over failed arrivals measure the failure rather than the system."
+    )
+}
+
 /// A versioned, embedded benchmark pack.
 #[derive(Debug, Clone)]
 pub struct BenchPack {
@@ -719,6 +741,15 @@ pub struct BenchPack {
     pub version: String,
     /// What the pack exercises, in one sentence.
     pub description: String,
+    /// The largest share of one operation's arrivals that may fail, in one
+    /// repetition of one phase, before the record stops being rankable.
+    ///
+    /// Pack-wide rather than per phase: the ceiling says when a measurement
+    /// stopped describing the system, which is the same question in a measured
+    /// phase, in a sweep, and in a baseline's copy of both. It is part of the
+    /// versioned pack definition and the result discloses it, so a reader
+    /// always sees the rule a record was judged by.
+    pub max_failed_share: f64,
     /// The seed the arrival streams draw from, disclosed in the result.
     pub seed: u64,
     /// The posture profiles this pack version defines, in declaration order.
@@ -927,6 +958,11 @@ pub fn load(token: &str) -> Result<BenchPack, BenchError> {
     Ok(pack)
 }
 
+/// What the `smoke` pack exercises, ahead of its ceiling statement.
+const SMOKE_PREAMBLE: &str = "\
+One blood-pressure template, a small EHR corpus, and a mixed open-loop phase \
+over the read, write and query surface.";
+
 /// The `smoke` pack: one small bulk load, then one short open-loop phase
 /// over the whole operation vocabulary.
 #[must_use]
@@ -934,7 +970,8 @@ pub fn smoke() -> BenchPack {
     BenchPack {
         id: SMOKE,
         version: "1.0.0".to_owned(),
-        description: "One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface.".to_owned(),
+        description: format!("{SMOKE_PREAMBLE} {}", failed_share_statement()),
+        max_failed_share: DEFAULT_MAX_FAILED_SHARE,
         seed: 0x5645_5245_4449_4354,
         profiles: vec![&MINIMAL],
         phases: vec![
@@ -1058,7 +1095,11 @@ pub fn community_vitals() -> BenchPack {
     BenchPack {
         id: COMMUNITY_VITALS,
         version: "1.0.0".to_owned(),
-        description: COMMUNITY_VITALS_DESCRIPTION.to_owned(),
+        description: format!(
+            "{COMMUNITY_VITALS_DESCRIPTION} {}",
+            failed_share_statement()
+        ),
+        max_failed_share: DEFAULT_MAX_FAILED_SHARE,
         seed: 0x436f_6d6d_5f56_6974,
         profiles: vec![&MINIMAL, &CLINICAL_DEFAULT],
         phases: vec![
@@ -1176,6 +1217,7 @@ pub fn aql_mix() -> BenchPack {
         id: AQL_MIX,
         version: "1.0.0".to_owned(),
         description: aql_mix_description(),
+        max_failed_share: DEFAULT_MAX_FAILED_SHARE,
         seed: 0x4151_4c5f_4d69_7800,
         profiles: vec![&MINIMAL],
         phases: vec![
@@ -1208,7 +1250,10 @@ fn aql_mix_description() -> String {
         .map(|(op, rationale)| format!("{op} probes {rationale}"))
         .collect::<Vec<_>>()
         .join("; ");
-    format!("{AQL_MIX_PREAMBLE} The six classes: {classes}. {AQL_MIX_PROVENANCE}")
+    format!(
+        "{AQL_MIX_PREAMBLE} The six classes: {classes}. {AQL_MIX_PROVENANCE} {}",
+        failed_share_statement()
+    )
 }
 
 /// What the `aql-mix` pack measures and how, ahead of its class list.
@@ -1601,6 +1646,27 @@ mod tests {
                 entries,
                 "{id}: the legend lost an entry"
             );
+        }
+        Ok(())
+    }
+
+    /// Every embedded pack pins the conservative failed-arrival ceiling and
+    /// states it in its own description, so a record carries the rule it was
+    /// judged by without a reader consulting anything else.
+    #[test]
+    fn every_embedded_pack_pins_and_states_its_failed_arrival_ceiling() -> Result<(), BenchError> {
+        for id in EMBEDDED {
+            let deck = load(id.as_str())?;
+            assert!(
+                (deck.max_failed_share - DEFAULT_MAX_FAILED_SHARE).abs() < f64::EPSILON,
+                "{id} pins {} rather than the conservative default",
+                deck.max_failed_share
+            );
+            assert!(
+                deck.description.contains(&failed_share_statement()),
+                "{id} does not state its failed-arrival ceiling"
+            );
+            assert!(deck.description.contains("0.01"), "{id}");
         }
         Ok(())
     }

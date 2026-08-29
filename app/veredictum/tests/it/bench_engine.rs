@@ -361,6 +361,61 @@ fn a_failing_operation_is_counted_by_class() -> Fallible {
     Ok(())
 }
 
+/// A run whose query arrivals all failed is refused for submission by the
+/// engine itself, with the error-share requirement named and the rendered
+/// summary saying where the ceiling went.
+///
+/// This is the run the requirement exists for: percentiles over arrivals that
+/// never answered describe the failure, and a record like this reaching a
+/// public board would rank it.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_run_whose_arrivals_failed_is_never_submittable() -> Fallible {
+    let sut = FakeSut::start();
+    // Mounted FIRST so it wins over the healthy query stub below: wiremock
+    // matches in registration order.
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/query/aql"))
+            .respond_with(ResponseTemplate::new(500)),
+    );
+    mount_healthy(&sut);
+    let (result, _document, summary) = drive_pack(&sut, &tiny_pack(), "all-failed", 3, 1.0)?;
+
+    assert!(
+        result
+            .submittable_unmet
+            .contains(&SubmissionRequirement::ErrorShare),
+        "{:?}",
+        result.submittable_unmet
+    );
+    assert!(!result.submittable);
+    let breaches = result.failed_share_breaches();
+    assert!(!breaches.is_empty(), "no breach was recorded");
+    assert!(
+        breaches.iter().all(|breach| breach
+            .worst_operation
+            .as_deref()
+            .is_some_and(|op| op.starts_with("adhoc_query"))),
+        "a healthy operation was blamed: {breaches:?}"
+    );
+    assert!(
+        (result.worst_failed_share() - 1.0).abs() < f64::EPSILON,
+        "{}",
+        result.worst_failed_share()
+    );
+    assert!(summary.contains("## Failed-arrival share"), "{summary}");
+    assert!(summary.contains("adhoc_query"), "{summary}");
+    assert!(
+        summary.contains("above the pack ceiling of 0.01"),
+        "{summary}"
+    );
+    Ok(())
+}
+
 /// A preflight that cannot read the template list refuses the run, and no
 /// measured document exists.
 #[test]

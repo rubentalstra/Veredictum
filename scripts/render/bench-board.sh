@@ -342,7 +342,8 @@ render_body() {
     "      <p class=\"after-code\">Then copy the record into\n" +
     "        <code>benchmarks/submissions/&lt;system&gt;/&lt;date&gt;-&lt;host&gt;.json</code> and open a pull\n" +
     "        request. CI checks the schema, the pack pins, the repetition count, the baselines,\n" +
-    "        the environment fingerprint and the file name, and refuses any edit to a record\n" +
+    "        the failed-arrival ceiling the pack pins, the environment fingerprint and the file\n" +
+    "        name, and refuses any edit to a record\n" +
     "        already merged. <a href=\"" + $guide + "\">The submission guide, in full →</a></p>\n" +
     "    </div>\n" +
     "  </section>"

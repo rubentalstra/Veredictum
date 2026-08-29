@@ -224,6 +224,12 @@ pub struct ComparisonColumn {
     /// The submission requirements it does not meet, so a column says WHY it
     /// is not offerable rather than only that it is not.
     pub submittable_unmet: Vec<SubmissionRequirement>,
+    /// The failed-arrival ceiling the column's pack version pins.
+    pub max_failed_share: f64,
+    /// The largest failed share any one operation of the run recorded, over
+    /// the target and every baseline, so a contaminated column is visible
+    /// beside the numbers it produced.
+    pub worst_failed_share: f64,
     /// The multiplier the run applied to the pack's seed population.
     pub scale_factor: f64,
     /// Whether the run matched the pack's pinned configuration.
@@ -313,6 +319,8 @@ pub fn compare(paths: &[PathBuf]) -> Result<Comparison, BenchError> {
             repetitions: u32::try_from(result.repetitions.len()).unwrap_or(u32::MAX),
             submittable: result.submittable,
             submittable_unmet: result.submittable_unmet.clone(),
+            max_failed_share: result.pack.max_failed_share,
+            worst_failed_share: result.worst_failed_share(),
             scale_factor: result.scale.factor,
             reference_configuration: result.scale.reference_configuration,
             environment: result.environment.labels(),

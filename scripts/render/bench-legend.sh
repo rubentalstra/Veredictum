@@ -239,7 +239,8 @@ render_body() {
       "          <h3><code>" + ($pack.id | @html) + "</code> <span class=\"pack-version\">version " +
       ($pack.version | @html) + "</span></h3>\n" +
       "          <p class=\"pack-meta\">seed <code>" + ($pack.seed | tostring) + "</code> · " +
-      ($pack.phases | length | tostring) + " phases · drive it with <code>--pack " +
+      ($pack.phases | length | tostring) + " phases · failed-arrival ceiling <code>" +
+      ($pack.max_failed_share | tostring) + "</code> · drive it with <code>--pack " +
       ($pack.id | @html) + "</code></p>\n" +
       "        </div>\n" +
       timeline($pack) + "\n" +

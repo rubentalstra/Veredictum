@@ -71,6 +71,12 @@ this.
 The command writes `bench-result-<label>.json` into `--out`. That file is the
 submission. Do not edit it: every check below reads it as the engine wrote it.
 
+Read the rendered summary's failed-arrival table before you open anything. Each
+pack pins a ceiling of `0.01`, and a run that lost more than that on any
+operation of any repetition stamps `submittable: false` with `error_share` in
+`submittable_unmet`. That record is still useful locally, and it is never
+rankable: take the run again once the deployment answers.
+
 ## 2. Name and place the record
 
 ```text
@@ -110,6 +116,7 @@ request on any of these:
 | Repetitions | fewer than three |
 | Baselines | no same-machine baseline block, or a baseline with no relative index derived from it |
 | Submittability | the `submittable` flag disagrees with the record's own numbers |
+| Failed-arrival ceiling | any repetition, phase and operation, on the target or on any baseline, above the ceiling the pack pins in `pack.max_failed_share` |
 | Fingerprint | no environment block, or no core count in it |
 | Failed arrivals | any operation in any repetition, on the target or on either baseline, where every recorded arrival failed |
 | File name | the date is not an ISO 8601 calendar date, or the host prefix does not digest from the record's own environment block |
