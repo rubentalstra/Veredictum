@@ -1100,3 +1100,174 @@ fn query_parameters_are_encoded_and_an_unbound_optional_is_omitted() -> Fallible
     );
     Ok(())
 }
+
+/// The read-modify-write setter binding, with the caller's `set:` block: a PUT
+/// whose body is the captured `status_body` with those fields overwritten.
+fn patched_status_binding(set: &Value) -> Value {
+    json!({
+        "sm_operation": "I_EHR_STATUS.set_ehr_queryable",
+        "its": "its-rest",
+        "request": {
+            "method": "PUT",
+            "path": "/ehr/{ehr_id}/ehr_status",
+            "body": { "from_capture": "status_body", "set": set }
+        },
+        "outcomes": { "ok": { "status": 200 } }
+    })
+}
+
+/// The captured base resource the patch is applied to.
+fn bound_status_body() -> Result<VarStore, Box<dyn std::error::Error>> {
+    let mut vars = VarStore::default();
+    vars.set(
+        veredictum::ids::CaptureName::parse("status_body")?,
+        veredictum::exec::state::Captured::Body(json!({
+            "_type": "EHR_STATUS",
+            "is_queryable": true
+        })),
+    );
+    Ok(vars)
+}
+
+/// A one-step case driving the setter, with the given `with:` block.
+fn patched_status_case(with: &Value) -> Value {
+    json!({
+        "id": "WIRE-patched_set", "kind": "functional", "component": "EHR",
+        "sm_operation": "I_EHR_STATUS.set_ehr_queryable",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [{
+            "step": 1, "call": "set_ehr_queryable", "expect": "ok", "with": with
+        }]
+    })
+}
+
+/// The body the SUT actually received, parsed as JSON.
+fn received_body(sut: &FakeSut) -> Result<Value, Box<dyn std::error::Error>> {
+    let received = sut.requests();
+    let request = received.first().ok_or("the SUT received no request")?;
+    Ok(serde_json::from_slice(&request.body)?)
+}
+
+/// A `${…}` in a patched body's `set:` value is RENDERED before the request is
+/// sent: the wire carries the value the case supplied, never the literal
+/// template text. The literal would make the exchange vacuous — the SUT would
+/// store `${client_value}` and the row would still go green.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_patched_set_value_reaches_the_wire_rendered() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("PUT"))
+            .and(path("/ehr/EHR-1/ehr_status"))
+            .respond_with(ResponseTemplate::new(200)),
+    );
+    let bindings = [patched_status_binding(&json!({
+        "uid": { "_type": "OBJECT_VERSION_ID", "value": "${client_value}" }
+    }))];
+    let mut vars = bound_status_body()?;
+    let observed = drive_one(
+        &sut,
+        &bindings,
+        patched_status_case(&json!({
+            "ehr_id": "EHR-1",
+            "client_value": "cccccccc-2222-4222-8222-222222222222"
+        })),
+        OutcomeKind::Ok,
+        &mut vars,
+    )?;
+    assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
+
+    let body = received_body(&sut)?;
+    assert_eq!(
+        body.get("uid"),
+        Some(&json!({
+            "_type": "OBJECT_VERSION_ID",
+            "value": "cccccccc-2222-4222-8222-222222222222"
+        })),
+        "the wire body must carry the rendered value"
+    );
+    assert_eq!(
+        body.get("is_queryable"),
+        Some(&json!(true)),
+        "the captured base resource must survive the patch"
+    );
+    Ok(())
+}
+
+/// The unbound twin: a `set:` value naming a reference nothing bound refuses
+/// the step transport-class (inconclusive, runner-side) and sends NOTHING, so
+/// no server is accused over a value the runner failed to build.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_unbound_reference_in_a_patched_set_value_refuses_the_step() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("PUT"))
+            .and(path("/ehr/EHR-1/ehr_status"))
+            .respond_with(ResponseTemplate::new(200)),
+    );
+    let bindings = [patched_status_binding(&json!({
+        "uid": { "_type": "OBJECT_VERSION_ID", "value": "${client_value}" }
+    }))];
+    let mut vars = bound_status_body()?;
+    let observed = drive_one(
+        &sut,
+        &bindings,
+        patched_status_case(&json!({ "ehr_id": "EHR-1" })),
+        OutcomeKind::Ok,
+        &mut vars,
+    )?;
+    match &observed.observation {
+        Observation::Transport(reason) => {
+            assert!(reason.contains("client_value"), "{reason}");
+            assert!(reason.contains("uid"), "{reason}");
+        }
+        other => panic!("an unbound patched reference must refuse the step, got {other:?}"),
+    }
+    assert!(
+        sut.requests().is_empty(),
+        "nothing may reach the wire once the body failed to render"
+    );
+    Ok(())
+}
+
+/// A reference-free `set:` value is inserted verbatim: the rendering pass
+/// rewrites nothing an ordinary binding authors.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_literal_patched_set_value_stays_byte_identical() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("PUT"))
+            .and(path("/ehr/EHR-1/ehr_status"))
+            .respond_with(ResponseTemplate::new(200)),
+    );
+    let literal = json!({
+        "is_queryable": false,
+        "uid": { "_type": "OBJECT_VERSION_ID", "value": "fixed::sys::1" }
+    });
+    let bindings = [patched_status_binding(&literal)];
+    let mut vars = bound_status_body()?;
+    let observed = drive_one(
+        &sut,
+        &bindings,
+        patched_status_case(&json!({ "ehr_id": "EHR-1" })),
+        OutcomeKind::Ok,
+        &mut vars,
+    )?;
+    assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
+
+    let body = received_body(&sut)?;
+    assert_eq!(body.get("is_queryable"), literal.get("is_queryable"));
+    assert_eq!(body.get("uid"), literal.get("uid"));
+    Ok(())
+}
