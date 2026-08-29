@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- GitHub Pages serves static files and sets no response headers, so the
+       policy travels as a <meta> element. A meta CSP is weaker than the header
+       by specification: `frame-ancestors`, `report-uri` and `sandbox` are
+       ignored in meta form (W3C CSP3 §3.3). It still blocks an injected
+       external script and an exfiltrating connection, which is the realistic
+       risk for a static page.
+       This page carries no <script> at all: the per-row disclosure is a
+       <details> element, which needs none. style-src keeps 'unsafe-inline'
+       only because the shared stylesheet's siblings use it; this page's own
+       styles all live in style.css. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Benchmark board — Veredictum</title>
+  <meta name="description" content="Comparative speed for openEHR clinical data repositories, ranked by a same-machine relative index. Every record is a community submission validated by CI before merge. A bench number is never a conformance verdict.">
+  <link rel="canonical" href="https://veredictum.eu/benchmarks.html">
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+  <link rel="stylesheet" href="./style.css">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Benchmark board — Veredictum">
+  <meta property="og:description" content="Comparative speed for openEHR clinical data repositories, ranked by a same-machine relative index.">
+  <meta property="og:url" content="https://veredictum.eu/benchmarks.html">
+  <meta property="og:site_name" content="Veredictum">
+  <meta property="og:image" content="https://veredictum.eu/assets/veredictum-seal.svg">
+  <meta property="og:image:alt" content="The Veredictum conformance seal">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Benchmark board — Veredictum">
+  <meta name="twitter:description" content="Comparative speed for openEHR clinical data repositories, ranked by a same-machine relative index.">
+  <meta name="twitter:image" content="https://veredictum.eu/assets/veredictum-seal.svg">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <img src="./assets/veredictum-icon.svg" alt="" aria-hidden="true">
+      <span>Veredictum</span>
+    </a>
+    <nav aria-label="Primary">
+      <a href="./docs/">Docs</a>
+      <a href="./benchmarks.html" aria-current="page">Benchmarks</a>
+      <a href="./#method" class="hide-sm">Method</a>
+      <a href="https://github.com/rubentalstra/Veredictum" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="board-intro">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Public benchmark board</span>
+        <h1>How fast is each openEHR CDR, measured the same way</h1>
+        <p>Every row below is a benchmark record somebody ran with the
+          <code>veredictum bench</code> command and submitted as a pull request to this
+          repository. The record carries the pack it drove, the seed it drove at, every
+          repetition, the machine it ran on, and the reference deployments it was measured
+          against on that same machine. CI validates all of that before a maintainer looks
+          at it, and the merge is the acceptance.</p>
+      </div>
+      <div class="boundary">
+        <p><b>A bench number is not a conformance verdict.</b> This board reports
+          comparative speed. It is not a conformance record, not a certificate, and not a
+          performance-class rating; a bench result may motivate a class run, never
+          substitute for one. A fast server that fails the catalogue is a fast server that
+          fails the catalogue.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="board">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">The board</span>
+        <h2>Two reference baselines on every row</h2>
+        <p>Each submission measures the pinned reference CDRs on its own machine, in the
+          same session, with the same pack at the same seed, so every row carries one index
+          per reference. An index is the median latency of the submission divided by the
+          same statistic from that reference: below 1.0 is faster than it, above 1.0 is
+          slower. Ordering a list needs a single ruler, so the rows are sorted by the
+          FerroEHR index; the EHRbase index sits beside it on every row and is the same
+          measurement against the other reference.</p>
+      </div>
+      <p class="after-code">No submission has been merged yet. The first one to arrive
+        will be the first row.</p>
+    </div>
+  </section>
+
+  <section id="how-to-read">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">How to read this board</span>
+        <h2>Written for someone who has never seen the instrument</h2>
+      </div>
+      <div class="prose">
+        <p><b>Why a ratio and not milliseconds.</b> A latency in milliseconds describes a
+          system and the machine it ran on at the same time, so two numbers taken on
+          different hardware cannot be compared. Every submission therefore measures the
+          reference CDRs on its own machine, in the same session, with the same pack at the
+          same seed. Dividing one median by the other cancels the machine out.</p>
+        <p><b>Why two references and not one.</b> A single reference makes the board a
+          verdict about that one product. Two independent ones, measured under identical
+          container ceilings in the same session, show whether a row is fast in general or
+          only fast against one comparison. A row whose two indices disagree sharply is
+          telling you something the ordering alone does not.</p>
+        <p><b>What the absolute figures are for.</b> They say what the ratio felt like on
+          one specific machine, which is why they never appear without the fingerprint of
+          that machine beside them. Read them as the scale of the work, never as a claim
+          about what your deployment would do.</p>
+        <p><b>What the references are.</b> Each submission composes the pinned reference CDRs
+          from image digests, under identical container ceilings. They are not a standard
+          of correctness. They are a ruler that happens to be the same length on every
+          machine.</p>
+        <p><b>Failed arrivals.</b> Every row states how many measured arrivals never
+          produced an answer. A percentile computed over a run that was mostly failing
+          describes the failures, so read the share before the milliseconds. The submission
+          gate refuses a record in which any operation produced no successful arrival at
+          all.</p>
+        <p><b>Open-loop, and what that buys.</b> Arrivals fire at their planned instants
+          regardless of whether an earlier request has come back, and every latency is
+          measured from the planned instant. A server that stalls therefore shows the stall
+          in its percentiles instead of quietly issuing fewer requests. Phases that are
+          closed-loop by construction, such as the bulk load, are labelled as such and are
+          reported as throughput, never as a latency claim.</p>
+        <p><b>Verified and declared-only.</b> Every row today carries the
+          <span class="tier tier-self">self-reported</span> tier: the submitter ran the
+          benchmark and the record passed CI, and nobody here re-ran it. A record a
+          maintainer reproduces will carry a reproduced tier, on the same submission
+          channel. Read a self-reported row as a claim its author put their name to in a
+          public git history, and nothing more.</p>
+        <p><b>Repetitions.</b> Three is the floor. One repetition measures a moment, so a
+          record with fewer is rejected before it can be ranked, and each figure on the
+          board is the median across repetitions.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="quickstart" id="submit">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Submit your CDR</span>
+        <h2>Run the pack, open a pull request</h2>
+        <p>The reference pack for this board is <code>community-vitals</code>. Point the
+          command at your deployment, let it compose both reference baselines on the same
+          machine, and commit the record it writes.</p>
+      </div>
+      <figure class="code">
+        <figcaption>One command, one record</figcaption>
+        <pre><code><span class="cmt"># The credential is read from the environment; it never rides argv.</span>
+<span class="p">$</span> export VEREDICTUM_BENCH_PASSWORD=…
+<span class="p">$</span> veredictum bench --base-url https://cdr.example/openehr/v1 \
+      --auth basic --user &lt;user&gt; \
+      --pack community-vitals --repetitions 3 --with-baselines \
+      --out ./bench --label &quot;Your CDR 1.2.3&quot;</code></pre>
+      </figure>
+      <p class="after-code">Then copy the record into
+        <code>benchmarks/submissions/&lt;system&gt;/&lt;date&gt;-&lt;host&gt;.json</code> and open a pull
+        request. CI checks the schema, the pack pins, the repetition count, the baselines,
+        the environment fingerprint and the file name, and refuses any edit to a record
+        already merged. <a href="https://github.com/rubentalstra/Veredictum/blob/main/benchmarks/SUBMITTING.md">The submission guide, in full →</a></p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <img src="./assets/veredictum-icon.svg" alt="" aria-hidden="true">
+      <span>Veredictum</span>
+    </a>
+    <p>This page is generated from the records committed under
+      <a href="https://github.com/rubentalstra/Veredictum/tree/main/benchmarks/submissions" rel="noopener">benchmarks/submissions</a> and is regenerated
+      whenever one is merged. Nothing on it is typed by hand.</p>
+    <div class="fine">
+      <p>openEHR® is the registered trademark of the openEHR Foundation.
+        Veredictum is an independent, community-driven conformance instrument:
+        it names openEHR descriptively, to say what is being tested, and it is
+        not an official openEHR Foundation product, not the Foundation's CNF
+        program, and not endorsed by or affiliated with the Foundation.</p>
+      <p>© Veredictum contributors.</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
