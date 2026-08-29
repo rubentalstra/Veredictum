@@ -18,6 +18,26 @@ members = ["app/veredictum", "app/veredictum-console"]
 default-members = ["app/veredictum"]
 
 # ─────────────────────────────────────────────────────────────────────────────
+# THE ENGINE SEAM, RESOLVED IN-TREE (#179)
+# ─────────────────────────────────────────────────────────────────────────────
+# The console names the engine by an exact crates.io version in its own
+# manifest, which is what keeps a console release reproducible from published
+# artifacts. This redirects that name to the workspace source for every build
+# made INSIDE this repository, so the pin may name the version being cut before
+# crates.io carries it and every pull request still compiles. `[patch]` is read
+# only from the top-level workspace manifest and never travels to a consumer of
+# a published crate
+# (https://doc.rust-lang.org/cargo/reference/overriding-dependencies.html).
+#
+# The patch is only APPLIED while the console's pin equals `app/veredictum`'s
+# own version; diverge them and cargo silently resolves the registry copy
+# instead, with no warning (verified on cargo 1.97.1).
+# `scripts/release/check-console-pin.sh` is what refuses that state, and it
+# reads `Cargo.lock` for the proof.
+[patch.crates-io]
+veredictum = { path = "app/veredictum" }
+
+# ─────────────────────────────────────────────────────────────────────────────
 # PROFILES
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -5434,34 +5434,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "veredictum"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68abcaed4ca7d7b96f6d56ee9006fa3dfc905c53301db3c2141c654ec4a64c15"
-dependencies = [
- "base64 0.23.1",
- "clap",
- "hdrhistogram",
- "jiff",
- "jsonschema",
- "jsonwebtoken",
- "pgp",
- "quick-xml",
- "rand 0.8.8",
- "regex",
- "reqwest",
- "semver",
- "serde",
- "serde-saphyr",
- "serde_jcs",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.20",
- "urlencoding",
- "uuid",
-]
-
-[[package]]
 name = "veredictum-console"
 version = "0.0.0"
 dependencies = [
@@ -5486,7 +5458,7 @@ dependencies = [
  "thirtyfour",
  "thiserror 2.0.20",
  "tokio",
- "veredictum 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "veredictum",
  "wasm-bindgen",
  "zip",
 ]

@@ -197,6 +197,16 @@ jobs:
       - name: Comment style — seeded-violation proof
         run: bash scripts/checks/comment-style.sh --self-test
 
+      # The console's engine pin is ONE value, the workspace engine version
+      # (#179). The root manifest's `[patch.crates-io]` only redirects the
+      # console's exact crates.io pin to `app/veredictum` while the two agree,
+      # and cargo falls back to the registry copy SILENTLY when they do not —
+      # so the console would link one engine while every gate spawns another.
+      # Here rather than at tag time alone: a divergence is refused on the pull
+      # request that introduces it, which is the only place it is cheap to fix.
+      - name: The console's engine pin names this tree's engine
+        run: bash scripts/release/check-console-pin.sh
+
       # Keep a Changelog 1.1.0 structure: no duplicated `### <Type>` inside one
       # release section, no subsection header outside the canonical type set.
       # A duplicated header ships the same release notes twice.

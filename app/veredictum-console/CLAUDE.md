@@ -14,8 +14,14 @@ at the scaffold (#53); the mandates carry over, re-grounded on this product.
 2. **The engine is reached ONLY through the published crate** (#52, #54):
    reads parse through the `veredictum` lib's typed pipeline API, runs spawn
    the pinned `veredictum` CLI binary as a subprocess. Never a `path =`
-   dependency on the root package, never a reimplemented parser or judgement,
-   and never console code speaking to a CDR itself — the spawned instrument
+   dependency on the root package, never a reimplemented parser or judgement.
+   The workspace root's `[patch.crates-io]` redirects that exact pin to
+   `app/veredictum` for builds made inside this repository (#179): that is a
+   resolution rule in the root manifest, not a dependency of this crate, so the
+   manifest still names the registry version and the patch never travels to a
+   consumer. The pin equals the workspace engine version, always, and
+   `scripts/release/check-console-pin.sh` refuses any other state.
+   Never console code speaking to a CDR itself — the spawned instrument
    is the only thing that touches the SUT — with ONE carved-out exception:
    the connect screen's reachability probe (`run_api::read::probe`), a single
    GET whose answer renders verbatim and is never judged. A diagnostic about

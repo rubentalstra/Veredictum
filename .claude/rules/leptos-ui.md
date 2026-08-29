@@ -27,8 +27,11 @@ is the precedent to imitate, not a path in this tree.
   the published `veredictum` crate — the lib's typed pipeline API for reads,
   the pinned CLI binary as a subprocess for runs (#54). It never depends on
   the root package by `path =`, and it never reimplements parsing, driving,
-  or judgement. The SUT is reached only by the spawned instrument; console
-  code never speaks to a CDR itself.
+  or judgement. The workspace root's `[patch.crates-io]` resolves that exact
+  pin to `app/veredictum` for in-repository builds (#179), so such a build
+  links this tree's engine while the manifest keeps naming the registry
+  version. The SUT is reached only by
+  the spawned instrument; console code never speaks to a CDR itself.
 - **Server functions are a public HTTP API** (`server/25_server_functions`
   security warning). The console has no login by design (#52): it binds
   `127.0.0.1` by default and the operator owns any wider exposure. That

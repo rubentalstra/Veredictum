@@ -37,14 +37,7 @@ fn a_job_supervises_a_run_to_its_finished_view() -> Result<(), Box<dyn std::erro
         );
         return Ok(());
     }
-    let engine = match Engine::verified(&binary) {
-        Ok(engine) => engine,
-        Err(veredictum_console::engine::Error::VersionMismatch { reported }) => {
-            eprintln!("SKIPPED(engine version drift): {reported}");
-            return Ok(());
-        }
-        Err(other) => return Err(other.into()),
-    };
+    let engine = Engine::verified(&binary)?;
 
     let scratch = assert_fs::TempDir::new()?;
     let port = engine_gate::fixture_sut()?;
@@ -160,14 +153,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
         );
         return Ok(());
     }
-    let engine = match Engine::verified(&binary) {
-        Ok(engine) => engine,
-        Err(veredictum_console::engine::Error::VersionMismatch { reported }) => {
-            eprintln!("SKIPPED(engine version drift): {reported}");
-            return Ok(());
-        }
-        Err(other) => return Err(other.into()),
-    };
+    let engine = Engine::verified(&binary)?;
 
     let scratch = assert_fs::TempDir::new()?;
     let port = engine_gate::fixture_sut()?;
@@ -304,14 +290,7 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
         );
         return Ok(());
     }
-    let engine = match Engine::verified(&binary) {
-        Ok(engine) => engine,
-        Err(veredictum_console::engine::Error::VersionMismatch { reported }) => {
-            eprintln!("SKIPPED(engine version drift): {reported}");
-            return Ok(());
-        }
-        Err(other) => return Err(other.into()),
-    };
+    let engine = Engine::verified(&binary)?;
 
     let scratch = assert_fs::TempDir::new()?;
     let port = engine_gate::fixture_sut()?;

@@ -296,6 +296,31 @@ version on.
   the re-checkable `HdrHistogram` V2 encoding, the cross-repetition median and
   inter-quartile range, and the methodology block. The `posture` object is
   reserved and always absent.
+
+### Changed
+
+- **The console's engine pin names the version being released (#179).** The
+  pin could only ever name a version crates.io already carried, so the console
+  normally shipped against the previous engine and every window between a tag
+  and the following bump ran the console's current code against an engine that
+  did not carry its flags. The workspace root now redirects the console's exact
+  crates.io pin to `app/veredictum` with `[patch.crates-io]`, so the pin is one
+  value — the workspace engine version — while the console's own manifest still
+  names the engine by an exact registry version and a console release stays
+  reproducible from published artifacts. `scripts/release/check-console-pin.sh`
+  holds the manifest pin, `ENGINE_PIN`, the engine's version and the tag to that
+  one value, refuses a `Cargo.lock` that resolved the pin against the registry,
+  and runs on every pull request as well as at tag time. The release graph is
+  unchanged: the crates.io upload stays last, after the image is built, smoked
+  and scanned.
+
+  Everything that skipped for the length of a cut window now drives or fails.
+  The console-versus-CLI document gate, the sealed-export gate, the scope and
+  record gates and the two driven browser journeys carried a version-drift arm
+  that printed a reason and returned success; those arms are gone, and a
+  mismatched engine fails the gate with the version it reported. `scripts/ui-e2e.sh`
+  carries no cut-window branch and always builds and drives the engine.
+
 ### Fixed
 
 - **`assert: version` judges the envelope it names (#225).** The driver's

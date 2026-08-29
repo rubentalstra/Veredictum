@@ -37,14 +37,7 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
         );
         return Ok(());
     }
-    let engine = match Engine::verified(&binary) {
-        Ok(engine) => engine,
-        Err(veredictum_console::engine::Error::VersionMismatch { reported }) => {
-            eprintln!("SKIPPED(engine version drift): {reported}");
-            return Ok(());
-        }
-        Err(other) => return Err(other.into()),
-    };
+    let engine = Engine::verified(&binary)?;
 
     let root = engine_gate::repo_root().join("artifacts");
     let specs = engine_gate::repo_root().join("specs/openehr");
@@ -339,14 +332,7 @@ fn a_composed_core_claim_is_judged_as_the_core_profile() -> Result<(), Box<dyn s
         );
         return Ok(());
     }
-    let engine = match Engine::verified(&binary) {
-        Ok(engine) => engine,
-        Err(veredictum_console::engine::Error::VersionMismatch { reported }) => {
-            eprintln!("SKIPPED(engine version drift): {reported}");
-            return Ok(());
-        }
-        Err(other) => return Err(other.into()),
-    };
+    let engine = Engine::verified(&binary)?;
 
     let state = drafted_state();
     let document = veredictum_console::run_api::read::compose_claim(&state, &[ScopeTier::Core])
