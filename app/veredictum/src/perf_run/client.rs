@@ -530,6 +530,129 @@ mod tests {
         assert!(principals.client(Principal::ReadOnly).is_none());
     }
 
+    /// The credential env var every supported platform sets, so the two
+    /// environment-resolved auth modes have a value to read without the
+    /// test process mutating its own environment.
+    const PRESENT_ENV: &str = "PATH";
+
+    fn instance(auth: &serde_json::Value) -> Ixit {
+        serde_json::from_value(serde_json::json!({
+            "instances": { "sut": { "base_url": "http://stub/", "auth": auth } }
+        }))
+        .unwrap()
+    }
+
+    /// Basic resolves to the base64 of `user:password` read from the two
+    /// named environment variables, and Bearer to the raw token from one.
+    /// A run whose credential variable is unset fails at construction, not
+    /// as error arrivals inside a window.
+    #[test]
+    fn the_environment_resolved_auth_modes_build_their_header_or_refuse() {
+        let basic = instance(&serde_json::json!({
+            "mode": "basic", "user_env": PRESENT_ENV, "password_env": PRESENT_ENV
+        }));
+        let client = PerfClient::from_instance(basic.default_instance().unwrap(), &basic).unwrap();
+        let header = client.authorization().unwrap().unwrap();
+        assert!(header.starts_with("Basic "), "{header}");
+        let value = std::env::var(PRESENT_ENV).unwrap();
+        assert_eq!(
+            header,
+            format!(
+                "Basic {}",
+                base64::engine::general_purpose::STANDARD
+                    .encode(format!("{value}:{value}").as_bytes())
+            )
+        );
+
+        let bearer = instance(&serde_json::json!({
+            "mode": "bearer", "token_env": PRESENT_ENV
+        }));
+        let client =
+            PerfClient::from_instance(bearer.default_instance().unwrap(), &bearer).unwrap();
+        assert_eq!(
+            client.authorization().unwrap().unwrap(),
+            format!("Bearer {value}")
+        );
+
+        let unset = instance(&serde_json::json!({
+            "mode": "bearer", "token_env": "VEREDICTUM_UNSET_CREDENTIAL_ENV"
+        }));
+        let error = PerfClient::from_instance(unset.default_instance().unwrap(), &unset)
+            .expect_err("an unset credential variable is a run-stopping defect");
+        assert!(error.contains("VEREDICTUM_UNSET_CREDENTIAL_ENV"), "{error}");
+
+        // The base URL is normalized once, so no path is ever built with a
+        // doubled separator.
+        assert_eq!(client.base_url, "http://stub");
+    }
+
+    /// A standing grant inside its refresh margin is re-minted rather than
+    /// presented: a token that lapses in flight would be an arrival the SUT
+    /// refuses for the instrument's reason, never the server's.
+    #[test]
+    fn a_grant_inside_its_refresh_margin_is_re_minted_before_presentation() {
+        let key = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("party/smart/cnf-smart-test.key.pem");
+        let ixit: Ixit = serde_json::from_value(serde_json::json!({
+            "instances": { "sut": { "base_url": "http://stub", "auth": {
+                "mode": "bearer_mint", "subject": "cnf-user",
+                "default_scopes": ["user/aql-*.r"] } } },
+            "smart": { "platform_instance": "sut", "mint": {
+                "issuer": "https://as.cnf.test", "subject": "cnf-smart-app",
+                "key_file": key, "kid": "cnf-smart-test", "ttl_seconds": 1 } }
+        }))
+        .unwrap();
+        let client = PerfClient::from_instance(ixit.default_instance().unwrap(), &ixit).unwrap();
+        let header = client.authorization().unwrap().unwrap();
+        assert!(header.starts_with("Bearer "), "{header}");
+        assert_eq!(header.split('.').count(), 3, "not a JWS compact token");
+    }
+
+    /// The optional principals a party may declare, added one at a time.
+    /// Whatever is not added stays absent, so an undeclared principal costs
+    /// the journeys that address it and never a fabricated client.
+    #[test]
+    fn the_optional_principals_are_added_one_by_one() {
+        let ixit = instance(&serde_json::json!({ "mode": "none" }));
+        let base = PerfClient::from_instance(ixit.default_instance().unwrap(), &ixit).unwrap();
+        let principals = PerfPrincipals::single(base.clone());
+        assert!(principals.declares(Principal::Primary));
+        assert!(!principals.declares(Principal::Admin));
+
+        let full = principals
+            .with_unauthenticated(base.clone())
+            .with_readonly(base.clone())
+            .with_admin(base.clone())
+            .with_smart_platform(base);
+        for principal in [
+            Principal::Primary,
+            Principal::Unauthenticated,
+            Principal::ReadOnly,
+            Principal::Admin,
+            Principal::SmartPlatform,
+        ] {
+            assert!(full.declares(principal), "{principal:?} not declared");
+        }
+    }
+
+    /// A DECLARED optional instance that cannot be built stops the run and
+    /// names the instance: silently degrading the workload would publish a
+    /// measurement of a smaller mix than the case describes.
+    #[test]
+    fn a_declared_but_unusable_optional_instance_fails_loudly() {
+        let ixit: Ixit = serde_json::from_value(serde_json::json!({
+            "instances": {
+                "sut": { "base_url": "http://stub", "auth": { "mode": "none" } },
+                "readonly": { "base_url": "http://stub", "auth": {
+                    "mode": "bearer", "token_env": "VEREDICTUM_UNSET_CREDENTIAL_ENV" } }
+            }
+        }))
+        .unwrap();
+        let error = PerfPrincipals::from_ixit(&ixit)
+            .expect_err("a declared principal with no credential is a topology defect");
+        assert!(error.contains("ixit instance readonly"), "{error}");
+    }
+
     #[test]
     fn header_captures_match_the_bindings() {
         assert_eq!(
