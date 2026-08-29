@@ -13,6 +13,7 @@
     "environment",
     "started_at",
     "finished_at",
+    "scale",
     "seed_phases",
     "repetitions",
     "cross",
@@ -122,6 +123,31 @@
       "type": "string",
       "minLength": 1
     },
+    "scale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "factor",
+        "declared_workers",
+        "reference_configuration"
+      ],
+      "properties": {
+        "factor": {
+          "type": "number",
+          "exclusiveMinimum": 0.0
+        },
+        "declared_workers": {
+          "type": "boolean"
+        },
+        "reference_configuration": {
+          "type": "boolean"
+        }
+      }
+    },
+    "version_at_time": {
+      "type": "string",
+      "minLength": 1
+    },
     "seed_phases": {
       "type": "array",
       "items": {
@@ -134,7 +160,8 @@
           "compositions_per_ehr",
           "workers",
           "elapsed_s",
-          "bulk_load_writes_per_s"
+          "bulk_load_writes_per_s",
+          "whole_loop_ms_per_composition"
         ],
         "properties": {
           "name": {
@@ -164,6 +191,10 @@
             "minimum": 0.0
           },
           "bulk_load_writes_per_s": {
+            "type": "number",
+            "minimum": 0.0
+          },
+          "whole_loop_ms_per_composition": {
             "type": "number",
             "minimum": 0.0
           }
@@ -246,9 +277,164 @@
                     "enum": [
                       "adhoc_query_uid",
                       "create_composition",
+                      "get_composition_at_time",
                       "get_composition_latest",
                       "get_ehr",
-                      "get_ehr_status"
+                      "get_ehr_status",
+                      "get_versioned_composition",
+                      "get_versioned_composition_revision_history",
+                      "get_versioned_composition_version_at_time",
+                      "get_versioned_composition_version_by_id",
+                      "get_versioned_composition_version_latest"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "count",
+                      "errors",
+                      "errors_by_class",
+                      "throughput_ops_s",
+                      "p50_us",
+                      "p75_us",
+                      "p90_us",
+                      "p99_us",
+                      "p999_us",
+                      "max_us",
+                      "hdr_v2_base64"
+                    ],
+                    "properties": {
+                      "count": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "errors": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "errors_by_class": {
+                        "type": "object",
+                        "propertyNames": {
+                          "enum": [
+                            "http_2xx",
+                            "http_3xx",
+                            "http_4xx",
+                            "http_5xx",
+                            "http_other",
+                            "timeout",
+                            "transport"
+                          ]
+                        },
+                        "additionalProperties": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "throughput_ops_s": {
+                        "type": "number",
+                        "minimum": 0.0
+                      },
+                      "p50_us": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "p75_us": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "p90_us": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "p99_us": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "p999_us": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "max_us": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "hdr_v2_base64": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "sweeps": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "regime",
+                "workers",
+                "compositions",
+                "requests_per_composition",
+                "requests",
+                "elapsed_s",
+                "whole_loop_us_per_request",
+                "operations"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "regime": {
+                  "enum": [
+                    "closed-loop",
+                    "open-loop"
+                  ]
+                },
+                "workers": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "compositions": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "requests_per_composition": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "requests": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "elapsed_s": {
+                  "type": "number",
+                  "minimum": 0.0
+                },
+                "whole_loop_us_per_request": {
+                  "type": "number",
+                  "minimum": 0.0
+                },
+                "operations": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "adhoc_query_uid",
+                      "create_composition",
+                      "get_composition_at_time",
+                      "get_composition_latest",
+                      "get_ehr",
+                      "get_ehr_status",
+                      "get_versioned_composition",
+                      "get_versioned_composition_revision_history",
+                      "get_versioned_composition_version_at_time",
+                      "get_versioned_composition_version_by_id",
+                      "get_versioned_composition_version_latest"
                     ]
                   },
                   "additionalProperties": {
@@ -341,18 +527,31 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "regime",
           "operations"
         ],
         "properties": {
+          "regime": {
+            "enum": [
+              "closed-loop",
+              "open-loop"
+            ]
+          },
           "operations": {
             "type": "object",
             "propertyNames": {
               "enum": [
                 "adhoc_query_uid",
                 "create_composition",
+                "get_composition_at_time",
                 "get_composition_latest",
                 "get_ehr",
-                "get_ehr_status"
+                "get_ehr_status",
+                "get_versioned_composition",
+                "get_versioned_composition_revision_history",
+                "get_versioned_composition_version_at_time",
+                "get_versioned_composition_version_by_id",
+                "get_versioned_composition_version_latest"
               ]
             },
             "additionalProperties": {

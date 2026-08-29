@@ -15,7 +15,9 @@ use std::path::PathBuf;
 use serde_json::{Value, json};
 use veredictum::bench::BOUNDARY_STATEMENT;
 use veredictum::bench::client::AuthKind;
-use veredictum::bench::pack::{BenchOp, BenchPack, BenchPhase, MeasurePhase, SeedPhase, smoke};
+use veredictum::bench::pack::{
+    BenchOp, BenchPack, BenchPhase, MeasurePhase, SeedPhase, community_vitals, smoke,
+};
 use veredictum::bench::result::BenchResult;
 use veredictum::pipeline::bench::{BenchRequest, compare_bench, run_bench};
 use wiremock::matchers::{method, path, path_regex};
@@ -58,6 +60,39 @@ fn tiny_pack() -> BenchPack {
     ])
 }
 
+/// Mounts every composition read in the operation vocabulary, most specific
+/// first, because wiremock matches in registration order.
+fn mount_composition_reads(sut: &FakeSut) {
+    for (pattern, body) in [
+        (
+            r"^/ehr/[^/]+/versioned_composition/[^/]+/version/[^/]+$",
+            json!({ "_type": "ORIGINAL_VERSION" }),
+        ),
+        (
+            r"^/ehr/[^/]+/versioned_composition/[^/]+/version$",
+            json!({ "_type": "ORIGINAL_VERSION" }),
+        ),
+        (
+            r"^/ehr/[^/]+/versioned_composition/[^/]+/revision_history$",
+            json!({ "_type": "REVISION_HISTORY" }),
+        ),
+        (
+            r"^/ehr/[^/]+/versioned_composition/[^/]+$",
+            json!({ "_type": "VERSIONED_COMPOSITION" }),
+        ),
+        (
+            r"^/ehr/[^/]+/composition/[^/]+$",
+            json!({ "_type": "COMPOSITION" }),
+        ),
+    ] {
+        sut.mount(
+            Mock::given(method("GET"))
+                .and(path_regex(pattern))
+                .respond_with(ResponseTemplate::new(200).set_body_json(body)),
+        );
+    }
+}
+
 /// Mounts a system that answers every exchange the engine drives.
 fn mount_healthy(sut: &FakeSut) {
     sut.mount(
@@ -78,13 +113,7 @@ fn mount_healthy(sut: &FakeSut) {
             .and(path_regex(r"^/ehr/[^/]+/composition$"))
             .respond_with(ResponseTemplate::new(201).insert_header("ETag", "\"c-1::sut::1\"")),
     );
-    sut.mount(
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/ehr/[^/]+/composition/[^/]+$"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(json!({ "_type": "COMPOSITION" })),
-            ),
-    );
+    mount_composition_reads(sut);
     sut.mount(
         Mock::given(method("GET"))
             .and(path_regex(r"^/ehr/[^/]+/ehr_status$"))
@@ -106,21 +135,25 @@ fn mount_healthy(sut: &FakeSut) {
     );
 }
 
-/// Runs the tiny pack against `sut` and returns the emitted document text.
-fn drive(
+/// Runs `deck` against `sut` and returns the record with its two documents,
+/// the result JSON first and the rendered Markdown summary second.
+fn drive_pack(
     sut: &FakeSut,
+    deck: &BenchPack,
     label: &str,
     repetitions: u32,
-) -> Result<(BenchResult, String), Box<dyn std::error::Error>> {
-    let deck = tiny_pack();
+    scale: f64,
+) -> Result<(BenchResult, String, String), Box<dyn std::error::Error>> {
     let outcome = run_bench(
         &BenchRequest {
-            pack: &deck,
+            pack: deck,
             base_url: &sut.base_url(),
             auth: AuthKind::None,
             user: None,
             repetitions,
             label: Some(label),
+            scale,
+            seed_workers: None,
         },
         &|_message| {},
     )?;
@@ -131,7 +164,35 @@ fn drive(
         .ok_or("the run emitted no result document")?
         .body
         .clone();
-    Ok((outcome.result, document))
+    let summary = outcome
+        .documents
+        .iter()
+        .find(|file| !is_json(&file.name))
+        .ok_or("the run emitted no rendered summary")?
+        .body
+        .clone();
+    Ok((outcome.result, document, summary))
+}
+
+/// Runs the tiny smoke-derived pack against `sut`.
+fn drive(
+    sut: &FakeSut,
+    label: &str,
+    repetitions: u32,
+) -> Result<(BenchResult, String), Box<dyn std::error::Error>> {
+    let (result, document, _summary) = drive_pack(sut, &tiny_pack(), label, repetitions, 1.0)?;
+    Ok((result, document))
+}
+
+/// Validates one emitted document against the published bench-result schema.
+fn schema_violations(document: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let value: Value = serde_json::from_str(document)?;
+    let schema = veredictum::schema::bench_result_schema();
+    let validator = jsonschema::validator_for(&schema)?;
+    Ok(validator
+        .iter_errors(&value)
+        .map(|error| format!("{}: {error}", error.instance_path()))
+        .collect())
 }
 
 /// The whole path end to end: preflight, seed, one measured repetition, and
@@ -179,13 +240,7 @@ fn a_bench_run_emits_a_bounded_record() -> Fallible {
 
     // The emitted document is what a reader gets, so it validates against the
     // published schema rather than only against the in-memory model.
-    let value: Value = serde_json::from_str(&document)?;
-    let schema = veredictum::schema::bench_result_schema();
-    let validator = jsonschema::validator_for(&schema)?;
-    let violations: Vec<String> = validator
-        .iter_errors(&value)
-        .map(|error| format!("{}: {error}", error.instance_path()))
-        .collect();
+    let violations = schema_violations(&document)?;
     assert!(violations.is_empty(), "{}", violations.join("; "));
     Ok(())
 }
@@ -249,6 +304,8 @@ fn a_failed_preflight_refuses_the_run() {
             user: None,
             repetitions: 1,
             label: None,
+            scale: 1.0,
+            seed_workers: None,
         },
         &|_message| {},
     )
@@ -281,6 +338,8 @@ fn two_results_compare_with_their_mismatches_named() -> Fallible {
                 user: None,
                 repetitions: 1,
                 label: Some(label),
+                scale: 1.0,
+                seed_workers: None,
             },
             &|_message| {},
         )?;
@@ -320,6 +379,201 @@ fn two_results_compare_with_their_mismatches_named() -> Fallible {
     let warning_at = body.find("DIFFERENT packs");
     let table_at = body.find("## Aligned metrics");
     assert!(warning_at < table_at, "{body}");
+    Ok(())
+}
+
+/// The community pack at a unit-test population: two EHRs, three commits each,
+/// the same seven-variant walk, and a one-second open-loop window.
+fn tiny_community_pack() -> Result<BenchPack, Box<dyn std::error::Error>> {
+    let deck = community_vitals();
+    let fixtures = deck.fixtures();
+    let walk = deck
+        .sweep_phases()
+        .first()
+        .copied()
+        .cloned()
+        .ok_or("the community pack lost its walk")?;
+    let open = deck
+        .measure_phases()
+        .first()
+        .copied()
+        .cloned()
+        .ok_or("the community pack lost its open-loop phase")?;
+    Ok(deck.with_phases(vec![
+        BenchPhase::Seed(SeedPhase {
+            name: "write".to_owned(),
+            fixtures,
+            ehrs: 2,
+            compositions_per_ehr: 3,
+            workers: 1,
+        }),
+        BenchPhase::Sweep(walk),
+        BenchPhase::Measure(MeasurePhase {
+            rate_per_s: 20.0,
+            warmup_s: 1,
+            duration_s: 1,
+            ..open
+        }),
+    ]))
+}
+
+/// Mounts every route the community pack drives, most specific first, because
+/// wiremock matches in registration order.
+fn mount_community(sut: &FakeSut) {
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/definition/template/adl1.4"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([]))),
+    );
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/definition/template/adl1.4"))
+            .respond_with(ResponseTemplate::new(409)),
+    );
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/ehr"))
+            .respond_with(ResponseTemplate::new(201).set_body_json(json!({ "uid": "EHR-1" }))),
+    );
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/ehr/[^/]+/composition$"))
+            .respond_with(
+                ResponseTemplate::new(201).set_body_json(json!({ "uid": "c-1::sut::1" })),
+            ),
+    );
+    mount_composition_reads(sut);
+}
+
+/// The reproduction end to end: the record carries the closed-loop write
+/// average, the closed-loop walk average over all seven variants, and the
+/// open-loop percentiles, each labelled with the regime that produced it.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_community_pack_records_both_disciplines_with_their_labels() -> Fallible {
+    let sut = FakeSut::start();
+    mount_community(&sut);
+    let (result, document, summary) =
+        drive_pack(&sut, &tiny_community_pack()?, "community", 1, 1.0)?;
+
+    assert_eq!(result.pack.id, "community-vitals");
+    assert_eq!(result.pack.fixtures.len(), 2);
+    assert_eq!(
+        result
+            .pack
+            .fixtures
+            .get("vital_signs_composition.json")
+            .map(String::as_str),
+        Some("468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947")
+    );
+
+    // The run matched the pack's pinned configuration, so it is offered as
+    // comparable with the reference figures.
+    assert!(result.scale.reference_configuration);
+    assert!(result.version_at_time.is_some());
+
+    let write = result.seed_phases.first().ok_or("no write phase")?;
+    assert_eq!(write.regime.as_str(), "closed-loop");
+    assert_eq!(write.ehrs, 2);
+    assert_eq!(write.compositions_per_ehr, 3);
+    assert_eq!(write.workers, 1);
+    assert!(
+        write.whole_loop_ms_per_composition > 0.0,
+        "the write phase reported no whole-loop average"
+    );
+
+    let repetition = result.repetitions.first().ok_or("no repetition")?;
+    let walk = repetition.sweeps.get("read_walk").ok_or("no sweep")?;
+    assert_eq!(walk.regime.as_str(), "closed-loop");
+    assert_eq!(walk.compositions, 6);
+    assert_eq!(walk.requests_per_composition, 7);
+    assert_eq!(walk.requests, 42);
+    assert!(
+        walk.whole_loop_us_per_request > 0.0,
+        "the walk reported no whole-loop average"
+    );
+    assert_eq!(walk.operations.len(), 7, "{:?}", walk.operations.keys());
+    for (operation, stats) in &walk.operations {
+        assert_eq!(stats.errors, 0, "{operation} failed on a healthy system");
+        assert_eq!(
+            stats.count, 6,
+            "{operation} did not visit every composition"
+        );
+    }
+
+    let open = repetition
+        .phases
+        .get("read_open_loop")
+        .ok_or("no open-loop phase")?;
+    assert_eq!(open.regime.as_str(), "open-loop");
+    assert!(open.dispatched_measured_arrivals > 0);
+    for (operation, stats) in &open.operations {
+        assert_eq!(stats.errors, 0, "{operation} failed on a healthy system");
+    }
+
+    // The cross summary keeps each phase's discipline beside its numbers, and
+    // the rendered view prints both labels.
+    assert_eq!(
+        result
+            .cross
+            .get("read_walk")
+            .map(|phase| phase.regime.as_str()),
+        Some("closed-loop")
+    );
+    assert_eq!(
+        result
+            .cross
+            .get("read_open_loop")
+            .map(|phase| phase.regime.as_str()),
+        Some("open-loop")
+    );
+    assert!(
+        summary.contains("## Phase `read_walk` (closed-loop)"),
+        "{summary}"
+    );
+    assert!(
+        summary.contains("## Phase `read_open_loop` (open-loop)"),
+        "{summary}"
+    );
+    assert!(summary.contains("us/request whole-loop"), "{summary}");
+    assert!(summary.contains("ms/composition whole-loop"), "{summary}");
+
+    let violations = schema_violations(&document)?;
+    assert!(violations.is_empty(), "{}", violations.join("; "));
+    Ok(())
+}
+
+/// A scaled run seeds a smaller population and says in the record that its
+/// numbers are off the pack's reference configuration.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_scaled_community_run_is_marked_off_the_reference_configuration() -> Fallible {
+    let sut = FakeSut::start();
+    mount_community(&sut);
+    let (result, document, summary) = drive_pack(&sut, &tiny_community_pack()?, "scaled", 1, 0.5)?;
+
+    assert!((result.scale.factor - 0.5).abs() < f64::EPSILON);
+    assert!(result.scale.declared_workers);
+    assert!(!result.scale.reference_configuration);
+    let write = result.seed_phases.first().ok_or("no write phase")?;
+    assert_eq!(write.ehrs, 1, "the scale factor did not shrink the seed");
+    let repetition = result.repetitions.first().ok_or("no repetition")?;
+    let walk = repetition.sweeps.get("read_walk").ok_or("no sweep")?;
+    assert_eq!(walk.compositions, 3);
+    assert_eq!(walk.requests, 21);
+    assert!(
+        summary.contains("not comparable with the reference figures"),
+        "{summary}"
+    );
+
+    let violations = schema_violations(&document)?;
+    assert!(violations.is_empty(), "{}", violations.join("; "));
     Ok(())
 }
 

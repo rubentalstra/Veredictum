@@ -35,6 +35,11 @@ pub struct BenchRequest<'a> {
     pub repetitions: u32,
     /// The operator's label for the run.
     pub label: Option<&'a str>,
+    /// Multiplies every seed phase's EHR count. `1.0` is the pack's pinned
+    /// population.
+    pub scale: f64,
+    /// Overrides every seed phase's declared worker count.
+    pub seed_workers: Option<usize>,
 }
 
 /// One finished bench run: the record, plus the two files it emits.
@@ -63,6 +68,8 @@ pub fn run_bench(
             user: request.user,
             repetitions: request.repetitions,
             label: request.label,
+            scale: request.scale,
+            seed_workers: request.seed_workers,
         },
         progress,
     )

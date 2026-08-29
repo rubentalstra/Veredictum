@@ -29,6 +29,37 @@ version on.
   precondition fixtures against the committed set.
 - Register entry AMB-221 records the SM/ITS-REST RESULT_SET required-set
   divergence (upstream report #169); the wire assertions keep the ITS floor.
+- **Bench pack one: the community vital-signs harness (#164).** `bench --pack
+  community-vitals` reproduces the openEHR community's own benchmark harness
+  (<https://discourse.openehr.org/t/17224>) and measures the same work a second
+  way. The write phase creates 100 EHRs and commits the same Vital signs
+  composition 1,000 times into each with `Prefer: return=identifier`, on one
+  worker, and reports bulk-load throughput plus the whole-loop
+  milliseconds-per-composition average the thread quotes. The read phase then
+  runs twice over that population: `read_walk` is the sequential walk the
+  harness performs, seven GETs against every committed composition, reporting
+  the whole-loop microseconds-per-request average; `read_open_loop` offers the
+  same seven reads as an arrival schedule pinned at 200/s for 60s after a 15s
+  warmup, which is where the coordinated-omission-free percentiles come from.
+  The pinned rate is part of the pack version.
+
+  Both fixtures are embedded byte-identically and pinned by sha256, verified
+  when the pack loads: the operational template from the vendored CKM export
+  for template id `Vital signs`, the composition from the attachment on post 8
+  of that thread.
+
+  Every number in the record now carries the discipline that produced it. Bench
+  results gain a closed-loop `sweeps` block per repetition, a `regime` on every
+  cross-repetition phase summary, `whole_loop_ms_per_composition` on a seed
+  phase, and a `scale` block saying whether the run matched the pack's pinned
+  configuration. `bench-compare` prints the discipline per row and names a
+  scale or configuration mismatch in the header. Two new flags: `--scale`
+  shrinks the EHR count for a quick run, `--seed-workers` overrides the worker
+  count a seed phase declares, and either one takes the run off the reference
+  configuration, which the record, the rendered summary and the comparison all
+  state. The operation vocabulary gains the six composition reads the harness
+  exercises, each with its wire realization and its own error classing.
+
 - **The universal-benchmark engine (#163).** Two new subcommands measure
   comparative speed against any reachable openEHR CDR, with no artifact root,
   no IXIT and no party statement. `bench --base-url <URL>` drives an embedded

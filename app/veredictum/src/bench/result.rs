@@ -253,6 +253,81 @@ pub struct SeedPhaseRecord {
     /// Writes divided by elapsed seconds. A closed-loop throughput bounded
     /// by the worker pool, never a latency claim.
     pub bulk_load_writes_per_s: f64,
+    /// The whole loop's elapsed milliseconds divided by the compositions it
+    /// committed, EHR creates included. The average a single-client bulk-load
+    /// harness reports, and a closed-loop figure like every other number in
+    /// this record.
+    pub whole_loop_ms_per_composition: f64,
+}
+
+/// One executed closed-loop sweep: a sequential walk over the whole seeded
+/// population.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SweepPhaseRecord {
+    /// The phase name from the pack.
+    pub name: String,
+    /// Always [`LoopRegime::ClosedLoop`], stated rather than implied.
+    pub regime: LoopRegime,
+    /// The worker pool the walk ran on. One worker is a sequential client.
+    pub workers: u64,
+    /// Compositions the walk visited.
+    pub compositions: u64,
+    /// Requests offered against each visited composition.
+    pub requests_per_composition: u64,
+    /// Requests the walk issued in total.
+    pub requests: u64,
+    /// Wall-clock seconds the walk took.
+    pub elapsed_s: f64,
+    /// The whole loop's elapsed microseconds divided by the requests it
+    /// issued. A closed-loop average, never a percentile.
+    pub whole_loop_us_per_request: f64,
+    /// Per-operation statistics, keyed by the operation token. Latency here
+    /// is the request's own duration, which is what a closed-loop client
+    /// observes.
+    pub operations: BTreeMap<String, OperationStats>,
+}
+
+/// How far the run departed from the pack's pinned configuration.
+///
+/// A pack's reference figures describe the configuration the pack declares.
+/// A run that scales the population down, or that moves a seed phase off its
+/// declared worker count, measures different work, so the record says so
+/// rather than leaving a reader to notice.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScaleRecord {
+    /// The multiplier applied to every seed phase's EHR count.
+    pub factor: f64,
+    /// Whether every seed phase ran at the worker count its pack declares.
+    pub declared_workers: bool,
+    /// Whether the run matches the pack's pinned configuration in every
+    /// respect the operator can change, which is the only configuration whose
+    /// numbers may be read against the pack's reference figures.
+    pub reference_configuration: bool,
+}
+
+impl ScaleRecord {
+    /// Records a run's departure from the pack's pinned configuration.
+    #[must_use]
+    pub fn new(factor: f64, declared_workers: bool) -> Self {
+        let reference_scale = (factor - 1.0).abs() < f64::EPSILON;
+        Self {
+            factor,
+            declared_workers,
+            reference_configuration: reference_scale && declared_workers,
+        }
+    }
+}
+
+impl Default for ScaleRecord {
+    fn default() -> Self {
+        Self {
+            factor: 1.0,
+            declared_workers: true,
+            reference_configuration: true,
+        }
+    }
 }
 
 /// One measured phase within one repetition.
@@ -289,8 +364,12 @@ pub struct MeasuredPhaseRecord {
 pub struct RepetitionRecord {
     /// The one-based repetition ordinal.
     pub repetition: u32,
-    /// The measured phases, keyed by phase name.
+    /// The open-loop measured phases, keyed by phase name.
     pub phases: BTreeMap<String, MeasuredPhaseRecord>,
+    /// The closed-loop sweeps, keyed by phase name. Absent from a pack that
+    /// declares none.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub sweeps: BTreeMap<String, SweepPhaseRecord>,
 }
 
 /// A median and an inter-quartile range over one value across repetitions.
@@ -327,6 +406,9 @@ pub struct CrossOperation {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CrossPhase {
+    /// Which discipline produced this phase's numbers. Carried here so every
+    /// rendered figure can be labelled without consulting the pack.
+    pub regime: LoopRegime,
     /// Per-operation summaries, keyed by the operation token.
     pub operations: BTreeMap<String, CrossOperation>,
 }
@@ -411,6 +493,13 @@ pub struct BenchResult {
     pub started_at: String,
     /// When the run finished, RFC 3339.
     pub finished_at: String,
+    /// How far the run departed from the pack's pinned configuration.
+    pub scale: ScaleRecord,
+    /// The instant every `version_at_time` read in this run addressed,
+    /// captured once after the seed phases finished, RFC 3339. Absent when
+    /// the pack drives no such read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_at_time: Option<String>,
     /// The executed bulk loads, in execution order.
     pub seed_phases: Vec<SeedPhaseRecord>,
     /// Every repetition, in execution order.
@@ -552,6 +641,17 @@ mod tests {
         let stats = OperationStats::from_histogram(&histogram, classes, 1.0)?;
         assert_eq!(stats.errors, 4);
         Ok(())
+    }
+
+    /// A run at the pinned scale on the declared workers is the reference
+    /// configuration; either departure clears the flag.
+    #[test]
+    fn only_the_pinned_configuration_is_the_reference_one() {
+        assert!(ScaleRecord::new(1.0, true).reference_configuration);
+        assert!(!ScaleRecord::new(0.1, true).reference_configuration);
+        assert!(!ScaleRecord::new(1.0, false).reference_configuration);
+        assert!(!ScaleRecord::new(0.1, false).reference_configuration);
+        assert_eq!(ScaleRecord::default(), ScaleRecord::new(1.0, true));
     }
 
     /// A label becomes a file-name-safe slug; no label keeps the bare stem.

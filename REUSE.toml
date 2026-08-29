@@ -70,6 +70,28 @@ precedence = "override"
 SPDX-FileCopyrightText = ["openEHR Foundation", "the respective archetype authors"]
 SPDX-License-Identifier = "CC-BY-SA-3.0 AND CC-BY-SA-4.0"
 
+# ── The embedded bench fixtures: third-party bytes inside our own tree ──────
+# A bench pack is compiled into the binary, so the bytes it offers a system
+# live under `app/` where the catch-all above would claim them for Veredictum.
+# They are not ours. The operational template is byte-identical to the vendored
+# CKM export under `artifacts/corpus/templates/ckm/`, so it carries that tree's
+# declaration.
+[[annotations]]
+path = "app/veredictum/src/bench/fixtures/vital_signs.opt"
+precedence = "override"
+SPDX-FileCopyrightText = ["openEHR Foundation", "the respective archetype authors"]
+SPDX-License-Identifier = "CC-BY-SA-3.0 AND CC-BY-SA-4.0"
+
+# The composition instance comes from a public attachment on the openEHR
+# Discourse forum, where the publisher declared no licence. Nothing here
+# asserts a grant on the publisher's behalf; the LicenseRef text records what
+# is known and what is not.
+[[annotations]]
+path = "app/veredictum/src/bench/fixtures/vital_signs_composition.json"
+precedence = "override"
+SPDX-FileCopyrightText = "the publisher of the openEHR Discourse benchmark harness attachment"
+SPDX-License-Identifier = "LicenseRef-openEHR-forum-attachment"
+
 # ── One vendored file whose NAME contains a newline character ───────────────
 # A file in the vendored CNF suite is tracked with a literal U+000A inside its
 # filename — an upstream defect, and not something this repository may rename,

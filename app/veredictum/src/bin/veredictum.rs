@@ -50,7 +50,8 @@
 //!                                       FROM two committed stress reports,
 //!                                       both directions on equal footing
 //! veredictum bench --base-url URL [--auth none|basic|bearer] [--user U]
-//!                  [--pack smoke] [--repetitions N] --out DIR [--label L]
+//!                  [--pack community-vitals|smoke] [--repetitions N]
+//!                  [--scale F] [--seed-workers N] --out DIR [--label L]
 //!                                       the universal speed benchmark: an
 //!                                       embedded pack against any reachable
 //!                                       CDR, seeded once and measured N times
@@ -297,6 +298,15 @@ enum Command {
         /// than three is recorded as not submittable.
         #[arg(long, default_value_t = 3)]
         repetitions: u32,
+        /// Multiply the pack's EHR count by this factor, for a shorter run.
+        /// Anything but `1.0` takes the run off the pack's pinned
+        /// configuration, and the record says so.
+        #[arg(long, default_value_t = 1.0)]
+        scale: f64,
+        /// Override the worker count every seed phase declares. Omit to run
+        /// the pack's own value, which is what its reference figures describe.
+        #[arg(long)]
+        seed_workers: Option<usize>,
         /// Output directory for the result document and its summary.
         #[arg(long)]
         out: PathBuf,
@@ -566,16 +576,22 @@ fn main() -> ExitCode {
             user,
             pack,
             repetitions,
+            scale,
+            seed_workers,
             out,
             label,
         } => bench_command(
-            &base_url,
-            &auth,
-            user.as_deref(),
-            &pack,
-            repetitions,
+            &BenchInvocation {
+                base_url: &base_url,
+                auth_token: &auth,
+                user: user.as_deref(),
+                pack_token: &pack,
+                repetitions,
+                scale,
+                seed_workers,
+                label: label.as_deref(),
+            },
             &out,
-            label.as_deref(),
         ),
         Command::BenchCompare { results, out } => bench_compare_command(&results, &out),
         Command::AqlProbe {
@@ -875,20 +891,25 @@ fn stress_command(request: &StressRequest<'_>, out: &Path) -> ExitCode {
     ExitCode::SUCCESS
 }
 
-fn bench_command(
-    base_url: &str,
-    auth_token: &str,
-    user: Option<&str>,
-    pack_token: &str,
+/// What one `bench` invocation asked for, so the command takes one argument
+/// rather than eight positional ones that a swap would silently reorder.
+struct BenchInvocation<'a> {
+    base_url: &'a str,
+    auth_token: &'a str,
+    user: Option<&'a str>,
+    pack_token: &'a str,
     repetitions: u32,
-    out: &Path,
-    label: Option<&str>,
-) -> ExitCode {
-    let auth = match AuthKind::parse(auth_token) {
+    scale: f64,
+    seed_workers: Option<usize>,
+    label: Option<&'a str>,
+}
+
+fn bench_command(invocation: &BenchInvocation<'_>, out: &Path) -> ExitCode {
+    let auth = match AuthKind::parse(invocation.auth_token) {
         Ok(auth) => auth,
         Err(e) => return fail(&e),
     };
-    let pack = match veredictum::bench::pack::load(pack_token) {
+    let pack = match veredictum::bench::pack::load(invocation.pack_token) {
         Ok(pack) => pack,
         Err(e) => return fail(&e),
     };
@@ -896,11 +917,13 @@ fn bench_command(
     let outcome = match run_bench(
         &BenchRequest {
             pack: &pack,
-            base_url,
+            base_url: invocation.base_url,
             auth,
-            user,
-            repetitions,
-            label,
+            user: invocation.user,
+            repetitions: invocation.repetitions,
+            label: invocation.label,
+            scale: invocation.scale,
+            seed_workers: invocation.seed_workers,
         },
         &progress,
     ) {
@@ -918,6 +941,12 @@ fn bench_command(
         outcome.result.pack.version,
         outcome.result.submittable
     );
+    if !outcome.result.scale.reference_configuration {
+        println!(
+            "scale factor {:.3}: this run is off the pack's pinned configuration, so its numbers are not comparable with the reference figures the pack describes",
+            outcome.result.scale.factor
+        );
+    }
     ExitCode::SUCCESS
 }
 

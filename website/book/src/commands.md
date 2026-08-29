@@ -200,7 +200,7 @@ Run the universal speed benchmark against any reachable CDR.
 ```bash
 veredictum bench --base-url <URL> --out <OUT> \
     [--auth none|basic|bearer] [--user <USER>] [--pack <PACK>] \
-    [--repetitions <N>] [--label <LABEL>]
+    [--repetitions <N>] [--scale <F>] [--seed-workers <N>] [--label <LABEL>]
 ```
 
 | Flag | Meaning |
@@ -209,13 +209,47 @@ veredictum bench --base-url <URL> --out <OUT> \
 | `--out <OUT>` | Output directory for the result document and its summary. Required |
 | `--auth <MODE>` | How the client presents itself: `none`, `basic` or `bearer`. Default `none` |
 | `--user <USER>` | The user `--auth basic` presents |
-| `--pack <PACK>` | The embedded pack to drive. Default `smoke` |
+| `--pack <PACK>` | The embedded pack to drive: `smoke` or `community-vitals`. Default `smoke` |
 | `--repetitions <N>` | How many times to repeat the measured phases. Default `3` |
+| `--scale <F>` | Multiply the pack's EHR count by this factor, for a shorter run. Default `1.0` |
+| `--seed-workers <N>` | Override the worker count every seed phase declares. Omit to run the pack's own value |
 | `--label <LABEL>` | A label for this run, which names its column in a comparison |
 
 A bench run needs no artifact root, no IXIT and no party statement. The pack is
 compiled into the binary with a sha256 pin on every fixture, and the pins are
 recorded in the result.
+
+### The embedded packs
+
+`smoke` proves the engine: one blood-pressure template, a small EHR corpus, and
+one mixed open-loop phase over the read, write and query surface.
+
+`community-vitals` reproduces the openEHR community's vital-signs benchmark
+harness ([thread 17224](https://discourse.openehr.org/t/17224)) and measures the
+same work a second way. Its write phase creates 100 EHRs and commits the same
+Vital signs composition 1,000 times into each with `Prefer: return=identifier`,
+on one worker, reporting bulk-load throughput plus the whole-loop
+milliseconds-per-composition average the thread quotes. Its read phase then runs
+twice over that population. `read_walk` is the sequential walk the harness
+performs, seven GETs against every committed composition: the latest version,
+the same at an instant, the `VERSIONED_COMPOSITION`, its latest version, its
+version at that instant, one version by id, and the revision history. It reports
+the whole-loop microseconds-per-request average. `read_open_loop` offers the same
+seven reads as an arrival schedule pinned at 200/s for 60s after a 15s warmup,
+which is where the coordinated-omission-free percentiles come from. The pinned
+rate is part of the pack version.
+
+Every number in the record carries the discipline that produced it: a
+`closed-loop` whole-loop average and an `open-loop` percentile answer different
+questions and are never read against one another. The two fixtures are embedded
+byte-identically, the operational template from the vendored CKM export for
+template id `Vital signs` and the composition from the attachment on post 8 of
+that thread, both pinned by sha256 and verified at load.
+
+`--scale` shrinks the EHR count for a quick run and changes nothing else.
+Anything but `1.0`, or a `--seed-workers` override, takes the run off the pack's
+pinned configuration; the record says so in its `scale` block, the summary says
+so in prose, and `bench-compare` names it in the header.
 
 Credentials never ride the command line: `--auth basic` reads its password from
 `VEREDICTUM_BENCH_PASSWORD` and `--auth bearer` reads its token from
@@ -255,9 +289,11 @@ the cross-repetition median with the inter-quartile range beside it, so a reader
 sees the spread as well as the number.
 
 A mismatch is stated above the table, never under it: columns that ran different
-pack versions, columns generated from different hosts, and columns whose runs
-carry too few repetitions to be submittable are all named in the header, and the
-command exits `1` when any of them applies.
+pack versions, columns generated from different hosts, columns that ran at
+different scale factors or off the pack's pinned configuration, and columns whose
+runs carry too few repetitions to be submittable are all named in the header, and
+the command exits `1` when any of them applies. Each row also names the
+discipline its numbers came from.
 
 ## stress-compare
 

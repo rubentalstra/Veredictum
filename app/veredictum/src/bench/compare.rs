@@ -20,7 +20,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::bench::BenchError;
-use crate::bench::result::{BenchResult, CrossOperation, CrossPhase, CrossStat, RepetitionRecord};
+use crate::bench::result::{
+    BenchResult, CrossOperation, CrossPhase, CrossStat, LoopRegime, RepetitionRecord,
+};
 
 /// The metrics a comparison aligns, in the order it renders them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -122,7 +124,13 @@ pub fn cross_stat(values: &[f64]) -> CrossStat {
     }
 }
 
-/// Summarizes every measured phase across the run's repetitions.
+/// Summarizes every phase across the run's repetitions, keeping each phase's
+/// discipline beside its numbers.
+///
+/// Open-loop phases and closed-loop sweeps are summarized the same way and
+/// land in the same map, keyed by phase name, because a pack's phase names are
+/// distinct. What separates them is the [`LoopRegime`] every entry carries, so
+/// no consumer has to infer the discipline from the name.
 #[must_use]
 #[expect(
     clippy::as_conversions,
@@ -130,19 +138,34 @@ pub fn cross_stat(values: &[f64]) -> CrossStat {
     reason = "recorded microsecond percentiles are far below 2^52"
 )]
 pub fn summarize(repetitions: &[RepetitionRecord]) -> BTreeMap<String, CrossPhase> {
-    let mut phases: BTreeMap<String, BTreeMap<String, Vec<&crate::bench::result::OperationStats>>> =
-        BTreeMap::new();
+    let mut phases: BTreeMap<
+        String,
+        (
+            LoopRegime,
+            BTreeMap<String, Vec<&crate::bench::result::OperationStats>>,
+        ),
+    > = BTreeMap::new();
     for repetition in repetitions {
         for (phase_name, phase) in &repetition.phases {
-            let operations = phases.entry(phase_name.clone()).or_default();
+            let entry = phases
+                .entry(phase_name.clone())
+                .or_insert_with(|| (phase.regime, BTreeMap::new()));
             for (op, stats) in &phase.operations {
-                operations.entry(op.clone()).or_default().push(stats);
+                entry.1.entry(op.clone()).or_default().push(stats);
+            }
+        }
+        for (phase_name, sweep) in &repetition.sweeps {
+            let entry = phases
+                .entry(phase_name.clone())
+                .or_insert_with(|| (sweep.regime, BTreeMap::new()));
+            for (op, stats) in &sweep.operations {
+                entry.1.entry(op.clone()).or_default().push(stats);
             }
         }
     }
     phases
         .into_iter()
-        .map(|(phase_name, operations)| {
+        .map(|(phase_name, (regime, operations))| {
             let operations = operations
                 .into_iter()
                 .map(|(op, samples)| {
@@ -173,14 +196,14 @@ pub fn summarize(repetitions: &[RepetitionRecord]) -> BTreeMap<String, CrossPhas
                     (op, cross)
                 })
                 .collect();
-            (phase_name, CrossPhase { operations })
+            (phase_name, CrossPhase { regime, operations })
         })
         .collect()
 }
 
 /// One column of a comparison: everything about the file that is not a
 /// number in the body.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ComparisonColumn {
     /// The operator's label, falling back to the file name.
     pub label: String,
@@ -196,6 +219,10 @@ pub struct ComparisonColumn {
     pub repetitions: u32,
     /// Whether the run carries enough repetitions to be offered.
     pub submittable: bool,
+    /// The multiplier the run applied to the pack's seed population.
+    pub scale_factor: f64,
+    /// Whether the run matched the pack's pinned configuration.
+    pub reference_configuration: bool,
     /// The generator host, as an ordered label map.
     pub environment: BTreeMap<String, String>,
 }
@@ -205,6 +232,9 @@ pub struct ComparisonColumn {
 pub struct ComparisonRow {
     /// The phase the row belongs to.
     pub phase: String,
+    /// The discipline that produced the row's numbers, so a closed-loop
+    /// average is never read as an open-loop percentile.
+    pub regime: LoopRegime,
     /// The operation.
     pub operation: String,
     /// The metric.
@@ -267,21 +297,25 @@ pub fn compare(paths: &[PathBuf]) -> Result<Comparison, BenchError> {
             sut_version: result.target.sut_version.clone(),
             repetitions: u32::try_from(result.repetitions.len()).unwrap_or(u32::MAX),
             submittable: result.submittable,
+            scale_factor: result.scale.factor,
+            reference_configuration: result.scale.reference_configuration,
             environment: result.environment.labels(),
         });
         results.push(result);
     }
     let warnings = warnings(&columns);
-    let mut keys: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut keys: BTreeMap<(String, String), LoopRegime> = BTreeMap::new();
     for result in &results {
         for (phase, cross) in &result.cross {
             for op in cross.operations.keys() {
-                let _fresh = keys.insert((phase.clone(), op.clone()));
+                let _kept = keys
+                    .entry((phase.clone(), op.clone()))
+                    .or_insert(cross.regime);
             }
         }
     }
     let mut rows = Vec::new();
-    for (phase, operation) in keys {
+    for ((phase, operation), regime) in keys {
         for metric in Metric::ALL {
             let cells = results
                 .iter()
@@ -295,6 +329,7 @@ pub fn compare(paths: &[PathBuf]) -> Result<Comparison, BenchError> {
                 .collect();
             rows.push(ComparisonRow {
                 phase: phase.clone(),
+                regime,
                 operation: operation.clone(),
                 metric: *metric,
                 cells,
@@ -337,11 +372,27 @@ fn warnings(columns: &[ComparisonColumn]) -> Vec<String> {
             "the columns were generated from DIFFERENT hosts, so a latency difference may be the generator's".to_owned(),
         );
     }
+    let scales: BTreeSet<String> = columns
+        .iter()
+        .map(|column| format!("{:.3}", column.scale_factor))
+        .collect();
+    if scales.len() > 1 {
+        warnings.push(format!(
+            "the columns ran at DIFFERENT scale factors ({}), so they seeded populations of different sizes",
+            scales.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
     for column in columns {
         if !column.submittable {
             warnings.push(format!(
                 "column {:?} carries {} repetition(s) and is not submittable",
                 column.label, column.repetitions
+            ));
+        }
+        if !column.reference_configuration {
+            warnings.push(format!(
+                "column {:?} ran at scale factor {:.3} off the pack's pinned configuration, so its numbers are not comparable with the reference figures the pack describes",
+                column.label, column.scale_factor
             ));
         }
     }
@@ -356,7 +407,79 @@ fn warnings(columns: &[ComparisonColumn]) -> Vec<String> {
 )]
 mod tests {
     use super::*;
-    use crate::bench::result::MeasuredPhaseRecord;
+    use crate::bench::result::{MeasuredPhaseRecord, SweepPhaseRecord};
+
+    /// One recorded operation whose latency is `p50` on every arrival.
+    fn flat_stats(p50: u64) -> Result<crate::bench::result::OperationStats, BenchError> {
+        let mut histogram = hdrhistogram::Histogram::<u64>::new_with_bounds(1, 600_000_000, 3)
+            .map_err(|e| BenchError::Histogram(e.to_string()))?;
+        for _ in 0..10 {
+            let _saturated = histogram.record(p50);
+        }
+        crate::bench::result::OperationStats::from_histogram(&histogram, BTreeMap::new(), 1.0)
+    }
+
+    /// A sweep and a measured phase summarize side by side, each keeping the
+    /// discipline that produced it.
+    #[test]
+    fn a_sweep_and_a_measured_phase_keep_their_disciplines()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut phases = BTreeMap::new();
+        let mut operations = BTreeMap::new();
+        let _replaced = operations.insert("get_ehr".to_owned(), flat_stats(100)?);
+        let _replaced = phases.insert(
+            "open".to_owned(),
+            MeasuredPhaseRecord {
+                regime: LoopRegime::OpenLoop,
+                rate_per_s: 1.0,
+                warmup_s: 0,
+                duration_s: 1,
+                planned_measured_arrivals: 10,
+                dispatched_measured_arrivals: 10,
+                warmup_arrivals: 0,
+                offered_load_sustained_per_s: 10.0,
+                generator_bound: false,
+                operations,
+            },
+        );
+        let mut sweeps = BTreeMap::new();
+        let mut walk_operations = BTreeMap::new();
+        let _replaced =
+            walk_operations.insert("get_composition_latest".to_owned(), flat_stats(200)?);
+        let _replaced = sweeps.insert(
+            "walk".to_owned(),
+            SweepPhaseRecord {
+                name: "walk".to_owned(),
+                regime: LoopRegime::ClosedLoop,
+                workers: 1,
+                compositions: 5,
+                requests_per_composition: 2,
+                requests: 10,
+                elapsed_s: 1.0,
+                whole_loop_us_per_request: 200.0,
+                operations: walk_operations,
+            },
+        );
+        let cross = summarize(&[RepetitionRecord {
+            repetition: 1,
+            phases,
+            sweeps,
+        }]);
+        assert_eq!(
+            cross.get("open").map(|phase| phase.regime),
+            Some(LoopRegime::OpenLoop)
+        );
+        assert_eq!(
+            cross.get("walk").map(|phase| phase.regime),
+            Some(LoopRegime::ClosedLoop)
+        );
+        assert!(
+            cross
+                .get("walk")
+                .is_some_and(|phase| phase.operations.contains_key("get_composition_latest"))
+        );
+        Ok(())
+    }
 
     /// The quantile matches the interpolated order statistic by hand, which
     /// is the definition the module doc pins.
@@ -418,7 +541,7 @@ mod tests {
             let mut operations = BTreeMap::new();
             let _replaced = operations.insert("get_ehr".to_owned(), stats(p50)?);
             Ok(MeasuredPhaseRecord {
-                regime: crate::bench::result::LoopRegime::OpenLoop,
+                regime: LoopRegime::OpenLoop,
                 rate_per_s: 1.0,
                 warmup_s: 0,
                 duration_s: 1,
@@ -439,10 +562,15 @@ mod tests {
                 Ok(RepetitionRecord {
                     repetition: u32::try_from(index).unwrap_or(0).saturating_add(1),
                     phases,
+                    sweeps: BTreeMap::new(),
                 })
             })
             .collect::<Result<_, BenchError>>()?;
         let cross = summarize(&repetitions);
+        assert_eq!(
+            cross.get("mixed").map(|phase| phase.regime),
+            Some(LoopRegime::OpenLoop)
+        );
         let operation = cross
             .get("mixed")
             .and_then(|phase| phase.operations.get("get_ehr"))
