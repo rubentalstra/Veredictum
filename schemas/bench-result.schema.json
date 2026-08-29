@@ -275,6 +275,12 @@
                   "type": "object",
                   "propertyNames": {
                     "enum": [
+                      "adhoc_query_aggregate",
+                      "adhoc_query_ehr_scan",
+                      "adhoc_query_filtered",
+                      "adhoc_query_ordered_page",
+                      "adhoc_query_point_lookup",
+                      "adhoc_query_population",
                       "adhoc_query_uid",
                       "create_composition",
                       "get_composition_at_time",
@@ -424,6 +430,12 @@
                   "type": "object",
                   "propertyNames": {
                     "enum": [
+                      "adhoc_query_aggregate",
+                      "adhoc_query_ehr_scan",
+                      "adhoc_query_filtered",
+                      "adhoc_query_ordered_page",
+                      "adhoc_query_point_lookup",
+                      "adhoc_query_population",
                       "adhoc_query_uid",
                       "create_composition",
                       "get_composition_at_time",
@@ -541,6 +553,12 @@
             "type": "object",
             "propertyNames": {
               "enum": [
+                "adhoc_query_aggregate",
+                "adhoc_query_ehr_scan",
+                "adhoc_query_filtered",
+                "adhoc_query_ordered_page",
+                "adhoc_query_point_lookup",
+                "adhoc_query_population",
                 "adhoc_query_uid",
                 "create_composition",
                 "get_composition_at_time",
@@ -915,6 +933,12 @@
                         "type": "object",
                         "propertyNames": {
                           "enum": [
+                            "adhoc_query_aggregate",
+                            "adhoc_query_ehr_scan",
+                            "adhoc_query_filtered",
+                            "adhoc_query_ordered_page",
+                            "adhoc_query_point_lookup",
+                            "adhoc_query_population",
                             "adhoc_query_uid",
                             "create_composition",
                             "get_composition_at_time",
@@ -1064,6 +1088,12 @@
                         "type": "object",
                         "propertyNames": {
                           "enum": [
+                            "adhoc_query_aggregate",
+                            "adhoc_query_ehr_scan",
+                            "adhoc_query_filtered",
+                            "adhoc_query_ordered_page",
+                            "adhoc_query_point_lookup",
+                            "adhoc_query_population",
                             "adhoc_query_uid",
                             "create_composition",
                             "get_composition_at_time",
@@ -1181,6 +1211,12 @@
                   "type": "object",
                   "propertyNames": {
                     "enum": [
+                      "adhoc_query_aggregate",
+                      "adhoc_query_ehr_scan",
+                      "adhoc_query_filtered",
+                      "adhoc_query_ordered_page",
+                      "adhoc_query_point_lookup",
+                      "adhoc_query_population",
                       "adhoc_query_uid",
                       "create_composition",
                       "get_composition_at_time",
@@ -1368,6 +1404,12 @@
                   "type": "object",
                   "propertyNames": {
                     "enum": [
+                      "adhoc_query_aggregate",
+                      "adhoc_query_ehr_scan",
+                      "adhoc_query_filtered",
+                      "adhoc_query_ordered_page",
+                      "adhoc_query_point_lookup",
+                      "adhoc_query_population",
                       "adhoc_query_uid",
                       "create_composition",
                       "get_composition_at_time",

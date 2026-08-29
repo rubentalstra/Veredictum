@@ -50,7 +50,7 @@
 //!                                       FROM two committed stress reports,
 //!                                       both directions on equal footing
 //! veredictum bench --base-url URL [--auth none|basic|bearer] [--user U]
-//!                  [--pack community-vitals|smoke] [--repetitions N]
+//!                  [--pack aql-mix|community-vitals|smoke] [--repetitions N]
 //!                  [--scale F] [--seed-workers N] [--with-baselines]
 //!                  --out DIR [--label L]
 //!                                       the universal speed benchmark: an

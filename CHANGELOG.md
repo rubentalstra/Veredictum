@@ -26,6 +26,23 @@ version on.
   evaluation class FerroEHR#2919 fixed goes red on contact — plus the
   zero-row negative twin.
 
+- **The `aql-mix` bench pack (#188).** `bench --pack aql-mix` measures AQL
+  query speed over the same Vital signs population `community-vitals` seeds,
+  from the same two sha256-pinned fixtures, so a query figure and a read figure
+  describe the same corpus. The seed phase creates 50 EHRs and commits the
+  composition 20 times into each, a population the pack version pins and sizes
+  for query shapes. The measured phase is open-loop at 24
+  arrivals a second for 60s after a 15s warmup, over six query classes at equal
+  share: a uid point lookup, an EHR-scoped scan, a filtered magnitude
+  predicate, the same predicate unscoped under a fetch bound, a `COUNT`
+  aggregate, and an ordered page read through a moving fetch window. Each class
+  posts its own AQL statement to `/query/aql`, accepts only 200, and counts
+  every other answer in its own error class, so the record carries one set of
+  percentiles per class and a server that refuses one shape never contaminates
+  another. Thresholds, page offsets and targets draw from the run's seeded
+  streams, and the seed is disclosed in the record. Each class states in the
+  versioned pack definition which storage behaviour it probes, and the
+  baselines, the relative index and `bench-compare` cover the pack unchanged.
 - **Bench baselines and the relative index (#184).** `bench --with-baselines`
   measures the target, then composes each pinned reference CDR on the same
   host, drives the same pack at the same seed for the same repetitions against
