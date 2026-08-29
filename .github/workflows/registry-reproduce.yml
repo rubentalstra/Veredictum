@@ -1,0 +1,200 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The registry's tier-1 lane: compose a deployment from a recipe this
+# repository controls, drive the catalogue against it, and attest what came out
+# from this workflow's own OIDC identity.
+#
+# WHY THE IDENTITY IS THE SIGNATURE. A stored signing key in a public
+# repository's CI is one compromised workflow away from forging every entry on
+# the board, so no key exists here and none will. What a tier-1 entry carries
+# instead is a Sigstore-backed attestation issued to `workflow_ref` — this
+# file, on this repository — which anybody re-checks with
+# `gh attestation verify <artifact> --repo rubentalstra/Veredictum`. The claim
+# is exactly that: these bytes came out of this workflow. It is not a SLSA
+# build-level claim, because the attestation is minted in an ordinary job
+# beside the steps that produced the artifacts
+# (https://docs.github.com/actions/security-guides/using-artifact-attestations-and-reusable-workflows-to-achieve-slsa-v1-build-level-3).
+#
+# WHAT MAY BE COMPOSED. Only the topologies declared under
+# `registry/topologies/`, whose recipes are committed here or fetched from the
+# upstream repository the declaration names. Nothing a submitter wrote is ever
+# executed in a job holding an OIDC token, which is why a submitted image or a
+# submitted compose file cannot reach this lane: adding a topology is a change
+# to this repository, reviewed like any other.
+#
+# The lane does not gate a merge. A tier-2 entry is publishable on its own, and
+# a live server's behaviour is never allowed to decide whether a pull request
+# can land. `ci.yml`'s `registry-submissions` job is what gates a submission.
+name: Registry reproduction
+
+on:
+  pull_request:
+    paths:
+      - 'registry/**'
+      - 'scripts/registry/**'
+      - 'docker/**'
+      - '.github/workflows/registry-reproduce.yml'
+  workflow_dispatch:
+    inputs:
+      topology:
+        description: 'The topology id to reproduce, as registry/topologies/<id>/ names it'
+        required: true
+        type: string
+      sut_version:
+        description: 'The version label to stamp into the record'
+        required: false
+        default: unpinned
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: registry-reproduce-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Which reproductions this event calls for. The plan emits nothing but
+  # topology ids that match a committed directory, so the only value crossing
+  # into the reproducing job is one this repository already carries.
+  plan:
+    name: what can be reproduced
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      any: ${{ steps.select.outputs.any }}
+      fork: ${{ steps.select.outputs.fork }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The pull-request half walks a commit range.
+          fetch-depth: 0
+      - id: select
+        shell: bash
+        # Context reaches the shell through `env:`, never `${{ }}` inline —
+        # zizmor's template-injection rule is the machine check for it.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+          INPUT_TOPOLOGY: ${{ inputs.topology }}
+          INPUT_VERSION: ${{ inputs.sut_version }}
+        run: |
+          set -euo pipefail
+          declared() { test -f "registry/topologies/$1/topology.json"; }
+          selected='[]'
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if ! declared "$INPUT_TOPOLOGY"; then
+              echo "::error::no topology is declared for ${INPUT_TOPOLOGY}"
+              exit 1
+            fi
+            selected="$(jq -cn --arg t "$INPUT_TOPOLOGY" --arg v "${INPUT_VERSION:-unpinned}" \
+              '[{topology: $t, version: $v}]')"
+          else
+            added="$(git diff --name-only --diff-filter=A "$PR_BASE...$PR_HEAD" \
+              -- registry/entries/conformance || true)"
+            for entry in $added; do
+              [ -f "$entry" ] || continue
+              kind="$(jq -r '.subject.deployment.kind // ""' "$entry")"
+              topology="$(jq -r '.subject.deployment.topology // ""' "$entry")"
+              authorized="$(jq -r '.subject.deployment.reproduction_authorized // false' "$entry")"
+              version="$(jq -r '.subject.version // "unpinned"' "$entry")"
+              if [ "$kind" != "reproducible-topology" ] || [ "$authorized" != "true" ]; then
+                echo "skipping $entry: deployment kind $kind, authorized $authorized"
+                continue
+              fi
+              if ! declared "$topology"; then
+                echo "::error::$entry names the topology ${topology}, which no committed declaration carries"
+                exit 1
+              fi
+              selected="$(jq -c --arg t "$topology" --arg v "$version" \
+                '. + [{topology: $t, version: $v}]' <<<"$selected")"
+            done
+          fi
+
+          count="$(jq 'length' <<<"$selected")"
+          echo "selected $count reproduction(s):"
+          jq -r '.[] | "  - \(.topology) at \(.version)"' <<<"$selected"
+          {
+            echo "matrix=$(jq -c '{include: .}' <<<"$selected")"
+            echo "any=$([ "$count" -gt 0 ] && echo true || echo false)"
+            echo "fork=${IS_FORK:-false}"
+          } >> "$GITHUB_OUTPUT"
+
+          # A fork's workflow cannot hold the identity that makes an
+          # attestation worth anything, so the lane says what it would have
+          # done and performs no run. The submission stays tier 2 until a
+          # maintainer dispatches the reproduction.
+          if [ "${IS_FORK:-false}" = "true" ] && [ "$count" -gt 0 ]; then
+            echo "::notice::this pull request comes from a fork, so no reproduction runs here; a maintainer dispatches it"
+          fi
+
+  reproduce:
+    name: reproduce ${{ matrix.topology }}
+    needs: plan
+    if: needs.plan.outputs.any == 'true' && needs.plan.outputs.fork != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write # Sigstore, for the attestation
+      attestations: write # store it against this repository
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No build cache is restored. This job mints an attestation carrying this
+      # repository's identity, and a cache an untrusted run can write is a way
+      # into the bytes that attestation would then vouch for.
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache: false
+      - name: Compose the topology and drive the catalogue
+        shell: bash
+        env:
+          TOPOLOGY: ${{ matrix.topology }}
+          SUT_VERSION: ${{ matrix.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/registry/reproduce.sh "$TOPOLOGY" reproduction "$SUT_VERSION"
+      # The attestation covers the three documents a tier-1 entry stands on:
+      # what the run recorded, what the judgement computed, and which images
+      # actually answered.
+      - name: Attest the reproduction
+        id: attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            reproduction/run/results.json
+            reproduction/judgement/verdicts.json
+            reproduction/deployment.json
+      - name: State what a maintainer commits
+        shell: bash
+        env:
+          TOPOLOGY: ${{ matrix.topology }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          BUNDLE: ${{ steps.attestation.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          echo "topology:     $TOPOLOGY"
+          echo "workflow_ref: ${GITHUB_REPOSITORY}/.github/workflows/registry-reproduce.yml@${GITHUB_REF}"
+          echo "run_id:       $RUN_ID"
+          echo "run_attempt:  $RUN_ATTEMPT"
+          echo "bundle:       $BUNDLE"
+          echo
+          echo "digests for the entry's artifacts:"
+          find reproduction -type f -name '*.json' -print0 | sort -z | xargs -0 sha256sum
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reproduction-${{ matrix.topology }}
+          path: reproduction
+          if-no-files-found: error

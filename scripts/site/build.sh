@@ -40,6 +40,13 @@ mkdir -p "$OUT"
 log "benchmark board (committed page vs the committed records)"
 bash "$ROOT/scripts/render/bench-board.sh" --check
 
+# 2b. The conformance board, the same shape: generated from the registry
+#     entries and the verdicts each one pins, and committed, so the deploy
+#     copies a reviewed file. A merged entry that leaves the page stale cannot
+#     be served.
+log "conformance board (committed page vs the committed registry entries)"
+bash "$ROOT/scripts/render/conformance-board.sh" --check
+
 # 3. The benchmark legend, the same shape one level further back: the page is
 #    generated from `website/landing/bench-packs.json`, which the binary emits
 #    from the packs it embeds. This check holds the page to that document; the
@@ -68,14 +75,15 @@ else
   printf '%s\n' "$SITE_DOMAIN" > "$OUT/CNAME"
 fi
 
-# 7. sitemap.xml — the landing page, the two benchmark pages, and every built book
-#    page.
+# 7. sitemap.xml — the landing page, the conformance board, the two benchmark
+#    pages, and every built book page.
 log "sitemap.xml"
 {
   echo '<?xml version="1.0" encoding="UTF-8"?>'
   echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
   host="${SITE_ORIGIN}${SITE_BASE}"
   echo "  <url><loc>${host}/</loc></url>"
+  echo "  <url><loc>${host}/conformance-board.html</loc></url>"
   echo "  <url><loc>${host}/benchmarks.html</loc></url>"
   echo "  <url><loc>${host}/benchmark-methodology.html</loc></url>"
   # print.html is the book's single-page render of pages already listed, and
