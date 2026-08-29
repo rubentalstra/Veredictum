@@ -28,7 +28,7 @@ git rev-parse HEAD >.claude/.session-start-head 2>/dev/null || true
 date -u +%Y-%m-%dT%H:%M:%SZ >.claude/.session-start-time 2>/dev/null || true
 
 echo "=== spec oracle ==="
-if [ -d specs/openehr ]; then
+if [[ -d specs/openehr ]]; then
   echo "Vendored released openEHR spec text: specs/openehr/ (index: its README.md). Derive every expectation from that text first-hand — never from memory, a vendor's docs, or a server's behaviour (.claude/rules/cnf-triage.md)."
 else
   echo "The vendored openEHR spec text is MISSING from this checkout — specs/openehr/ is not there. Do not answer a spec question until it is restored: re-run scripts/vendor/spec-docs.sh. Never answer from memory, from a vendor's documentation, or from what a server did (.claude/rules/cnf-triage.md)."

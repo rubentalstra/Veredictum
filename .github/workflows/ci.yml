@@ -692,12 +692,12 @@ jobs:
           twv="$(grep -E '^ARG TAILWIND_VERSION=' "$DOCKERFILE" | head -1 | cut -d= -f2)"
           echo "cargo-leptos ${clv}, tailwindcss ${twv}"
           triple=x86_64-unknown-linux-gnu
-          curl -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${clv}/cargo-leptos-${triple}.tar.gz"
-          curl -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${clv}/cargo-leptos-${triple}.tar.gz.sha256"
+          curl --proto '=https' --tlsv1.2 -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${clv}/cargo-leptos-${triple}.tar.gz"
+          curl --proto '=https' --tlsv1.2 -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${clv}/cargo-leptos-${triple}.tar.gz.sha256"
           sha256sum -c "cargo-leptos-${triple}.tar.gz.sha256"
           tar -xzf "cargo-leptos-${triple}.tar.gz"
           sudo install -m 0755 "$(find . -type f -name cargo-leptos | head -1)" /usr/local/bin/cargo-leptos
-          curl -fsSLo tailwindcss "https://github.com/tailwindlabs/tailwindcss/releases/download/${twv}/tailwindcss-linux-x64"
+          curl --proto '=https' --tlsv1.2 -fsSLo tailwindcss "https://github.com/tailwindlabs/tailwindcss/releases/download/${twv}/tailwindcss-linux-x64"
           sudo install -m 0755 tailwindcss /usr/local/bin/tailwindcss
           rm -rf cargo-leptos* tailwindcss
 

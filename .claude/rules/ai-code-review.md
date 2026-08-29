@@ -45,9 +45,10 @@ opinion beside the shellcheck bundled in the actionlint image, not a
 replacement — shellcheck reads the shell embedded in workflow `run:` blocks,
 which Sonar never sees as shell, so the two cover different files.
 
-Those 11 findings sit on hooks ported verbatim from FerroEHR, and a style
-rewrite here would silently fork them from their upstream originals. Under the
-precedence above that is a finding to record, not one to act on reflexively.
+The fork-parity adjudication that kept those 11 findings is retired by owner
+ruling. This repository owns its hooks now, so there is no upstream original
+for a style edit to fork from. The S7688 family is fixed: every flagged POSIX
+`[ … ]` test now reads `[[ … ]]`.
 
 ## New Code = since the last release
 

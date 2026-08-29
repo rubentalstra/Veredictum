@@ -61,7 +61,7 @@ pattern="^(${pattern%|})"
 changed="$(git diff --name-only "$base" "$head")"
 
 touched="$(printf '%s\n' "$changed" | grep -E "$pattern" || true)"
-if [ -z "$touched" ]; then
+if [[ -z "$touched" ]]; then
   echo "changelog-entry: no user-visible surface touched — an entry is not required."
   exit 0
 fi
@@ -73,9 +73,9 @@ printf '%s\n' "$touched" | sed 's/^/  /'
 # of SIGPIPE, and `pipefail` turns that into a failed pipeline — so a LARGE
 # changelog diff would be reported as "no entry at all". `-c` reads the whole
 # diff, so the pipeline always exits cleanly.
-if [ "$(printf '%s\n' "$changed" | grep -cx 'CHANGELOG.md' || true)" -gt 0 ]; then
+if [[ "$(printf '%s\n' "$changed" | grep -cx 'CHANGELOG.md' || true)" -gt 0 ]]; then
   added="$(git diff "$base" "$head" -- CHANGELOG.md | grep -c '^+[^+].*[^[:space:]]' || true)"
-  if [ "${added:-0}" -gt 0 ]; then
+  if [[ "${added:-0}" -gt 0 ]]; then
     echo "changelog-entry: CHANGELOG.md gained ${added} line(s) — OK."
     exit 0
   fi

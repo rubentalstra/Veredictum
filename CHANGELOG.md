@@ -18,6 +18,12 @@ version on.
 
 ## [Unreleased]
 
+### Security
+
+- The container image build and the release pipeline now fetch their pinned
+  tools with `curl --proto '=https' --tlsv1.2`, so a redirect cannot downgrade
+  a supply-chain download to plain HTTP.
+
 ## [0.1.0] - 2026-08-28
 
 The first stable release: the milestone closed at zero open issues, and

@@ -85,12 +85,12 @@ RUN set -eu; \
       arm64) triple=aarch64-unknown-linux-gnu; tw=linux-arm64 ;; \
       *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${CARGO_LEPTOS_VERSION}/cargo-leptos-${triple}.tar.gz"; \
-    curl -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${CARGO_LEPTOS_VERSION}/cargo-leptos-${triple}.tar.gz.sha256"; \
+    curl --proto '=https' --tlsv1.2 -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${CARGO_LEPTOS_VERSION}/cargo-leptos-${triple}.tar.gz"; \
+    curl --proto '=https' --tlsv1.2 -fsSLO "https://github.com/leptos-rs/cargo-leptos/releases/download/${CARGO_LEPTOS_VERSION}/cargo-leptos-${triple}.tar.gz.sha256"; \
     sha256sum -c "cargo-leptos-${triple}.tar.gz.sha256"; \
     tar -xzf "cargo-leptos-${triple}.tar.gz"; \
     install -m 0755 "$(find /tmp -type f -name cargo-leptos | head -1)" /usr/local/bin/cargo-leptos; \
-    curl -fsSLo /usr/local/bin/tailwindcss \
+    curl --proto '=https' --tlsv1.2 -fsSLo /usr/local/bin/tailwindcss \
       "https://github.com/tailwindlabs/tailwindcss/releases/download/${TAILWIND_VERSION}/tailwindcss-${tw}"; \
     chmod 0755 /usr/local/bin/tailwindcss; \
     rm -rf /tmp/cargo-leptos*

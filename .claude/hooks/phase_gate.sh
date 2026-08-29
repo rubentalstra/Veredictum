@@ -29,12 +29,12 @@ root="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}
 cd "$root" || exit 0
 
 marker=".claude/.session-start-head"
-[ -f "$marker" ] || exit 0 # no baseline recorded; cannot judge — do not nag
+[[ -f "$marker" ]] || exit 0 # no baseline recorded; cannot judge — do not nag
 
 head_now="$(git rev-parse HEAD 2>/dev/null || true)"
-[ -n "$head_now" ] || exit 0
+[[ -n "$head_now" ]] || exit 0
 
-if [ "$(cat "$marker")" != "$head_now" ]; then
+if [[ "$(cat "$marker")" != "$head_now" ]]; then
   exit 0 # at least one commit was made this session
 fi
 
@@ -42,14 +42,14 @@ fi
 # close) happened since session start. The issues API's `since` filters on
 # last-updated; a non-empty result means the tracker was touched.
 ts_marker=".claude/.session-start-time"
-if [ -f "$ts_marker" ] && command -v gh >/dev/null 2>&1; then
+if [[ -f "$ts_marker" ]] && command -v gh >/dev/null 2>&1; then
   since="$(cat "$ts_marker")"
   touched="$(gh api "repos/{owner}/{repo}/issues?state=all&since=${since}&per_page=1" --jq 'length' 2>/dev/null || echo "")"
-  if [ "${touched:-0}" = "1" ]; then
+  if [[ "${touched:-0}" = "1" ]]; then
     exit 0
   fi
   # gh failed (offline/auth): cannot judge — do not nag.
-  [ -n "$touched" ] || exit 0
+  [[ -n "$touched" ]] || exit 0
 fi
 
 echo "tracker gate: no commit was made and no GitHub issue was created/commented/updated this session. Follow the issue workflow (CLAUDE.md): record what you did on the tracker — tick the issue's acceptance-criteria checkboxes ('gh issue edit <n>'), post a status comment ('gh issue comment <n>'), or open an issue for newly-registered work — and commit on a conventional-type branch (feat/, fix/, chore/, ...). If this session was purely informational, stop again to end anyway." >&2

@@ -68,16 +68,16 @@ do_verify() {
   want="$(manifest_version)"
   echo "publish-crate: expecting ${CRATE} ${want} on the registry"
   for _ in 1 2 3 4 5 6; do
-    if body="$(curl -sSL --fail -H "User-Agent: ${CRATE}-publish-verify" \
+    if body="$(curl --proto '=https' --tlsv1.2 -sSL --fail -H "User-Agent: ${CRATE}-publish-verify" \
                  "https://crates.io/api/v1/crates/${CRATE}/versions" 2>/dev/null)"; then
       got="$(printf '%s' "$body" \
              | jq -r --arg v "$want" '.versions[]? | select(.num == $v) | .num' \
              | head -1)" || got=""
     fi
-    [ -n "$got" ] && break
+    [[ -n "$got" ]] && break
     sleep 10
   done
-  if [ -z "$got" ]; then
+  if [[ -z "$got" ]]; then
     echo "::error::version ${want} is not on the registry"
     return 1
   fi

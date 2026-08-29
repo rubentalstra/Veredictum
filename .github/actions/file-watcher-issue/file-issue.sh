@@ -77,7 +77,7 @@ repo="${GITHUB_REPOSITORY:-}"
 dry_run=0
 dedup_keys=()
 
-while [ "$#" -gt 0 ]; do
+while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --title) title="${2:?--title needs a value}"; shift 2 ;;
     --body-file) body_file="${2:?--body-file needs a value}"; shift 2 ;;
@@ -102,14 +102,14 @@ esac
 
 # The dedup key defaults to the title, which is then matched exactly.
 exact=0
-if [ "${#dedup_keys[@]}" -eq 0 ]; then
-  [ -n "$title" ] || { echo "file-issue: --title is required when no --dedup-key is given" >&2; exit 2; }
+if [[ "${#dedup_keys[@]}" -eq 0 ]]; then
+  [[ -n "$title" ]] || { echo "file-issue: --title is required when no --dedup-key is given" >&2; exit 2; }
   dedup_keys=("$title")
   exact=1
 fi
 
 gh_args=()
-if [ -n "$repo" ]; then
+if [[ -n "$repo" ]]; then
   gh_args=(--repo "$repo")
 fi
 
@@ -121,7 +121,7 @@ find_existing() {
   done
   json="$(gh issue list "${gh_args[@]+"${gh_args[@]}"}" --state "$state" --search "$query" \
             --limit 100 --json number,title)"
-  if [ "$exact" = 1 ]; then
+  if [[ "$exact" = 1 ]]; then
     printf '%s' "$json" | jq -r --arg t "$title" \
       'map(select(.title == $t)) | .[0].number // empty'
   else
@@ -133,21 +133,21 @@ find_existing() {
 }
 
 # Checked before the search, so a broken caller costs no API call.
-if [ "$verb" = file ]; then
-  [ -n "$title" ] || { echo "file-issue: --title is required" >&2; exit 2; }
-  [ -n "$body_file" ] || { echo "file-issue: --body-file is required" >&2; exit 2; }
-  [ -s "$body_file" ] || { echo "::error::body file '$body_file' is missing or empty"; exit 1; }
+if [[ "$verb" = file ]]; then
+  [[ -n "$title" ]] || { echo "file-issue: --title is required" >&2; exit 2; }
+  [[ -n "$body_file" ]] || { echo "file-issue: --body-file is required" >&2; exit 2; }
+  [[ -s "$body_file" ]] || { echo "::error::body file '$body_file' is missing or empty"; exit 1; }
 fi
 
 existing="$(find_existing)"
 
-if [ "$verb" = find ]; then
+if [[ "$verb" = find ]]; then
   printf '%s\n' "$existing"
   exit 0
 fi
 
 emit() { # $1 = issue number (may be empty), $2 = outcome
-  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     {
       echo "issue=$1"
       echo "outcome=$2"
@@ -156,8 +156,8 @@ emit() { # $1 = issue number (may be empty), $2 = outcome
   echo "file-issue: $2${1:+ #$1} — $title"
 }
 
-if [ "$dry_run" = 1 ]; then
-  if [ -n "$existing" ]; then
+if [[ "$dry_run" = 1 ]]; then
+  if [[ -n "$existing" ]]; then
     echo "file-issue: DRY-RUN would $on_existing on #$existing — $title"
   else
     echo "file-issue: DRY-RUN would create — $title [${labels:-no labels}]"
@@ -166,7 +166,7 @@ if [ "$dry_run" = 1 ]; then
   exit 0
 fi
 
-if [ -n "$existing" ]; then
+if [[ -n "$existing" ]]; then
   case "$on_existing" in
     comment)
       gh issue comment "$existing" "${gh_args[@]+"${gh_args[@]}"}" --body-file "$body_file" >/dev/null
@@ -179,18 +179,24 @@ if [ -n "$existing" ]; then
     skip)
       emit "$existing" skipped
       ;;
+    # Unreachable: --on-existing is validated above. A loud arm beats a silent
+    # fall-through that would report success while doing nothing.
+    *)
+      echo "file-issue: unhandled --on-existing '$on_existing'" >&2
+      exit 2
+      ;;
   esac
   exit 0
 fi
 
 # One --label per name; an empty list creates an unlabelled issue.
 label_args=()
-if [ -n "$labels" ]; then
+if [[ -n "$labels" ]]; then
   IFS=',' read -r -a names <<<"$labels"
   for name in "${names[@]}"; do
     name="${name#"${name%%[![:space:]]*}"}"
     name="${name%"${name##*[![:space:]]}"}"
-    [ -n "$name" ] && label_args+=(--label "$name")
+    [[ -n "$name" ]] && label_args+=(--label "$name")
   done
 fi
 url="$(gh issue create "${gh_args[@]+"${gh_args[@]}"}" --title "$title" --body-file "$body_file" \
