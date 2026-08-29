@@ -1,0 +1,64 @@
+# ORDER BY reorders rows and does nothing else: QUERY AQL master03-syntax
+# §ORDER BY defines it over the result of the query, so adding it can never
+# change which rows exist. The FerroEHR#2880 diagnosis showed exactly that
+# violation on a folder query — the row COUNT changed when ORDER BY was
+# added — so this case pins membership with and without the clause on the
+# same folder-node query. The folder-node membership itself (all five nodes
+# of the provisioned tree, root included) rides the AMB-218 graph and the
+# AMB-219 depth readings.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-folder_nodes_order_invariant
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlAdvanced, DirectoryOps]   # ORDER BY rides the advanced battery (the order_by_limit precedent)
+profiles: [STANDARD, OPTIONS]
+test_purpose: >-
+  EHR CONTAINS FOLDER returns every folder node of the directory tree, and
+  adding ORDER BY reorders the same row set without changing membership.
+description: "AQL folder-node membership is invariant under ORDER BY"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §Containment"
+  - "QUERY AQL master03-syntax §ORDER BY"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # committed BEFORE the directory
+  directory: cnf.directory.folder_containment_tree
+data_sets: [cnf.directory.folder_containment_tree]
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT f/name/value AS name
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS FOLDER f
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - assert: result_set
+        match: set                          # no ORDER BY: bag equality (QUERY master03 §ORDER BY)
+        rows: [["root"], ["f1"], ["f11"], ["f2"], ["f3"]]
+        columns: [{ name: name }]
+  - step: 2
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT f/name/value AS name
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS FOLDER f
+        ORDER BY f/name/value ASC
+      fetch: 100
+    expect: ok
+    assert:
+      - assert: result_set
+        match: ordered                      # ORDER BY pins the order (QUERY master03 §ORDER BY)
+        rows: [["f1"], ["f11"], ["f2"], ["f3"], ["root"]]
+        columns: [{ name: name }]
+postconditions:
+  - assert: state
+    text: >-
+      The same five folder nodes come back with and without ORDER BY — the
+      clause reorders, it never filters or multiplies.

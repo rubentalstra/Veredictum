@@ -1,0 +1,46 @@
+# The executing branch of register AMB-220 (option_select, upstream #161): a
+# SUT declaring undefined-containment-empty executes the RM-undefined pair
+# and returns an empty result set, because the containment graph holds no
+# COMPOSITION-inside-COMPOSITION pair to bind. The refusing twin is
+# undefined_containment_refused. The EHR is loaded with ten compositions on
+# purpose: a server that answers this query with rows has manufactured a
+# relationship the RM does not define, whichever branch it declared.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-undefined_containment_empty
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+option: undefined-containment-empty      # AMB-220 option_select branch
+test_purpose: >-
+  A containment pair the RM defines no relationship for executes to an empty
+  result set on a SUT declaring the executing branch — never to rows.
+description: "Undefined containment pair executes to an empty result (declared branch)"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §Containment"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # a loaded EHR, so acceptance would have rows to be wrong with
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c1/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}']
+        CONTAINS COMPOSITION c1 CONTAINS COMPOSITION c2
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 0 }   # no RM pair exists for the rows to denote
+postconditions:
+  - assert: state
+    text: >-
+      The declared executing branch held: the undefined pair bound nothing
+      (AMB-220), and no row was manufactured for a relationship the RM does
+      not define.

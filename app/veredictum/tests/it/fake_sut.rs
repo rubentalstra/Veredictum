@@ -22,7 +22,7 @@
     reason = "test-support helpers (not `#[test]` fns, so the clippy.toml in-tests scoping does not reach them) are panic-idiomatic: a broken harness must abort the test loudly, Book ch11"
 )]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use veredictum::artifacts::ArtifactSet;
@@ -114,6 +114,23 @@ pub(crate) fn artifact_set(bindings: &[Value]) -> ArtifactSet {
     ));
     set.corpus_dir = Some(PathBuf::from("corpus"));
     set.selectors = Some((PathBuf::from("vocab/selectors.yaml"), selectors()));
+    set
+}
+
+/// An artifact set over a REAL corpus: the caller's manifest document and the
+/// directory its `source` paths resolve against, so a precondition fixture
+/// and its declared views are read off disk exactly as a committed one is.
+pub(crate) fn artifact_set_over_corpus(
+    bindings: &[Value],
+    manifest: Value,
+    corpus_dir: &Path,
+) -> ArtifactSet {
+    let mut set = artifact_set(bindings);
+    set.corpus = Some((
+        PathBuf::from("corpus/MANIFEST.yaml"),
+        serde_json::from_value(manifest).unwrap(),
+    ));
+    set.corpus_dir = Some(corpus_dir.to_owned());
     set
 }
 

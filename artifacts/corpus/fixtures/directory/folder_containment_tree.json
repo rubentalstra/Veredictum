@@ -1,0 +1,95 @@
+{
+  "_type": "FOLDER",
+  "name": {
+    "_type": "DV_TEXT",
+    "value": "root"
+  },
+  "archetype_node_id": "openEHR-EHR-FOLDER.generic.v1",
+  "folders": [
+    {
+      "_type": "FOLDER",
+      "name": {
+        "_type": "DV_TEXT",
+        "value": "f1"
+      },
+      "archetype_node_id": "openEHR-EHR-FOLDER.generic.v1",
+      "folders": [
+        {
+          "_type": "FOLDER",
+          "name": {
+            "_type": "DV_TEXT",
+            "value": "f11"
+          },
+          "archetype_node_id": "openEHR-EHR-FOLDER.generic.v1",
+          "items": [
+            {
+              "_type": "OBJECT_REF",
+              "namespace": "local",
+              "type": "VERSIONED_COMPOSITION",
+              "id": {
+                "_type": "HIER_OBJECT_ID",
+                "value": "${committed_object_id_3}"
+              }
+            }
+          ]
+        }
+      ],
+      "items": [
+        {
+          "_type": "OBJECT_REF",
+          "namespace": "local",
+          "type": "VERSIONED_COMPOSITION",
+          "id": {
+            "_type": "HIER_OBJECT_ID",
+            "value": "${committed_object_id_0}"
+          }
+        },
+        {
+          "_type": "OBJECT_REF",
+          "namespace": "local",
+          "type": "VERSIONED_COMPOSITION",
+          "id": {
+            "_type": "HIER_OBJECT_ID",
+            "value": "${committed_object_id_1}"
+          }
+        },
+        {
+          "_type": "OBJECT_REF",
+          "namespace": "local",
+          "type": "VERSIONED_COMPOSITION",
+          "id": {
+            "_type": "HIER_OBJECT_ID",
+            "value": "${committed_object_id_2}"
+          }
+        }
+      ]
+    },
+    {
+      "_type": "FOLDER",
+      "name": {
+        "_type": "DV_TEXT",
+        "value": "f2"
+      },
+      "archetype_node_id": "openEHR-EHR-FOLDER.generic.v1",
+      "items": [
+        {
+          "_type": "OBJECT_REF",
+          "namespace": "local",
+          "type": "VERSIONED_COMPOSITION",
+          "id": {
+            "_type": "HIER_OBJECT_ID",
+            "value": "${committed_object_id_2}"
+          }
+        }
+      ]
+    },
+    {
+      "_type": "FOLDER",
+      "name": {
+        "_type": "DV_TEXT",
+        "value": "f3"
+      },
+      "archetype_node_id": "openEHR-EHR-FOLDER.generic.v1"
+    }
+  ]
+}

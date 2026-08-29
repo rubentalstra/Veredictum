@@ -927,6 +927,22 @@ cnf.directory.with_items:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   provenance: "derived 2026-08-01 from cnf.directory.root_only by adding two sibling FOLDERs whose `items` lists carry OBJECT_REFs (RM UML/classes/folder.adoc §Attributes: items: List<OBJECT_REF>, 0..1): ONE target (1e0a7f34-…) is referenced from BOTH siblings — the multiple-classification shape RM common master05-directory_package.adoc §Overview and RM ehr master04-ehr_package.adoc §Folders describe — beside one distinct second target (7c4d2b81-…). Re-adjudicated 2026-08-18 (issue #1951, register AMB-211): the refs moved from namespace `local` to `my.system.id` — the FOREIGN namespace the CNF Robot corpus's own directory fixtures carry — because the free-standing-ids ground (BASE object_ref.adoc: the target 'may exist locally or be maintained outside the current namespace') describes DISTRIBUTED references, and this server's own-design extension refuses a reference that claims THIS system and does not resolve (the refusal twin is cnf.directory.invalid.local_dangling_item). Foreign-namespace ids stand free exactly as before"
+cnf.directory.folder_containment_tree:
+  source: fixtures/directory/folder_containment_tree.json
+  format: canonical-json
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  provenance: "authored 2026-08-29 (issue #156) as the AQL folder-containment fixture: a root FOLDER with sub-folders f1 (items -> committed compositions 0,1,2; child f11 with items -> composition 3), f2 (items -> composition 2, the multiply-classified target RM common master05-directory_package.adoc §Overview describes), and f3 (no items — the NOT CONTAINS ground). Item OBJECT_REFs claim THIS system (namespace local, register AMB-211: a this-system reference must resolve) and their HIER_OBJECT_ID values are ${committed_object_id_k} placeholders the driver renders from the case's requires.commit set (cnf.set.query-bp-10) at provisioning time, so every reference resolves to a really-committed versioned composition. Compositions 4..9 stay unreferenced by construction — the cartesian-product detector's ground (AMB-218)"
+  views:
+    folder_composition_pairs:
+      select: "every (folder name, committed composition uid) containment pair of the tree, transitive over the AMB-218 graph under the AMB-219 any-depth reading"
+      where: "f11:3; f1:0,1,2,3; f2:2; root:0,1,2,3 — 10 pairs, the multiply-classified composition once per containing folder"
+    f2_scoped_uids:
+      select: "committed uids of the compositions folder f2 references"
+      where: "composition 2 only"
+    referenced_uids:
+      select: "committed uids of every folder-referenced composition, distinct"
+      where: "compositions 0,1,2,3 — never the unreferenced 4..9"
 cnf.directory.invalid.root_archetype_id_mismatch:
   source: fixtures/directory/root_archetype_id_mismatch.json
   format: canonical-json
@@ -1562,6 +1578,12 @@ cnf.tpl.ecc_item_structure_type_narrowing:
 # the AQL 1.1 grammar/semantics (not copied from the RM-1.0.x-era vendored
 # corpus). All fixtures are spine-first authored; the generated set is a
 # digest-pinned recipe contract (corpus/recipes/query_bp.md).
+# COVERAGE NOTE (issue #156): AQL folder containment is covered — the
+# provisioned directory tree cnf.directory.folder_containment_tree plus the
+# schedule/query folder_* and undefined_containment_* cases exercise
+# FOLDER↔COMPOSITION and FOLDER↔FOLDER pairs, name scoping, NOT CONTAINS,
+# ORDER BY row-set invariance and the cartesian-product detectors, under the
+# AMB-218/AMB-219/AMB-220 register readings.
 
 # ── the generated loaded-db corpus ────────────────────────────────────────────
 cnf.set.query-bp-10:

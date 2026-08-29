@@ -9771,3 +9771,112 @@ AMB-217:
     prohibition; the shape is pinned by the server's own wire tests instead.
   disposition: editorial
   upstream_issue: 2612
+AMB-218:
+  ambiguity: >-
+    AQL containment across versioned-object references is undefined, and the
+    QUERY component never mentions FOLDER at all. §Containment defines
+    CONTAINS as "the parent object of the right-hand operand class
+    expression" and its flagship example (EHR e CONTAINS COMPOSITION c)
+    already crosses a reference hop — EHR.compositions is List<OBJECT_REF> to
+    VERSIONED_COMPOSITION — yet no sentence generalizes reference-hop
+    containment, so the row semantics of
+    FROM EHR e CONTAINS FOLDER f CONTAINS COMPOSITION c (EHR.directory →
+    VERSIONED_FOLDER, FOLDER.items → VERSIONED_COMPOSITION) have no released
+    ground. The RM meanwhile frames folders as exactly this index: "Folder
+    structures do not contain Compositions, only references to them", and
+    folders "mutiply classify" their targets [sic, the released spelling].
+  source: >-
+    QUERY AQL master03-syntax.adoc §Containment (the parent-object sentence;
+    a case-insensitive search for "folder" across the whole QUERY component
+    returns zero matches, and OBJECT_REF never appears in the AQL chapters);
+    QUERY AQL master07-grammar §Parser grammar (classExprOperand: any RM
+    class identifier parses); RM ehr master04-ehr_package.adoc §Folders (references, not
+    containment by value; more than one Folder can refer to the same
+    Composition); RM common master05-directory_package.adoc §Overview
+    (items are references; multiple classification); verified first-hand
+    2026-08-29.
+  handling: >-
+    Fixed handling: the schedule reads containment over the RM's logical
+    containment graph INCLUDING versioned-object references — an EHR contains
+    its folder trees and its compositions; a FOLDER contains its by-value
+    sub-folders and the versioned objects its items list references. The
+    folder-containment cases gate on the membership consequences every
+    reading sharing that graph implies: an object with no containment path
+    from the parent operand never pairs with it (the cartesian-product
+    detector), a multiply-classified composition pairs once per containing
+    folder, and folder→folder pairs are strictly directed. Depth semantics
+    are AMB-219; the undefined-pair branch is AMB-220.
+  disposition: fixed_handling
+  upstream_issue: 159
+AMB-219:
+  ambiguity: >-
+    CONTAINS depth is unstated: no released sentence says whether the
+    containment constraint matches direct children only or descendants at
+    any depth. The words transitive, descendant, direct and "any depth" do
+    not occur in a containment context anywhere in the QUERY component, and
+    every worked example is compatible with either reading.
+  source: >-
+    QUERY AQL master03-syntax.adoc §Containment ("hierarchical relationships
+    between parent and child data items" — no depth statement); QUERY AQL
+    master06-writing_AQL.adoc §Step 1 ("a Composition archetype is the
+    parent of an Observation archetype" — a heuristic whose own example only
+    selects data under the any-depth reading, since an OBSERVATION routinely
+    sits under a SECTION); a search for transitivity language across
+    QUERY/docs returns zero matches; verified first-hand 2026-08-29.
+  handling: >-
+    Fixed handling: CONTAINS matches descendants at any depth of the AMB-218
+    containment graph. This is the only reading under which the released
+    text's own worked examples select the data they describe. Folder cases
+    assert transitive pairs under it: a composition referenced by a nested
+    sub-folder pairs with every ancestor folder.
+  disposition: fixed_handling
+  upstream_issue: 160
+AMB-220:
+  ambiguity: >-
+    No behaviour is assigned to a containment pair the RM defines no
+    relationship for (e.g. FROM COMPOSITION c1 CONTAINS COMPOSITION c2). The
+    query parses (the grammar accepts any identifier pair) and names only
+    RM-defined classes, so the 400_Query trigger ("invalid syntax") is never
+    reached; no clause requires rejection and none defines a result.
+  source: >-
+    QUERY AQL master07-grammar §Parser grammar (containsExpr and
+    classExprOperand accept any identifier pair); QUERY AQL
+    master03-syntax.adoc §FROM (operands constrained only to classes
+    "defined by the RM"); the released OAS responses/400_Query.yaml, cited
+    AS the OAS ("unable to execute the query due to invalid input … invalid
+    syntax" — a syntax trigger); no QUERY sentence addresses semantically
+    undefined pairs; verified first-hand 2026-08-29.
+  handling: >-
+    Option select: the party statement declares whether the SUT refuses such
+    a query as an invalid query (undefined-containment-refused) or executes
+    it to an empty result set (undefined-containment-empty); twin cases pin
+    each branch and are not-applicable for a party declaring neither. Under
+    BOTH branches a non-empty result set is a wrong answer — the RM defines
+    no pair the rows could denote — which is what the branch cases assert.
+  disposition: option_select
+  options: [undefined-containment-refused, undefined-containment-empty]
+  upstream_issue: 161
+AMB-221:
+  ambiguity: >-
+    The two released definitions of the query result structure declare
+    opposite required sets. SM RESULT_SET requires columns, id and
+    creation_time and makes rows optional (0..1); the ITS-REST ResultSet
+    schema requires exactly rows, makes columns optional, and carries none
+    of id/creation_time/query (it has meta, name, q instead). A wire
+    assertion can satisfy one oracle's letter only by violating the other's.
+  source: >-
+    SM UML/classes/result_set.adoc §RESULT_SET Class (columns 1..1, id 1..1,
+    creation_time 1..1, query 0..1, rows 0..1; the rows meaning cell reads
+    "Rox data." and the query meaning cell is empty — released editorial
+    defects); the released OAS schemas/query/ResultSet.yaml, cited AS the
+    OAS (required [rows]; properties meta, name, q, columns, rows);
+    verified first-hand 2026-08-29.
+  handling: >-
+    Fixed handling: on the wire the ITS-REST schema is the floor the
+    catalogue asserts — rows required, columns and meta optional — because
+    the ITS binds the operation to the wire and the OAS grounds the shape
+    where the docs text is silent. The SM-side required set is not asserted
+    against REST exchanges; the divergence is reported upstream rather than
+    silently absorbed.
+  disposition: fixed_handling
+  upstream_issue: 169

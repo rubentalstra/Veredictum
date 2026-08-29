@@ -1,0 +1,61 @@
+# The by-value half of folder containment: FOLDER.folders is List<FOLDER>
+# ("Sub-folders of this FOLDER", RM common folder class), a real value
+# hierarchy with no reference hop, so FOLDER f1 CONTAINS FOLDER f2 is the
+# best-grounded folder containment there is. QUERY AQL master03-syntax
+# §Containment directs the pair: the left operand is the parent. The depth
+# reading (root pairs with the nested f11 too) is AMB-219.
+#
+# The provisioned tree is root -> {f1 -> f11, f2, f3}, so the strict
+# ancestor/descendant pairs are exactly five. A self-pair or an inverted pair
+# has no reading under the parent-object sentence, and both shapes are what a
+# cartesian join over folder nodes produces (25 rows).
+id: I_QUERY_SERVICE.execute_ad_hoc_query-folder_folder_pairs
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic, DirectoryOps]
+profiles: [STANDARD]
+test_purpose: >-
+  FOLDER CONTAINS FOLDER returns exactly the strict ancestor/descendant
+  pairs of the by-value sub-folder hierarchy — no self-pairs, no inverted
+  pairs, no cartesian product.
+description: "AQL FOLDER CONTAINS FOLDER returns strict ancestor/descendant pairs"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §Containment"
+  - "RM common master05-directory_package §Overview"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # committed BEFORE the directory
+  directory: cnf.directory.folder_containment_tree
+data_sets: [cnf.directory.folder_containment_tree]
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT f1/name/value AS parent, f2/name/value AS child
+        FROM EHR e[ehr_id/value='${ehr_id}']
+        CONTAINS FOLDER f1 CONTAINS FOLDER f2
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - assert: result_set
+        match: set                          # no ORDER BY: bag equality (QUERY master03 §ORDER BY)
+        rows:
+          - ["root", "f1"]
+          - ["root", "f11"]
+          - ["root", "f2"]
+          - ["root", "f3"]
+          - ["f1", "f11"]
+        columns: [{ name: parent }, { name: child }]
+postconditions:
+  - assert: state
+    text: >-
+      Sub-folder containment is directed and strict: five ancestor/descendant
+      pairs, the nested folder pairing with both ancestors (AMB-219), never a
+      self-pair or an inverted pair.

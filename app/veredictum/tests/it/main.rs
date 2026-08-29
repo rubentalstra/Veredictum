@@ -26,6 +26,7 @@ mod corpus_packs;
 mod defect_rejection;
 mod driver_wire;
 mod fake_sut;
+mod folder_provisioning;
 mod gpg_interop;
 mod measured_wire;
 mod perf_driver;

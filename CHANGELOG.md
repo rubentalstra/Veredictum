@@ -20,6 +20,15 @@ version on.
 
 ### Added
 
+- AQL folder-containment coverage (#156): a provisioned directory-tree fixture
+  over the run's own committed compositions, eight new QUERY cases
+  (FOLDER↔COMPOSITION and FOLDER↔FOLDER pairs, name scoping, NOT CONTAINS,
+  ORDER BY row-set invariance, the cartesian-product detectors, and the
+  option-gated undefined-pair twins), register entries AMB-218/AMB-219/AMB-220
+  with upstream reports #159/#160/#161, and driver support for rendering
+  precondition fixtures against the committed set.
+- Register entry AMB-221 records the SM/ITS-REST RESULT_SET required-set
+  divergence (upstream report #169); the wire assertions keep the ITS floor.
 - **The universal-benchmark engine (#163).** Two new subcommands measure
   comparative speed against any reachable openEHR CDR, with no artifact root,
   no IXIT and no party statement. `bench --base-url <URL>` drives an embedded
@@ -60,6 +69,7 @@ version on.
 - The container image build and the release pipeline now fetch their pinned
   tools with `curl --proto '=https' --tlsv1.2`, so a redirect cannot downgrade
   a supply-chain download to plain HTTP.
+
 
 ## [0.1.0] - 2026-08-28
 

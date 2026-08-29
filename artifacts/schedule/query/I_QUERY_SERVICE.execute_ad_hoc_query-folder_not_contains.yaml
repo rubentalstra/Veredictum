@@ -1,0 +1,53 @@
+# The folder-side exclusion constraint. QUERY AQL master03-syntax
+# §Containment: NOT with CONTAINS expresses "the absence of any containment
+# relationship between a parent and potential child items". Over the AMB-218
+# graph under the AMB-219 depth reading, every folder of the provisioned tree
+# except the empty f3 contains at least one composition (root and f1
+# transitively, f11 and f2 directly), so the exclusion selects exactly f3 —
+# and a server that evaluates the exclusion against the EHR's compositions
+# rather than the folder's own references returns nothing at all, or every
+# folder.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-folder_not_contains
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic, DirectoryOps]
+profiles: [STANDARD]
+test_purpose: >-
+  FOLDER NOT CONTAINS COMPOSITION selects exactly the folders holding no
+  composition reference anywhere in their subtree.
+description: "AQL FOLDER NOT CONTAINS COMPOSITION selects the empty folder"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §Containment, §NOT"
+  - "RM common master05-directory_package §Overview"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # committed BEFORE the directory
+  directory: cnf.directory.folder_containment_tree
+data_sets: [cnf.directory.folder_containment_tree]
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT f/name/value AS name
+        FROM EHR e[ehr_id/value='${ehr_id}']
+        CONTAINS FOLDER f NOT CONTAINS COMPOSITION c
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - assert: result_set
+        match: set                          # no ORDER BY: bag equality (QUERY master03 §ORDER BY)
+        rows: [["f3"]]
+        columns: [{ name: name }]
+postconditions:
+  - assert: state
+    text: >-
+      The exclusion reads the folder's own containment subtree: the one
+      reference-free folder matches, the transitively-containing ancestors do
+      not (AMB-218/AMB-219).

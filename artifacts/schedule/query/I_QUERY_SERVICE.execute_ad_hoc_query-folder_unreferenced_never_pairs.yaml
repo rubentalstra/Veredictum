@@ -1,0 +1,53 @@
+# The identity half of the cartesian-product detector (the pair case pins
+# multiplicity; this one pins WHICH compositions can appear at all). The EHR
+# holds ten committed compositions and the provisioned tree references four
+# of them, so the distinct uid projection over FOLDER CONTAINS COMPOSITION
+# returns exactly those four — the six unreferenced compositions have no
+# containment path from any folder (AMB-218) and must never appear. This is
+# the assertion that goes red on FerroEHR#2880-class behaviour even when the
+# row multiplicities happen to collide.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-folder_unreferenced_never_pairs
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic, DirectoryOps]
+profiles: [STANDARD]
+test_purpose: >-
+  A composition referenced by no folder never appears in a
+  FOLDER CONTAINS COMPOSITION result: the distinct uid projection returns
+  exactly the folder-referenced compositions.
+description: "AQL folder containment never returns an unreferenced composition"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §Containment"
+  - "QUERY AQL master03-syntax §DISTINCT"
+  - "RM ehr master04-ehr_package §Folders"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # committed BEFORE the directory
+  directory: cnf.directory.folder_containment_tree
+data_sets: [cnf.directory.folder_containment_tree]
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT DISTINCT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}']
+        CONTAINS FOLDER f CONTAINS COMPOSITION c
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - assert: result_set
+        match: set                          # no ORDER BY: bag equality (QUERY master03 §ORDER BY)
+        rows: { from: "${ds:cnf.directory.folder_containment_tree#referenced_uids}" }
+        columns: [{ name: uid }]
+postconditions:
+  - assert: state
+    text: >-
+      Folder containment reaches only the referenced compositions: four
+      distinct uids, never the six the tree does not index (AMB-218).
