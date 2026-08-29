@@ -29,6 +29,50 @@ use crate::vocab::IgnoreSetName;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssertionFailure(pub String);
 
+/// Which channel an assertion failure belongs to.
+///
+/// A finding against the server needs a value the server actually served. An
+/// assertion the run could not judge at all proves nothing about the SUT, so
+/// it takes the inconclusive channel beside a transport fault (ISO/IEC 9646
+/// *inconclusive*; interpreter law (c), [`crate::exec`]).
+///
+/// The two are distinguished as TYPES rather than by reading the message: a
+/// classification that branches on a substring changes the moment a message
+/// is reworded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AssertionOutcome {
+    /// The SUT served a value, and it differs from the asserted one — a
+    /// conformance finding, so the row FAILS (law b).
+    Mismatch(String),
+    /// The assertion cannot be judged on this ITS or on this run: the fact
+    /// has no released read, the container the assertion names resolves to
+    /// no single family, the authored pattern carries a token outside its
+    /// closed vocabulary, or a prerequisite the assertion reads was never
+    /// bound. The row is INCONCLUSIVE (law c), attributed to the runner or
+    /// the catalogue, never to the server.
+    Unjudgeable(String),
+}
+
+impl AssertionOutcome {
+    /// The one-line reason, whichever channel this outcome carries.
+    #[must_use]
+    pub fn reason(&self) -> &str {
+        match self {
+            Self::Mismatch(reason) | Self::Unjudgeable(reason) => reason,
+        }
+    }
+}
+
+impl From<AssertionFailure> for AssertionOutcome {
+    /// A pure judge compares a value the SUT SERVED against the authored one,
+    /// so its failure is a conformance mismatch by construction. Only the
+    /// wire-side resolution that precedes a judge can be unjudgeable, and
+    /// those sites name the variant themselves.
+    fn from(failure: AssertionFailure) -> Self {
+        Self::Mismatch(failure.0)
+    }
+}
+
 /// Resolve an RM path segment sequence (`context/setting`,
 /// `content[0]/data/events[0]/...`) over a canonical-JSON value.
 ///

@@ -23,7 +23,7 @@ use reqwest::StatusCode;
 use serde_json::Value;
 
 use crate::artifacts::ArtifactSet;
-use crate::exec::assertions::{self, AssertionFailure};
+use crate::exec::assertions::{self, AssertionFailure, AssertionOutcome};
 use crate::exec::outcome::{self, Observation};
 use crate::exec::resolve::Resolver;
 use crate::exec::state::{Captured, VarStore};
@@ -702,7 +702,7 @@ impl<'a> HttpDriver<'a> {
         exchange: &Exchange,
         signing: Option<&crate::exec::signature::SigningMode>,
         vars: &VarStore,
-    ) -> Vec<String> {
+    ) -> Vec<AssertionOutcome> {
         let ctx_defaults: Vec<String> = self
             .set
             .selectors
@@ -717,7 +717,7 @@ impl<'a> HttpDriver<'a> {
         let mut failures = Vec::new();
         for assertion in assertions_list {
             let body = exchange.body.as_ref().unwrap_or(&Value::Null);
-            let result: Result<(), AssertionFailure> = match assertion {
+            let result: Result<(), AssertionOutcome> = match assertion {
                 Assertion::Field {
                     path,
                     equals,
@@ -725,16 +725,18 @@ impl<'a> HttpDriver<'a> {
                     exists,
                     absent,
                     matches,
-                } => self.eval_field_assertion(
-                    body,
-                    path,
-                    equals.as_ref(),
-                    not_equals.as_ref(),
-                    *exists,
-                    *absent,
-                    matches.as_deref(),
-                    vars,
-                ),
+                } => self
+                    .eval_field_assertion(
+                        body,
+                        path,
+                        equals.as_ref(),
+                        not_equals.as_ref(),
+                        *exists,
+                        *absent,
+                        matches.as_deref(),
+                        vars,
+                    )
+                    .map_err(AssertionOutcome::from),
                 Assertion::Equivalent { to, ignoring } => {
                     // An unresolvable REFERENCE is a defect of the case, not a
                     // missing commit (FerroEHR#1853): reporting both as "no committed
@@ -767,6 +769,7 @@ impl<'a> HttpDriver<'a> {
                             }
                         }
                     }
+                    .map_err(AssertionOutcome::from)
                 }
                 Assertion::Returns {
                     equals,
@@ -778,33 +781,37 @@ impl<'a> HttpDriver<'a> {
                     equals.as_ref(),
                     matches.as_deref(),
                     omits.as_deref(),
-                ),
+                )
+                .map_err(AssertionOutcome::from),
                 Assertion::ResultSet {
                     match_mode,
                     rows,
                     count,
                     columns,
-                } => self.eval_result_set(
-                    body,
-                    *match_mode,
-                    rows.as_ref(),
-                    *count,
-                    columns.as_deref(),
-                    vars,
-                ),
+                } => self
+                    .eval_result_set(
+                        body,
+                        *match_mode,
+                        rows.as_ref(),
+                        *count,
+                        columns.as_deref(),
+                        vars,
+                    )
+                    .map_err(AssertionOutcome::from),
                 Assertion::XmlRoot {
                     name,
                     namespace,
                     xsi_type,
-                } => assertions::eval_xml_root(body, name, *namespace, xsi_type.as_deref()),
+                } => assertions::eval_xml_root(body, name, *namespace, xsi_type.as_deref())
+                    .map_err(AssertionOutcome::from),
                 Assertion::InstanceOf { rm_type, .. } => {
                     // Structural check: the body self-identifies as the type.
                     match body.get("_type").and_then(Value::as_str) {
                         Some(t) if t == rm_type => Ok(()),
-                        Some(t) => Err(AssertionFailure(format!(
+                        Some(t) => Err(AssertionOutcome::Mismatch(format!(
                             "instance_of: body is {t}, expected {rm_type}"
                         ))),
-                        None => Err(AssertionFailure(format!(
+                        None => Err(AssertionOutcome::Mismatch(format!(
                             "instance_of: body carries no _type (expected {rm_type})"
                         ))),
                     }
@@ -821,15 +828,17 @@ impl<'a> HttpDriver<'a> {
                     equals,
                     distinct_from,
                     ..
-                } => self.eval_signature_assertion(
-                    body,
-                    *present,
-                    *verifiable,
-                    equals.as_ref(),
-                    distinct_from.as_ref(),
-                    signing,
-                    vars,
-                ),
+                } => self
+                    .eval_signature_assertion(
+                        body,
+                        *present,
+                        *verifiable,
+                        equals.as_ref(),
+                        distinct_from.as_ref(),
+                        signing,
+                        vars,
+                    )
+                    .map_err(AssertionOutcome::from),
                 // The version family is judged against the VERSION envelope it
                 // names, read back off the versioned object when the step's
                 // own body is not already that envelope.
@@ -859,8 +868,8 @@ impl<'a> HttpDriver<'a> {
                 | Assertion::MessageExemplar { .. }
                 | Assertion::State { .. } => Ok(()),
             };
-            if let Err(AssertionFailure(message)) = result {
-                failures.push(message);
+            if let Err(outcome) = result {
+                failures.push(outcome);
             }
         }
         failures
@@ -3340,7 +3349,8 @@ impl StepDriver for HttpDriver<'_> {
         // are executed assertions too (issues FerroEHR#403 + FerroEHR#415 — both were parsed
         // but never evaluated). Evaluated only when the observation IS the
         // expected kind: the declarations belong to that outcome's wire
-        // expectation.
+        // expectation. Each finding they raise judges what the SUT SERVED,
+        // so each is a conformance mismatch.
         if observation == Observation::Kind(expected)
             && let Some(expectation) = binding.outcome(expected)
         {
@@ -3350,12 +3360,11 @@ impl StepDriver for HttpDriver<'_> {
             // NOTE: a name in `crate::exec::headers::structural_token` outranks
             // that scope — ITS-REST `operations/composition_get.yaml` lets a
             // `uid_based_id` argument be spelled two ways, so it is not an identity.
-            assertion_failures.extend(self.eval_wire_expectation(
-                expectation,
-                &exchange,
-                &headers,
-                &header_vars,
-            ));
+            assertion_failures.extend(
+                self.eval_wire_expectation(expectation, &exchange, &headers, &header_vars)
+                    .into_iter()
+                    .map(AssertionOutcome::Mismatch),
+            );
         }
         Ok(StepObservation {
             observation,
@@ -3491,7 +3500,7 @@ impl StepDriver for HttpDriver<'_> {
         case: &CaseCore,
         row: usize,
         vars: &mut VarStore,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<AssertionOutcome>, String> {
         self.resolver.bind_row(case, row);
         self.row = u32::try_from(row).unwrap_or(u32::MAX);
         let body = self.last_body.clone().unwrap_or(Value::Null);
@@ -3509,7 +3518,7 @@ impl StepDriver for HttpDriver<'_> {
                     absent,
                     matches,
                 } => {
-                    if let Err(AssertionFailure(m)) = self.eval_field_assertion(
+                    if let Err(failure) = self.eval_field_assertion(
                         &body,
                         path,
                         equals.as_ref(),
@@ -3519,7 +3528,7 @@ impl StepDriver for HttpDriver<'_> {
                         matches.as_deref(),
                         vars,
                     ) {
-                        failures.push(m);
+                        failures.push(AssertionOutcome::from(failure));
                     }
                 }
                 // A version postcondition reads the versioned object back:
@@ -3533,7 +3542,7 @@ impl StepDriver for HttpDriver<'_> {
                     count,
                     uid_pattern,
                 } => {
-                    if let Err(AssertionFailure(m)) = self.eval_version_assertion(
+                    if let Err(outcome) = self.eval_version_assertion(
                         case,
                         Some(&body),
                         VersionFacts {
@@ -3546,7 +3555,7 @@ impl StepDriver for HttpDriver<'_> {
                         },
                         vars,
                     ) {
-                        failures.push(m);
+                        failures.push(outcome);
                     }
                 }
                 // Equivalent/returns/result_set/instance_of postconditions
@@ -3689,7 +3698,7 @@ impl HttpDriver<'_> {
     /// The versioned family a `version` assertion is judged against: the
     /// case's own SM anchor first, then the single family its flow calls
     /// reach, then the single family its committed members name.
-    fn version_family(&self, case: &CaseCore) -> Result<VersionedFamily, AssertionFailure> {
+    fn version_family(&self, case: &CaseCore) -> Result<VersionedFamily, AssertionOutcome> {
         let anchor = case.sm_operation.as_ref();
         if let Some(family) = anchor.and_then(VersionedFamily::of_operation) {
             return Ok(family);
@@ -3709,7 +3718,7 @@ impl HttpDriver<'_> {
         Self::one_family(called)
             .or_else(|| Self::one_family(self.committed_families()))
             .ok_or_else(|| {
-                AssertionFailure(format!(
+                AssertionOutcome::Unjudgeable(format!(
                     "version: case {} reaches no single versioned-object family, so the assertion names no container to read",
                     case.id
                 ))
@@ -3767,8 +3776,12 @@ impl HttpDriver<'_> {
         variant: Option<&str>,
         with: &BTreeMap<String, Value>,
         vars: &VarStore,
-    ) -> Result<Value, AssertionFailure> {
-        let fail = |e: String| AssertionFailure(format!("version: {e}"));
+    ) -> Result<Value, AssertionOutcome> {
+        // Every failure below is a READ that did not happen — an unrealized
+        // binding, an unreachable instance, a transport fault, an auxiliary
+        // read the SUT refused. None of them is a served value contradicting
+        // the assertion, so none of them is a finding against the server.
+        let fail = |e: String| AssertionOutcome::Unjudgeable(format!("version: {e}"));
         let binding = self
             .binding_for_variant(case, call, variant)
             .map_err(fail)?;
@@ -3826,14 +3839,14 @@ impl HttpDriver<'_> {
         in_hand: Option<&Value>,
         version_uid: &str,
         vars: &VarStore,
-    ) -> Result<Value, AssertionFailure> {
+    ) -> Result<Value, AssertionOutcome> {
         if let Some(body) = in_hand
             && crate::exec::versioned::envelope_uid(body) == Some(version_uid)
         {
             return Ok(body.clone());
         }
         let (call, variant) = family.envelope_read().ok_or_else(|| {
-            AssertionFailure(format!(
+            AssertionOutcome::Unjudgeable(format!(
                 "version: the released ITS-REST realizes no VERSION envelope read for the {family:?} family, so change_type/lifecycle_state/uid_pattern are unjudgeable here"
             ))
         })?;
@@ -3851,11 +3864,11 @@ impl HttpDriver<'_> {
         in_hand: Option<&Value>,
         facts: VersionFacts<'_>,
         vars: &VarStore,
-    ) -> Result<(), AssertionFailure> {
+    ) -> Result<(), AssertionOutcome> {
         let family = self.version_family(case)?;
         if let Some(want) = facts.count {
             let call = family.revision_history_read().ok_or_else(|| {
-                AssertionFailure(format!(
+                AssertionOutcome::Unjudgeable(format!(
                     "version count: the released ITS-REST realizes no REVISION_HISTORY read for the {family:?} family, so the version count is unjudgeable here"
                 ))
             })?;
@@ -3885,7 +3898,7 @@ impl HttpDriver<'_> {
         &mut self,
         facts: &VersionFacts<'_>,
         vars: &VarStore,
-    ) -> Result<Vec<String>, AssertionFailure> {
+    ) -> Result<Vec<String>, AssertionOutcome> {
         // `count` alone is legal and names no version (the assertion's own
         // invariant); anything else was refused at parse time.
         let ((Some(SingleRef(reference)), None) | (None, Some(SingleRef(reference)))) =
@@ -3893,23 +3906,26 @@ impl HttpDriver<'_> {
         else {
             return Ok(Vec::new());
         };
-        let resolved = self
-            .resolver
-            .resolve_ref(reference, vars)
-            .map_err(|e| AssertionFailure(format!("version: {reference} is unresolvable ({e})")))?;
+        // An unresolvable reference is a prerequisite the run never bound —
+        // a capture the row's earlier refusal was EXPECTED to withhold, or a
+        // case that names a handle its flow does not produce. Either way no
+        // version is in hand to judge, so the assertion is unjudgeable.
+        let resolved = self.resolver.resolve_ref(reference, vars).map_err(|e| {
+            AssertionOutcome::Unjudgeable(format!("version: {reference} is unresolvable ({e})"))
+        })?;
         match resolved {
             Value::String(uid) => Ok(vec![uid]),
             Value::Array(items) => items
                 .iter()
                 .map(|item| {
                     item.as_str().map(ToOwned::to_owned).ok_or_else(|| {
-                        AssertionFailure(format!(
+                        AssertionOutcome::Unjudgeable(format!(
                             "version: {reference} carries a non-scalar member, which names no version"
                         ))
                     })
                 })
                 .collect(),
-            other => Err(AssertionFailure(format!(
+            other => Err(AssertionOutcome::Unjudgeable(format!(
                 "version: {reference} resolved to {}, which names no version",
                 json_shape(&other)
             ))),
@@ -3922,13 +3938,13 @@ impl HttpDriver<'_> {
         &mut self,
         template: &Template,
         vars: &VarStore,
-    ) -> Result<regex::Regex, AssertionFailure> {
+    ) -> Result<regex::Regex, AssertionOutcome> {
         let mut pattern = String::from("^");
         for segment in template.segments() {
             match segment {
                 crate::refgrammar::Segment::Lit(text) => {
                     let expanded = crate::exec::versioned::expand_uid_literal(text).map_err(|name| {
-                        AssertionFailure(format!(
+                        AssertionOutcome::Unjudgeable(format!(
                             "version uid_pattern: <{name}> is not one of the closed OBJECT_VERSION_ID tokens (uuid | system | n)"
                         ))
                     })?;
@@ -3936,19 +3952,20 @@ impl HttpDriver<'_> {
                 }
                 crate::refgrammar::Segment::Ref(reference) => {
                     let value = self.resolver.resolve_ref(reference, vars).map_err(|e| {
-                        AssertionFailure(format!(
+                        AssertionOutcome::Unjudgeable(format!(
                             "version uid_pattern: {reference} is unresolvable ({e})"
                         ))
                     })?;
-                    let text = scalar_text(&value)
-                        .map_err(|e| AssertionFailure(format!("version uid_pattern: {e}")))?;
+                    let text = scalar_text(&value).map_err(|e| {
+                        AssertionOutcome::Unjudgeable(format!("version uid_pattern: {e}"))
+                    })?;
                     pattern.push_str(&regex::escape(&text));
                 }
             }
         }
         pattern.push('$');
         regex::Regex::new(&pattern)
-            .map_err(|e| AssertionFailure(format!("version uid_pattern: {e}")))
+            .map_err(|e| AssertionOutcome::Unjudgeable(format!("version uid_pattern: {e}")))
     }
 }
 

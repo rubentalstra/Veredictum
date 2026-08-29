@@ -7,8 +7,10 @@
 //! **(a)** `reset_per_row` re-establishes the whole `requires` block around
 //! every row; **(b)** a step whose observed outcome differs from `expect`
 //! fails the row and aborts its remaining steps and row postconditions;
-//! **(c)** transport faults and unmapped responses → `errored`
-//! (inconclusive), a mapped-but-unexpected outcome → `failed`; **(d)**
+//! **(c)** transport faults, unmapped responses and assertions this ITS or
+//! this run cannot judge ([`assertions::AssertionOutcome::Unjudgeable`]) →
+//! `errored` (inconclusive), a mapped-but-unexpected outcome or a served
+//! value that contradicts an assertion → `failed`; **(d)**
 //! `${time:*}` resolution is fixed (±1 ms, midpoint — [`state::VarStore`]);
 //! **(e)** aggregate assertions collect across rows and evaluate once after
 //! the last row.
@@ -42,6 +44,8 @@ pub mod versioned;
 use crate::ids::CaseId;
 use crate::model::case::{CaseCore, FlowStep};
 use crate::vocab::{FormatName, OutcomeKind};
+
+use assertions::AssertionOutcome;
 
 use outcome::{Observation, StepJudgement};
 use state::VarStore;
@@ -112,9 +116,10 @@ impl CaseRecord {
 pub struct StepObservation {
     /// What the driver saw on the wire, classified.
     pub observation: Observation,
-    /// Post-step assertion failures (empty when all held). Only meaningful
-    /// when the observation matched the expectation.
-    pub assertion_failures: Vec<String>,
+    /// Post-step assertion failures (empty when all held), each carrying its
+    /// own channel: a mismatch fails the row, an unjudgeable assertion errors
+    /// it. Only meaningful when the observation matched the expectation.
+    pub assertion_failures: Vec<AssertionOutcome>,
 }
 
 impl StepObservation {
@@ -170,13 +175,14 @@ pub trait StepDriver {
     /// Evaluate the case's per-row postconditions (non-aggregate).
     ///
     /// # Errors
-    /// Interpreter defects only; assertion failures return in the list.
+    /// Interpreter defects only; assertion failures return in the list, each
+    /// carrying the channel [`run_case`] routes it by.
     fn postconditions(
         &mut self,
         case: &CaseCore,
         row: usize,
         vars: &mut VarStore,
-    ) -> Result<Vec<String>, String>;
+    ) -> Result<Vec<AssertionOutcome>, String>;
 
     /// Evaluate the aggregate assertions once after the last row (law e),
     /// over the values collected across all rows.
@@ -249,6 +255,36 @@ pub fn row_count(case: &CaseCore) -> usize {
         .max(1)
 }
 
+/// The assertion outcome a row is recorded against: the first MISMATCH when
+/// the list holds one, else the first entry.
+///
+/// A mismatch is a finding the run actually proved, so it outranks an
+/// unjudgeable sibling assertion, which proved nothing. Without the
+/// preference an unjudgeable assertion authored ahead of a real mismatch
+/// would hide a genuine conformance finding behind an inconclusive row.
+fn judged_first(failures: &[AssertionOutcome]) -> Option<&AssertionOutcome> {
+    failures
+        .iter()
+        .find(|failure| matches!(**failure, AssertionOutcome::Mismatch(_)))
+        .or_else(|| failures.first())
+}
+
+/// Route one assertion outcome to its row outcome: a mismatch is a
+/// conformance finding against the SUT (law b), an unjudgeable assertion is
+/// inconclusive beside a transport fault (law c).
+fn row_from_assertion(step: u32, failure: &AssertionOutcome) -> RowOutcome {
+    match failure {
+        AssertionOutcome::Mismatch(reason) => RowOutcome::Failed {
+            step,
+            reason: reason.clone(),
+        },
+        AssertionOutcome::Unjudgeable(reason) => RowOutcome::Errored {
+            step,
+            reason: reason.clone(),
+        },
+    }
+}
+
 /// Run one case×format through the interpreter laws.
 ///
 /// # Errors
@@ -302,12 +338,9 @@ pub fn run_case<D: StepDriver>(
             let observed = driver.perform(case, step, expected, row, &mut vars)?;
             match outcome::judge(expected, &observed.observation) {
                 StepJudgement::Continue => {
-                    if let Some(failure) = observed.assertion_failures.first() {
-                        row_outcome = RowOutcome::Failed {
-                            step: step.step,
-                            reason: failure.clone(),
-                        };
-                        break 'steps; // law b
+                    if let Some(failure) = judged_first(&observed.assertion_failures) {
+                        row_outcome = row_from_assertion(step.step, failure);
+                        break 'steps; // law b for a mismatch, law c otherwise
                     }
                 }
                 StepJudgement::Failed { expected, observed } => {
@@ -332,16 +365,11 @@ pub fn run_case<D: StepDriver>(
         }
 
         // Law b: row postconditions run only when every step held.
-        if matches!(row_outcome, RowOutcome::Passed)
-            && let Some(failure) = driver
-                .postconditions(case, row, &mut vars)?
-                .into_iter()
-                .next()
-        {
-            row_outcome = RowOutcome::Failed {
-                step: 0,
-                reason: failure,
-            };
+        if matches!(row_outcome, RowOutcome::Passed) {
+            let postconditions = driver.postconditions(case, row, &mut vars)?;
+            if let Some(failure) = judged_first(&postconditions) {
+                row_outcome = row_from_assertion(0, failure);
+            }
         }
 
         row_states.push(vars.clone());
@@ -413,7 +441,7 @@ mod tests {
             _c: &CaseCore,
             _r: usize,
             _v: &mut VarStore,
-        ) -> Result<Vec<String>, String> {
+        ) -> Result<Vec<AssertionOutcome>, String> {
             Ok(Vec::new())
         }
         fn aggregates(&mut self, _c: &CaseCore, _rows: &[VarStore]) -> Result<Vec<String>, String> {

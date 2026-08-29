@@ -338,7 +338,23 @@ version on.
   `uid`/`owner_id`/`time_created`. A declared fact the ITS gives no read for —
   a `count` on a family with no revision history, an envelope member on a
   family with no version read, a version reference that resolves to nothing —
-  fails the row by name instead of passing silently.
+  is named loudly instead of passing silently, and is recorded inconclusive
+  rather than charged to the server (#237, below).
+- **An unjudgeable assertion is inconclusive, never a finding against the
+  server (#237).** Every assertion failure became `failed`, which on a
+  published record reads as a conformance finding the run proved. An assertion
+  the run could not judge at all proves nothing about the server: the released
+  ITS realizes no read for the fact, the case reaches no single versioned
+  family to read, the authored `uid_pattern` carries a token outside its
+  closed vocabulary, or a prerequisite the assertion reads was never bound
+  because the row's earlier refusal was the expected outcome. Those now record
+  `errored` (ISO/IEC 9646 *inconclusive*) beside a transport fault, with the
+  same reason text, so triage attributes them to the runner or the catalogue
+  where they belong. A served value that contradicts an assertion still fails
+  the row, and a mismatch outranks an unjudgeable sibling assertion so a real
+  finding is never hidden behind an inconclusive row. The channel is carried
+  as a type through the step and postcondition seams, never inferred from the
+  message text.
 - **A failed run is never submittable (#197).** Submittability counted
   repetitions and baseline blocks and read no error count, so a run whose
   arrivals all failed still stamped `submittable: true` and was rankable on the

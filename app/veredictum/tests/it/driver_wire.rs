@@ -570,10 +570,10 @@ fn a_declared_header_matcher_is_evaluated_against_the_answer() -> Fallible {
         OutcomeKind::Created,
         &mut vars,
     )?;
-    assert_eq!(
-        observed.assertion_failures,
-        Vec::<String>::new(),
-        "a complete 201 must produce no header finding"
+    assert!(
+        observed.assertion_failures.is_empty(),
+        "a complete 201 must produce no header finding: {:?}",
+        observed.assertion_failures
     );
 
     let partial = FakeSut::start();
@@ -599,7 +599,7 @@ fn a_declared_header_matcher_is_evaluated_against_the_answer() -> Fallible {
         observed
             .assertion_failures
             .iter()
-            .any(|failure| failure.contains("Location")),
+            .any(|failure| failure.reason().contains("Location")),
         "findings {:?} name no missing Location",
         observed.assertion_failures
     );
@@ -882,10 +882,10 @@ fn a_body_capture_reads_a_dotted_path_out_of_the_answer() -> Fallible {
         &mut vars,
     )?;
     assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
-    assert_eq!(
-        observed.assertion_failures,
-        Vec::<String>::new(),
-        "the assertions describe the answer the stub sent"
+    assert!(
+        observed.assertion_failures.is_empty(),
+        "the assertions describe the answer the stub sent: {:?}",
+        observed.assertion_failures
     );
     assert_eq!(
         vars.scalar(&veredictum::ids::CaptureName::parse("ehr_uid")?),
@@ -945,7 +945,7 @@ fn a_field_assertion_that_fails_names_its_path() -> Fallible {
         observed
             .assertion_failures
             .first()
-            .is_some_and(|failure| failure.contains("_type")),
+            .is_some_and(|failure| failure.reason().contains("_type")),
         "findings {:?} name no path",
         observed.assertion_failures
     );
@@ -1002,7 +1002,9 @@ fn postconditions_are_evaluated_over_the_rows_last_answer() -> Fallible {
         "one postcondition holds and one does not: {failures:?}"
     );
     assert!(
-        failures.first().is_some_and(|f| f.contains("_type")),
+        failures
+            .first()
+            .is_some_and(|f| f.reason().contains("_type")),
         "{failures:?}"
     );
     Ok(())
