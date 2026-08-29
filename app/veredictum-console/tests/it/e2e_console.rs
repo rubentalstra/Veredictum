@@ -1043,6 +1043,137 @@ async fn upload_bundle(h: &Harness, archive: &str) -> String {
         .map_or_else(|| String::from("/verify"), |(_, tail)| format!("/{tail}"))
 }
 
+/// The committed bench fixtures, in the order the journey uploads them.
+const BENCH_FIXTURES: [(&str, &str); 2] = [
+    ("bench-result-alpha.json", "Alpha CDR 3.1"),
+    ("bench-result-beta.json", "Beta CDR 2.0"),
+];
+
+/// Copies one committed bench fixture where the BROWSER can read it, and
+/// returns the path to type into the file control.
+///
+/// # Panics
+/// On any IO failure — a journey that silently uploaded nothing would assert
+/// against the page's resting state and pass for the wrong reason.
+fn stage_bench_fixture(name: &str) -> String {
+    let (host, remote) = upload_paths();
+    std::fs::create_dir_all(&host).expect("the upload directory");
+    let source = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/bench")).join(name);
+    let _copied = std::fs::copy(source, host.join(name)).expect("stage the bench fixture");
+    format!("{remote}/{name}")
+}
+
+/// Uploads one bench record through the plain form and waits for the listing.
+///
+/// # Panics
+/// When the control is absent or the upload never lands.
+async fn upload_bench_record(h: &Harness, name: &str, label: &str) {
+    let staged = stage_bench_fixture(name);
+    h.goto("/benchmarks").await;
+    h.wait_css("input#records")
+        .await
+        .send_keys(&staged)
+        .await
+        .expect("choose the bench record");
+    h.wait_xpath("//button[contains(., 'Read the records')]")
+        .await
+        .click()
+        .await
+        .expect("submit the bench record");
+    h.wait_url_contains("uploaded=").await;
+    h.wait_xpath(&format!("//td//a[contains(., '{label}')]"))
+        .await;
+}
+
+/// The benchmark surface (#166): upload a record, read it in full, then align
+/// two of them and see every mismatch stated.
+///
+/// The fixtures are committed records, so the journey needs no bench run and
+/// no CDR: what it exercises is the console's reading of the published
+/// bench-result family.
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_bench_records_upload_render_and_compare() {
+    let Some(h) = Harness::start("benchmarks").await else {
+        return;
+    };
+    for (name, label) in BENCH_FIXTURES {
+        upload_bench_record(&h, name, label).await;
+    }
+    // The boundary statement is furniture on every bench surface, verbatim
+    // from the records: a table of speed numbers is exactly the artifact
+    // somebody quotes out of context.
+    h.wait_xpath("//h2[contains(., 'What a bench record is')]")
+        .await;
+    h.wait_xpath("//body[contains(., 'not a conformance record')]")
+        .await;
+    h.capture("benchmarks-light").await;
+
+    // One record in full: the posture labels, the percentile table, the
+    // failed-arrival readings, the baseline and the relative index.
+    h.wait_xpath("//td//a[contains(., 'Alpha CDR 3.1')]")
+        .await
+        .click()
+        .await
+        .expect("open the record");
+    h.wait_url_contains("record=").await;
+    for heading in [
+        "Posture `minimal`",
+        "Cross-repetition percentiles",
+        "Failed-arrival share",
+        "Same-machine baselines",
+        "Relative index",
+    ] {
+        h.wait_xpath(&format!("//h2[contains(., '{heading}')]"))
+            .await;
+    }
+    // Every figure says which discipline produced it, and the histograms are
+    // honestly named as tabulated rather than drawn.
+    h.wait_xpath("//body[contains(., 'open-loop')]").await;
+    h.wait_xpath("//body[contains(., 'closed-loop')]").await;
+    h.wait_xpath("//body[contains(., 'declared-only')]").await;
+    h.wait_xpath("//body[contains(., 'HdrHistogram V2')]").await;
+    h.capture("benchmark-detail-light").await;
+
+    // Two records aligned, each toggled from its own row.
+    h.goto("/benchmarks").await;
+    for (_, label) in BENCH_FIXTURES {
+        h.wait_xpath(&format!(
+            "//tr[.//a[contains(., '{label}')]]//a[normalize-space()='compare']"
+        ))
+        .await
+        .click()
+        .await
+        .expect("select the record for comparison");
+        h.wait_url_contains("compare=").await;
+    }
+    let aligned = h.wait_xpath("//h2[contains(., 'Side by side')]").await;
+    // The mismatch warnings are the point of the view: two records taken on
+    // different machines under different disclosures are not one ranking.
+    h.wait_xpath("//body[contains(., 'DIFFERENT hosts')]").await;
+    h.wait_xpath("//body[contains(., 'DIFFERENT postures')]")
+        .await;
+    h.wait_xpath("//body[contains(., 'not submittable')]").await;
+    // The capture is of the ALIGNED table, which sits below the listing that
+    // selected it; without this the book would show the listing twice.
+    aligned
+        .scroll_into_view()
+        .await
+        .expect("bring the aligned table into the viewport");
+    tokio::time::sleep(THEME_SETTLE).await;
+    h.capture("benchmark-compare-light").await;
+
+    h.enable_dark().await;
+    h.goto("/benchmarks").await;
+    h.wait_css("html.dark").await;
+    h.wait_xpath("//h2[contains(., 'What a bench record is')]")
+        .await;
+    tokio::time::sleep(THEME_SETTLE).await;
+    h.capture("benchmarks-dark").await;
+
+    h.assert_console_clean(&[]).await;
+    h.finish().await;
+}
+
 /// The side-by-side grading (#99): the same wizard against two REAL CDRs —
 /// FerroEHR's quickstart and EHRbase's official pairing, both latest — so the
 /// captures show two records over one catalogue. Skips unless the harness

@@ -5,6 +5,7 @@
 //! Screens still under construction render an honest placeholder naming
 //! their tracker issue instead of pretending.
 
+pub mod benchmarks;
 pub mod catalogue;
 pub mod instrument;
 pub mod not_found;
