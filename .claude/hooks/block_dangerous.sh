@@ -22,7 +22,7 @@ if command -v jq >/dev/null 2>&1; then
 else
   cmd="$payload"
 fi
-[ -n "${cmd:-}" ] || exit 0
+[[ -n "${cmd:-}" ]] || exit 0
 
 # rm with both -r and -f (combined or separate flags), unless scoped to /tmp.
 if printf '%s' "$cmd" | grep -qE '(^|[;&|[:space:]])rm[[:space:]]+-[a-zA-Z]*([rR][a-zA-Z]*f|f[a-zA-Z]*[rR])' ||

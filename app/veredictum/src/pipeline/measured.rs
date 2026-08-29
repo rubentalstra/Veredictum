@@ -37,7 +37,7 @@ pub struct SustainedWindow(u64);
 
 impl SustainedWindow {
     /// Every window on the ladder, in hours.
-    pub const LADDER: &'static [u64] = &[1, 2, 4, 6, 8, 12];
+    pub const LADDER: &[u64] = &[1, 2, 4, 6, 8, 12];
 
     /// Returns the window of `hours`, or `None` when that is not a rung of
     /// the ladder.

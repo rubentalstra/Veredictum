@@ -34,7 +34,7 @@ if command -v jq >/dev/null 2>&1; then
 else
   path="$payload"
 fi
-[ -n "${path:-}" ] || exit 0
+[[ -n "${path:-}" ]] || exit 0
 
 case "$path" in
   */artifacts/schedule/* | artifacts/schedule/* | \
