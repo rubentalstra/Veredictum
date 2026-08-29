@@ -17,12 +17,13 @@ use veredictum::bench::BOUNDARY_STATEMENT;
 use veredictum::bench::baselines::{DockerCli, ReferenceCdr, pinned_resources};
 use veredictum::bench::client::AuthKind;
 use veredictum::bench::pack::{
-    BenchOp, BenchPack, BenchPhase, MeasurePhase, SeedPhase, community_vitals, smoke,
+    BenchOp, BenchPack, BenchPhase, MeasurePhase, MixEntry, SeedPhase, aql_mix, community_vitals,
+    smoke,
 };
 use veredictum::bench::relative::{GapReason, RELATIVE_DERIVATION};
 use veredictum::bench::result::{BaselineRecord, BenchResult, SubmissionRequirement};
 use veredictum::pipeline::bench::{BenchRequest, compare_bench, run_bench};
-use wiremock::matchers::{method, path, path_regex};
+use wiremock::matchers::{body_string_contains, method, path, path_regex};
 use wiremock::{Mock, ResponseTemplate};
 
 use crate::fake_sut::FakeSut;
@@ -41,6 +42,10 @@ fn is_json(name: &str) -> bool {
 
 /// A pack the size of a unit test: four EHRs, one composition each, one
 /// second of measured arrivals over the whole operation vocabulary.
+///
+/// The rate is high enough that every operation in the vocabulary draws
+/// several measured arrivals; the schedule is a pure function of the pack
+/// seed, so what it covers here it covers on every run.
 fn tiny_pack() -> BenchPack {
     let deck = smoke();
     let fixtures = deck.fixtures();
@@ -54,10 +59,13 @@ fn tiny_pack() -> BenchPack {
         }),
         BenchPhase::Measure(MeasurePhase {
             name: "mixed".to_owned(),
-            rate_per_s: 20.0,
+            rate_per_s: 120.0,
             warmup_s: 1,
             duration_s: 1,
-            mix: BenchOp::ALL.iter().map(|op| (*op, 1)).collect(),
+            mix: BenchOp::ALL
+                .iter()
+                .map(|op| MixEntry::new(*op, 1, "the whole vocabulary at equal share"))
+                .collect(),
         }),
     ])
 }
@@ -548,6 +556,174 @@ fn the_community_pack_records_both_disciplines_with_their_labels() -> Fallible {
     );
     assert!(summary.contains("us/request whole-loop"), "{summary}");
     assert!(summary.contains("ms/composition whole-loop"), "{summary}");
+
+    let violations = schema_violations(&document)?;
+    assert!(violations.is_empty(), "{}", violations.join("; "));
+    Ok(())
+}
+
+/// The AQL pack at a unit-test population: three EHRs, two commits each, and
+/// a one-second measured window over the same six query classes the pack
+/// pins, at the same equal share.
+fn tiny_aql_pack() -> Result<BenchPack, Box<dyn std::error::Error>> {
+    let deck = aql_mix();
+    let fixtures = deck.fixtures();
+    let queries = deck
+        .measure_phases()
+        .first()
+        .copied()
+        .cloned()
+        .ok_or("the AQL pack lost its measured phase")?;
+    Ok(deck.with_phases(vec![
+        BenchPhase::Seed(SeedPhase {
+            name: "seed".to_owned(),
+            fixtures,
+            ehrs: 3,
+            compositions_per_ehr: 2,
+            workers: 2,
+        }),
+        BenchPhase::Measure(MeasurePhase {
+            rate_per_s: 120.0,
+            warmup_s: 1,
+            duration_s: 1,
+            ..queries
+        }),
+    ]))
+}
+
+/// The six query classes the AQL pack measures, read from the pack itself so
+/// this list cannot drift from the definition.
+fn aql_classes() -> Vec<String> {
+    aql_mix().probe_rationales().into_keys().collect()
+}
+
+/// The whole AQL pack end to end: every class lands with its own percentiles,
+/// its own sample count and its own error tally.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_aql_pack_records_one_set_of_percentiles_per_class() -> Fallible {
+    let sut = FakeSut::start();
+    mount_healthy(&sut);
+    let (result, document, _summary) = drive_pack(&sut, &tiny_aql_pack()?, "aql", 1, 1.0)?;
+
+    assert_eq!(result.pack.id, "aql-mix");
+    assert_eq!(result.pack.version, "1.0.0");
+    assert_eq!(
+        result
+            .pack
+            .fixtures
+            .get("vital_signs_composition.json")
+            .map(String::as_str),
+        Some("468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947")
+    );
+
+    let repetition = result.repetitions.first().ok_or("no repetition")?;
+    let phase = repetition.phases.get("queries").ok_or("no query phase")?;
+    assert_eq!(phase.regime.as_str(), "open-loop");
+    let classes = aql_classes();
+    assert_eq!(classes.len(), 6);
+    for class in &classes {
+        let stats = phase
+            .operations
+            .get(class)
+            .ok_or_else(|| format!("{class} recorded no arrival"))?;
+        assert!(stats.count > 0, "{class} recorded no arrival");
+        assert_eq!(stats.errors, 0, "{class} failed on a healthy system");
+        assert!(
+            !stats.hdr_v2_base64.is_empty(),
+            "{class} carries no encoding"
+        );
+        let decoded = stats.decode_histogram()?;
+        assert_eq!(decoded.value_at_quantile(0.50), stats.p50_us);
+    }
+    // Every measured operation is one of the six classes: the pack offers no
+    // read or write beside them.
+    for operation in phase.operations.keys() {
+        assert!(classes.contains(operation), "{operation} is off the mix");
+    }
+    // The cross-repetition summary carries the same classes, which is what
+    // the relative index and bench-compare then align per class.
+    let cross = result.cross.get("queries").ok_or("no cross summary")?;
+    for class in &classes {
+        assert!(
+            cross.operations.contains_key(class),
+            "{class} is missing from the cross summary"
+        );
+    }
+
+    let violations = schema_violations(&document)?;
+    assert!(violations.is_empty(), "{}", violations.join("; "));
+    Ok(())
+}
+
+/// A server that fails one query shape and refuses another has each counted
+/// in its own class, and the four healthy classes are not blamed for either.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_broken_query_class_never_blames_a_healthy_one() -> Fallible {
+    let sut = FakeSut::start();
+    // Mounted FIRST so they win over the healthy query stub: wiremock matches
+    // in registration order, and the statement text is what separates one
+    // class from another on a shared route.
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/query/aql"))
+            .and(body_string_contains("COUNT("))
+            .respond_with(ResponseTemplate::new(500)),
+    );
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/query/aql"))
+            .and(body_string_contains("ORDER BY"))
+            .respond_with(ResponseTemplate::new(400)),
+    );
+    mount_healthy(&sut);
+    let (result, document, _summary) = drive_pack(&sut, &tiny_aql_pack()?, "degraded", 1, 1.0)?;
+
+    let repetition = result.repetitions.first().ok_or("no repetition")?;
+    let phase = repetition.phases.get("queries").ok_or("no query phase")?;
+
+    let aggregate = phase
+        .operations
+        .get("adhoc_query_aggregate")
+        .ok_or("the aggregate class recorded no arrival")?;
+    assert!(aggregate.errors > 0, "the 500s were not counted");
+    assert_eq!(
+        aggregate.errors_by_class.get("http_5xx").copied(),
+        Some(aggregate.errors),
+        "{:?}",
+        aggregate.errors_by_class
+    );
+
+    let ordered = phase
+        .operations
+        .get("adhoc_query_ordered_page")
+        .ok_or("the ordered-page class recorded no arrival")?;
+    assert!(ordered.errors > 0, "the refusals were not counted");
+    assert_eq!(
+        ordered.errors_by_class.get("http_4xx").copied(),
+        Some(ordered.errors),
+        "{:?}",
+        ordered.errors_by_class
+    );
+
+    for class in aql_classes() {
+        if class == "adhoc_query_aggregate" || class == "adhoc_query_ordered_page" {
+            continue;
+        }
+        let stats = phase
+            .operations
+            .get(&class)
+            .ok_or_else(|| format!("{class} recorded no arrival"))?;
+        assert_eq!(stats.errors, 0, "{class} was blamed for another class");
+        assert!(stats.errors_by_class.is_empty(), "{class} carries a class");
+    }
 
     let violations = schema_violations(&document)?;
     assert!(violations.is_empty(), "{}", violations.join("; "));

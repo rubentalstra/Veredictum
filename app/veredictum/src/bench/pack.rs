@@ -194,11 +194,34 @@ pub enum BenchOp {
     GetVersionedCompositionVersionLatest,
     /// `POST /query/aql` — an EHR-scoped `SELECT c/uid/value` projection.
     AdhocQueryUid,
+    /// `POST /query/aql` — `COUNT` over the population a magnitude threshold
+    /// matches (openEHR QUERY `AQL` §Aggregate functions).
+    AdhocQueryAggregate,
+    /// `POST /query/aql` — every composition in one EHR, projected by uid.
+    AdhocQueryEhrScan,
+    /// `POST /query/aql` — an EHR-scoped magnitude predicate over the
+    /// blood-pressure observation leaves.
+    AdhocQueryFiltered,
+    /// `POST /query/aql` — an `ORDER BY` over composition start time, read
+    /// through a moving fetch window.
+    AdhocQueryOrderedPage,
+    /// `POST /query/aql` — one composition addressed by its own uid inside
+    /// one EHR.
+    AdhocQueryPointLookup,
+    /// `POST /query/aql` — the magnitude predicate with no EHR scope, bounded
+    /// by a fetch count.
+    AdhocQueryPopulation,
 }
 
 impl BenchOp {
     /// Every operation, in the fixed order every emitted document uses.
     pub const ALL: &[BenchOp] = &[
+        BenchOp::AdhocQueryAggregate,
+        BenchOp::AdhocQueryEhrScan,
+        BenchOp::AdhocQueryFiltered,
+        BenchOp::AdhocQueryOrderedPage,
+        BenchOp::AdhocQueryPointLookup,
+        BenchOp::AdhocQueryPopulation,
         BenchOp::AdhocQueryUid,
         BenchOp::CreateComposition,
         BenchOp::GetCompositionAtTime,
@@ -235,6 +258,12 @@ impl BenchOp {
                 "get_versioned_composition_version_latest"
             }
             BenchOp::AdhocQueryUid => "adhoc_query_uid",
+            BenchOp::AdhocQueryAggregate => "adhoc_query_aggregate",
+            BenchOp::AdhocQueryEhrScan => "adhoc_query_ehr_scan",
+            BenchOp::AdhocQueryFiltered => "adhoc_query_filtered",
+            BenchOp::AdhocQueryOrderedPage => "adhoc_query_ordered_page",
+            BenchOp::AdhocQueryPointLookup => "adhoc_query_point_lookup",
+            BenchOp::AdhocQueryPopulation => "adhoc_query_population",
         }
     }
 
@@ -246,14 +275,45 @@ impl BenchOp {
             BenchOp::CreateComposition
             | BenchOp::GetEhr
             | BenchOp::GetEhrStatus
-            | BenchOp::AdhocQueryUid => false,
+            | BenchOp::AdhocQueryUid
+            | BenchOp::AdhocQueryAggregate
+            | BenchOp::AdhocQueryEhrScan
+            | BenchOp::AdhocQueryFiltered
+            | BenchOp::AdhocQueryOrderedPage
+            | BenchOp::AdhocQueryPopulation => false,
             BenchOp::GetCompositionAtTime
             | BenchOp::GetCompositionLatest
             | BenchOp::GetVersionedComposition
             | BenchOp::GetVersionedCompositionRevisionHistory
             | BenchOp::GetVersionedCompositionVersionAtTime
             | BenchOp::GetVersionedCompositionVersionById
-            | BenchOp::GetVersionedCompositionVersionLatest => true,
+            | BenchOp::GetVersionedCompositionVersionLatest
+            | BenchOp::AdhocQueryPointLookup => true,
+        }
+    }
+
+    /// Whether the operation is realized as an ad-hoc AQL query, which is
+    /// what decides whether it carries a `POST /query/aql` body.
+    #[must_use]
+    pub const fn is_adhoc_query(self) -> bool {
+        match self {
+            BenchOp::AdhocQueryAggregate
+            | BenchOp::AdhocQueryEhrScan
+            | BenchOp::AdhocQueryFiltered
+            | BenchOp::AdhocQueryOrderedPage
+            | BenchOp::AdhocQueryPointLookup
+            | BenchOp::AdhocQueryPopulation
+            | BenchOp::AdhocQueryUid => true,
+            BenchOp::CreateComposition
+            | BenchOp::GetCompositionAtTime
+            | BenchOp::GetCompositionLatest
+            | BenchOp::GetEhr
+            | BenchOp::GetEhrStatus
+            | BenchOp::GetVersionedComposition
+            | BenchOp::GetVersionedCompositionRevisionHistory
+            | BenchOp::GetVersionedCompositionVersionAtTime
+            | BenchOp::GetVersionedCompositionVersionById
+            | BenchOp::GetVersionedCompositionVersionLatest => false,
         }
     }
 
@@ -305,6 +365,37 @@ pub struct SeedPhase {
     pub workers: usize,
 }
 
+/// One entry of a measured phase's operation mix: the operation, its share of
+/// the arrivals, and what offering it probes.
+///
+/// The rationale lives on the entry rather than on [`BenchOp`], because why a
+/// pack offers an operation is a property of that pack's design: the same read
+/// probes one thing inside a harness reproduction and another inside a query
+/// mix. It is part of the versioned pack definition, so changing it changes
+/// the pack version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MixEntry {
+    /// The operation this entry offers.
+    pub op: BenchOp,
+    /// This entry's share of the arrivals, relative to every other entry's.
+    pub share: u32,
+    /// What offering this operation probes, in one sentence, for a rendered
+    /// legend.
+    pub rationale: String,
+}
+
+impl MixEntry {
+    /// Builds one mix entry.
+    #[must_use]
+    pub fn new(op: BenchOp, share: u32, rationale: &str) -> Self {
+        Self {
+            op,
+            share,
+            rationale: rationale.to_owned(),
+        }
+    }
+}
+
 /// An open-loop measured phase: a seeded arrival schedule at a pinned rate
 /// over an operation mix.
 #[derive(Debug, Clone)]
@@ -317,9 +408,9 @@ pub struct MeasurePhase {
     pub warmup_s: u64,
     /// The measured span in seconds.
     pub duration_s: u64,
-    /// The operation mix as (operation, share) pairs. Shares are relative;
-    /// the engine normalizes over their sum.
-    pub mix: Vec<(BenchOp, u32)>,
+    /// The operation mix. Shares are relative; the engine normalizes over
+    /// their sum.
+    pub mix: Vec<MixEntry>,
 }
 
 impl MeasurePhase {
@@ -328,7 +419,7 @@ impl MeasurePhase {
     pub fn total_share(&self) -> u64 {
         self.mix
             .iter()
-            .map(|(_, share)| u64::from(*share))
+            .map(|entry| u64::from(entry.share))
             .fold(0_u64, u64::saturating_add)
     }
 
@@ -341,14 +432,26 @@ impl MeasurePhase {
             return None;
         }
         let mut point = draw % total;
-        for (op, share) in &self.mix {
-            let share = u64::from(*share);
+        for entry in &self.mix {
+            let share = u64::from(entry.share);
             if point < share {
-                return Some(*op);
+                return Some(entry.op);
             }
             point = point.saturating_sub(share);
         }
-        self.mix.last().map(|(op, _)| *op)
+        self.mix.last().map(|entry| entry.op)
+    }
+
+    /// What each offered operation probes, keyed by the operation token.
+    ///
+    /// This is the phase's half of the legend a rendered view prints beside
+    /// the per-operation numbers.
+    #[must_use]
+    pub fn rationales(&self) -> BTreeMap<String, String> {
+        self.mix
+            .iter()
+            .map(|entry| (entry.op.as_str().to_owned(), entry.rationale.clone()))
+            .collect()
     }
 }
 
@@ -460,6 +563,20 @@ impl BenchPack {
             .collect()
     }
 
+    /// What every measured operation in this pack probes, keyed by the
+    /// operation token.
+    ///
+    /// One key per operation the pack's measured phases offer, which is what a
+    /// rendered legend reads to explain a per-operation column without knowing
+    /// anything about the pack's internals.
+    #[must_use]
+    pub fn probe_rationales(&self) -> BTreeMap<String, String> {
+        self.measure_phases()
+            .into_iter()
+            .flat_map(MeasurePhase::rationales)
+            .collect()
+    }
+
     /// The closed-loop sweep phases, in execution order.
     #[must_use]
     pub fn sweep_phases(&self) -> Vec<&SweepPhase> {
@@ -479,20 +596,45 @@ const SMOKE: PackId = PackId("smoke");
 /// The id of the community-harness reproduction.
 const COMMUNITY_VITALS: PackId = PackId("community-vitals");
 
+/// The id of the AQL query mix.
+const AQL_MIX: PackId = PackId("aql-mix");
+
 /// The seven composition reads the community harness issues against every
-/// committed composition, in the order it issues them.
-const COMMUNITY_READS: &[BenchOp] = &[
-    BenchOp::GetCompositionLatest,
-    BenchOp::GetCompositionAtTime,
-    BenchOp::GetVersionedComposition,
-    BenchOp::GetVersionedCompositionVersionLatest,
-    BenchOp::GetVersionedCompositionVersionAtTime,
-    BenchOp::GetVersionedCompositionVersionById,
-    BenchOp::GetVersionedCompositionRevisionHistory,
+/// committed composition, in the order it issues them, each with what
+/// offering it probes.
+const COMMUNITY_READS: &[(BenchOp, &str)] = &[
+    (
+        BenchOp::GetCompositionLatest,
+        "the harness's latest-version composition read, the read a client issues most",
+    ),
+    (
+        BenchOp::GetCompositionAtTime,
+        "the harness's composition read at an instant, which resolves a version by time",
+    ),
+    (
+        BenchOp::GetVersionedComposition,
+        "the harness's read of the VERSIONED_COMPOSITION container itself",
+    ),
+    (
+        BenchOp::GetVersionedCompositionVersionLatest,
+        "the harness's latest-version read through the versioned object",
+    ),
+    (
+        BenchOp::GetVersionedCompositionVersionAtTime,
+        "the harness's version-at-an-instant read through the versioned object",
+    ),
+    (
+        BenchOp::GetVersionedCompositionVersionById,
+        "the harness's read of one version by its own identifier",
+    ),
+    (
+        BenchOp::GetVersionedCompositionRevisionHistory,
+        "the harness's revision-history read, which walks every version of the object",
+    ),
 ];
 
 /// The embedded pack ids, in the order `--pack` accepts them.
-pub const EMBEDDED: &[PackId] = &[COMMUNITY_VITALS, SMOKE];
+pub const EMBEDDED: &[PackId] = &[AQL_MIX, COMMUNITY_VITALS, SMOKE];
 
 /// Loads one embedded pack by its id, verifying every fixture pin.
 ///
@@ -503,6 +645,7 @@ pub fn load(token: &str) -> Result<BenchPack, BenchError> {
     let pack = match token {
         "smoke" => smoke(),
         "community-vitals" => community_vitals(),
+        "aql-mix" => aql_mix(),
         other => {
             return Err(BenchError::UnknownPack {
                 requested: other.to_owned(),
@@ -554,15 +697,55 @@ pub fn smoke() -> BenchPack {
                 warmup_s: 10,
                 duration_s: 60,
                 mix: vec![
-                    (BenchOp::CreateComposition, 20),
-                    (BenchOp::GetCompositionLatest, 30),
-                    (BenchOp::GetEhr, 20),
-                    (BenchOp::GetEhrStatus, 15),
-                    (BenchOp::AdhocQueryUid, 15),
+                    MixEntry::new(
+                        BenchOp::CreateComposition,
+                        20,
+                        "the commit path, measured while reads compete with it",
+                    ),
+                    MixEntry::new(
+                        BenchOp::GetCompositionLatest,
+                        30,
+                        "the latest-version composition read",
+                    ),
+                    MixEntry::new(
+                        BenchOp::GetEhr,
+                        20,
+                        "the EHR resource read, the cheapest addressed read the API offers",
+                    ),
+                    MixEntry::new(
+                        BenchOp::GetEhrStatus,
+                        15,
+                        "the status read, which reaches a second versioned object in the same EHR",
+                    ),
+                    MixEntry::new(
+                        BenchOp::AdhocQueryUid,
+                        15,
+                        "an EHR-scoped projection, so the query path is exercised beside the direct reads",
+                    ),
                 ],
             }),
         ],
     }
+}
+
+/// The two pinned fixtures every pack that seeds the Vital signs population
+/// offers, in offer order: the template first, then the composition it
+/// constrains.
+fn vital_signs_fixtures() -> Vec<Fixture> {
+    vec![
+        Fixture {
+            key: FixtureKey("vital_signs.opt"),
+            kind: FixtureKind::OperationalTemplate,
+            bytes: VITAL_SIGNS_OPT,
+            sha256: VITAL_SIGNS_OPT_SHA256,
+        },
+        Fixture {
+            key: FixtureKey("vital_signs_composition.json"),
+            kind: FixtureKind::Composition,
+            bytes: VITAL_SIGNS_COMPOSITION,
+            sha256: VITAL_SIGNS_COMPOSITION_SHA256,
+        },
+    ]
 }
 
 /// EHRs the community harness creates at scale 1.0.
@@ -586,20 +769,7 @@ const COMMUNITY_READ_RATE_PER_S: f64 = 200.0;
 /// each labelled with the regime that produced it.
 #[must_use]
 pub fn community_vitals() -> BenchPack {
-    let fixtures = vec![
-        Fixture {
-            key: FixtureKey("vital_signs.opt"),
-            kind: FixtureKind::OperationalTemplate,
-            bytes: VITAL_SIGNS_OPT,
-            sha256: VITAL_SIGNS_OPT_SHA256,
-        },
-        Fixture {
-            key: FixtureKey("vital_signs_composition.json"),
-            kind: FixtureKind::Composition,
-            bytes: VITAL_SIGNS_COMPOSITION,
-            sha256: VITAL_SIGNS_COMPOSITION_SHA256,
-        },
-    ];
+    let fixtures = vital_signs_fixtures();
     BenchPack {
         id: COMMUNITY_VITALS,
         version: "1.0.0".to_owned(),
@@ -615,7 +785,7 @@ pub fn community_vitals() -> BenchPack {
             }),
             BenchPhase::Sweep(SweepPhase {
                 name: "read_walk".to_owned(),
-                per_composition: COMMUNITY_READS.to_vec(),
+                per_composition: COMMUNITY_READS.iter().map(|(op, _)| *op).collect(),
                 workers: 1,
             }),
             BenchPhase::Measure(MeasurePhase {
@@ -623,7 +793,10 @@ pub fn community_vitals() -> BenchPack {
                 rate_per_s: COMMUNITY_READ_RATE_PER_S,
                 warmup_s: 15,
                 duration_s: 60,
-                mix: COMMUNITY_READS.iter().map(|op| (*op, 1)).collect(),
+                mix: COMMUNITY_READS
+                    .iter()
+                    .map(|(op, rationale)| MixEntry::new(*op, 1, rationale))
+                    .collect(),
             }),
         ],
     }
@@ -652,6 +825,130 @@ selects. Fixture provenance: the operational template is the vendored CKM \
 export for template id 'Vital signs' (CKM cid 1013.26.380), byte-identical; \
 the composition is the attachment on post 8 of that thread, byte-identical. \
 Both are pinned by sha256 and verified at load.";
+
+/// EHRs the AQL pack seeds.
+const AQL_MIX_EHRS: usize = 50;
+
+/// Compositions the AQL pack commits into each seeded EHR.
+const AQL_MIX_COMPOSITIONS_PER_EHR: usize = 20;
+
+/// The closed worker pool the AQL pack's bulk load runs on. The load builds a
+/// population rather than reproducing a harness, so it uses a pool.
+const AQL_MIX_SEED_WORKERS: usize = 8;
+
+/// The aggregate arrival rate the measured query phase is pinned at. Six
+/// classes at equal share, so each is offered at four arrivals a second.
+const AQL_MIX_RATE_PER_S: f64 = 24.0;
+
+/// Warmup seconds the measured query phase dispatches and then discards.
+const AQL_MIX_WARMUP_S: u64 = 15;
+
+/// The measured span of the query phase, in seconds.
+const AQL_MIX_DURATION_S: u64 = 60;
+
+/// The six query classes the pack measures, each with the storage behaviour it
+/// probes. This table IS the pack's class definition: the mix, the legend and
+/// the pack description all read it, so no second copy can drift.
+const AQL_MIX_CLASSES: &[(BenchOp, &str)] = &[
+    (
+        BenchOp::AdhocQueryPointLookup,
+        "the indexed-read floor: one composition addressed by its own uid inside one EHR, the cheapest query a server can answer",
+    ),
+    (
+        BenchOp::AdhocQueryEhrScan,
+        "the loaded-database shape: every composition in one EHR projected by uid, so the cost follows how much that EHR holds",
+    ),
+    (
+        BenchOp::AdhocQueryFiltered,
+        "the value index: a systolic magnitude threshold over the observation leaves of one EHR, with the threshold drawn per arrival so no result set can be memoized",
+    ),
+    (
+        BenchOp::AdhocQueryPopulation,
+        "the cross-EHR planner: the same magnitude threshold with no EHR scope and a fetch bound, so the server picks an access path over the whole population",
+    ),
+    (
+        BenchOp::AdhocQueryAggregate,
+        "the columnar shape: one COUNT over the population that threshold matches, which returns a single row and reads every value behind it",
+    ),
+    (
+        BenchOp::AdhocQueryOrderedPage,
+        "sorting and pagination: an ORDER BY over composition start time read through a moving fetch window, the shape a paged user interface issues",
+    ),
+];
+
+/// The `aql-mix` pack: query speed over the vital-signs population, one
+/// measured class per storage behaviour.
+///
+/// The seed phase builds the same corpus the community pack builds, from the
+/// same two pinned fixtures, at a population sized for query shapes rather
+/// than for scale. The measured phase then offers the six query classes
+/// open-loop at equal share, so the record carries one set of percentiles per
+/// class instead of one blended query number.
+#[must_use]
+pub fn aql_mix() -> BenchPack {
+    BenchPack {
+        id: AQL_MIX,
+        version: "1.0.0".to_owned(),
+        description: aql_mix_description(),
+        seed: 0x4151_4c5f_4d69_7800,
+        phases: vec![
+            BenchPhase::Seed(SeedPhase {
+                name: "seed".to_owned(),
+                fixtures: vital_signs_fixtures(),
+                ehrs: AQL_MIX_EHRS,
+                compositions_per_ehr: AQL_MIX_COMPOSITIONS_PER_EHR,
+                workers: AQL_MIX_SEED_WORKERS,
+            }),
+            BenchPhase::Measure(MeasurePhase {
+                name: "queries".to_owned(),
+                rate_per_s: AQL_MIX_RATE_PER_S,
+                warmup_s: AQL_MIX_WARMUP_S,
+                duration_s: AQL_MIX_DURATION_S,
+                mix: AQL_MIX_CLASSES
+                    .iter()
+                    .map(|(op, rationale)| MixEntry::new(*op, 1, rationale))
+                    .collect(),
+            }),
+        ],
+    }
+}
+
+/// What the `aql-mix` pack exercises, with its six classes named from the one
+/// table that defines them.
+fn aql_mix_description() -> String {
+    let classes = AQL_MIX_CLASSES
+        .iter()
+        .map(|(op, rationale)| format!("{op} probes {rationale}"))
+        .collect::<Vec<_>>()
+        .join("; ");
+    format!("{AQL_MIX_PREAMBLE} The six classes: {classes}. {AQL_MIX_PROVENANCE}")
+}
+
+/// What the `aql-mix` pack measures and how, ahead of its class list.
+const AQL_MIX_PREAMBLE: &str = "\
+Measures AQL query speed over the same Vital signs population the \
+community-vitals pack seeds, so a query figure and a read figure describe the \
+same corpus. The seed phase creates 50 EHRs and commits the same composition \
+20 times into each, on a pool of 8 workers. This pack version pins that \
+population, and it is sized for query shapes: large enough that a query has to \
+choose an access path, small enough to load before a measured window opens. \
+The measured phase is open-loop at 24 arrivals a \
+second for 60s after a 15s warmup, over six query classes at equal share, so \
+each class is offered at 4 arrivals a second and every class returns the same \
+number of samples. Each class posts one AQL statement to /query/aql, accepts \
+only 200, and counts every other answer in its own error class, so a server \
+that refuses one shape never contaminates another class's percentiles. Every \
+query parameter draws from the run's seeded streams: the systolic threshold, \
+the page offset, and the EHR or composition each arrival addresses, so no \
+arrival repeats the previous one's result set and the whole draw is \
+reproducible from the seed the record discloses.";
+
+/// Where the `aql-mix` pack's two fixtures come from.
+const AQL_MIX_PROVENANCE: &str = "\
+Fixture provenance: the operational template is the vendored CKM export for \
+template id 'Vital signs' (CKM cid 1013.26.380) and the composition is the \
+attachment on post 8 of <https://discourse.openehr.org/t/17224>, both \
+byte-identical and pinned by sha256.";
 
 #[cfg(test)]
 #[expect(
@@ -733,7 +1030,10 @@ mod tests {
             rate_per_s: 1.0,
             warmup_s: 0,
             duration_s: 1,
-            mix: vec![(BenchOp::GetEhr, 3), (BenchOp::CreateComposition, 1)],
+            mix: vec![
+                MixEntry::new(BenchOp::GetEhr, 3, "the EHR read"),
+                MixEntry::new(BenchOp::CreateComposition, 1, "the commit"),
+            ],
         };
         let picked: Vec<BenchOp> = (0..8).filter_map(|d| phase.op_for_draw(d)).collect();
         assert_eq!(
@@ -864,8 +1164,9 @@ mod tests {
         assert_eq!(measure.warmup_s, 15);
         assert_eq!(measure.duration_s, 60);
         assert_eq!(measure.total_share(), 7);
-        let offered: Vec<BenchOp> = measure.mix.iter().map(|(op, _)| *op).collect();
-        assert_eq!(offered, COMMUNITY_READS.to_vec());
+        let offered: Vec<BenchOp> = measure.mix.iter().map(|entry| entry.op).collect();
+        let declared: Vec<BenchOp> = COMMUNITY_READS.iter().map(|(op, _)| *op).collect();
+        assert_eq!(offered, declared);
     }
 
     /// An empty mix selects nothing rather than defaulting to an operation.
@@ -879,5 +1180,126 @@ mod tests {
             mix: Vec::new(),
         };
         assert_eq!(phase.op_for_draw(7), None);
+    }
+
+    /// Every mix entry of every embedded pack states what it probes, because
+    /// a legend with a blank cell explains nothing.
+    #[test]
+    fn every_embedded_mix_entry_states_what_it_probes() -> Result<(), BenchError> {
+        for id in EMBEDDED {
+            let deck = load(id.as_str())?;
+            let mut entries = 0_usize;
+            for phase in deck.measure_phases() {
+                for entry in &phase.mix {
+                    assert!(
+                        !entry.rationale.trim().is_empty(),
+                        "{id}: {} carries no rationale",
+                        entry.op
+                    );
+                    entries = entries.saturating_add(1);
+                }
+            }
+            assert_eq!(
+                deck.probe_rationales().len(),
+                entries,
+                "{id}: the legend lost an entry"
+            );
+        }
+        Ok(())
+    }
+
+    /// The AQL pack seeds the same two pinned fixtures the community pack
+    /// seeds, so a query figure and a read figure describe the same corpus.
+    #[test]
+    fn the_aql_pack_seeds_the_community_population() -> Result<(), BenchError> {
+        let deck = load("aql-mix")?;
+        assert_eq!(deck.id, AQL_MIX);
+        assert_eq!(deck.version, "1.0.0");
+        assert_eq!(deck.fixture_pins(), community_vitals().fixture_pins());
+        assert_eq!(
+            deck.fixture_pins()
+                .get("vital_signs.opt")
+                .map(String::as_str),
+            Some("3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128")
+        );
+        deck.verify_pins()
+    }
+
+    /// The AQL pack pins its population and its measured window, because both
+    /// are part of what its numbers mean.
+    #[test]
+    fn the_aql_pack_pins_its_population_and_window() {
+        let deck = aql_mix();
+        assert_eq!(deck.phases.len(), 2);
+        assert!(deck.sweep_phases().is_empty());
+        let seeds: Vec<&SeedPhase> = deck
+            .phases
+            .iter()
+            .filter_map(|phase| match phase {
+                BenchPhase::Seed(seed) => Some(seed),
+                BenchPhase::Sweep(_) | BenchPhase::Measure(_) => None,
+            })
+            .collect();
+        let Some(seed) = seeds.first() else {
+            panic!("the seed phase is gone");
+        };
+        assert_eq!(seed.ehrs, 50);
+        assert_eq!(seed.compositions_per_ehr, 20);
+        assert_eq!(seed.workers, 8);
+        assert_eq!(seed.ehrs.saturating_mul(seed.compositions_per_ehr), 1_000);
+
+        let Some(measure) = deck.measure_phases().first().copied() else {
+            panic!("the measured query phase is gone");
+        };
+        assert_eq!(measure.name, "queries");
+        assert!((measure.rate_per_s - 24.0).abs() < f64::EPSILON);
+        assert_eq!(measure.warmup_s, 15);
+        assert_eq!(measure.duration_s, 60);
+    }
+
+    /// The six classes are offered at equal share, every one is an ad-hoc
+    /// query, and no class is repeated.
+    #[test]
+    fn the_aql_pack_offers_six_query_classes_at_equal_share() {
+        let deck = aql_mix();
+        let Some(measure) = deck.measure_phases().first().copied() else {
+            panic!("the measured query phase is gone");
+        };
+        assert_eq!(measure.mix.len(), 6);
+        assert_eq!(measure.total_share(), 6);
+        assert!(
+            measure.mix.iter().all(|entry| entry.share == 1),
+            "a class was given an unequal share"
+        );
+        assert!(
+            measure.mix.iter().all(|entry| entry.op.is_adhoc_query()),
+            "a class is not an ad-hoc query"
+        );
+        let distinct: std::collections::BTreeSet<BenchOp> =
+            measure.mix.iter().map(|entry| entry.op).collect();
+        assert_eq!(distinct.len(), 6, "a class is repeated");
+        let picked: std::collections::BTreeSet<BenchOp> = (0..6)
+            .filter_map(|draw| measure.op_for_draw(draw))
+            .collect();
+        assert_eq!(picked, distinct, "the picker starves a class");
+    }
+
+    /// The pack description names every class from the one table that defines
+    /// them, so the record a reader receives is self-describing.
+    #[test]
+    fn the_aql_pack_description_names_every_class() {
+        let deck = aql_mix();
+        for (op, rationale) in AQL_MIX_CLASSES {
+            assert!(deck.description.contains(op.as_str()), "{op} is unnamed");
+            assert!(
+                deck.description.contains(rationale),
+                "{op} lost its rationale"
+            );
+            assert_eq!(
+                deck.probe_rationales().get(op.as_str()).map(String::as_str),
+                Some(*rationale)
+            );
+        }
+        assert!(deck.description.contains("sized for query shapes"));
     }
 }

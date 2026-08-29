@@ -22,7 +22,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Mutex, mpsc};
+use std::sync::{LazyLock, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use hdrhistogram::Histogram;
@@ -52,6 +52,88 @@ const HDR_MAX_US: u64 = 600_000_000;
 const ADHOC_UID_AQL: &str = "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c \
      WHERE e/ehr_id/value = $ehr_id LIMIT 10";
 
+/// The point lookup [`BenchOp::AdhocQueryPointLookup`] offers: one composition
+/// addressed by the identifier its commit disclosed, inside one EHR.
+///
+/// `COMPOSITION.uid.value` is the `/uid/value` path (openEHR QUERY `AQL`
+/// §"openEHR path syntax"), and the standard predicate on the `EHR` class
+/// expression is the spec's own scoping form (§Parameters, §FROM).
+// NOTE: openEHR QUERY `AQL` §"openEHR path syntax" maps COMPOSITION.uid.value
+// to /uid/value and settles nothing about which identifier a repository
+// projects there, so a server projecting the versioned object answers no row.
+const AQL_POINT_LOOKUP: &str = "SELECT c/uid/value FROM EHR e[ehr_id/value=$ehr_id] \
+     CONTAINS COMPOSITION c WHERE c/uid/value = $uid";
+
+/// The EHR-scoped scan [`BenchOp::AdhocQueryEhrScan`] offers: every
+/// composition in one EHR, projected by uid and bounded by nothing.
+const AQL_EHR_SCAN: &str =
+    "SELECT c/uid/value FROM EHR e[ehr_id/value=$ehr_id] CONTAINS COMPOSITION c";
+
+/// The ordered page [`BenchOp::AdhocQueryOrderedPage`] offers.
+///
+/// openEHR QUERY `AQL` §"ORDER BY" states that without the clause the result
+/// has no ordering this specification defines, which is why a paged read
+/// carries one.
+const AQL_ORDERED_PAGE: &str = "SELECT c/uid/value, c/context/start_time/value \
+     FROM EHR e CONTAINS COMPOSITION c ORDER BY c/context/start_time/value DESC";
+
+/// The systolic magnitude leaf every value-reading class predicates on.
+///
+/// openEHR QUERY `AQL` §"openEHR path syntax" gives exactly this path for the
+/// Systolic `DV_QUANTITY` of `openEHR-EHR-OBSERVATION.blood_pressure.v2`,
+/// which is the observation the seeded Vital signs composition carries.
+const SYSTOLIC_MAGNITUDE: &str =
+    "o/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude";
+
+/// The blood-pressure containment every value-reading class shares
+/// (openEHR QUERY `AQL` §Containment).
+const BLOOD_PRESSURE: &str = "CONTAINS OBSERVATION o[openEHR-EHR-OBSERVATION.blood_pressure.v2]";
+
+/// The EHR-scoped magnitude predicate [`BenchOp::AdhocQueryFiltered`] offers.
+static AQL_FILTERED: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT c/uid/value FROM EHR e[ehr_id/value=$ehr_id] CONTAINS COMPOSITION c \
+         {BLOOD_PRESSURE} WHERE {SYSTOLIC_MAGNITUDE} >= $systolic"
+    )
+});
+
+/// The same predicate with no EHR scope, which
+/// [`BenchOp::AdhocQueryPopulation`] offers under a fetch bound.
+static AQL_POPULATION: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT c/uid/value FROM EHR e CONTAINS COMPOSITION c {BLOOD_PRESSURE} \
+         WHERE {SYSTOLIC_MAGNITUDE} >= $systolic"
+    )
+});
+
+/// The aggregate over that population, which
+/// [`BenchOp::AdhocQueryAggregate`] offers (openEHR QUERY `AQL` §COUNT:
+/// "returns the number of values of given expression argument").
+static AQL_AGGREGATE: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "SELECT COUNT(c/uid/value) FROM EHR e CONTAINS COMPOSITION c {BLOOD_PRESSURE} \
+         WHERE {SYSTOLIC_MAGNITUDE} >= $systolic"
+    )
+});
+
+/// The lowest systolic threshold a filtered arrival draws, in `mm[Hg]`.
+const SYSTOLIC_FLOOR: u64 = 90;
+
+/// How wide the drawn threshold band is, in `mm[Hg]`.
+const SYSTOLIC_SPAN: u64 = 60;
+
+/// Rows the unscoped population query asks for, through the `fetch` member of
+/// the ad-hoc request body (ITS-REST
+/// `specifications/operations/query_execute_adhoc_query_body.yaml`: "fetching
+/// `fetch` numbers of rows from `offset`").
+const POPULATION_FETCH: u64 = 50;
+
+/// Rows one page of the ordered read asks for.
+const PAGE_FETCH: u64 = 20;
+
+/// How many distinct pages an ordered-page arrival draws from.
+const ORDERED_PAGES: u64 = 10;
+
 /// How many stamped composition variants a measured phase pre-renders. Every
 /// write arrival draws one, so payload bytes vary without the hot path
 /// paying for a serialization per arrival.
@@ -70,6 +152,7 @@ const STREAM_OP: u64 = 0x6f70_6572_6174_696f;
 const STREAM_EHR: u64 = 0x6568_725f_7461_7267;
 const STREAM_COMPOSITION: u64 = 0x636f_6d70_5f74_6172;
 const STREAM_PAYLOAD: u64 = 0x7061_796c_6f61_645f;
+const STREAM_QUERY: u64 = 0x7175_6572_795f_7061;
 
 /// What the caller asked the engine to do.
 #[derive(Debug)]
@@ -176,7 +259,7 @@ fn reads_a_version_at_time(pack: &BenchPack) -> bool {
         || pack
             .measure_phases()
             .iter()
-            .any(|phase| phase.mix.iter().any(|(op, _)| at_time(op)))
+            .any(|phase| phase.mix.iter().any(|entry| at_time(&entry.op)))
 }
 
 /// The versioned-object part of an `OBJECT_VERSION_ID` (`uid::system::1`
@@ -850,6 +933,64 @@ struct ArrivalTarget<'a> {
     version_at_time: &'a str,
     /// The composition bytes a write arrival offers.
     payload: &'a [u8],
+    /// The seeded draw every query parameter of this arrival derives from.
+    query_draw: u64,
+}
+
+/// The `POST /query/aql` body one query class offers, or `None` for an
+/// operation that is not an ad-hoc query.
+///
+/// The request members are the ones the ad-hoc execute operation defines
+/// (ITS-REST `specifications/schemas/query/AdhocQueryExecute.yaml`: `q`,
+/// `offset`, `fetch`, `query_parameters`), and every value substituted into a
+/// parameter comes from the arrival's own seeded draw, so a class never
+/// repeats the previous arrival's result set and the whole draw is
+/// reproducible from the pack seed.
+fn query_request(op: BenchOp, target: ArrivalTarget<'_>) -> Option<Value> {
+    let draw = target.query_draw;
+    let systolic = SYSTOLIC_FLOOR.saturating_add(draw % SYSTOLIC_SPAN);
+    let offset = ((draw >> 8) % ORDERED_PAGES).saturating_mul(PAGE_FETCH);
+    let body = match op {
+        BenchOp::AdhocQueryUid => {
+            json!({ "q": ADHOC_UID_AQL, "query_parameters": { "ehr_id": target.ehr_id } })
+        }
+        BenchOp::AdhocQueryPointLookup => json!({
+            "q": AQL_POINT_LOOKUP,
+            "query_parameters": { "ehr_id": target.ehr_id, "uid": target.version_uid },
+        }),
+        BenchOp::AdhocQueryEhrScan => {
+            json!({ "q": AQL_EHR_SCAN, "query_parameters": { "ehr_id": target.ehr_id } })
+        }
+        BenchOp::AdhocQueryFiltered => json!({
+            "q": AQL_FILTERED.as_str(),
+            "query_parameters": { "ehr_id": target.ehr_id, "systolic": systolic },
+        }),
+        BenchOp::AdhocQueryPopulation => json!({
+            "q": AQL_POPULATION.as_str(),
+            "fetch": POPULATION_FETCH,
+            "query_parameters": { "systolic": systolic },
+        }),
+        BenchOp::AdhocQueryAggregate => json!({
+            "q": AQL_AGGREGATE.as_str(),
+            "query_parameters": { "systolic": systolic },
+        }),
+        BenchOp::AdhocQueryOrderedPage => json!({
+            "q": AQL_ORDERED_PAGE,
+            "fetch": PAGE_FETCH,
+            "offset": offset,
+        }),
+        BenchOp::CreateComposition
+        | BenchOp::GetCompositionAtTime
+        | BenchOp::GetCompositionLatest
+        | BenchOp::GetEhr
+        | BenchOp::GetEhrStatus
+        | BenchOp::GetVersionedComposition
+        | BenchOp::GetVersionedCompositionRevisionHistory
+        | BenchOp::GetVersionedCompositionVersionAtTime
+        | BenchOp::GetVersionedCompositionVersionById
+        | BenchOp::GetVersionedCompositionVersionLatest => return None,
+    };
+    Some(body)
 }
 
 /// Offers one arrival and reports whether it landed as the operation
@@ -938,8 +1079,18 @@ fn offer(
             None,
             PreferReturn::Unstated,
         ),
-        BenchOp::AdhocQueryUid => {
-            let body = json!({ "q": ADHOC_UID_AQL, "query_parameters": { "ehr_id": ehr_id } });
+        BenchOp::AdhocQueryUid
+        | BenchOp::AdhocQueryAggregate
+        | BenchOp::AdhocQueryEhrScan
+        | BenchOp::AdhocQueryFiltered
+        | BenchOp::AdhocQueryOrderedPage
+        | BenchOp::AdhocQueryPointLookup
+        | BenchOp::AdhocQueryPopulation => {
+            // `query_request` answers every query variant, so `None` here
+            // would mean the two matches disagree about the vocabulary.
+            let Some(body) = query_request(op, target) else {
+                return (false, Some(ErrorClass::Transport));
+            };
             match serde_json::to_vec(&body) {
                 Ok(bytes) => client.send(
                     op.as_str(),
@@ -974,7 +1125,13 @@ fn offer(
                 | BenchOp::GetVersionedCompositionVersionAtTime
                 | BenchOp::GetVersionedCompositionVersionById
                 | BenchOp::GetVersionedCompositionVersionLatest
-                | BenchOp::AdhocQueryUid => reply.status == StatusCode::OK,
+                | BenchOp::AdhocQueryUid
+                | BenchOp::AdhocQueryAggregate
+                | BenchOp::AdhocQueryEhrScan
+                | BenchOp::AdhocQueryFiltered
+                | BenchOp::AdhocQueryOrderedPage
+                | BenchOp::AdhocQueryPointLookup
+                | BenchOp::AdhocQueryPopulation => reply.status == StatusCode::OK,
             };
             if accepted {
                 (true, None)
@@ -1075,6 +1232,9 @@ fn sweep_phase(
                             .map_or("", String::as_str);
                         for op in &phase.per_composition {
                             let issued = Instant::now();
+                            // A sweep walks the population in creation order,
+                            // so its targets are the walk's own cursor and no
+                            // parameter is drawn.
                             let (ok, class) = offer(
                                 client,
                                 *op,
@@ -1084,6 +1244,7 @@ fn sweep_phase(
                                     version_uid: seeded.version_uid.as_str(),
                                     version_at_time: at_time,
                                     payload: &[],
+                                    query_draw: u64::try_from(slot).unwrap_or(0),
                                 },
                             );
                             let latency_us = u64::try_from(
@@ -1219,6 +1380,8 @@ fn measure_phase(
                     pack.seed ^ STREAM_PAYLOAD,
                     &[phase_index, arrival.index],
                 );
+                let query_draw =
+                    crate::perf_run::fnv1a(pack.seed ^ STREAM_QUERY, &[phase_index, arrival.index]);
                 let ehr_slot = usize::try_from(
                     ehr_draw % u64::try_from(corpus.ehr_ids.len().max(1)).unwrap_or(1),
                 )
@@ -1242,6 +1405,7 @@ fn measure_phase(
                         version_uid: seeded.version_uid.as_str(),
                         version_at_time: encoded_at_time,
                         payload: payloads.get(payload_slot).map_or(&[][..], Vec::as_slice),
+                        query_draw,
                     },
                     _ => ArrivalTarget {
                         ehr_id: corpus.ehr_ids.get(ehr_slot).map_or("", String::as_str),
@@ -1249,6 +1413,7 @@ fn measure_phase(
                         version_uid: "",
                         version_at_time: encoded_at_time,
                         payload: payloads.get(payload_slot).map_or(&[][..], Vec::as_slice),
+                        query_draw,
                     },
                 };
                 let (ok, class) = offer(client, arrival.op, target);
@@ -1382,7 +1547,7 @@ mod tests {
             rate_per_s: 10.0,
             warmup_s: 2,
             duration_s: 3,
-            mix: vec![(BenchOp::GetEhr, 1)],
+            mix: vec![pack::MixEntry::new(BenchOp::GetEhr, 1, "the EHR read")],
         };
         let schedule = build_schedule(&deck, &phase, 0);
         assert_eq!(schedule.len(), 50);
@@ -1399,7 +1564,7 @@ mod tests {
             rate_per_s: 0.0,
             warmup_s: 0,
             duration_s: 10,
-            mix: vec![(BenchOp::GetEhr, 1)],
+            mix: vec![pack::MixEntry::new(BenchOp::GetEhr, 1, "the EHR read")],
         };
         assert!(build_schedule(&deck, &phase, 0).is_empty());
     }
@@ -1474,6 +1639,159 @@ mod tests {
     fn only_a_pack_that_reads_at_an_instant_records_one() {
         assert!(!reads_a_version_at_time(&pack::smoke()));
         assert!(reads_a_version_at_time(&pack::community_vitals()));
+    }
+
+    /// One target for the query-body tests, with the draw the caller names.
+    fn query_target(draw: u64) -> ArrivalTarget<'static> {
+        ArrivalTarget {
+            ehr_id: "EHR-7",
+            object_uid: "c-1",
+            version_uid: "c-1::sut::1",
+            version_at_time: "2026-08-29T00%3A00%3A00Z",
+            payload: &[],
+            query_draw: draw,
+        }
+    }
+
+    /// Every query class carries its own AQL statement, and every class that
+    /// is not a query carries none.
+    #[test]
+    fn every_query_class_carries_its_own_statement() {
+        let mut statements: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for op in BenchOp::ALL {
+            let body = query_request(*op, query_target(1));
+            assert_eq!(
+                body.is_some(),
+                op.is_adhoc_query(),
+                "{op} disagrees about being a query"
+            );
+            let Some(body) = body else { continue };
+            let statement = body
+                .pointer("/q")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            assert!(statement.starts_with("SELECT "), "{op}: {statement}");
+            assert!(
+                statements.insert(statement.clone()),
+                "{op} repeats another class's statement: {statement}"
+            );
+        }
+        assert_eq!(statements.len(), 7);
+    }
+
+    /// Each class's statement carries the shape its rationale claims: the
+    /// point lookup addresses one uid, the scan is unbounded, the two
+    /// predicated classes carry the systolic path, the aggregate counts, and
+    /// the ordered page sorts.
+    #[test]
+    fn each_query_class_has_the_shape_its_rationale_claims() {
+        assert!(AQL_POINT_LOOKUP.contains("WHERE c/uid/value = $uid"));
+        assert!(AQL_POINT_LOOKUP.contains("EHR e[ehr_id/value=$ehr_id]"));
+
+        assert!(AQL_EHR_SCAN.contains("EHR e[ehr_id/value=$ehr_id]"));
+        assert!(!AQL_EHR_SCAN.contains("WHERE"), "the scan filters");
+
+        assert!(AQL_FILTERED.contains("EHR e[ehr_id/value=$ehr_id]"));
+        assert!(AQL_FILTERED.contains(SYSTOLIC_MAGNITUDE));
+        assert!(AQL_FILTERED.ends_with(">= $systolic"));
+
+        assert!(AQL_POPULATION.contains(SYSTOLIC_MAGNITUDE));
+        assert!(
+            !AQL_POPULATION.contains("$ehr_id"),
+            "the population query is scoped to one EHR"
+        );
+
+        assert!(AQL_AGGREGATE.contains("COUNT(c/uid/value)"));
+        assert!(AQL_AGGREGATE.contains(SYSTOLIC_MAGNITUDE));
+
+        assert!(AQL_ORDERED_PAGE.contains("ORDER BY c/context/start_time/value DESC"));
+        assert!(!AQL_ORDERED_PAGE.contains("$ehr_id"));
+    }
+
+    /// Only the two paged classes bound their result set, through the request
+    /// members the ad-hoc execute operation defines.
+    #[test]
+    fn only_the_paged_classes_carry_a_fetch_bound() {
+        let fetch = |op: BenchOp| {
+            query_request(op, query_target(0x0102_0304))
+                .and_then(|body| body.pointer("/fetch").and_then(Value::as_u64))
+        };
+        assert_eq!(fetch(BenchOp::AdhocQueryPopulation), Some(50));
+        assert_eq!(fetch(BenchOp::AdhocQueryOrderedPage), Some(20));
+        assert_eq!(fetch(BenchOp::AdhocQueryPointLookup), None);
+        assert_eq!(fetch(BenchOp::AdhocQueryEhrScan), None);
+        assert_eq!(fetch(BenchOp::AdhocQueryFiltered), None);
+        assert_eq!(fetch(BenchOp::AdhocQueryAggregate), None);
+    }
+
+    /// Query parameters are a pure function of the arrival's draw: the same
+    /// draw yields the same body, and the threshold stays inside the band the
+    /// pack declares.
+    #[test]
+    fn query_parameters_are_deterministic_in_the_draw() {
+        for draw in [0_u64, 1, 7, 0x0102_0304_0506_0708, u64::MAX] {
+            assert_eq!(
+                query_request(BenchOp::AdhocQueryFiltered, query_target(draw)),
+                query_request(BenchOp::AdhocQueryFiltered, query_target(draw)),
+                "draw {draw} is not deterministic"
+            );
+            let systolic = query_request(BenchOp::AdhocQueryFiltered, query_target(draw))
+                .and_then(|body| {
+                    body.pointer("/query_parameters/systolic")
+                        .and_then(Value::as_u64)
+                })
+                .unwrap_or_default();
+            assert!((90..150).contains(&systolic), "{systolic} is off the band");
+            let offset = query_request(BenchOp::AdhocQueryOrderedPage, query_target(draw))
+                .and_then(|body| body.pointer("/offset").and_then(Value::as_u64))
+                .unwrap_or_default();
+            assert!(
+                offset < 200 && offset.is_multiple_of(20),
+                "{offset} is off the grid"
+            );
+        }
+    }
+
+    /// Two different draws move the threshold and the page, which is what
+    /// stops a server serving one memoized result set for a whole class.
+    #[test]
+    fn different_draws_move_the_threshold_and_the_page() {
+        let systolic = |draw: u64| {
+            query_request(BenchOp::AdhocQueryFiltered, query_target(draw)).and_then(|body| {
+                body.pointer("/query_parameters/systolic")
+                    .and_then(Value::as_u64)
+            })
+        };
+        assert_ne!(systolic(0), systolic(1));
+        let offset = |draw: u64| {
+            query_request(BenchOp::AdhocQueryOrderedPage, query_target(draw))
+                .and_then(|body| body.pointer("/offset").and_then(Value::as_u64))
+        };
+        assert_ne!(offset(0), offset(1 << 8));
+    }
+
+    /// The point lookup addresses the composition its EHR holds, so it can
+    /// never be a lookup the instrument itself made miss.
+    #[test]
+    fn the_point_lookup_addresses_the_drawn_composition() {
+        let Some(body) = query_request(BenchOp::AdhocQueryPointLookup, query_target(3)) else {
+            panic!("the point lookup carries no body");
+        };
+        assert_eq!(
+            body.pointer("/query_parameters/uid")
+                .and_then(Value::as_str),
+            Some("c-1::sut::1")
+        );
+        assert_eq!(
+            body.pointer("/query_parameters/ehr_id")
+                .and_then(Value::as_str),
+            Some("EHR-7")
+        );
+        assert!(
+            BenchOp::AdhocQueryPointLookup.addresses_a_composition(),
+            "the point lookup would be given an EHR-only target"
+        );
     }
 
     /// Every operation the community walk offers addresses a composition, so

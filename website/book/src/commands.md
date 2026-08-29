@@ -210,7 +210,7 @@ veredictum bench --base-url <URL> --out <OUT> \
 | `--out <OUT>` | Output directory for the result document and its summary. Required |
 | `--auth <MODE>` | How the client presents itself: `none`, `basic` or `bearer`. Default `none` |
 | `--user <USER>` | The user `--auth basic` presents |
-| `--pack <PACK>` | The embedded pack to drive: `smoke` or `community-vitals`. Default `smoke` |
+| `--pack <PACK>` | The embedded pack to drive: `smoke`, `community-vitals` or `aql-mix`. Default `smoke` |
 | `--repetitions <N>` | How many times to repeat the measured phases. Default `3` |
 | `--scale <F>` | Multiply the pack's EHR count by this factor, for a shorter run. Default `1.0` |
 | `--seed-workers <N>` | Override the worker count every seed phase declares. Omit to run the pack's own value |
@@ -247,6 +247,34 @@ questions and are never read against one another. The two fixtures are embedded
 byte-identically, the operational template from the vendored CKM export for
 template id `Vital signs` and the composition from the attachment on post 8 of
 that thread, both pinned by sha256 and verified at load.
+
+`aql-mix` measures query speed over that same population, from the same two
+pinned fixtures, so a query figure and a read figure describe the same corpus.
+Its seed phase creates 50 EHRs and commits the composition 20 times into each,
+on a pool of 8 workers. The pack version pins that population, and it is sized
+for query shapes: large enough that a query has to choose an access path, small
+enough to load before a measured window opens. The
+measured phase is open-loop at 24 arrivals a second for 60s after a 15s warmup,
+over six query classes at equal share, so each class is offered at 4 arrivals a
+second and every class returns the same number of samples.
+
+| Class | What it probes |
+|---|---|
+| `adhoc_query_point_lookup` | The indexed-read floor: one composition addressed by its own uid inside one EHR, the cheapest query a server can answer |
+| `adhoc_query_ehr_scan` | The loaded-database shape: every composition in one EHR projected by uid, so the cost follows how much that EHR holds |
+| `adhoc_query_filtered` | The value index: a systolic magnitude threshold over the observation leaves of one EHR |
+| `adhoc_query_population` | The cross-EHR planner: the same threshold with no EHR scope and a `fetch` bound, so the server picks an access path over the whole population |
+| `adhoc_query_aggregate` | The columnar shape: one `COUNT` over the population that threshold matches, which returns a single row and reads every value behind it |
+| `adhoc_query_ordered_page` | Sorting and pagination: an `ORDER BY` over composition start time read through a moving `fetch` window |
+
+Each class posts its own AQL statement to `/query/aql`, accepts only `200`, and
+counts every other answer in its own error class, so a server that refuses one
+shape leaves the other five classes' percentiles alone. The systolic threshold,
+the page offset, and the EHR or composition each arrival addresses all draw
+from the run's seeded streams, so no arrival repeats the previous one's result
+set and the whole draw is reproducible from the seed the record discloses. Why
+each class exists travels with the pack definition, so a rendered view explains
+a column without knowing anything about the pack's internals.
 
 `--scale` shrinks the EHR count for a quick run and changes nothing else.
 Anything but `1.0`, or a `--seed-workers` override, takes the run off the pack's
