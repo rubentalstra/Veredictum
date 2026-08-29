@@ -60,6 +60,7 @@
     "ehr-status-xml-write-accepted",
     "ehr-xml-supported",
     "ehr-xml-write-accepted",
+    "undefined-containment-empty",
     "xml-namespace-fixed"
   ],
   "served_extensions": [],
