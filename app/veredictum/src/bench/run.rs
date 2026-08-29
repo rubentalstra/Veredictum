@@ -951,18 +951,10 @@ struct Completion {
 /// the phase index, so every repetition offers the same work in the same
 /// order.
 fn build_schedule(pack: &BenchPack, phase: &MeasurePhase, phase_index: u64) -> Vec<PlannedArrival> {
-    let span_s = phase.warmup_s.saturating_add(phase.duration_s);
-    if phase.rate_per_s <= 0.0 || span_s == 0 {
+    let total = phase.planned_arrivals();
+    if total == 0 {
         return Vec::new();
     }
-    #[expect(
-        clippy::as_conversions,
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "the arrival count is rate x span, both operator-scale values far below 2^52"
-    )]
-    let total = (phase.rate_per_s * span_s as f64).ceil() as u64;
     let mut arrivals = Vec::with_capacity(usize::try_from(total).unwrap_or(0));
     for index in 0..total {
         #[expect(
@@ -975,16 +967,10 @@ fn build_schedule(pack: &BenchPack, phase: &MeasurePhase, phase_index: u64) -> V
         let Some(op) = phase.op_for_draw(draw) else {
             continue;
         };
-        #[expect(
-            clippy::as_conversions,
-            clippy::cast_precision_loss,
-            reason = "the warmup boundary is an operator-scale second count"
-        )]
-        let recorded = offset_s >= phase.warmup_s as f64;
         arrivals.push(PlannedArrival {
             at: Duration::from_secs_f64(offset_s),
             op,
-            recorded,
+            recorded: phase.is_measured(index),
             index,
         });
     }
@@ -1094,87 +1080,39 @@ fn query_request(op: BenchOp, target: ArrivalTarget<'_>) -> Option<Value> {
 
 /// Offers one arrival and reports whether it landed as the operation
 /// requires, plus the class of any failure.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one dispatch table over the closed operation vocabulary: splitting it would hide which path an operation takes"
-)]
 fn offer(
     client: &BenchClient,
     op: BenchOp,
     target: ArrivalTarget<'_>,
 ) -> (bool, Option<ErrorClass>) {
-    let ehr_id = target.ehr_id;
-    let object_uid = target.object_uid;
-    let versioned = format!("/ehr/{ehr_id}/versioned_composition/{object_uid}");
-    let at_time = target.version_at_time;
+    // One path per arrival, built from the operation's own published wire
+    // template, so what the manifest states and what goes out are one string.
+    let path = op.path(
+        target.ehr_id,
+        target.object_uid,
+        &query_value(target.version_uid),
+        target.version_at_time,
+    );
     let reply = match op {
         BenchOp::CreateComposition => client.send(
             op.as_str(),
             Method::POST,
-            &format!("/ehr/{ehr_id}/composition"),
+            &path,
             Some(("application/json", target.payload.to_vec())),
             PreferReturn::Identifier,
         ),
-        BenchOp::GetCompositionLatest => client.send(
+        BenchOp::GetCompositionLatest
+        | BenchOp::GetCompositionAtTime
+        | BenchOp::GetVersionedComposition
+        | BenchOp::GetVersionedCompositionVersionLatest
+        | BenchOp::GetVersionedCompositionVersionAtTime
+        | BenchOp::GetVersionedCompositionVersionById
+        | BenchOp::GetVersionedCompositionRevisionHistory
+        | BenchOp::GetEhr
+        | BenchOp::GetEhrStatus => client.send(
             op.as_str(),
             Method::GET,
-            &format!("/ehr/{ehr_id}/composition/{object_uid}"),
-            None,
-            PreferReturn::Unstated,
-        ),
-        BenchOp::GetCompositionAtTime => client.send(
-            op.as_str(),
-            Method::GET,
-            &format!("/ehr/{ehr_id}/composition/{object_uid}?version_at_time={at_time}"),
-            None,
-            PreferReturn::Unstated,
-        ),
-        BenchOp::GetVersionedComposition => client.send(
-            op.as_str(),
-            Method::GET,
-            &versioned,
-            None,
-            PreferReturn::Unstated,
-        ),
-        BenchOp::GetVersionedCompositionVersionLatest => client.send(
-            op.as_str(),
-            Method::GET,
-            &format!("{versioned}/version"),
-            None,
-            PreferReturn::Unstated,
-        ),
-        BenchOp::GetVersionedCompositionVersionAtTime => client.send(
-            op.as_str(),
-            Method::GET,
-            &format!("{versioned}/version?version_at_time={at_time}"),
-            None,
-            PreferReturn::Unstated,
-        ),
-        BenchOp::GetVersionedCompositionVersionById => client.send(
-            op.as_str(),
-            Method::GET,
-            &format!("{versioned}/version/{}", query_value(target.version_uid)),
-            None,
-            PreferReturn::Unstated,
-        ),
-        BenchOp::GetVersionedCompositionRevisionHistory => client.send(
-            op.as_str(),
-            Method::GET,
-            &format!("{versioned}/revision_history"),
-            None,
-            PreferReturn::Unstated,
-        ),
-        BenchOp::GetEhr => client.send(
-            op.as_str(),
-            Method::GET,
-            &format!("/ehr/{ehr_id}"),
-            None,
-            PreferReturn::Unstated,
-        ),
-        BenchOp::GetEhrStatus => client.send(
-            op.as_str(),
-            Method::GET,
-            &format!("/ehr/{ehr_id}/ehr_status"),
+            &path,
             None,
             PreferReturn::Unstated,
         ),
@@ -1194,7 +1132,7 @@ fn offer(
                 Ok(bytes) => client.send(
                     op.as_str(),
                     Method::POST,
-                    "/query/aql",
+                    &path,
                     Some(("application/json", bytes)),
                     PreferReturn::Unstated,
                 ),

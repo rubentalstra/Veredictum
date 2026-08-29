@@ -1,0 +1,472 @@
+{
+  "schema_version": "0.1.0",
+  "boundary_statement": "This is a benchmark record for comparative speed. It is not a conformance record, not a certificate, and not a performance-class rating; a bench result may motivate a class run, never substitute for one.",
+  "methodology": "Seed once, measure N times. Measured phases are open-loop: arrivals fire at their planned instants regardless of any other request's completion, and every latency is measured from the planned arrival instant, so coordinated omission cannot hide a stall. Seed phases are closed-loop by construction and are reported as bulk-load throughput only.",
+  "relative_index": "The relative index is the target's cross-repetition median divided by the baseline's cross-repetition median for the same phase, operation and metric, both measured on the same host in the same session. It is dimensionless. On a latency metric a value below 1.0 means the target answered faster than the baseline and above 1.0 slower; on throughput the sense inverts, because there a larger number is the faster system.",
+  "seed_disclosure": "Every pack declares one seed, and every draw a run makes derives from it: which operation each arrival offers, which EHR or composition it addresses, and the query parameters a measured AQL class substitutes. Two runs of the same pack version at the same scale therefore offer the same work in the same order, on any machine and against any system, which is what makes two records comparable at all. The seed is a property of the pack rather than of the run, so it is not an operator input and no command-line flag moves it.",
+  "posture_disclosure": "Two speed numbers are comparable only when the same features were switched on behind them, so every pack defines named posture profiles and a run declares exactly one with --posture. The record then carries one line per disclosed item, and each line is labelled verified or declared-only: a black-box canary reads the item off the running system before and after the measured window, and where released ITS-REST surfaces nothing to read the declaration is carried as a claim and says so. A canary that contradicts the declaration, and a pair of brackets that disagree with each other, both refuse the whole run. Authentication and TLS are facts of the invocation rather than choices of the profile, so a profile leaves them to the run.",
+  "submission_requirements": [
+    {
+      "token": "repetitions",
+      "statement": "at least 3 repetitions, because one repetition measures a moment rather than a system"
+    },
+    {
+      "token": "baseline",
+      "statement": "at least one same-machine baseline, because an absolute number without an anchor describes the machine as much as the system"
+    }
+  ],
+  "operations": [
+    {
+      "token": "adhoc_query_aggregate",
+      "wire": "POST /query/aql"
+    },
+    {
+      "token": "adhoc_query_ehr_scan",
+      "wire": "POST /query/aql"
+    },
+    {
+      "token": "adhoc_query_filtered",
+      "wire": "POST /query/aql"
+    },
+    {
+      "token": "adhoc_query_ordered_page",
+      "wire": "POST /query/aql"
+    },
+    {
+      "token": "adhoc_query_point_lookup",
+      "wire": "POST /query/aql"
+    },
+    {
+      "token": "adhoc_query_population",
+      "wire": "POST /query/aql"
+    },
+    {
+      "token": "adhoc_query_uid",
+      "wire": "POST /query/aql"
+    },
+    {
+      "token": "create_composition",
+      "wire": "POST /ehr/{ehr_id}/composition"
+    },
+    {
+      "token": "get_composition_at_time",
+      "wire": "GET /ehr/{ehr_id}/composition/{uid}?version_at_time={at_time}"
+    },
+    {
+      "token": "get_composition_latest",
+      "wire": "GET /ehr/{ehr_id}/composition/{uid}"
+    },
+    {
+      "token": "get_ehr",
+      "wire": "GET /ehr/{ehr_id}"
+    },
+    {
+      "token": "get_ehr_status",
+      "wire": "GET /ehr/{ehr_id}/ehr_status"
+    },
+    {
+      "token": "get_versioned_composition",
+      "wire": "GET /ehr/{ehr_id}/versioned_composition/{uid}"
+    },
+    {
+      "token": "get_versioned_composition_revision_history",
+      "wire": "GET /ehr/{ehr_id}/versioned_composition/{uid}/revision_history"
+    },
+    {
+      "token": "get_versioned_composition_version_at_time",
+      "wire": "GET /ehr/{ehr_id}/versioned_composition/{uid}/version?version_at_time={at_time}"
+    },
+    {
+      "token": "get_versioned_composition_version_by_id",
+      "wire": "GET /ehr/{ehr_id}/versioned_composition/{uid}/version/{version_uid}"
+    },
+    {
+      "token": "get_versioned_composition_version_latest",
+      "wire": "GET /ehr/{ehr_id}/versioned_composition/{uid}/version"
+    }
+  ],
+  "packs": [
+    {
+      "id": "aql-mix",
+      "version": "1.0.0",
+      "description": "Measures AQL query speed over the same Vital signs population the community-vitals pack seeds, so a query figure and a read figure describe the same corpus. The seed phase creates 50 EHRs and commits the same composition 20 times into each, on a pool of 8 workers. This pack version pins that population, and it is sized for query shapes: large enough that a query has to choose an access path, small enough to load before a measured window opens. The measured phase is open-loop at 24 arrivals a second for 60s after a 15s warmup, over six query classes at equal share, so each class is offered at 4 arrivals a second and every class returns the same number of samples. Each class posts one AQL statement to /query/aql, accepts only 200, and counts every other answer in its own error class, so a server that refuses one shape never contaminates another class's percentiles. Every query parameter draws from the run's seeded streams: the systolic threshold, the page offset, and the EHR or composition each arrival addresses, so no arrival repeats the previous one's result set and the whole draw is reproducible from the seed the record discloses. The six classes: adhoc_query_point_lookup probes the indexed-read floor: one composition addressed by its own uid inside one EHR, the cheapest query a server can answer; adhoc_query_ehr_scan probes the loaded-database shape: every composition in one EHR projected by uid, so the cost follows how much that EHR holds; adhoc_query_filtered probes the value index: a systolic magnitude threshold over the observation leaves of one EHR, with the threshold drawn per arrival so no result set can be memoized; adhoc_query_population probes the cross-EHR planner: the same magnitude threshold with no EHR scope and a fetch bound, so the server picks an access path over the whole population; adhoc_query_aggregate probes the columnar shape: one COUNT over the population that threshold matches, which returns a single row and reads every value behind it; adhoc_query_ordered_page probes sorting and pagination: an ORDER BY over composition start time read through a moving fetch window, the shape a paged user interface issues. Fixture provenance: the operational template is the vendored CKM export for template id 'Vital signs' (CKM cid 1013.26.380) and the composition is the attachment on post 8 of <https://discourse.openehr.org/t/17224>, both byte-identical and pinned by sha256.",
+      "seed": 4706627057783240704,
+      "fixtures": [
+        {
+          "key": "vital_signs.opt",
+          "kind": "operational_template",
+          "media_type": "application/xml",
+          "bytes": 223110,
+          "sha256": "3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128",
+          "provenance": "The openEHR Clinical Knowledge Manager's own Operational Template export for template id 'Vital signs' (CKM cid 1013.26.380, <https://ckm.openehr.org/ckm>), vendored byte-identically and rooted at openEHR-EHR-COMPOSITION.encounter.v1."
+        },
+        {
+          "key": "vital_signs_composition.json",
+          "kind": "composition",
+          "media_type": "application/json",
+          "bytes": 22637,
+          "sha256": "468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947",
+          "provenance": "The composition attached to post 8 of the openEHR community's vital-signs benchmark thread (<https://discourse.openehr.org/t/17224>), vendored byte-identically: eight OBSERVATION entries under openEHR-EHR-COMPOSITION.encounter.v1, rm_version 1.0.2, declaring template id 'Vital signs'."
+        },
+        {
+          "key": "vital_signs_composition.missing_composer.json",
+          "kind": "invalid_composition",
+          "media_type": "application/json",
+          "bytes": 22356,
+          "sha256": "f0598db5ab447b371ead28cba0f841f72370dbbf93db98d5b8e477910a42688d",
+          "provenance": "Derived in this repository from vital_signs_composition.json by deleting the mandatory COMPOSITION.composer member and nothing else, so a server that validates a commit against the reference model refuses it."
+        }
+      ],
+      "phases": [
+        {
+          "kind": "seed",
+          "name": "seed",
+          "discipline": "closed-loop",
+          "ehrs": 50,
+          "compositions_per_ehr": 20,
+          "compositions": 1000,
+          "workers": 8,
+          "fixtures": [
+            "vital_signs.opt",
+            "vital_signs_composition.json",
+            "vital_signs_composition.missing_composer.json"
+          ]
+        },
+        {
+          "kind": "measure",
+          "name": "queries",
+          "discipline": "open-loop",
+          "rate_per_s": 24.0,
+          "warmup_s": 15,
+          "duration_s": 60,
+          "planned_arrivals": 1800,
+          "planned_measured_arrivals": 1440,
+          "mix": [
+            {
+              "op": "adhoc_query_point_lookup",
+              "share": 1,
+              "rate_per_s": 4.0,
+              "rationale": "the indexed-read floor: one composition addressed by its own uid inside one EHR, the cheapest query a server can answer"
+            },
+            {
+              "op": "adhoc_query_ehr_scan",
+              "share": 1,
+              "rate_per_s": 4.0,
+              "rationale": "the loaded-database shape: every composition in one EHR projected by uid, so the cost follows how much that EHR holds"
+            },
+            {
+              "op": "adhoc_query_filtered",
+              "share": 1,
+              "rate_per_s": 4.0,
+              "rationale": "the value index: a systolic magnitude threshold over the observation leaves of one EHR, with the threshold drawn per arrival so no result set can be memoized"
+            },
+            {
+              "op": "adhoc_query_population",
+              "share": 1,
+              "rate_per_s": 4.0,
+              "rationale": "the cross-EHR planner: the same magnitude threshold with no EHR scope and a fetch bound, so the server picks an access path over the whole population"
+            },
+            {
+              "op": "adhoc_query_aggregate",
+              "share": 1,
+              "rate_per_s": 4.0,
+              "rationale": "the columnar shape: one COUNT over the population that threshold matches, which returns a single row and reads every value behind it"
+            },
+            {
+              "op": "adhoc_query_ordered_page",
+              "share": 1,
+              "rate_per_s": 4.0,
+              "rationale": "sorting and pagination: an ORDER BY over composition start time read through a moving fetch window, the shape a paged user interface issues"
+            }
+          ]
+        }
+      ],
+      "profiles": [
+        {
+          "name": "minimal",
+          "summary": "The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": true,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "none"
+          }
+        }
+      ],
+      "probe_rationales": {
+        "adhoc_query_aggregate": "the columnar shape: one COUNT over the population that threshold matches, which returns a single row and reads every value behind it",
+        "adhoc_query_ehr_scan": "the loaded-database shape: every composition in one EHR projected by uid, so the cost follows how much that EHR holds",
+        "adhoc_query_filtered": "the value index: a systolic magnitude threshold over the observation leaves of one EHR, with the threshold drawn per arrival so no result set can be memoized",
+        "adhoc_query_ordered_page": "sorting and pagination: an ORDER BY over composition start time read through a moving fetch window, the shape a paged user interface issues",
+        "adhoc_query_point_lookup": "the indexed-read floor: one composition addressed by its own uid inside one EHR, the cheapest query a server can answer",
+        "adhoc_query_population": "the cross-EHR planner: the same magnitude threshold with no EHR scope and a fetch bound, so the server picks an access path over the whole population"
+      }
+    },
+    {
+      "id": "community-vitals",
+      "version": "1.0.0",
+      "description": "Reproduces the openEHR community's vital-signs benchmark harness (<https://discourse.openehr.org/t/17224>) and measures the same work a second way. The write phase creates 100 EHRs and commits the same Vital signs composition 1,000 times into each with Prefer: return=identifier, on one worker, and reports bulk-load throughput plus the whole-loop milliseconds-per-composition average the thread quotes, labelled closed-loop. The read phase then runs twice: read_walk is the sequential walk over every committed composition, seven GETs each (latest, version_at_time, the VERSIONED_COMPOSITION, its latest version, its version at that instant, one version by id, and the revision history), reporting the whole-loop microseconds-per-request average, labelled closed-loop; read_open_loop offers the same seven reads as an arrival schedule pinned at 200/s for 60s after a 15s warmup, which is where the coordinated-omission-free percentiles come from. The pinned rate is part of this pack version: changing it changes the work and bumps the version. Every version_at_time read addresses one instant captured after the write phase finished, which every seeded version predates, so it selects the same versions the harness's own start-of-run instant selects. Fixture provenance: the operational template is the vendored CKM export for template id 'Vital signs' (CKM cid 1013.26.380), byte-identical; the composition is the attachment on post 8 of that thread, byte-identical. Both are pinned by sha256 and verified at load.",
+      "seed": 4859222839474415988,
+      "fixtures": [
+        {
+          "key": "vital_signs.opt",
+          "kind": "operational_template",
+          "media_type": "application/xml",
+          "bytes": 223110,
+          "sha256": "3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128",
+          "provenance": "The openEHR Clinical Knowledge Manager's own Operational Template export for template id 'Vital signs' (CKM cid 1013.26.380, <https://ckm.openehr.org/ckm>), vendored byte-identically and rooted at openEHR-EHR-COMPOSITION.encounter.v1."
+        },
+        {
+          "key": "vital_signs_composition.json",
+          "kind": "composition",
+          "media_type": "application/json",
+          "bytes": 22637,
+          "sha256": "468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947",
+          "provenance": "The composition attached to post 8 of the openEHR community's vital-signs benchmark thread (<https://discourse.openehr.org/t/17224>), vendored byte-identically: eight OBSERVATION entries under openEHR-EHR-COMPOSITION.encounter.v1, rm_version 1.0.2, declaring template id 'Vital signs'."
+        },
+        {
+          "key": "vital_signs_composition.missing_composer.json",
+          "kind": "invalid_composition",
+          "media_type": "application/json",
+          "bytes": 22356,
+          "sha256": "f0598db5ab447b371ead28cba0f841f72370dbbf93db98d5b8e477910a42688d",
+          "provenance": "Derived in this repository from vital_signs_composition.json by deleting the mandatory COMPOSITION.composer member and nothing else, so a server that validates a commit against the reference model refuses it."
+        }
+      ],
+      "phases": [
+        {
+          "kind": "seed",
+          "name": "write",
+          "discipline": "closed-loop",
+          "ehrs": 100,
+          "compositions_per_ehr": 1000,
+          "compositions": 100000,
+          "workers": 1,
+          "fixtures": [
+            "vital_signs.opt",
+            "vital_signs_composition.json",
+            "vital_signs_composition.missing_composer.json"
+          ]
+        },
+        {
+          "kind": "sweep",
+          "name": "read_walk",
+          "discipline": "closed-loop",
+          "workers": 1,
+          "requests_per_composition": 7,
+          "operations": [
+            "get_composition_latest",
+            "get_composition_at_time",
+            "get_versioned_composition",
+            "get_versioned_composition_version_latest",
+            "get_versioned_composition_version_at_time",
+            "get_versioned_composition_version_by_id",
+            "get_versioned_composition_revision_history"
+          ]
+        },
+        {
+          "kind": "measure",
+          "name": "read_open_loop",
+          "discipline": "open-loop",
+          "rate_per_s": 200.0,
+          "warmup_s": 15,
+          "duration_s": 60,
+          "planned_arrivals": 15000,
+          "planned_measured_arrivals": 12000,
+          "mix": [
+            {
+              "op": "get_composition_latest",
+              "share": 1,
+              "rate_per_s": 28.57142857142857,
+              "rationale": "the harness's latest-version composition read, the read a client issues most"
+            },
+            {
+              "op": "get_composition_at_time",
+              "share": 1,
+              "rate_per_s": 28.57142857142857,
+              "rationale": "the harness's composition read at an instant, which resolves a version by time"
+            },
+            {
+              "op": "get_versioned_composition",
+              "share": 1,
+              "rate_per_s": 28.57142857142857,
+              "rationale": "the harness's read of the VERSIONED_COMPOSITION container itself"
+            },
+            {
+              "op": "get_versioned_composition_version_latest",
+              "share": 1,
+              "rate_per_s": 28.57142857142857,
+              "rationale": "the harness's latest-version read through the versioned object"
+            },
+            {
+              "op": "get_versioned_composition_version_at_time",
+              "share": 1,
+              "rate_per_s": 28.57142857142857,
+              "rationale": "the harness's version-at-an-instant read through the versioned object"
+            },
+            {
+              "op": "get_versioned_composition_version_by_id",
+              "share": 1,
+              "rate_per_s": 28.57142857142857,
+              "rationale": "the harness's read of one version by its own identifier"
+            },
+            {
+              "op": "get_versioned_composition_revision_history",
+              "share": 1,
+              "rate_per_s": 28.57142857142857,
+              "rationale": "the harness's revision-history read, which walks every version of the object"
+            }
+          ]
+        }
+      ],
+      "profiles": [
+        {
+          "name": "minimal",
+          "summary": "The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": true,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "none"
+          }
+        },
+        {
+          "name": "clinical-default",
+          "summary": "A clinical deployment's usual configuration: an audit trail written to the deployment's own store, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": false,
+          "declares": {
+            "audit": "internal",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "none"
+          }
+        }
+      ],
+      "probe_rationales": {
+        "get_composition_at_time": "the harness's composition read at an instant, which resolves a version by time",
+        "get_composition_latest": "the harness's latest-version composition read, the read a client issues most",
+        "get_versioned_composition": "the harness's read of the VERSIONED_COMPOSITION container itself",
+        "get_versioned_composition_revision_history": "the harness's revision-history read, which walks every version of the object",
+        "get_versioned_composition_version_at_time": "the harness's version-at-an-instant read through the versioned object",
+        "get_versioned_composition_version_by_id": "the harness's read of one version by its own identifier",
+        "get_versioned_composition_version_latest": "the harness's latest-version read through the versioned object"
+      }
+    },
+    {
+      "id": "smoke",
+      "version": "1.0.0",
+      "description": "One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface.",
+      "seed": 6216465318106710868,
+      "fixtures": [
+        {
+          "key": "blood_pressure.opt",
+          "kind": "operational_template",
+          "media_type": "application/xml",
+          "bytes": 10404,
+          "sha256": "97549fb2ab7ca36b9baa1cc86e857ef82924927a42140dfd3fd09a05dd83d006",
+          "provenance": "Authored in this repository for the smoke pack: an ADL 1.4 operational template with template id 'cnf.blood_pressure', rooted at openEHR-EHR-COMPOSITION.minimal.v1 and constraining openEHR-EHR-OBSERVATION.blood_pressure.v2. It exists to give the smoke pack a small upload, and it is not derived from any published library."
+        },
+        {
+          "key": "bp_composition.json",
+          "kind": "composition",
+          "media_type": "application/json",
+          "bytes": 3484,
+          "sha256": "9eaea10c5171d1f4648c8e932a21ce624312a2cad98f49115f35efbbb344a3ce",
+          "provenance": "Authored in this repository for the smoke pack: a canonical-JSON COMPOSITION declaring template id 'cnf.blood_pressure', carrying one POINT_EVENT with a systolic and a diastolic DV_QUANTITY in mm[Hg]."
+        },
+        {
+          "key": "bp_composition.missing_composer.json",
+          "kind": "invalid_composition",
+          "media_type": "application/json",
+          "bytes": 3443,
+          "sha256": "602039bed3f3daf060152af6034baf6d7ce74fde6ec77e8ff1cc89eda2b3e0b3",
+          "provenance": "Derived in this repository from bp_composition.json by deleting the mandatory COMPOSITION.composer member and nothing else, so a server that validates a commit against the reference model refuses it."
+        }
+      ],
+      "phases": [
+        {
+          "kind": "seed",
+          "name": "seed",
+          "discipline": "closed-loop",
+          "ehrs": 200,
+          "compositions_per_ehr": 5,
+          "compositions": 1000,
+          "workers": 8,
+          "fixtures": [
+            "blood_pressure.opt",
+            "bp_composition.json",
+            "bp_composition.missing_composer.json"
+          ]
+        },
+        {
+          "kind": "measure",
+          "name": "mixed",
+          "discipline": "open-loop",
+          "rate_per_s": 50.0,
+          "warmup_s": 10,
+          "duration_s": 60,
+          "planned_arrivals": 3500,
+          "planned_measured_arrivals": 3000,
+          "mix": [
+            {
+              "op": "create_composition",
+              "share": 20,
+              "rate_per_s": 10.0,
+              "rationale": "the commit path, measured while reads compete with it"
+            },
+            {
+              "op": "get_composition_latest",
+              "share": 30,
+              "rate_per_s": 15.0,
+              "rationale": "the latest-version composition read"
+            },
+            {
+              "op": "get_ehr",
+              "share": 20,
+              "rate_per_s": 10.0,
+              "rationale": "the EHR resource read, the cheapest addressed read the API offers"
+            },
+            {
+              "op": "get_ehr_status",
+              "share": 15,
+              "rate_per_s": 7.5,
+              "rationale": "the status read, which reaches a second versioned object in the same EHR"
+            },
+            {
+              "op": "adhoc_query_uid",
+              "share": 15,
+              "rate_per_s": 7.5,
+              "rationale": "an EHR-scoped projection, so the query path is exercised beside the direct reads"
+            }
+          ]
+        }
+      ],
+      "profiles": [
+        {
+          "name": "minimal",
+          "summary": "The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": true,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "none"
+          }
+        }
+      ],
+      "probe_rationales": {
+        "adhoc_query_uid": "an EHR-scoped projection, so the query path is exercised beside the direct reads",
+        "create_composition": "the commit path, measured while reads compete with it",
+        "get_composition_latest": "the latest-version composition read",
+        "get_ehr": "the EHR resource read, the cheapest addressed read the API offers",
+        "get_ehr_status": "the status read, which reaches a second versioned object in the same EHR"
+      }
+    }
+  ]
+}

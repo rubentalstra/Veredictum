@@ -143,8 +143,10 @@ jobs:
           # reason (#11): the fuzz-build job compiles the harnesses, and the
           # harnesses read the instrument crate, so either side changing must
           # compile the other. app/ carries both crates since the restructure
-          # (#55); no code lives at the root any more.
-          if echo "$changed" | grep -qE '^(app/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
+          # (#55); no code lives at the root any more. The legend generator is
+          # named individually (#189) because the test job runs its --check and
+          # the rest of scripts/render/ has nothing to do with that job.
+          if echo "$changed" | grep -qE '^(app/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|scripts/render/bench-legend\.sh$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
@@ -522,6 +524,13 @@ jobs:
       # guards tier.
       - name: The documented CLI surface matches the binary
         run: bash scripts/checks/cli-surface.sh
+      # The benchmark legend is generated from the pack manifest the binary
+      # emits, and the manifest is held byte-identical to the embedded packs by
+      # `bench_manifest` in the suite above. This step closes the second half:
+      # the committed page still matches the committed manifest, so a pack
+      # change cannot reach the site with the legend saying something else.
+      - name: The benchmark legend matches the emitted pack manifest
+        run: bash scripts/render/bench-legend.sh --check
 
   # The `[lints.rustdoc]` table is inert without a doc run — this is the run.
   # `-D warnings` promotes the warn-tier entries (unescaped backticks, a missing

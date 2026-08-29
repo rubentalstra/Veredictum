@@ -28,6 +28,14 @@ const BLOOD_PRESSURE_OPT: &str = include_str!("fixtures/blood_pressure.opt");
 const BLOOD_PRESSURE_OPT_SHA256: &str =
     "97549fb2ab7ca36b9baa1cc86e857ef82924927a42140dfd3fd09a05dd83d006";
 
+/// Where [`BLOOD_PRESSURE_OPT`] comes from.
+const BLOOD_PRESSURE_OPT_PROVENANCE: &str = "\
+Authored in this repository for the smoke pack: an ADL 1.4 operational \
+template with template id 'cnf.blood_pressure', rooted at \
+openEHR-EHR-COMPOSITION.minimal.v1 and constraining \
+openEHR-EHR-OBSERVATION.blood_pressure.v2. It exists to give the smoke pack a \
+small upload, and it is not derived from any published library.";
+
 /// One canonical-JSON `COMPOSITION` constrained by [`BLOOD_PRESSURE_OPT`]:
 /// a single `POINT_EVENT` carrying a systolic and a diastolic
 /// `DV_QUANTITY` in `mm[Hg]` under the
@@ -38,6 +46,12 @@ const BP_COMPOSITION: &str = include_str!("fixtures/bp_composition.json");
 /// The pinned digest of [`BP_COMPOSITION`].
 const BP_COMPOSITION_SHA256: &str =
     "9eaea10c5171d1f4648c8e932a21ce624312a2cad98f49115f35efbbb344a3ce";
+
+/// Where [`BP_COMPOSITION`] comes from.
+const BP_COMPOSITION_PROVENANCE: &str = "\
+Authored in this repository for the smoke pack: a canonical-JSON COMPOSITION \
+declaring template id 'cnf.blood_pressure', carrying one POINT_EVENT with a \
+systolic and a diastolic DV_QUANTITY in mm[Hg].";
 
 /// The invalid twin of [`BP_COMPOSITION`]: the same bytes with the mandatory
 /// `COMPOSITION.composer` member deleted and nothing else changed.
@@ -53,6 +67,12 @@ const BP_COMPOSITION_TWIN: &str = include_str!("fixtures/bp_composition.missing_
 const BP_COMPOSITION_TWIN_SHA256: &str =
     "602039bed3f3daf060152af6034baf6d7ce74fde6ec77e8ff1cc89eda2b3e0b3";
 
+/// Where [`BP_COMPOSITION_TWIN`] comes from.
+const BP_COMPOSITION_TWIN_PROVENANCE: &str = "\
+Derived in this repository from bp_composition.json by deleting the mandatory \
+COMPOSITION.composer member and nothing else, so a server that validates a \
+commit against the reference model refuses it.";
+
 /// The `Vital signs` operational template the community harness uploads,
 /// embedded byte-identically from the vendored CKM template pack (CKM cid
 /// 1013.26.380; template id `Vital signs`, root
@@ -62,6 +82,12 @@ const VITAL_SIGNS_OPT: &str = include_str!("fixtures/vital_signs.opt");
 /// The pinned digest of [`VITAL_SIGNS_OPT`].
 const VITAL_SIGNS_OPT_SHA256: &str =
     "3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128";
+
+/// Where [`VITAL_SIGNS_OPT`] comes from.
+const VITAL_SIGNS_OPT_PROVENANCE: &str = "\
+The openEHR Clinical Knowledge Manager's own Operational Template export for \
+template id 'Vital signs' (CKM cid 1013.26.380, <https://ckm.openehr.org/ckm>), \
+vendored byte-identically and rooted at openEHR-EHR-COMPOSITION.encounter.v1.";
 
 /// The `Vital signs` `COMPOSITION` instance the community harness commits,
 /// byte-identical to the attachment on post 8 of
@@ -73,6 +99,14 @@ const VITAL_SIGNS_COMPOSITION: &str = include_str!("fixtures/vital_signs_composi
 const VITAL_SIGNS_COMPOSITION_SHA256: &str =
     "468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947";
 
+/// Where [`VITAL_SIGNS_COMPOSITION`] comes from.
+const VITAL_SIGNS_COMPOSITION_PROVENANCE: &str = "\
+The composition attached to post 8 of the openEHR community's vital-signs \
+benchmark thread (<https://discourse.openehr.org/t/17224>), vendored \
+byte-identically: eight OBSERVATION entries under \
+openEHR-EHR-COMPOSITION.encounter.v1, rm_version 1.0.2, declaring template id \
+'Vital signs'.";
+
 /// The invalid twin of [`VITAL_SIGNS_COMPOSITION`], derived the same way
 /// [`BP_COMPOSITION_TWIN`] is: the mandatory `COMPOSITION.composer` member
 /// deleted and nothing else changed.
@@ -82,6 +116,12 @@ const VITAL_SIGNS_COMPOSITION_TWIN: &str =
 /// The pinned digest of [`VITAL_SIGNS_COMPOSITION_TWIN`].
 const VITAL_SIGNS_COMPOSITION_TWIN_SHA256: &str =
     "f0598db5ab447b371ead28cba0f841f72370dbbf93db98d5b8e477910a42688d";
+
+/// Where [`VITAL_SIGNS_COMPOSITION_TWIN`] comes from.
+const VITAL_SIGNS_COMPOSITION_TWIN_PROVENANCE: &str = "\
+Derived in this repository from vital_signs_composition.json by deleting the \
+mandatory COMPOSITION.composer member and nothing else, so a server that \
+validates a commit against the reference model refuses it.";
 
 /// The id of an embedded pack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -132,6 +172,23 @@ pub enum FixtureKind {
 }
 
 impl FixtureKind {
+    /// Every kind, in the order the emitted manifest's schema enumerates them.
+    pub const ALL: &[FixtureKind] = &[
+        FixtureKind::Composition,
+        FixtureKind::InvalidComposition,
+        FixtureKind::OperationalTemplate,
+    ];
+
+    /// The token an emitted document records the kind under.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            FixtureKind::OperationalTemplate => "operational_template",
+            FixtureKind::Composition => "composition",
+            FixtureKind::InvalidComposition => "invalid_composition",
+        }
+    }
+
     /// The media type the fixture goes on the wire as.
     #[must_use]
     pub const fn media_type(self) -> &'static str {
@@ -139,6 +196,12 @@ impl FixtureKind {
             FixtureKind::OperationalTemplate => "application/xml",
             FixtureKind::Composition | FixtureKind::InvalidComposition => "application/json",
         }
+    }
+}
+
+impl fmt::Display for FixtureKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -153,6 +216,14 @@ pub struct Fixture {
     pub bytes: &'static str,
     /// The lowercase-hex sha256 the bytes must hash to.
     pub sha256: &'static str,
+    /// Where the bytes came from, in one sentence, so a reader of the emitted
+    /// manifest can go and fetch the source material.
+    ///
+    /// The digest above is what makes this checkable: the provenance names the
+    /// source, and re-hashing the source is how a reader confirms it. Editing
+    /// this string moves no byte the pack offers, so it does not bump the pack
+    /// version.
+    pub provenance: &'static str,
 }
 
 impl Fixture {
@@ -293,6 +364,58 @@ impl BenchOp {
             BenchOp::AdhocQueryPointLookup => "adhoc_query_point_lookup",
             BenchOp::AdhocQueryPopulation => "adhoc_query_population",
         }
+    }
+
+    /// The request the operation puts on the wire, as method plus a path
+    /// template over the four values an arrival substitutes: `{ehr_id}`,
+    /// `{uid}`, `{version_uid}` and `{at_time}`.
+    ///
+    /// The dispatcher builds every offered path from this template, so what an
+    /// emitted manifest publishes is the request that actually goes out.
+    #[must_use]
+    pub const fn wire(self) -> &'static str {
+        match self {
+            BenchOp::CreateComposition => "POST /ehr/{ehr_id}/composition",
+            BenchOp::GetCompositionAtTime => {
+                "GET /ehr/{ehr_id}/composition/{uid}?version_at_time={at_time}"
+            }
+            BenchOp::GetCompositionLatest => "GET /ehr/{ehr_id}/composition/{uid}",
+            BenchOp::GetEhr => "GET /ehr/{ehr_id}",
+            BenchOp::GetEhrStatus => "GET /ehr/{ehr_id}/ehr_status",
+            BenchOp::GetVersionedComposition => "GET /ehr/{ehr_id}/versioned_composition/{uid}",
+            BenchOp::GetVersionedCompositionRevisionHistory => {
+                "GET /ehr/{ehr_id}/versioned_composition/{uid}/revision_history"
+            }
+            BenchOp::GetVersionedCompositionVersionAtTime => {
+                "GET /ehr/{ehr_id}/versioned_composition/{uid}/version?version_at_time={at_time}"
+            }
+            BenchOp::GetVersionedCompositionVersionById => {
+                "GET /ehr/{ehr_id}/versioned_composition/{uid}/version/{version_uid}"
+            }
+            BenchOp::GetVersionedCompositionVersionLatest => {
+                "GET /ehr/{ehr_id}/versioned_composition/{uid}/version"
+            }
+            BenchOp::AdhocQueryUid
+            | BenchOp::AdhocQueryAggregate
+            | BenchOp::AdhocQueryEhrScan
+            | BenchOp::AdhocQueryFiltered
+            | BenchOp::AdhocQueryOrderedPage
+            | BenchOp::AdhocQueryPointLookup
+            | BenchOp::AdhocQueryPopulation => "POST /query/aql",
+        }
+    }
+
+    /// The path half of [`BenchOp::wire`], with every placeholder replaced by
+    /// the value this arrival addresses.
+    #[must_use]
+    pub fn path(self, ehr_id: &str, uid: &str, version_uid: &str, at_time: &str) -> String {
+        self.wire()
+            .split_once(' ')
+            .map_or(self.wire(), |(_method, path)| path)
+            .replace("{ehr_id}", ehr_id)
+            .replace("{uid}", uid)
+            .replace("{version_uid}", version_uid)
+            .replace("{at_time}", at_time)
     }
 
     /// Whether the operation addresses one seeded composition rather than an
@@ -468,6 +591,70 @@ impl MeasurePhase {
             point = point.saturating_sub(share);
         }
         self.mix.last().map(|entry| entry.op)
+    }
+
+    /// How many arrivals the phase's schedule plans, warmup included.
+    ///
+    /// The dispatcher builds its schedule from this count, and the emitted
+    /// pack manifest prints it, so the two can never describe different work.
+    #[must_use]
+    pub fn planned_arrivals(&self) -> u64 {
+        let span_s = self.warmup_s.saturating_add(self.duration_s);
+        if self.rate_per_s <= 0.0 || span_s == 0 {
+            return 0;
+        }
+        #[expect(
+            clippy::as_conversions,
+            clippy::cast_precision_loss,
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "the arrival count is rate x span, both operator-scale values far below 2^52"
+        )]
+        let total = (self.rate_per_s * span_s as f64).ceil() as u64;
+        total
+    }
+
+    /// Whether the arrival at `index` falls inside the measured window rather
+    /// than the warmup that precedes it.
+    #[must_use]
+    pub fn is_measured(&self, index: u64) -> bool {
+        if self.rate_per_s <= 0.0 {
+            return false;
+        }
+        #[expect(
+            clippy::as_conversions,
+            clippy::cast_precision_loss,
+            reason = "the arrival ordinal and the warmup boundary are operator-scale values far below 2^52"
+        )]
+        let measured = index as f64 / self.rate_per_s >= self.warmup_s as f64;
+        measured
+    }
+
+    /// How many of the planned arrivals land inside the measured window.
+    #[must_use]
+    pub fn planned_measured_arrivals(&self) -> u64 {
+        (0..self.planned_arrivals())
+            .filter(|index| self.is_measured(*index))
+            .count()
+            .try_into()
+            .unwrap_or(u64::MAX)
+    }
+
+    /// The arrivals per second one mix entry is offered at, given its share of
+    /// the phase's aggregate rate.
+    #[must_use]
+    pub fn rate_of(&self, entry: &MixEntry) -> f64 {
+        let total = self.total_share();
+        if total == 0 {
+            return 0.0;
+        }
+        #[expect(
+            clippy::as_conversions,
+            clippy::cast_precision_loss,
+            reason = "the share and its total are small operator-scale counts"
+        )]
+        let rate = self.rate_per_s * (f64::from(entry.share) / total as f64);
+        rate
     }
 
     /// What each offered operation probes, keyed by the operation token.
@@ -759,18 +946,21 @@ pub fn smoke() -> BenchPack {
                         kind: FixtureKind::OperationalTemplate,
                         bytes: BLOOD_PRESSURE_OPT,
                         sha256: BLOOD_PRESSURE_OPT_SHA256,
+                        provenance: BLOOD_PRESSURE_OPT_PROVENANCE,
                     },
                     Fixture {
                         key: FixtureKey("bp_composition.json"),
                         kind: FixtureKind::Composition,
                         bytes: BP_COMPOSITION,
                         sha256: BP_COMPOSITION_SHA256,
+                        provenance: BP_COMPOSITION_PROVENANCE,
                     },
                     Fixture {
                         key: FixtureKey("bp_composition.missing_composer.json"),
                         kind: FixtureKind::InvalidComposition,
                         bytes: BP_COMPOSITION_TWIN,
                         sha256: BP_COMPOSITION_TWIN_SHA256,
+                        provenance: BP_COMPOSITION_TWIN_PROVENANCE,
                     },
                 ],
                 ehrs: 200,
@@ -824,18 +1014,21 @@ fn vital_signs_fixtures() -> Vec<Fixture> {
             kind: FixtureKind::OperationalTemplate,
             bytes: VITAL_SIGNS_OPT,
             sha256: VITAL_SIGNS_OPT_SHA256,
+            provenance: VITAL_SIGNS_OPT_PROVENANCE,
         },
         Fixture {
             key: FixtureKey("vital_signs_composition.json"),
             kind: FixtureKind::Composition,
             bytes: VITAL_SIGNS_COMPOSITION,
             sha256: VITAL_SIGNS_COMPOSITION_SHA256,
+            provenance: VITAL_SIGNS_COMPOSITION_PROVENANCE,
         },
         Fixture {
             key: FixtureKey("vital_signs_composition.missing_composer.json"),
             kind: FixtureKind::InvalidComposition,
             bytes: VITAL_SIGNS_COMPOSITION_TWIN,
             sha256: VITAL_SIGNS_COMPOSITION_TWIN_SHA256,
+            provenance: VITAL_SIGNS_COMPOSITION_TWIN_PROVENANCE,
         },
     ]
 }
@@ -1074,6 +1267,7 @@ mod tests {
             kind: FixtureKind::Composition,
             bytes: "{}",
             sha256: "0000000000000000000000000000000000000000000000000000000000000000",
+            provenance: "authored for this test",
         };
         let error = fixture.verify(SMOKE).unwrap_err();
         assert!(matches!(error, BenchError::FixturePin { .. }), "{error}");
@@ -1085,6 +1279,44 @@ mod tests {
     fn an_unknown_pack_is_refused() {
         let error = load("does-not-exist").unwrap_err();
         assert!(error.to_string().contains("smoke"), "{error}");
+    }
+
+    /// Every operation publishes a wire template whose placeholders are all
+    /// substituted, so a rendered legend never prints a `{uid}` at a reader.
+    #[test]
+    fn every_operation_publishes_a_substitutable_wire_template() {
+        for op in BenchOp::ALL {
+            let wire = op.wire();
+            assert!(
+                wire.starts_with("GET /") || wire.starts_with("POST /"),
+                "{op}: {wire} is not a method plus a path"
+            );
+            let path = op.path("E", "U", "V", "T");
+            assert!(!path.contains('{'), "{op}: {path} kept a placeholder");
+            assert!(path.starts_with('/'), "{op}: {path} is not rooted");
+        }
+    }
+
+    /// The path a composition read addresses names the object it addresses,
+    /// and an EHR-scoped operation never carries a composition uid.
+    #[test]
+    fn a_wire_path_substitutes_only_what_its_operation_addresses() {
+        assert_eq!(
+            BenchOp::GetVersionedCompositionVersionById.path("E", "U", "V", "T"),
+            "/ehr/E/versioned_composition/U/version/V"
+        );
+        assert_eq!(
+            BenchOp::GetCompositionAtTime.path("E", "U", "V", "T"),
+            "/ehr/E/composition/U?version_at_time=T"
+        );
+        assert_eq!(
+            BenchOp::GetEhrStatus.path("E", "U", "V", "T"),
+            "/ehr/E/ehr_status"
+        );
+        assert_eq!(
+            BenchOp::AdhocQueryUid.path("E", "U", "V", "T"),
+            "/query/aql"
+        );
     }
 
     /// An unknown operation token never falls back to a default.

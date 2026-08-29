@@ -67,6 +67,14 @@
 //!                                       align two or more committed bench
 //!                                       results into one table, flagging every
 //!                                       pack or host mismatch in the header
+//! veredictum bench-packs --out DIR      write bench-packs.json: every
+//!                                       embedded pack's phases with their
+//!                                       load discipline, its operation mix
+//!                                       with what each entry probes, its
+//!                                       posture profiles, its fixture pins
+//!                                       with their provenance, its seed, and
+//!                                       the submission requirements
+//!                                       (byte-deterministic)
 //! veredictum aql-probe --root DIR --ixit FILE --out FILE
 //!                      [--corpus-class POC|S|L|R] [--requests N]
 //!                                       the seeded-corpus AQL optimization
@@ -111,7 +119,7 @@ use veredictum::bench::client::AuthKind;
 use veredictum::pipeline::assets::{
     conformance_assets, performance_assets, schema_files, stress_overlay,
 };
-use veredictum::pipeline::bench::{BenchRequest, compare_bench, run_bench};
+use veredictum::pipeline::bench::{BenchRequest, compare_bench, describe_packs, run_bench};
 use veredictum::pipeline::catalogue::{coverage_report_path, validate_tree, write_coverage_report};
 use veredictum::pipeline::conformance::{RunRequest, RunWarning, execute_run};
 use veredictum::pipeline::judgement::{JudgementRequest, judge};
@@ -344,6 +352,15 @@ enum Command {
         #[arg(long = "result", required = true)]
         results: Vec<PathBuf>,
         /// Output directory for the rendered comparison.
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Write the embedded benchmark pack manifest: every pack's phases with
+    /// their load discipline, its operation mix with what each entry probes,
+    /// its posture profiles, its fixture pins with their provenance, its seed,
+    /// and the submission requirements (byte-deterministic).
+    BenchPacks {
+        /// Output directory (created if missing).
         #[arg(long)]
         out: PathBuf,
     },
@@ -619,6 +636,7 @@ fn main() -> ExitCode {
             &out,
         ),
         Command::BenchCompare { results, out } => bench_compare_command(&results, &out),
+        Command::BenchPacks { out } => bench_packs_command(&out),
         Command::AqlProbe {
             root,
             ixit,
@@ -1027,6 +1045,26 @@ fn bench_compare_command(results: &[PathBuf], out: &Path) -> ExitCode {
         }
         ExitCode::from(1)
     }
+}
+
+fn bench_packs_command(out: &Path) -> ExitCode {
+    let outcome = match describe_packs() {
+        Ok(outcome) => outcome,
+        Err(e) => return fail(&e),
+    };
+    if let Err(code) = emit(out, std::slice::from_ref(&outcome.document)) {
+        return code;
+    }
+    for pack in &outcome.manifest.packs {
+        println!(
+            "{}@{}: {} phase(s), {} fixture(s)",
+            pack.id,
+            pack.version,
+            pack.phases.len(),
+            pack.fixtures.len()
+        );
+    }
+    ExitCode::SUCCESS
 }
 
 fn probe_command(request: &ProbeRequest<'_>, out: &Path) -> ExitCode {
