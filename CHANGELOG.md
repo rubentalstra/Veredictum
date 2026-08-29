@@ -20,6 +20,32 @@ version on.
 
 ### Added
 
+- **Bench baselines and the relative index (#184).** `bench --with-baselines`
+  measures the target, then composes each pinned reference CDR on the same
+  host, drives the same pack at the same seed for the same repetitions against
+  it, and tears the stack down with its volumes. EHRbase 2.35.1 and FerroEHR
+  4.0.10 are pinned by image digest, with their upstream deployment recipes
+  named at an immutable tag and the same container ceilings applied to both.
+  Every baseline lands in the record as a full per-operation summary beside its
+  digests, its recipe reference and those ceilings. From target and baseline the
+  record derives the relative index: per phase, operation and metric, the
+  target's cross-repetition median divided by the baseline's, dimensionless and
+  serialized with both inputs. Where no ratio exists — an operation only one
+  side measured, a phase only one side ran, a zero baseline median — the record
+  carries a typed gap rather than an omitted row. `--with-baselines` refuses on
+  a host whose `docker` CLI does not answer, naming the binary, before the
+  target is touched; a run without the flag needs no container runtime.
+- Submittability now states its reasons. A record is submittable with at least
+  three repetitions AND at least one same-machine baseline; the `submittable`
+  boolean keeps its meaning and a new `submittable_unmet` list names each
+  requirement a record misses, printed on the bench summary and in every
+  `bench-compare` column header. The environment fingerprint renders on the
+  summary header, in the CLI output and in every comparison column, so no
+  number appears without the machine it came from. `bench-compare` gains a
+  relative-index table and warns when columns from different hosts carry no
+  index to compare across them. `schemas/bench-result.schema.json` gains
+  `baselines`, `relative` and `submittable_unmet`.
+
 - AQL folder-containment coverage (#156): a provisioned directory-tree fixture
   over the run's own committed compositions, eight new QUERY cases
   (FOLDER↔COMPOSITION and FOLDER↔FOLDER pairs, name scoping, NOT CONTAINS,

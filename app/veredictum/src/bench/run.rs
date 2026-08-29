@@ -37,8 +37,7 @@ use crate::bench::pack::{
 };
 use crate::bench::result::{
     BenchResult, ErrorClass, LoopRegime, MeasuredPhaseRecord, Methodology, OperationStats,
-    PackRecord, RepetitionRecord, SUBMITTABLE_REPETITIONS, ScaleRecord, SeedPhaseRecord,
-    SweepPhaseRecord, TargetRecord,
+    PackRecord, RepetitionRecord, ScaleRecord, SeedPhaseRecord, SweepPhaseRecord, TargetRecord,
 };
 use crate::bench::{BOUNDARY_STATEMENT, BenchError, METHODOLOGY};
 
@@ -83,6 +82,11 @@ pub struct BenchRun<'a> {
     pub auth: AuthKind,
     /// The user `--auth basic` needs.
     pub user: Option<&'a str>,
+    /// A secret supplied in process, which replaces the environment lookup
+    /// the auth mode otherwise does. The baseline orchestration sets it to
+    /// the credential of the stack it composed; a target run leaves it
+    /// `None`.
+    pub credential: Option<&'a str>,
     /// How many times to repeat the measured phases.
     pub repetitions: u32,
     /// The operator's label for this run.
@@ -201,7 +205,7 @@ pub fn execute(
         return Err(BenchError::Repetitions(run.repetitions));
     }
     run.pack.verify_pins()?;
-    let client = BenchClient::new(run.base_url, run.auth, run.user)?;
+    let client = BenchClient::with_credential(run.base_url, run.auth, run.user, run.credential)?;
     let started_at = jiff::Timestamp::now().to_string();
 
     progress("preflight: proving the write-then-read path".to_owned());
@@ -251,8 +255,7 @@ pub fn execute(
     }
 
     let cross = summarize(&repetitions);
-    let submittable = repetitions.len() >= SUBMITTABLE_REPETITIONS;
-    Ok(BenchResult {
+    let mut result = BenchResult {
         schema_version: crate::schema::SCHEMA_VERSION.to_owned(),
         boundary_statement: BOUNDARY_STATEMENT.to_owned(),
         label: run.label.map(str::to_owned),
@@ -269,6 +272,8 @@ pub fn execute(
         seed_phases,
         repetitions,
         cross,
+        baselines: Vec::new(),
+        relative: Vec::new(),
         methodology: Methodology {
             statement: METHODOLOGY.to_owned(),
             open_loop: true,
@@ -276,9 +281,12 @@ pub fn execute(
             seed_once_measure_n: true,
             repetitions: run.repetitions,
         },
-        submittable,
+        submittable: false,
+        submittable_unmet: Vec::new(),
         posture: None,
-    })
+    };
+    result.settle_submittability();
+    Ok(result)
 }
 
 /// Executes one repetition: every closed-loop sweep, then every open-loop
@@ -1433,6 +1441,7 @@ mod tests {
                 base_url: "http://stub",
                 auth: AuthKind::None,
                 user: None,
+                credential: None,
                 repetitions: 0,
                 label: None,
                 scale: 1.0,

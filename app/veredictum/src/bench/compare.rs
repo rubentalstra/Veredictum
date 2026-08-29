@@ -20,8 +20,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use crate::bench::BenchError;
+use crate::bench::relative::RelativeIndex;
 use crate::bench::result::{
     BenchResult, CrossOperation, CrossPhase, CrossStat, LoopRegime, RepetitionRecord,
+    SubmissionRequirement,
 };
 
 /// The metrics a comparison aligns, in the order it renders them.
@@ -217,14 +219,22 @@ pub struct ComparisonColumn {
     pub sut_version: Option<String>,
     /// How many repetitions the run carried.
     pub repetitions: u32,
-    /// Whether the run carries enough repetitions to be offered.
+    /// Whether the run meets every submission requirement.
     pub submittable: bool,
+    /// The submission requirements it does not meet, so a column says WHY it
+    /// is not offerable rather than only that it is not.
+    pub submittable_unmet: Vec<SubmissionRequirement>,
     /// The multiplier the run applied to the pack's seed population.
     pub scale_factor: f64,
     /// Whether the run matched the pack's pinned configuration.
     pub reference_configuration: bool,
-    /// The generator host, as an ordered label map.
+    /// The generator host, as an ordered label map. Rendered in the column
+    /// header, because an absolute number without its machine is unreadable.
     pub environment: BTreeMap<String, String>,
+    /// The relative index the run derived against each of its same-machine
+    /// baselines. The one figure that carries across columns taken on
+    /// different hosts.
+    pub relative: Vec<RelativeIndex>,
 }
 
 /// One aligned row: the same phase, operation and metric across every column.
@@ -297,9 +307,11 @@ pub fn compare(paths: &[PathBuf]) -> Result<Comparison, BenchError> {
             sut_version: result.target.sut_version.clone(),
             repetitions: u32::try_from(result.repetitions.len()).unwrap_or(u32::MAX),
             submittable: result.submittable,
+            submittable_unmet: result.submittable_unmet.clone(),
             scale_factor: result.scale.factor,
             reference_configuration: result.scale.reference_configuration,
             environment: result.environment.labels(),
+            relative: result.relative.clone(),
         });
         results.push(result);
     }
@@ -382,10 +394,21 @@ fn warnings(columns: &[ComparisonColumn]) -> Vec<String> {
             scales.into_iter().collect::<Vec<_>>().join(", ")
         ));
     }
+    if hosts.len() > 1 && columns.iter().any(|column| column.relative.is_empty()) {
+        warnings.push(
+            "the columns come from different hosts and at least one carries NO relative index, so nothing in this table is comparable across them".to_owned(),
+        );
+    }
     for column in columns {
         if !column.submittable {
+            let unmet = column
+                .submittable_unmet
+                .iter()
+                .map(|requirement| requirement.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
             warnings.push(format!(
-                "column {:?} carries {} repetition(s) and is not submittable",
+                "column {:?} carries {} repetition(s) and is not submittable (unmet: {unmet})",
                 column.label, column.repetitions
             ));
         }

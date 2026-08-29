@@ -11,6 +11,7 @@
 
 use std::path::PathBuf;
 
+use crate::bench::baselines::{BaselineRun, DockerCli, run_baselines};
 use crate::bench::client::AuthKind;
 use crate::bench::compare::Comparison;
 use crate::bench::pack::BenchPack;
@@ -40,6 +41,12 @@ pub struct BenchRequest<'a> {
     pub scale: f64,
     /// Overrides every seed phase's declared worker count.
     pub seed_workers: Option<usize>,
+    /// Whether to compose and measure the pinned reference CDRs on this host
+    /// after the target's run, which is what makes the record submittable.
+    pub with_baselines: bool,
+    /// How the baseline orchestration reaches the container runtime. `None`
+    /// takes the `docker` CLI from `PATH`.
+    pub docker: Option<DockerCli>,
 }
 
 /// One finished bench run: the record, plus the two files it emits.
@@ -53,19 +60,33 @@ pub struct BenchOutcome {
 
 /// Drives one pack against a live system and returns its record.
 ///
+/// With `with_baselines` set the same pack, at the same seed and the same
+/// repetition count, is then driven against every pinned reference CDR on
+/// this host, and the record carries all of them plus the relative index
+/// derived from them.
+///
 /// # Errors
 /// [`Error::Instrument`] carrying the engine's own diagnostic, which already
-/// names the exchange or the phase that failed.
+/// names the exchange, the phase, or the baseline that failed. A missing
+/// container runtime is refused before the target is touched, so the flag
+/// never produces a half-anchored record.
 pub fn run_bench(
     request: &BenchRequest<'_>,
     progress: &(dyn Fn(String) + Sync),
 ) -> Result<BenchOutcome, Error> {
-    let result = run::execute(
+    let docker = request.docker.clone().unwrap_or_default();
+    if request.with_baselines {
+        let _version = docker
+            .probe()
+            .map_err(|error| Error::Instrument(format!("bench: {error}")))?;
+    }
+    let mut result = run::execute(
         &BenchRun {
             pack: request.pack,
             base_url: request.base_url,
             auth: request.auth,
             user: request.user,
+            credential: None,
             repetitions: request.repetitions,
             label: request.label,
             scale: request.scale,
@@ -74,6 +95,20 @@ pub fn run_bench(
         progress,
     )
     .map_err(|error| Error::Instrument(format!("bench: {error}")))?;
+    if request.with_baselines {
+        let baselines = run_baselines(
+            &BaselineRun {
+                pack: request.pack,
+                repetitions: request.repetitions,
+                scale: request.scale,
+                seed_workers: request.seed_workers,
+                docker: &docker,
+            },
+            progress,
+        )
+        .map_err(|error| Error::Instrument(format!("bench: {error}")))?;
+        result.attach_baselines(baselines);
+    }
     let document = result
         .to_document()
         .map_err(|error| Error::Instrument(format!("bench: {error}")))?;

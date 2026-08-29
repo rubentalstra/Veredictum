@@ -200,7 +200,8 @@ Run the universal speed benchmark against any reachable CDR.
 ```bash
 veredictum bench --base-url <URL> --out <OUT> \
     [--auth none|basic|bearer] [--user <USER>] [--pack <PACK>] \
-    [--repetitions <N>] [--scale <F>] [--seed-workers <N>] [--label <LABEL>]
+    [--repetitions <N>] [--scale <F>] [--seed-workers <N>] \
+    [--with-baselines] [--label <LABEL>]
 ```
 
 | Flag | Meaning |
@@ -213,6 +214,7 @@ veredictum bench --base-url <URL> --out <OUT> \
 | `--repetitions <N>` | How many times to repeat the measured phases. Default `3` |
 | `--scale <F>` | Multiply the pack's EHR count by this factor, for a shorter run. Default `1.0` |
 | `--seed-workers <N>` | Override the worker count every seed phase declares. Omit to run the pack's own value |
+| `--with-baselines` | Also measure the pinned reference CDRs on this host, and record the relative index |
 | `--label <LABEL>` | A label for this run, which names its column in a comparison |
 
 A bench run needs no artifact root, no IXIT and no party statement. The pack is
@@ -263,8 +265,48 @@ the exchange, so a half-measured document never exists.
 The run then seeds its corpus once and repeats the measured phases. Measured
 phases are open-loop: arrivals fire at their planned instants whatever the
 system is doing, and every latency is measured from the planned instant, so a
-stall shows up in every arrival queued behind it. A result with fewer than three
-repetitions is recorded as not submittable.
+stall shows up in every arrival queued behind it.
+
+### Same-machine baselines
+
+`--with-baselines` anchors the run. After the target's own measurement, the
+instrument composes each pinned reference CDR on this host, drives the same
+pack at the same seed for the same number of repetitions against it, and tears
+the stack down with its volumes so the next baseline starts from an empty
+database. The record then carries a baseline block per reference, each a full
+per-operation summary exactly like the target's, beside the digest-pinned
+images, the upstream deployment recipe the topology follows, and the container
+ceilings both stacks ran under. Every image is pinned by digest rather than by
+tag, so two submitters measure the same bytes.
+
+The flag needs the `docker` CLI. On a host where it does not answer the run is
+refused before the target is touched, with the missing binary named; a run
+without the flag needs no container runtime at all.
+
+### The relative index
+
+An absolute millisecond describes the system and the machine together, so two
+records taken on different hosts cannot be read against one another. The
+relative index can. For every phase, operation and metric it is the target's
+cross-repetition median divided by the baseline's, both measured on the same
+host in the same session, so the machine cancels. On a latency metric a value
+below `1.0` means the target answered faster than the baseline and above `1.0`
+slower; on throughput the sense inverts, because there a larger number is the
+faster system. Each ratio is serialized with the two medians it came from.
+
+Where no ratio can be formed the record says so and why: an operation only one
+side measured, a phase only one side ran, or a baseline median of zero. A gap
+is recorded rather than omitted, because a missing row in a comparison reads as
+agreement.
+
+### Submittability
+
+A record is submittable when it carries at least three repetitions and at least
+one same-machine baseline. A record that misses either stays valid for local
+exploration and names the requirements it misses, in the `submittable_unmet`
+list, in the rendered summary and in every `bench-compare` column header. The
+environment fingerprint prints on the summary header and in every comparison
+column, so no number is read without the machine it came from.
 
 A bench result is a benchmark record for comparative speed. It is not a
 conformance record, not a certificate, and not a performance-class rating; a
@@ -288,12 +330,20 @@ One column per file, one row per phase, operation and metric. Each cell carries
 the cross-repetition median with the inter-quartile range beside it, so a reader
 sees the spread as well as the number.
 
+Every column header carries the machine the run was generated on, and a column
+that is not submittable names the requirements it misses rather than printing
+one bare `false`. Where the columns carry a relative index, it gets its own
+table below the header, at `p50` and `p99` per baseline: that is the part which
+survives a change of host.
+
 A mismatch is stated above the table, never under it: columns that ran different
 pack versions, columns generated from different hosts, columns that ran at
 different scale factors or off the pack's pinned configuration, and columns whose
-runs carry too few repetitions to be submittable are all named in the header, and
-the command exits `1` when any of them applies. Each row also names the
-discipline its numbers came from.
+runs are not submittable are all named in the header, and the command exits `1`
+when any of them applies. Columns from different hosts where at least one
+carries no relative index are named too, because nothing in that table is
+comparable across them. Each row also names the discipline its numbers came
+from.
 
 ## stress-compare
 

@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::bench::BenchError;
 use crate::bench::fingerprint::EnvironmentFingerprint;
 use crate::bench::pack::BenchPack;
+use crate::bench::relative::RelativeIndex;
 
 /// The file stem a bench run writes its result under.
 pub const RESULT_FILE_STEM: &str = "bench-result";
@@ -30,6 +31,164 @@ pub const RESULT_FILE_STEM: &str = "bench-result";
 /// How many repetitions a result must carry before it may be submitted for
 /// comparison. One repetition measures a moment, not a system.
 pub const SUBMITTABLE_REPETITIONS: usize = 3;
+
+/// How many same-machine baselines a result must carry before it may be
+/// submitted. Without one, an absolute millisecond describes the machine as
+/// much as the system.
+pub const SUBMITTABLE_BASELINES: usize = 1;
+
+/// What a record must carry before it may be offered for ranking.
+///
+/// A closed vocabulary, so a non-submittable record says WHICH requirement it
+/// misses rather than only that it misses one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SubmissionRequirement {
+    /// At least [`SUBMITTABLE_REPETITIONS`] repetitions.
+    Repetitions,
+    /// At least [`SUBMITTABLE_BASELINES`] same-machine baseline block.
+    Baseline,
+}
+
+impl SubmissionRequirement {
+    /// Every requirement, in the order the schema enumerates them.
+    pub const ALL: &[SubmissionRequirement] = &[
+        SubmissionRequirement::Repetitions,
+        SubmissionRequirement::Baseline,
+    ];
+
+    /// The token the record names the requirement by.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            SubmissionRequirement::Repetitions => "repetitions",
+            SubmissionRequirement::Baseline => "baseline",
+        }
+    }
+
+    /// What the requirement asks for, as one sentence a rendered summary
+    /// prints beside the refusal.
+    #[must_use]
+    pub const fn statement(self) -> &'static str {
+        match self {
+            SubmissionRequirement::Repetitions => {
+                "at least 3 repetitions, because one repetition measures a moment rather than a system"
+            }
+            SubmissionRequirement::Baseline => {
+                "at least one same-machine baseline, because an absolute number without an anchor describes the machine as much as the system"
+            }
+        }
+    }
+
+    /// Reads one token from the closed vocabulary.
+    ///
+    /// # Errors
+    /// [`BenchError::UnknownToken`] listing the accepted tokens.
+    pub fn parse(token: &str) -> Result<Self, BenchError> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|requirement| requirement.as_str() == token)
+            .ok_or_else(|| BenchError::UnknownToken {
+                vocabulary: "submission requirement",
+                token: token.to_owned(),
+                accepted: Self::ALL
+                    .iter()
+                    .map(|requirement| requirement.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            })
+    }
+}
+
+impl fmt::Display for SubmissionRequirement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for SubmissionRequirement {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for SubmissionRequirement {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let token = String::deserialize(deserializer)?;
+        SubmissionRequirement::parse(&token).map_err(serde::de::Error::custom)
+    }
+}
+
+/// The upstream deployment recipe a baseline's topology follows.
+///
+/// The reference is an immutable tag rather than a branch, so the topology a
+/// reader fetches is the one the baseline ran.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecipeReference {
+    /// The repository the recipe lives in.
+    pub repository: String,
+    /// The immutable tag the recipe is read at.
+    pub git_ref: String,
+    /// The recipe file within that repository.
+    pub file: String,
+}
+
+/// The container ceilings a baseline was composed under.
+///
+/// Every baseline in a record takes the same ceilings; a baseline handed more
+/// CPU than its sibling measures the ceiling rather than the CDR.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BaselineResources {
+    /// The server container's CPU limit, as compose states it.
+    pub server_cpus: String,
+    /// The server container's memory limit.
+    pub server_memory: String,
+    /// The database container's CPU limit.
+    pub database_cpus: String,
+    /// The database container's memory limit.
+    pub database_memory: String,
+    /// The database container's shared-memory size.
+    pub database_shm_size: String,
+}
+
+/// One reference CDR measured on the same host, in the same session, by the
+/// same pack at the same seed.
+///
+/// The measured half is exactly the target's: the same seed phases, the same
+/// repetitions, the same cross-repetition summary, so the two sides of a
+/// ratio are the same statistic.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BaselineRecord {
+    /// The reference CDR token.
+    pub cdr: String,
+    /// That reference's human-readable name.
+    pub display_name: String,
+    /// The digest-pinned images composed, keyed by role.
+    pub images: BTreeMap<String, String>,
+    /// The upstream deployment recipe the topology follows.
+    pub recipe: RecipeReference,
+    /// The container ceilings the stack was composed under.
+    pub resources: BaselineResources,
+    /// The base URL the pack was driven over.
+    pub base_url: String,
+    /// The version the baseline disclosed about itself, when it disclosed
+    /// one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sut_version: Option<String>,
+    /// When the baseline run started, RFC 3339.
+    pub started_at: String,
+    /// When it finished, RFC 3339.
+    pub finished_at: String,
+    /// The executed bulk loads, in execution order.
+    pub seed_phases: Vec<SeedPhaseRecord>,
+    /// Every repetition, in execution order.
+    pub repetitions: Vec<RepetitionRecord>,
+    /// The cross-repetition summary, keyed by phase name.
+    pub cross: BTreeMap<String, CrossPhase>,
+}
 
 /// Which load regime produced a phase's numbers.
 ///
@@ -506,21 +665,70 @@ pub struct BenchResult {
     pub repetitions: Vec<RepetitionRecord>,
     /// The cross-repetition summary, keyed by phase name.
     pub cross: BTreeMap<String, CrossPhase>,
+    /// The same-machine reference runs, in the order they were composed.
+    /// Empty for a run that measured only its target.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub baselines: Vec<BaselineRecord>,
+    /// The target measured against every baseline, one block each.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relative: Vec<RelativeIndex>,
     /// What the numbers mean.
     pub methodology: Methodology,
-    /// Whether the run carries enough repetitions to be offered for
-    /// comparison ([`SUBMITTABLE_REPETITIONS`] or more).
+    /// Whether the run meets every submission requirement.
     pub submittable: bool,
+    /// The requirements it does not meet, so a refusal names its reasons
+    /// rather than leaving a reader to guess which one fired. Empty exactly
+    /// when `submittable` is true.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub submittable_unmet: Vec<SubmissionRequirement>,
     /// Reserved for the posture profile a run declares. Always absent here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub posture: Option<serde_json::Value>,
 }
 
 impl BenchResult {
-    /// Whether the run carries enough repetitions to be submittable.
+    /// The submission requirements this run does not meet, in the order
+    /// [`SubmissionRequirement::ALL`] lists them.
+    #[must_use]
+    pub fn unmet_requirements(&self) -> Vec<SubmissionRequirement> {
+        SubmissionRequirement::ALL
+            .iter()
+            .copied()
+            .filter(|requirement| match requirement {
+                SubmissionRequirement::Repetitions => {
+                    self.repetitions.len() < SUBMITTABLE_REPETITIONS
+                }
+                SubmissionRequirement::Baseline => self.baselines.len() < SUBMITTABLE_BASELINES,
+            })
+            .collect()
+    }
+
+    /// Whether the run meets every submission requirement.
     #[must_use]
     pub fn is_submittable(&self) -> bool {
-        self.repetitions.len() >= SUBMITTABLE_REPETITIONS
+        self.unmet_requirements().is_empty()
+    }
+
+    /// Records the same-machine baselines, derives the relative index against
+    /// each, and re-decides submittability.
+    ///
+    /// The relative index is derived here rather than measured, so it stays a
+    /// pure function of the two cross-repetition summaries already in the
+    /// document.
+    pub fn attach_baselines(&mut self, baselines: Vec<BaselineRecord>) {
+        self.relative = baselines
+            .iter()
+            .map(|baseline| crate::bench::relative::derive(&self.cross, baseline))
+            .collect();
+        self.baselines = baselines;
+        self.settle_submittability();
+    }
+
+    /// Re-decides `submittable` and its unmet list from what the record now
+    /// carries.
+    pub fn settle_submittability(&mut self) {
+        self.submittable_unmet = self.unmet_requirements();
+        self.submittable = self.submittable_unmet.is_empty();
     }
 
     /// The document's canonical text: two-space pretty print, trailing
@@ -659,5 +867,152 @@ mod tests {
     fn the_file_name_follows_the_label() {
         assert_eq!(slug("EHRbase 2.x / run A"), "ehrbase-2-x---run-a");
         assert_eq!(slug("---"), "");
+    }
+
+    /// Every submission-requirement token round-trips, and an unknown one is
+    /// refused rather than read as a met requirement.
+    #[test]
+    fn every_submission_requirement_token_round_trips() -> Result<(), Box<dyn std::error::Error>> {
+        for requirement in SubmissionRequirement::ALL {
+            assert_eq!(
+                SubmissionRequirement::parse(requirement.as_str())?,
+                *requirement
+            );
+            let text = serde_json::to_string(requirement)?;
+            let back: SubmissionRequirement = serde_json::from_str(&text)?;
+            assert_eq!(back, *requirement);
+            assert!(!requirement.statement().is_empty());
+        }
+        assert!(SubmissionRequirement::parse("vibes").is_err());
+        Ok(())
+    }
+
+    /// A record with three repetitions and no baseline names the baseline
+    /// requirement, and attaching one clears it.
+    #[test]
+    fn submittability_names_the_requirement_it_misses() {
+        let mut result = minimal_result(3);
+        result.settle_submittability();
+        assert!(!result.submittable);
+        assert_eq!(
+            result.submittable_unmet,
+            vec![SubmissionRequirement::Baseline]
+        );
+        result.attach_baselines(vec![empty_baseline()]);
+        assert!(result.submittable, "{:?}", result.submittable_unmet);
+        assert!(result.submittable_unmet.is_empty());
+    }
+
+    /// A single-repetition record with no baseline misses BOTH requirements,
+    /// and says so rather than reporting one bare false.
+    #[test]
+    fn a_thin_record_names_every_requirement_it_misses() {
+        let mut result = minimal_result(1);
+        result.settle_submittability();
+        assert_eq!(
+            result.submittable_unmet,
+            vec![
+                SubmissionRequirement::Repetitions,
+                SubmissionRequirement::Baseline
+            ]
+        );
+        assert!(!result.is_submittable());
+    }
+
+    /// Attaching a baseline derives one relative-index block per baseline,
+    /// which is what a reader compares across machines.
+    #[test]
+    fn attaching_a_baseline_derives_its_relative_index() {
+        let mut result = minimal_result(3);
+        result.attach_baselines(vec![empty_baseline()]);
+        assert_eq!(result.relative.len(), 1);
+        assert_eq!(
+            result.relative.first().map(|index| index.baseline.as_str()),
+            Some("ehrbase")
+        );
+    }
+
+    /// A result whose baselines are absent serializes without the new keys,
+    /// so a consumer of the previous shape still reads it.
+    #[test]
+    fn a_baseline_free_record_omits_the_new_keys() -> Result<(), Box<dyn std::error::Error>> {
+        let mut result = minimal_result(3);
+        result.settle_submittability();
+        let text = result.to_document()?;
+        assert!(!text.contains("\"baselines\""), "{text}");
+        assert!(!text.contains("\"relative\""), "{text}");
+        assert!(text.contains("\"submittable_unmet\""), "{text}");
+        let back: BenchResult = serde_json::from_str(&text)?;
+        assert_eq!(back, result);
+        Ok(())
+    }
+
+    /// A record carrying nothing but the fields the submittability decision
+    /// reads, at the requested repetition count.
+    fn minimal_result(repetitions: usize) -> BenchResult {
+        BenchResult {
+            schema_version: "0".to_owned(),
+            boundary_statement: crate::bench::BOUNDARY_STATEMENT.to_owned(),
+            label: None,
+            pack: PackRecord {
+                id: "smoke".to_owned(),
+                version: "1.0.0".to_owned(),
+                description: "a pack".to_owned(),
+                seed: 1,
+                fixtures: BTreeMap::new(),
+            },
+            target: TargetRecord {
+                base_url: "http://sut.invalid/openehr/v1".to_owned(),
+                sut_version: None,
+            },
+            environment: EnvironmentFingerprint::detect(),
+            started_at: "2026-08-29T00:00:00Z".to_owned(),
+            finished_at: "2026-08-29T00:01:00Z".to_owned(),
+            scale: ScaleRecord::default(),
+            version_at_time: None,
+            seed_phases: Vec::new(),
+            repetitions: (1..=repetitions)
+                .map(|index| RepetitionRecord {
+                    repetition: u32::try_from(index).unwrap_or(1),
+                    phases: BTreeMap::new(),
+                    sweeps: BTreeMap::new(),
+                })
+                .collect(),
+            cross: BTreeMap::new(),
+            baselines: Vec::new(),
+            relative: Vec::new(),
+            methodology: Methodology {
+                statement: crate::bench::METHODOLOGY.to_owned(),
+                open_loop: true,
+                coordinated_omission_free: true,
+                seed_once_measure_n: true,
+                repetitions: u32::try_from(repetitions).unwrap_or(1),
+            },
+            submittable: false,
+            submittable_unmet: Vec::new(),
+            posture: None,
+        }
+    }
+
+    /// A baseline block carrying only the provenance a record must disclose.
+    fn empty_baseline() -> BaselineRecord {
+        BaselineRecord {
+            cdr: "ehrbase".to_owned(),
+            display_name: "EHRbase".to_owned(),
+            images: BTreeMap::new(),
+            recipe: RecipeReference {
+                repository: "https://example.invalid/cdr".to_owned(),
+                git_ref: "v1.0.0".to_owned(),
+                file: "docker-compose.yml".to_owned(),
+            },
+            resources: crate::bench::baselines::pinned_resources(),
+            base_url: "http://127.0.0.1:18091/ehrbase/rest/openehr/v1".to_owned(),
+            sut_version: None,
+            started_at: "2026-08-29T00:02:00Z".to_owned(),
+            finished_at: "2026-08-29T00:03:00Z".to_owned(),
+            seed_phases: Vec::new(),
+            repetitions: Vec::new(),
+            cross: BTreeMap::new(),
+        }
     }
 }
