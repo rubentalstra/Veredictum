@@ -19,6 +19,11 @@ version on.
 ## [Unreleased]
 
 ### Added
+- Register entries AMB-223 and AMB-224 (#206): the BMM type-conformance
+  algorithm's missing simple-descendant-of-generic-ancestor rule (report_only,
+  upstream #211) and ADL 1.4's stated {1..1} existence default that the
+  published corpus contradicts (fixed_handling — an unstated existence defers
+  to the RM's effective existence; upstream #212).
 - **Bench posture profiles, with bracketed canaries (#165).** Two speed numbers
   are comparable only when the same features were switched on behind them, so
   every embedded pack now defines named posture profiles and a run declares

@@ -9911,3 +9911,51 @@ AMB-222:
     no case asserts it.
   disposition: fixed_handling
   upstream_issue: 195
+AMB-223:
+  ambiguity: >-
+    The published BMM type-conformance algorithm has no rule for a
+    NON-GENERIC descendant of a GENERIC ancestor: its closing arm returns
+    `not valid_generic_type_name (anc_type)` under the comment "the
+    descendant type is not generic, so the ancestor type cannot be either,
+    for conformance", so Multiplicity_interval (is_a Interval<Integer>)
+    conforms to Interval<Ordered> NEVER under the released text. The spec
+    author confirmed on the openEHR forum (discourse t/11940) that the
+    conformance is intended — a forum confirmation, not published text.
+  source: >-
+    LANG docs/bmm/master05-core-types.adoc §Type Conformance (the published
+    algorithm's else-arm and its own comment, read first-hand 2026-08-29);
+    the section's three substitution rules, none covering the case. First
+    reported by FerroEHR (their tracker #2921, which implements the three
+    published rules verbatim with the negative case pinned as deliberate).
+  handling: >-
+    Report only: no catalogue case gates on BMM type conformance, so a SUT
+    following the published algorithm verbatim is recorded, never failed,
+    and a SUT implementing the forum-confirmed intent is recorded the same
+    way — until upstream publishes the fourth rule, both readings stand.
+  disposition: report_only
+  upstream_issue: 211
+AMB-224:
+  ambiguity: >-
+    ADL 1.4 states a default existence of {1..1} where none is shown, and
+    the published archetype corpus contradicts it wholesale: CKM's own
+    blood_pressure.v2 carries no explicit existence anywhere, so the literal
+    default makes every RM-optional constrained attribute mandatory and
+    VCAEX fails essentially every published archetype. The ADL 2
+    formalization and every published tool read an unstated existence as
+    deferring to the RM's effective existence (community convergence,
+    discourse t/17187).
+  source: >-
+    AM docs/ADL1.4/master05-cadl.adoc §existence ("The default existence
+    constraint, if none is shown, is {1..1}", read first-hand 2026-08-29);
+    the vendored CKM corpus this catalogue uploads, whose archetypes state
+    no existence on RM-optional attributes. First reported by FerroEHR
+    (their tracker #2923, which checks VCAEX only on stated constraints,
+    documented as deliberate).
+  handling: >-
+    Fixed handling: the schedule reads an unstated ADL 1.4 existence as the
+    RM's effective existence — the only reading under which the released
+    corpus the catalogue itself uploads is valid at all. No upload-validation
+    case expects a refusal manufactured by the literal default, and a SUT
+    checking VCAEX only on STATED constraints is conformant.
+  disposition: fixed_handling
+  upstream_issue: 212
