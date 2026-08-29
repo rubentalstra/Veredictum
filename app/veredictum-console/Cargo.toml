@@ -30,7 +30,7 @@ path = "src/main.rs"
 # release is always reproducible by a third party from published artifacts.
 # Server-only: the lib carries the blocking driver and its native deps, and
 # nothing of it may enter the WASM bundle.
-veredictum = { version = "=0.1.0-alpha.6", optional = true }
+veredictum = { version = "=0.1.0", optional = true }
 # The pasted claim is held to the PUBLISHED statement schema, not only to
 # serde's leniency: the same validator crate the engine uses, over the
 # schema document the engine's own `schema` module emits (#101).
