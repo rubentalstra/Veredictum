@@ -1,0 +1,80 @@
+# The DELETE half of the deactivated-EHR refusal. A logical delete is a write:
+# RM common master06-change_control_package.adoc §Logical Deletion commits a new
+# VERSION and sets "the `_lifecycle_state_` value to the code for `deleted`". RM
+# ehr master04-ehr_package.adoc §EHR Active Status scopes the flag to the
+# contents rather than to a method — "An EHR's 'contents' consist of everything
+# other than the `EHR_STATUS` object, i.e. its Compositions … its hierarchical
+# Folders" — and RM UML/classes/ehr_status.adoc §Attributes states the
+# permission: "True if the EHR, other than the EHR_STATUS object, is allowed to
+# be written to." So the delete is refused while is_modifiable is false.
+#
+# SPEC SILENCE on the CODE, adjudicated as AMB-82 (fixed_handling): the ITS-REST
+# docs text never mentions `is_modifiable` outside the EHR-creation defaults, and
+# the 409 `composition_delete.yaml` DOES declare is a different cause — the
+# released OAS `responses/409_COMPOSITION_with_uid_based_id.yaml` scopes it to
+# "when supplied `uid_based_id` doesn't match the latest version" and ties an
+# entity tag to that. The step therefore drives the `ehr_not_modifiable` binding
+# variant, which declares the AMB-82 refusal with no entity-tag claim.
+#
+# Step 5 keeps the refusal honest: the composition is still served as live
+# content (200, not the 204 a logically deleted latest would give).
+id: I_EHR_COMPOSITION.delete_composition-ehr_not_modifiable
+kind: functional
+component: EHR_COMPOSITION
+sm_operation: I_EHR_COMPOSITION.delete_composition
+capabilities: [CompositionOps]
+exercises: [EhrStatus]
+profiles: [CORE]
+ambiguities: [AMB-82]
+test_purpose: >-
+  Deleting a COMPOSITION in an EHR whose EHR_STATUS.is_modifiable is false is
+  refused as a conflict with the EHR's deactivated state, and commits no
+  deleted version.
+description: "Delete a COMPOSITION in a deactivated EHR"
+spec_refs:
+  - "RM ehr §EHR Active Status (master04 — is_modifiable scopes to Compositions and hierarchical Folders)"
+  - "RM UML/classes/ehr_status §Attributes (is_modifiable — the write permission)"
+  - "RM common §change_control (master06 — logical deletion commits a new version)"
+  - "ITS-REST overview Requests_and_responses §HTTP status codes"
+  - "SM openehr_platform §I_EHR_COMPOSITION.delete_composition"
+  - "SM openehr_platform §I_EHR_STATUS.clear_ehr_modifiable"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  templates: [cnf.opt.minimal_event]
+  ehr: { commits: none }                 # mints ${ehr_id}; its EHR_STATUS v1 is is_modifiable = true
+data_sets: [cnf.composition.minimal_event.v1]
+flow:
+  - step: 1                              # the COMPOSITION to delete, committed while the EHR is still active
+    call: create_composition
+    with: { ehr_id: "${ehr_id}", composition: "${ds:cnf.composition.minimal_event.v1}" }
+    expect: created
+    capture:
+      preceding_version_uid: created.version_uid
+      versioned_object_uid: created.versioned_object_uid
+  - step: 2
+    call: I_EHR_STATUS.get_ehr_status    # the payload the PUT modifies + the If-Match precondition
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid, status_body: ok.body }
+  - step: 3                              # deactivate: is_modifiable -> false
+    call: I_EHR_STATUS.clear_ehr_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    expect: updated
+  - step: 4                              # the path names the LATEST version: only the deactivation refuses this DELETE
+    call: delete_composition
+    variant: ehr_not_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${preceding_version_uid}" }
+    expect: conflict
+  - step: 5                              # nothing was committed: the composition is still live content
+    call: get_composition_latest
+    with: { ehr_id: "${ehr_id}", versioned_object_uid: "${versioned_object_uid}" }
+    expect: ok
+    assert:
+      - { assert: equivalent, to: "${ds:cnf.composition.minimal_event.v1}", ignoring: server_assigned }
+postconditions:
+  - assert: state
+    text: >-
+      The refused delete committed no deleted version: the deactivated EHR still
+      serves the COMPOSITION as live content (verified by step 5)
+  - { assert: version, count: 1 }

@@ -1,0 +1,74 @@
+# The DELETE half of the deactivated-EHR refusal on the directory route. A
+# logical delete is a write: RM common master06-change_control_package.adoc
+# §Logical Deletion commits a new VERSION and sets "the `_lifecycle_state_`
+# value to the code for `deleted`". RM ehr master04-ehr_package.adoc §EHR Active
+# Status names hierarchical Folders among the contents the flag governs, and RM
+# UML/classes/ehr_status.adoc §Attributes states the permission: "True if the
+# EHR, other than the EHR_STATUS object, is allowed to be written to." So the
+# delete is refused while is_modifiable is false.
+#
+# SPEC SILENCE on the CODE, adjudicated as AMB-82 (fixed_handling): the ITS-REST
+# docs text never mentions `is_modifiable` outside the EHR-creation defaults and
+# `directory_delete.yaml` declares no branch for a deactivated EHR. The
+# register's fixed handling is 409, the row ITS-REST overview
+# Requests_and_responses.md §HTTP status codes describes as "Indicates that the
+# request could not be processed because it might generate a duplicate or a
+# conflict".
+#
+# Step 5 keeps the refusal honest: the directory is still served as live content
+# (200, not the 204 a logically deleted latest would give).
+id: I_EHR_DIRECTORY.delete_directory-ehr_not_modifiable
+kind: functional
+component: EHR_DIRECTORY
+sm_operation: I_EHR_DIRECTORY.delete_directory
+capabilities: [DirectoryOps]
+exercises: [EhrStatus]
+profiles: [STANDARD]
+ambiguities: [AMB-82]
+test_purpose: >-
+  Deleting the directory of an EHR whose EHR_STATUS.is_modifiable is false is
+  refused as a conflict with the EHR's deactivated state, and commits no
+  deleted version.
+description: "Delete the directory of a deactivated EHR"
+spec_refs:
+  - "RM ehr §EHR Active Status (master04 — is_modifiable scopes to Compositions and hierarchical Folders)"
+  - "RM UML/classes/ehr_status §Attributes (is_modifiable — the write permission)"
+  - "RM common §change_control (master06 — logical deletion commits a new version)"
+  - "ITS-REST overview Requests_and_responses §HTTP status codes"
+  - "SM openehr_platform §I_EHR_DIRECTORY.delete_directory"
+  - "SM openehr_platform §I_EHR_STATUS.clear_ehr_modifiable"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  ehr: { commits: none }                 # mints ${ehr_id}; its EHR_STATUS v1 is is_modifiable = true
+data_sets: [cnf.directory.root_only]
+flow:
+  - step: 1                              # the directory to delete, committed while the EHR is still active
+    call: create_directory
+    with: { ehr_id: "${ehr_id}", directory: "${ds:cnf.directory.root_only}" }
+    expect: created
+    capture: { preceding_version_uid: created.version_uid }
+  - step: 2
+    call: I_EHR_STATUS.get_ehr_status    # the payload the PUT modifies + the If-Match precondition
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid, status_body: ok.body }
+  - step: 3                              # deactivate: is_modifiable -> false
+    call: I_EHR_STATUS.clear_ehr_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    expect: updated
+  - step: 4                              # the precondition is CURRENT: only the deactivation refuses this DELETE
+    call: delete_directory
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${preceding_version_uid}" }
+    expect: conflict
+  - step: 5                              # nothing was committed: the directory is still live content
+    call: get_directory
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    assert:
+      - { assert: equivalent, to: "${ds:cnf.directory.root_only}", ignoring: server_assigned }
+postconditions:
+  - assert: state
+    text: >-
+      The refused delete committed no deleted version: the deactivated EHR still
+      serves its directory as live content (verified by step 5)

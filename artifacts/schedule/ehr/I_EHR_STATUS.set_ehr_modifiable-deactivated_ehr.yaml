@@ -1,0 +1,62 @@
+# The CARVE-OUT that makes a deactivated EHR recoverable, and the positive twin
+# of the AMB-82 refusal rows. RM UML/classes/ehr_status.adoc §Attributes states
+# both halves in one sentence: "True if the EHR, other than the EHR_STATUS
+# object, is allowed to be written to. The EHR_STATUS object itself can always
+# be written to." RM ehr master04-ehr_package.adoc §EHR Active Status draws the
+# same boundary from the other side: "An EHR's 'contents' consist of everything
+# other than the `EHR_STATUS` object". RM UML/classes/ehr_status.adoc §EHR_STATUS
+# Class says why: "This object is always modifiable, in order to change the
+# status of the EHR as a whole."
+#
+# So the write the content routes are refused for (register AMB-82) must
+# SUCCEED here, and it is the only route by which a deactivated EHR is ever
+# reactivated. A server that gates the EHR_STATUS PUT on is_modifiable strands
+# the EHR permanently, which is exactly what this row catches; the refusal rows
+# on the composition and directory routes are the other side of the same
+# boundary.
+id: I_EHR_STATUS.set_ehr_modifiable-deactivated_ehr
+kind: functional
+component: EHR
+sm_operation: I_EHR_STATUS.set_ehr_modifiable
+capabilities: [EhrStatus]
+profiles: [CORE]
+test_purpose: >-
+  The EHR_STATUS of an EHR whose is_modifiable is false is still writable, so
+  set_ehr_modifiable reactivates the EHR.
+description: "Set EHR modifiable on a deactivated EHR (the EHR_STATUS carve-out)"
+spec_refs:
+  - "RM UML/classes/ehr_status §Attributes (is_modifiable — the EHR_STATUS object itself can always be written to)"
+  - "RM UML/classes/ehr_status §EHR_STATUS Class (always modifiable, to change the status of the EHR as a whole)"
+  - "RM ehr §EHR Active Status (master04 — the contents are everything other than the EHR_STATUS object)"
+  - "SM openehr_platform §I_EHR_STATUS.set_ehr_modifiable"
+  - "SM openehr_platform §I_EHR_STATUS.clear_ehr_modifiable"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  ehr: { commits: none }                 # mints ${ehr_id}; its EHR_STATUS v1 is is_modifiable = true
+flow:
+  - step: 1
+    call: I_EHR_STATUS.get_ehr_status    # the payload the PUT modifies + the If-Match precondition
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid, status_body: ok.body }
+  - step: 2                              # deactivate: is_modifiable -> false
+    call: I_EHR_STATUS.clear_ehr_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    expect: updated
+    capture: { deactivated_version_uid: updated.status_version_uid }
+  - step: 3                              # the write the content routes refuse: on EHR_STATUS it must succeed
+    call: set_ehr_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${deactivated_version_uid}" }
+    expect: updated
+  - step: 4                              # in-case verification: the EHR is active again
+    call: I_EHR_STATUS.get_ehr_status
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    assert:
+      - { assert: field, path: "is_modifiable", equals: true }
+postconditions:
+  - assert: state
+    text: >-
+      The EHR_STATUS of a deactivated EHR is writable, and writing it set
+      is_modifiable back to true (verified by step 4)

@@ -58,6 +58,17 @@ outcomes:
     status: 412                           # 412_directory.yaml (stale If-Match)
     headers: { ETag: latest-version-uid }
   precondition_missing: { status: 400 }   # If-Match absent when required -> 400.yaml (overview Requests_and_responses)
+  conflict:
+    # A content write into a DEACTIVATED EHR. RM ehr master04 §EHR Active
+    # Status refuses writes to "everything other than the EHR_STATUS object"
+    # while `is_modifiable` is false, naming hierarchical Folders alongside
+    # Compositions; no released ITS-REST sentence assigns the refusal a code
+    # and `directory_update.yaml` declares no such branch, so register AMB-82
+    # carries the adjudicated 409 — the overview §HTTP status codes row for a
+    # request that "could not be processed because it might generate a
+    # duplicate or a conflict" with the resource's state.
+    status: 409
+    body: error_loose                     # ITS-REST overview §HTTP status codes — for 4xx/5xx, services MAY return additional error details if Prefer: return=representation
   not_found: { status: 404 }              # unknown ehr_id, or an EHR with no directory to update (RM ehr §EHR.directory 0..1) — ITS-REST overview §HTTP status codes: 404 = target resource not found; If-Match precedence per RFC 9110 §13.2.1 ("A server MUST ignore all received preconditions if its response to the same request without those conditions … would have been a status code other than a 2xx … or 412")
 captures:
   version_uid:

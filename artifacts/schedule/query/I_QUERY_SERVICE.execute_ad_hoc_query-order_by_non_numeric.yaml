@@ -1,0 +1,147 @@
+# ORDER BY over a NON-NUMERIC ordered path. The released text never restricts
+# the sorting expression to a number — QUERY AQL master03-syntax §ORDER BY:
+# "Sorting rows assumes that data identified by the path (from the sorting
+# expression) are comparable. It implies the use of a specific operators like
+# _equal_, _less-than_ and _greater-than_ (all available to primitives and
+# `Ordered` types) on data identified by path", and its own worked example is
+# `ORDER BY c/name/value DESC`, a DV_TEXT path. Two further sentences of the
+# same section are asserted here: "When sorting type is not specified, `ASC`
+# (ascending) is assumed by default", and "Multiple sorting expressions are
+# separated using a comma. If two rows are equal according to the leftmost
+# expression, they are compared according to the next sorting expression."
+#
+# The two paths are the DV_DATE_TIME context time and the DV_TEXT composition
+# name, both fixed by the digest-pinned recipe contract: composition k carries
+# the event time 2026-01-01T0k:00:00Z and the name "blood pressure k", so both
+# orderings are total and the two agree, and the OBSERVATION name is the same
+# on all ten, which is what makes step 4's tie-break decisive.
+#
+# The projection is the ORDERED VALUE itself rather than the uid, so a red row
+# names the ordering and nothing about identifier minting.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-order_by_non_numeric
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+test_purpose: >-
+  ORDER BY sorts on a non-numeric ordered path — a DV_DATE_TIME value and a
+  DV_TEXT value — ascending by default, descending on DESC, and resolves ties
+  on the leftmost expression with the next sorting expression.
+description: "AQL ORDER BY over a non-numeric ordered path (DV_DATE_TIME, DV_TEXT)"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §ORDER BY"
+  - "QUERY AQL master03-syntax §Identified Paths"
+  - "QUERY AQL master03-syntax §Name alias"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # generated: event times 2026-01-01T00..09:00:00Z, names "blood pressure 0".."9"
+flow:
+  - step: 1                                 # no sorting type given: ASC is assumed
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/context/start_time/value AS t
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        ORDER BY c/context/start_time/value
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - assert: result_set
+        match: ordered
+        columns: [{ name: t }]
+        rows:
+          - ["2026-01-01T00:00:00Z"]
+          - ["2026-01-01T01:00:00Z"]
+          - ["2026-01-01T02:00:00Z"]
+          - ["2026-01-01T03:00:00Z"]
+          - ["2026-01-01T04:00:00Z"]
+          - ["2026-01-01T05:00:00Z"]
+          - ["2026-01-01T06:00:00Z"]
+          - ["2026-01-01T07:00:00Z"]
+          - ["2026-01-01T08:00:00Z"]
+          - ["2026-01-01T09:00:00Z"]
+  - step: 2                                 # DESC on the same DV_DATE_TIME path
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/context/start_time/value AS t
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        ORDER BY c/context/start_time/value DESC
+      fetch: 100
+    expect: ok
+    assert:
+      - assert: result_set
+        match: ordered
+        columns: [{ name: t }]
+        rows:
+          - ["2026-01-01T09:00:00Z"]
+          - ["2026-01-01T08:00:00Z"]
+          - ["2026-01-01T07:00:00Z"]
+          - ["2026-01-01T06:00:00Z"]
+          - ["2026-01-01T05:00:00Z"]
+          - ["2026-01-01T04:00:00Z"]
+          - ["2026-01-01T03:00:00Z"]
+          - ["2026-01-01T02:00:00Z"]
+          - ["2026-01-01T01:00:00Z"]
+          - ["2026-01-01T00:00:00Z"]
+  - step: 3                                 # the spec's own example shape: ORDER BY a DV_TEXT value DESC
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/name/value AS n
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        ORDER BY c/name/value DESC
+      fetch: 100
+    expect: ok
+    assert:
+      - assert: result_set
+        match: ordered
+        columns: [{ name: n }]
+        rows:
+          - ["blood pressure 9"]
+          - ["blood pressure 8"]
+          - ["blood pressure 7"]
+          - ["blood pressure 6"]
+          - ["blood pressure 5"]
+          - ["blood pressure 4"]
+          - ["blood pressure 3"]
+          - ["blood pressure 2"]
+          - ["blood pressure 1"]
+          - ["blood pressure 0"]
+  - step: 4                                 # every row ties on the leftmost expression: the next one decides
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT o/name/value AS obs, c/name/value AS n
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        CONTAINS OBSERVATION o [openEHR-EHR-OBSERVATION.blood_pressure.v2]
+        ORDER BY o/name/value ASC, c/name/value DESC
+      fetch: 100
+    expect: ok
+    assert:
+      - assert: result_set
+        match: ordered
+        columns: [{ name: obs }, { name: n }]
+        rows:
+          - ["Blood pressure", "blood pressure 9"]
+          - ["Blood pressure", "blood pressure 8"]
+          - ["Blood pressure", "blood pressure 7"]
+          - ["Blood pressure", "blood pressure 6"]
+          - ["Blood pressure", "blood pressure 5"]
+          - ["Blood pressure", "blood pressure 4"]
+          - ["Blood pressure", "blood pressure 3"]
+          - ["Blood pressure", "blood pressure 2"]
+          - ["Blood pressure", "blood pressure 1"]
+          - ["Blood pressure", "blood pressure 0"]
+postconditions:
+  - assert: state
+    text: >-
+      A non-numeric ordered path sorts under the same ORDER BY rules as a
+      numeric one: ascending by default, descending on DESC, and a tie on the
+      leftmost sorting expression resolved by the next one.

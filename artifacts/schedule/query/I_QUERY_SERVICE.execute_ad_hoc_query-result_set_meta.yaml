@@ -1,0 +1,93 @@
+# The RESULT_SET `meta` object, asserted exactly as far as the released ground
+# reaches and no further.
+#
+# PRESENCE IS NOT ASSERTABLE. ITS-REST specifications/docs/query/Response.md
+# §Metadata is the docs text and it is explicit: "RESULT_SET metadata comprise
+# a set of optional (implementation dependent) attributes, useful for
+# debugging." The released OAS schemas/query/ResultSetMetadata.yaml, cited AS
+# the OAS, marks nothing `required` and sets `additionalProperties: true`, so a
+# service may omit every member and may carry members of its own. A row that
+# required `_type`, `_schema_version`, `_created` or `_generator` would fail a
+# conformant service, and one that required a member the released schema does
+# not declare at all would be asserting a foreign product's shape. Register
+# AMB-221 already fixes the wire floor for the envelope: rows required, columns
+# and meta optional.
+#
+# WHAT IS ASSERTABLE is the SHAPE of a member the service does serve, which the
+# same OAS file states:
+#   - `_executed_aql`: "The actual AQL query that was executed by the server,
+#     after replacing the query parameters." After replacement the bound VALUE
+#     stands where the `$` parameter stood, so the executed text carries the
+#     value and the two steps below bind two different ones. A service that
+#     echoes the submitted `q` unchanged serves the parameter marker instead
+#     and fails; a service that omits the member passes, which is what
+#     "implementation dependent" requires.
+#   - `_created`: `type: string`, `format: date-time`, "Result creation time
+#     (in the extended ISO 8601 format)" — hyphen-separated date, `T`,
+#     colon-separated time, whatever fraction and offset follow.
+# Both ride the `absent_or_matches` predicate, which holds when the member is
+# absent and judges its shape when it is present.
+#
+# The parameter binding is also what makes each step's row count a fact: the
+# recipe contract fixes systolic k at 100 + 10k, so >= 170 selects three
+# compositions and >= 140 selects six.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-result_set_meta
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+ambiguities: [AMB-221]
+test_purpose: >-
+  RESULT_SET metadata members are optional, and a service that serves
+  `_executed_aql` serves the query it actually executed, with the query
+  parameters replaced, while a served `_created` carries an extended ISO 8601
+  date-time.
+description: "RESULT_SET meta members are optional and, when served, carry their declared shape"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "ITS-REST query §Response details (Metadata)"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+  - "QUERY AQL master03-syntax §Parameters"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # generated: systolic 100,110,…,190
+flow:
+  - step: 1                                 # $systolicMin bound to 170: three compositions, and 170 in the executed text
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        CONTAINS OBSERVATION o [openEHR-EHR-OBSERVATION.blood_pressure.v2]
+        WHERE o/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude >= $systolicMin
+      query_parameters: { systolicMin: 170 }
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 3 }   # 170, 180, 190
+      - { assert: field, path: "meta/_executed_aql", absent_or_matches: "170" }
+      - { assert: field, path: "meta/_created", absent_or_matches: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}' }
+  - step: 2                                 # the SAME query text, a different bind: the executed text moves with it
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        CONTAINS OBSERVATION o [openEHR-EHR-OBSERVATION.blood_pressure.v2]
+        WHERE o/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude >= $systolicMin
+      query_parameters: { systolicMin: 140 }
+      fetch: 100
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 6 }   # 140 … 190
+      - { assert: field, path: "meta/_executed_aql", absent_or_matches: "140" }
+postconditions:
+  - assert: state
+    text: >-
+      No RESULT_SET metadata member is required of a service, and the two the
+      released schema gives a shape to are judged only where the service
+      serves them.

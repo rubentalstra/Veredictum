@@ -193,6 +193,17 @@ pub enum Assertion {
         /// A regex the field's serialized value must match.
         #[serde(default)]
         matches: Option<String>,
+        /// The OPTIONAL-member predicate: the field is absent, or its
+        /// serialized value matches this regex. It exists because a released
+        /// schema can declare a member's shape while leaving its presence to
+        /// the service — the ITS-REST `RESULT_SET` metadata is the case that
+        /// forced it (`specifications/docs/query/Response.md` §Metadata:
+        /// "`RESULT_SET` metadata comprise a set of optional (implementation
+        /// dependent) attributes, useful for debugging"). Requiring such a
+        /// member fails a conformant service; ignoring it lets a malformed one
+        /// pass, so the shape is asserted exactly when the member is served.
+        #[serde(default)]
+        absent_or_matches: Option<String>,
     },
     /// The master07 "content check": retrieved equals committed, modulo the
     /// declared server-assigned set — normative per operation, never
@@ -393,20 +404,27 @@ impl Assertion {
                 exists,
                 absent,
                 matches,
+                absent_or_matches,
                 path,
             } => {
                 let predicates = usize::from(equals.is_some())
                     + usize::from(not_equals.is_some())
                     + usize::from(exists.is_some())
                     + usize::from(absent.is_some())
-                    + usize::from(matches.is_some());
+                    + usize::from(matches.is_some())
+                    + usize::from(absent_or_matches.is_some());
                 if predicates != 1 {
                     return Err(format!(
-                        "field assertion on {path:?} must carry exactly one of equals | exists | absent | matches"
+                        "field assertion on {path:?} must carry exactly one of equals | exists | absent | matches | absent_or_matches"
                     ));
                 }
-                if let Some(re) = matches {
-                    regex::Regex::new(re).map_err(|e| format!("field matches regex: {e}"))?;
+                for (label, re) in [
+                    ("matches", matches),
+                    ("absent_or_matches", absent_or_matches),
+                ] {
+                    if let Some(re) = re {
+                        regex::Regex::new(re).map_err(|e| format!("field {label} regex: {e}"))?;
+                    }
                 }
                 Ok(())
             }
@@ -821,6 +839,27 @@ mod tests {
 
         let a = parse(serde_json::json!({
             "assert": "xml_root", "name": "version", "xsi_type": " "
+        }));
+        assert!(a.check_invariants().is_err());
+    }
+
+    /// The optional-member predicate counts as the field assertion's one
+    /// predicate, and its regex is compiled at validate time like `matches`.
+    #[test]
+    fn absent_or_matches_is_one_predicate_with_a_compiled_regex() {
+        let a = parse(serde_json::json!({
+            "assert": "field", "path": "meta/_created", "absent_or_matches": "^[0-9]{4}-"
+        }));
+        assert!(a.check_invariants().is_ok());
+
+        let a = parse(serde_json::json!({
+            "assert": "field", "path": "meta/_created",
+            "absent_or_matches": "^[0-9]{4}-", "exists": true
+        }));
+        assert!(a.check_invariants().is_err());
+
+        let a = parse(serde_json::json!({
+            "assert": "field", "path": "meta/_created", "absent_or_matches": "([unclosed"
         }));
         assert!(a.check_invariants().is_err());
     }

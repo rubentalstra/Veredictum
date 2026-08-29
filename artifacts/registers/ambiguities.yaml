@@ -10104,3 +10104,46 @@ AMB-226:
     body uid, as the CONTRIBUTION create already does.
   disposition: fixed_handling
   upstream_issue: 221
+AMB-227:
+  ambiguity: >-
+    AQL fixes an applicable input type set per aggregate function and assigns
+    nothing to an argument outside it. SUM and AVG declare Integer or Real;
+    a query summing a String identified path parses under the released
+    grammar, names only RM classes and paths, and reaches no stated branch —
+    no sentence requires the query to be refused and none defines a result.
+    The neighbouring functions show the omission is not a general silence
+    about types: COUNT states its input "can be anything" and MIN/MAX
+    enumerate String, Date, Time, Integer or Real, so the chapter does speak
+    about applicable types and then stops short of the out-of-set case.
+  source: >-
+    QUERY AQL master03-syntax.adoc §SUM ("Input values type should be either
+    Integer or Real, and it will also determine the return type", with no
+    out-of-set branch) and QUERY AQL master03-syntax.adoc §AVG (the identical
+    sentence), CONTRASTED with QUERY AQL master03-syntax.adoc §COUNT ("Input
+    values type can be anything, while the return type is always an Integer")
+    and QUERY AQL master03-syntax.adoc §MIN ("Input values type should be
+    either String, Date, Time, Integer or Real"); QUERY AQL
+    master03-syntax.adoc §Aggregate functions (the argument is an _expression_ "consisting
+    of literals, parameters, variables, identified paths or other functions",
+    with no type predicate); a search of master03-syntax.adoc for rejection
+    language (invalid / error / reject) returns zero matches, and SUM and AVG
+    occur in neither master04-result_structure.adoc nor master07-grammar.adoc;
+    the released OAS responses/400_Query.yaml, cited AS the OAS ("unable to
+    execute the query due to invalid input, e.g. a required parameter is
+    missing, or at least one of the parameters has an invalid syntax" — a
+    syntax trigger a well-formed identified path never reaches), and the
+    ITS-REST docs text carries no sentence on aggregate argument types.
+    Verified first-hand 2026-08-29.
+  handling: >-
+    Option select: the party statement declares whether the SUT refuses an
+    aggregate over an input type outside the function's declared set as an
+    invalid query (aql-nonnumeric-aggregate-refused) or executes it
+    (aql-nonnumeric-aggregate-executed); twin cases pin each branch and are
+    not-applicable for a party declaring neither. Under the executing branch
+    the answer stays a single aggregate row — §Aggregate functions defines an
+    aggregate as "returning a single result based on a group of rows of the
+    result set rather than on a single row" — and no case asserts a VALUE for
+    SUM or AVG over a non-numeric input, because none is assigned.
+  disposition: option_select
+  options: [aql-nonnumeric-aggregate-refused, aql-nonnumeric-aggregate-executed]
+  upstream_issue: 229

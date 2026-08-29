@@ -1,0 +1,36 @@
+# Wire realization of I_EHR_COMPOSITION.delete_composition, variant
+# `ehr_not_modifiable`: the request is byte-identical to the variant-less
+# delete; what differs is the CAUSE the 409 declares and therefore what the
+# response must carry.
+#
+# The variant-less binding's `conflict` is the branch the released OAS states
+# outright — `responses/409_COMPOSITION_with_uid_based_id.yaml`, cited AS the
+# OAS: "`409 Conflict` is returned when supplied `uid_based_id` doesn't match
+# the latest version. Returns also latest `version_uid` in the `ETag` header."
+# Its entity-tag claim belongs to that cause and to no other.
+#
+# The cause here is a content write into a DEACTIVATED EHR. RM ehr master04
+# §EHR Active Status refuses writes to "everything other than the EHR_STATUS
+# object" while `is_modifiable` is false, naming Compositions first, and a
+# logical delete IS such a write (RM common master06 §Logical Deletion commits
+# a new VERSION). No released ITS-REST sentence assigns that refusal a code:
+# register AMB-82 carries the adjudicated 409, the overview §HTTP status codes
+# row for a request that "could not be processed because it might generate a
+# duplicate or a conflict" with the resource's state. Nothing released ties an
+# entity tag to it, and the row that would supply one names a different cause,
+# so the variant claims no `ETag` — asserting one would fail a service that
+# refuses correctly and says nothing more.
+sm_operation: I_EHR_COMPOSITION.delete_composition
+its: its-rest
+variant: ehr_not_modifiable
+request:
+  method: DELETE
+  path: /ehr/{ehr_id}/composition/{preceding_version_uid}
+# The variant declares the refusal branch alone. Its success half is the
+# variant-less binding's, which every other delete row already drives, and
+# re-declaring it here would leave an outcome no case exercises.
+outcomes:
+  conflict:
+    status: 409                           # register AMB-82 — the deactivated-EHR refusal
+    headers:
+      Location: { match: absent, applies: { its_rest: ">=1.1.0" } }  # error response — overview §Location (creation/redirect only)

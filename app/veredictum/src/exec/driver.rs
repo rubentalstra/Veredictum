@@ -551,6 +551,7 @@ impl<'a> HttpDriver<'a> {
         exists: Option<bool>,
         absent: Option<bool>,
         matches: Option<&str>,
+        absent_or_matches: Option<&str>,
         vars: &VarStore,
     ) -> Result<(), AssertionFailure> {
         let mut resolve =
@@ -573,6 +574,7 @@ impl<'a> HttpDriver<'a> {
                 exists,
                 absent,
                 matches,
+                absent_or_matches,
             ),
             (Err(e), _) | (_, Err(e)) => Err(AssertionFailure(e)),
         }
@@ -745,6 +747,7 @@ impl<'a> HttpDriver<'a> {
                     exists,
                     absent,
                     matches,
+                    absent_or_matches,
                 } => self
                     .eval_field_assertion(
                         body,
@@ -754,6 +757,7 @@ impl<'a> HttpDriver<'a> {
                         *exists,
                         *absent,
                         matches.as_deref(),
+                        absent_or_matches.as_deref(),
                         vars,
                     )
                     .map_err(AssertionOutcome::from),

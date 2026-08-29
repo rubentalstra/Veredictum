@@ -41,7 +41,7 @@ and the checkable claims were re-verified 2026-08-27 against this repository
 and its tracker. The reference runner is shipped: `veredictum`, published on
 crates.io (0.1.0-alpha.4 at the re-verification), with signed releases, the
 container image (carrying the web console, #6), the docs site, and a
-catalogue of 1119 case cores and 248 operation bindings that passes every
+catalogue of 1130 case cores and 249 operation bindings that passes every
 validate gate. A party's measured artifacts are emitted to the output
 directory a run is given.*
 
@@ -93,8 +93,8 @@ the 2021–2022 community's work. The deltas are five: one-file-per-case data
 with generated prose; CI enforcement of the derivation chain; computable
 Statement/results schemas with mechanically computed verdicts; the
 governance/resourcing charter; and the ISO/EHDS grounding. The working
-implementation is this repository's published instrument (1119 case cores,
-248 operation bindings, both wire formats, machine-computed verdicts on the
+implementation is this repository's published instrument (1130 case cores,
+249 operation bindings, both wire formats, machine-computed verdicts on the
 CNF profiles model; grown from FerroEHR's ECC draft of 394 cases) — and it
 is explicitly not "the standard": the standard is community-owned,
 vendor-neutral, and multi-harness by construction.
@@ -178,7 +178,7 @@ Service Model", his alone). Those three revisions made master06–09 the
 fleshed core §8 draws on, and
 `guide/master00-amendment_record.adoc` names him with T Beale on the
 Conformance Guide's initial writing. Recounted against this repository on
-2026-08-29: **127 of the 1119 case cores cite master06, master07, master08 or
+2026-08-29: **127 of the 1130 case cores cite master06, master07, master08 or
 master09** (22 / 31 / 40 / 34 respectively), and 349 cite some chapter of the
 Test Schedule.
 
@@ -1091,7 +1091,7 @@ evaluated per data-set row):
 | Assertion | Fields | Semantics |
 |---|---|---|
 | `instance_of` | `rm_type`, `format?` | Body parses as the named RM type and validates against the ITS schema for the active format (canonical JSON ⇒ ITS-JSON; XML ⇒ XSD). |
-| `field` | `path`, `equals \| exists \| absent \| matches` | RM-path-addressed field check; values may reference `${row.*}`/captures — e.g. `path: ehr_status/is_queryable, equals: ${row.is_queryable}`. |
+| `field` | `path`, `equals \| exists \| absent \| matches \| absent_or_matches` | RM-path-addressed field check; values may reference `${row.*}`/captures — e.g. `path: ehr_status/is_queryable, equals: ${row.is_queryable}`. `absent_or_matches` is the OPTIONAL-member predicate: it passes when the path resolves to nothing and judges the serialized value when it does, for a member a released schema gives a shape to while leaving its presence to the service (the ITS-REST `RESULT_SET` metadata). |
 | `equivalent` | `to: committed \| ${ds:…} \| ${capture}`, `ignoring:` named ignore-sets (`server_assigned`, `ctx_defaults`) and/or explicit `[paths]` | The master07 "content check": retrieved content equals committed content, modulo the declared server-assigned set (`uid`, `system_id`, audit times, …) — the ignore set is normative per operation, not runner-chosen. |
 | `version` | `of: ${<version-uid capture>}` (the target version), `for_each: ${<list capture>}` (per-element over a list capture), `change_type \| lifecycle_state \| count \| uid_pattern` | RM versioning facts: `of: ${v2_uid}, change_type: MODIFY`, `lifecycle_state: "openehr::523\|deleted\|"` (AMB-11), `count: 2`, `uid_pattern: "<uuid>::<system>::<n>"`. `count` needs no `of:`. |
 | `result_set` | `match: ordered \| set \| count \| contains`, `rows`, `columns?` | AQL results, compared under the normative equivalence rules below. |
@@ -2853,7 +2853,7 @@ proposing a format and demonstrating one.
   `docs/query/{Request,Response}.md` (all vendored).
 - Our instrument: this repository (`app/veredictum/`), published as
   `veredictum` on crates.io (0.1.0-alpha.4 at the 2026-08-27
-  re-verification); the catalogue holds 1119 case cores and 248 operation
+  re-verification); the catalogue holds 1130 case cores and 249 operation
   bindings and passes every validate gate. Its predecessor, the ECC
   (FerroEHR's `tools/conformance/`, 394 active catalogue cases; final
   committed baseline `docs/conformance/ferroehr/CONFORMANCE_REPORT.md`, 402
