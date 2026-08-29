@@ -600,3 +600,281 @@ fn a_field_mismatch_still_fails_the_row() -> Fallible {
     }
     Ok(())
 }
+
+/// The only assertion outcome a step raised.
+fn only(outcomes: &[AssertionOutcome]) -> Result<String, Box<dyn std::error::Error>> {
+    let first = outcomes.first().ok_or("the step raised no outcome")?;
+    match first {
+        AssertionOutcome::Unjudgeable(reason) => Ok(reason.clone()),
+        other @ AssertionOutcome::Mismatch(_) => {
+            Err(format!("expected an unjudgeable outcome, got {other:?}").into())
+        }
+    }
+}
+
+/// A versioned read that did not happen is a READ the run could not perform,
+/// never a served value contradicting the assertion: an answer outside 2xx,
+/// an answer with no body, and a binding declaring no envelope realization
+/// all leave the fact UNJUDGEABLE rather than charging the server with it.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_versioned_read_that_did_not_happen_is_never_a_finding_against_the_server() -> Fallible {
+    let facts = json!([{
+        "assert": "version", "of": "${version_uid}", "change_type": "CREATE"
+    }]);
+
+    // The read is refused: the asserted version is unreadable, and the
+    // status the SUT answered with travels with the diagnostic.
+    let sut = FakeSut::start();
+    mount_create(&sut);
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path_regex(format!(
+                "^/ehr/{EHR_ID}/versioned_composition/{OBJECT_ID}/version/.+$"
+            )))
+            .respond_with(ResponseTemplate::new(404)),
+    );
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive(
+        &sut,
+        &[create_composition_binding(), version_read_binding()],
+        create_case(&facts),
+        &mut vars,
+    )?;
+    let reason = only(&outcomes)?;
+    assert!(
+        reason.contains("404") && reason.contains("unreadable"),
+        "{reason}"
+    );
+
+    // The read succeeds with an EMPTY body: there is no envelope to judge.
+    let sut = FakeSut::start();
+    mount_create(&sut);
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path_regex(format!(
+                "^/ehr/{EHR_ID}/versioned_composition/{OBJECT_ID}/version/.+$"
+            )))
+            .respond_with(ResponseTemplate::new(200)),
+    );
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive(
+        &sut,
+        &[create_composition_binding(), version_read_binding()],
+        create_case(&facts),
+        &mut vars,
+    )?;
+    assert!(only(&outcomes)?.contains("served no body"));
+
+    // The catalogue declares the operation but not the `version` realization
+    // the envelope read needs — a gap of the CATALOGUE, named as one.
+    let variant_less = json!({
+        "sm_operation": "I_EHR_COMPOSITION.get_versioned_composition",
+        "its": "its-rest",
+        "request": {
+            "method": "GET",
+            "path": "/ehr/{ehr_id}/versioned_composition/{versioned_object_uid}"
+        },
+        "outcomes": { "ok": { "status": 200 } }
+    });
+    let sut = FakeSut::start();
+    mount_create(&sut);
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive(
+        &sut,
+        &[create_composition_binding(), variant_less],
+        create_case(&facts),
+        &mut vars,
+    )?;
+    let reason = only(&outcomes)?;
+    assert!(reason.contains("version realization"), "{reason}");
+    assert_eq!(
+        sut.requests().len(),
+        1,
+        "only the create went out: an undeclared realization is never guessed at"
+    );
+    Ok(())
+}
+
+/// Several facts over the SAME envelope cost ONE exchange: the read is cached
+/// per row and per URL, so a case asserting three members of one version does
+/// not triple the load it puts on the server it is measuring.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn several_facts_over_one_envelope_cost_one_read() -> Fallible {
+    let sut = FakeSut::start();
+    mount_create(&sut);
+    mount_envelope(&sut, envelope(1, "249", "532", "complete"));
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive(
+        &sut,
+        &[create_composition_binding(), version_read_binding()],
+        create_case(&json!([
+            { "assert": "version", "of": "${version_uid}", "change_type": "CREATE" },
+            {
+                "assert": "version", "of": "${version_uid}",
+                "lifecycle_state": "openehr::532|complete|"
+            },
+            {
+                "assert": "version", "of": "${version_uid}",
+                "uid_pattern": "<uuid>::<system>::<n>"
+            }
+        ])),
+        &mut vars,
+    )?;
+    assert!(outcomes.is_empty(), "{outcomes:?}");
+    let reads = sut
+        .requests()
+        .iter()
+        .filter(|r| r.method == wiremock::http::Method::GET)
+        .count();
+    assert_eq!(reads, 1, "three facts over one envelope re-read it");
+    Ok(())
+}
+
+/// A `version` assertion names a version through a reference, and a reference
+/// the run never bound names none: the fact is unjudgeable rather than
+/// silently skipped, and a reference resolving to something that is not a uid
+/// says what it resolved to instead.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_version_reference_that_names_no_uid_is_unjudgeable() -> Fallible {
+    let sut = FakeSut::start();
+    mount_create(&sut);
+    mount_envelope(&sut, envelope(1, "249", "532", "complete"));
+
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive(
+        &sut,
+        &[create_composition_binding(), version_read_binding()],
+        create_case(&json!([{
+            "assert": "version", "of": "${never_bound}", "change_type": "CREATE"
+        }])),
+        &mut vars,
+    )?;
+    assert!(only(&outcomes)?.contains("never_bound"));
+
+    // A LIST reference judges every member, and a member that is not a
+    // scalar names no version.
+    let mut vars = provisioned_vars()?;
+    vars.set(
+        CaptureName::parse("uid_list")?,
+        Captured::List(vec![version_uid(1)]),
+    );
+    let outcomes = drive(
+        &sut,
+        &[create_composition_binding(), version_read_binding()],
+        create_case(&json!([{
+            "assert": "version", "for_each": "${uid_list}", "change_type": "CREATE"
+        }])),
+        &mut vars,
+    )?;
+    assert!(outcomes.is_empty(), "{outcomes:?}");
+    Ok(())
+}
+
+/// The CONTRIBUTION commit whose members name the family the assertion is
+/// judged against. A CONTRIBUTION names no family of its own — RM common
+/// master06 §Contributions makes the member `VERSION` objects the ones that
+/// do — so the family comes from the committed members' `data._type`.
+fn create_contribution_binding() -> Value {
+    json!({
+        "sm_operation": "I_EHR_CONTRIBUTION.create_contribution",
+        "its": "its-rest",
+        "request": {
+            "method": "POST", "path": "/ehr/{ehr_id}/contribution", "body": "contribution"
+        },
+        "outcomes": { "created": { "status": 201 } }
+    })
+}
+
+/// A contribution case committing one member of the given RM type.
+fn contribution_case(member_type: &str, facts: &Value) -> Value {
+    json!({
+        "id": "WIRE-contribution_version", "kind": "functional",
+        "component": "EHR_CONTRIBUTION",
+        "sm_operation": "I_EHR_CONTRIBUTION.create_contribution",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [{
+            "step": 1, "call": "create_contribution", "expect": "created",
+            "with": {
+                "ehr_id": "${ehr_id}",
+                "versions": [{ "change_type": "creation", "data": { "_type": member_type } }]
+            },
+            "assert": facts.clone()
+        }]
+    })
+}
+
+/// A case whose SM anchor names no versioned family falls back to the family
+/// its committed members name — and when they name none, the assertion is
+/// loudly unaddressable rather than judged against a guessed container.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_case_without_a_family_anchor_reads_it_off_its_committed_members() -> Fallible {
+    let facts = json!([{
+        "assert": "version", "of": "${committed_version_uid}", "change_type": "CREATE"
+    }]);
+    let bind_uid = |vars: &mut VarStore| -> Result<(), Box<dyn std::error::Error>> {
+        vars.set(
+            CaptureName::parse("committed_version_uid")?,
+            Captured::Scalar(version_uid(1)),
+        );
+        Ok(())
+    };
+
+    // A COMPOSITION member names the composition family, so the envelope read
+    // goes to the versioned-composition route.
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path(format!("/ehr/{EHR_ID}/contribution")))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+    mount_envelope(&sut, envelope(1, "249", "532", "complete"));
+    let mut vars = provisioned_vars()?;
+    bind_uid(&mut vars)?;
+    let outcomes = drive(
+        &sut,
+        &[create_contribution_binding(), version_read_binding()],
+        contribution_case("COMPOSITION", &facts),
+        &mut vars,
+    )?;
+    assert!(outcomes.is_empty(), "{outcomes:?}");
+
+    // A member of no versioned family leaves the assertion unaddressable, and
+    // the diagnostic names the case rather than blaming the server.
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path(format!("/ehr/{EHR_ID}/contribution")))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+    let mut vars = provisioned_vars()?;
+    bind_uid(&mut vars)?;
+    let outcomes = drive(
+        &sut,
+        &[create_contribution_binding(), version_read_binding()],
+        contribution_case("ITEM_TREE", &facts),
+        &mut vars,
+    )?;
+    let reason = only(&outcomes)?;
+    assert!(
+        reason.contains("no single versioned-object family"),
+        "{reason}"
+    );
+    assert!(reason.contains("WIRE-contribution_version"), "{reason}");
+    Ok(())
+}

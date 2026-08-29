@@ -1671,3 +1671,229 @@ fn a_header_slot_takes_the_steps_with_value_over_the_capture() -> Fallible {
     );
     Ok(())
 }
+
+/// A negative against a non-existent resource has no captured base body, so
+/// the wire gets a minimal RM-VALID canonical `EHR_STATUS`: the SUT must
+/// refuse on the unknown id, not on the body. RM-validity is load-bearing —
+/// `EHR_STATUS` is an unconditional archetype root (RM ehr `ehr_status.adoc`
+/// `Is_archetype_root`) and a root without `ARCHETYPED` violates
+/// `Archetyped_valid` (RM common `locatable.adoc`).
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_unbound_status_capture_sends_the_minimal_valid_status_the_negative_needs() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("PUT"))
+            .and(path("/ehr/EHR-absent/ehr_status"))
+            .respond_with(ResponseTemplate::new(404)),
+    );
+    let bindings = [patched_status_binding(&json!({ "is_queryable": false }))];
+    // No `status_body` capture: the case never read one back, because the
+    // resource it addresses does not exist.
+    let mut vars = VarStore::default();
+    let observed = drive_one(
+        &sut,
+        &bindings,
+        patched_status_case(&json!({ "ehr_id": "EHR-absent" })),
+        OutcomeKind::Ok,
+        &mut vars,
+    )?;
+    assert_eq!(observed.observation, Observation::Unmapped { status: 404 });
+
+    let body = received_body(&sut)?;
+    assert_eq!(body["_type"], json!("EHR_STATUS"));
+    assert_eq!(body["subject"]["_type"], json!("PARTY_SELF"));
+    assert_eq!(
+        body["archetype_details"]["_type"],
+        json!("ARCHETYPED"),
+        "an archetype root without ARCHETYPED violates Archetyped_valid: {body}"
+    );
+    assert_eq!(
+        body["is_queryable"],
+        json!(false),
+        "the declared set: is applied to the substituted base too"
+    );
+    Ok(())
+}
+
+/// The commit binding whose simplified format carries its template identity
+/// in a request header (ITS-REST `operations/composition_create.yaml`).
+fn flat_commit_binding() -> Value {
+    json!({
+        "sm_operation": "I_EHR_COMPOSITION.create_composition",
+        "its": "its-rest",
+        "request": {
+            "method": "POST", "path": "/ehr/{ehr_id}/composition", "body": "composition"
+        },
+        "formats": ["canonical-json", "wt-flat"],
+        "format_headers": {
+            "wt-flat": {
+                "Content-Type": "application/openehr.wt.flat+json",
+                "openehr-template-id": "required"
+            }
+        },
+        "outcomes": { "created": { "status": 201 } }
+    })
+}
+
+/// A one-step commit in the given format.
+fn flat_commit_case(format: Option<&str>) -> Value {
+    let mut step = json!({
+        "step": 1, "call": "create_composition", "expect": "created",
+        "with": { "ehr_id": "EHR-1", "composition": { "ctx/language": "en" } }
+    });
+    if let Some(format) = format
+        && let Some(map) = step.as_object_mut()
+    {
+        map.insert("format".to_owned(), Value::String(format.to_owned()));
+    }
+    json!({
+        "id": "WIRE-flat_commit", "kind": "functional", "component": "SIMPLIFIED_FORMATS",
+        "sm_operation": "I_EHR_COMPOSITION.create_composition",
+        "requires": { "templates": ["cnf.opt.minimal"] },
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [step]
+    })
+}
+
+/// The request headers the SUT received on its last request, lower-cased.
+fn sent_headers(sut: &FakeSut) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+    let received = sut.requests();
+    let request = received.last().ok_or("the SUT received no request")?;
+    Ok(request
+        .headers
+        .iter()
+        .map(|(name, value)| {
+            (
+                name.as_str().to_ascii_lowercase(),
+                value.to_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect())
+}
+
+/// A step's declared FORMAT selects the format headers its binding attaches:
+/// the simplified representation labels the payload and carries the template
+/// identity the receiving server needs to expand it, and a step in the
+/// canonical representation carries neither. The identity comes from the
+/// case's own provisioned template, so a case never has to restate it.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_simplified_format_carries_the_template_identity_its_binding_requires() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let manifest = json!({
+        "cnf.opt.minimal": {
+            "source": "opt.json",
+            "format": "opt-xml",
+            "template_id": "minimal.event.v1",
+            "validity": { "verdict": "valid" },
+            "provenance": "authored in-test: the template the flat payload names"
+        }
+    });
+    std::fs::write(dir.path().join("opt.json"), "<template/>")?;
+
+    let drive =
+        |format: Option<&str>| -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
+            let sut = FakeSut::start();
+            sut.mount(
+                Mock::given(method("POST"))
+                    .and(path("/ehr/EHR-1/composition"))
+                    .respond_with(ResponseTemplate::new(201)),
+            );
+            let set = crate::fake_sut::artifact_set_over_corpus(
+                &[flat_commit_binding()],
+                manifest.clone(),
+                dir.path(),
+            );
+            let topology = ixit(&sut.base_url());
+            let core = case(flat_commit_case(format));
+            let step = core.flow.first().ok_or("the case declares no flow step")?;
+            let mut driver = HttpDriver::new(&set, &topology, None)?;
+            let mut vars = VarStore::default();
+            driver.perform(&core, step, OutcomeKind::Created, 0, &mut vars)?;
+            sent_headers(&sut)
+        };
+
+    let flat = drive(Some("wt-flat"))?;
+    assert!(
+        flat.contains(&(
+            "content-type".to_owned(),
+            "application/openehr.wt.flat+json".to_owned()
+        )),
+        "the flat commit does not label its payload: {flat:?}"
+    );
+    assert!(
+        flat.contains(&(
+            "openehr-template-id".to_owned(),
+            "minimal.event.v1".to_owned()
+        )),
+        "the template identity is the corpus entry's own, not the corpus key: {flat:?}"
+    );
+
+    let canonical = drive(None)?;
+    assert!(
+        !canonical
+            .iter()
+            .any(|(name, _)| name == "openehr-template-id"),
+        "the canonical representation needs no template header: {canonical:?}"
+    );
+    assert!(
+        canonical.contains(&("content-type".to_owned(), "application/json".to_owned())),
+        "a body-carrying request must label its payload: {canonical:?}"
+    );
+    Ok(())
+}
+
+/// A step's `scopes:` resolves on the same footing as its `with:` values, and
+/// an entry that is not a scope STRING is a step-resolution failure — an
+/// inconclusive row, never a request carrying a scope claim nobody wrote.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions propagate with `?`"
+)]
+fn a_scope_entry_that_is_not_a_string_is_a_step_resolution_failure() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/ehr"))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+    let mut document = create_ehr_case();
+    let step = document
+        .get_mut("flow")
+        .and_then(|flow| flow.get_mut(0))
+        .and_then(Value::as_object_mut)
+        .ok_or("the case declares no flow step")?;
+    step.insert("scopes".to_owned(), json!(["${captured_object}"]));
+
+    let mut vars = VarStore::default();
+    vars.set(
+        veredictum::ids::CaptureName::parse("captured_object")?,
+        veredictum::exec::state::Captured::Body(json!({ "scope": "user/*.r" })),
+    );
+    let observed = drive_one(
+        &sut,
+        &[create_ehr_binding()],
+        document,
+        OutcomeKind::Created,
+        &mut vars,
+    )?;
+    match &observed.observation {
+        Observation::Transport(reason) => {
+            assert!(reason.contains("expected a scope string"), "{reason}");
+        }
+        other => panic!("a non-string scope must be inconclusive, got {other:?}"),
+    }
+    assert!(
+        sut.requests().is_empty(),
+        "nothing may reach the SUT once the step failed to resolve"
+    );
+    Ok(())
+}
