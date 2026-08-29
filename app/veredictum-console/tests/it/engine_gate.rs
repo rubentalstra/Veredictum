@@ -102,22 +102,10 @@ fn a_console_run_and_a_cli_run_emit_identical_documents() -> Result<(), Box<dyn 
         );
         return Ok(());
     }
-    let engine = match Engine::verified(&binary) {
-        Ok(engine) => engine,
-        Err(engine::Error::VersionMismatch { reported }) => {
-            // Mid-cycle the workspace binary legitimately runs ahead of the
-            // published pin; the gate then has no same-version binary to
-            // drive both paths with, and pretending otherwise would test
-            // nothing. CI builds the workspace at the pinned version, so
-            // there this arm is a red flag it never takes silently.
-            eprintln!(
-                "SKIPPED(engine version drift): {reported} != {}",
-                engine::ENGINE_VERSION
-            );
-            return Ok(());
-        }
-        Err(other) => return Err(other.into()),
-    };
+    // The pin IS the workspace engine version (#179), held there by
+    // `scripts/release/check-console-pin.sh`, so a version mismatch here is a
+    // broken invariant and fails the gate rather than skipping it.
+    let engine = Engine::verified(&binary)?;
 
     let scratch = assert_fs::TempDir::new()?;
     let port = fixture_sut()?;

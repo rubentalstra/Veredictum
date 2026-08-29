@@ -86,14 +86,7 @@ fn driven(out: &Path) -> Result<Option<(ConsoleState, Engine)>, Box<dyn std::err
         );
         return Ok(None);
     }
-    let engine = match Engine::verified(&binary) {
-        Ok(engine) => engine,
-        Err(veredictum_console::engine::Error::VersionMismatch { reported }) => {
-            eprintln!("SKIPPED(engine version drift): {reported}");
-            return Ok(None);
-        }
-        Err(other) => return Err(other.into()),
-    };
+    let engine = Engine::verified(&binary)?;
 
     let slot = JobSlot::default();
     let state = state_over(out, slot.clone());

@@ -358,7 +358,8 @@ pipeline is a `needs` edge, so no leg guesses whether an earlier one finished.
    A content PR MAY pre-bump the version when its change is what the next
    release exists to ship (the way #36 moved alpha.3 → alpha.4 for the lib
    API); the cut then verifies the version rather than moving it. Whichever
-   PR moves it, the version in the tree at tag time is what publishes.
+   PR moves it, the version in the tree at tag time is what publishes, and the
+   console's `veredictum = "=X"` plus `ENGINE_PIN` move in the same commit.
 3. `CITATION.cff`: `version` and `date-released`.
 4. `bash scripts/render/zenodo-json.sh` — `.zenodo.json` is GENERATED, because
    Zenodo ignores `CITATION.cff` completely whenever a `.zenodo.json` exists
@@ -373,13 +374,31 @@ pipeline is a `needs` edge, so no leg guesses whether an earlier one finished.
    `release tags` ruleset requires a signature and refuses deletion, so a tag is
    never re-pointed: the recovery for a bad cut is the next version.
 
-**The console's engine pin trails by at most one release**, and `plan` refuses
-a cut that breaks it (`scripts/release/check-console-pin.sh`, #128). The
-console consumes the engine at an exact crates.io version, and an exact pin can
-only name a version that already published, so at tag time it is either the
-version being published (a cut PR that pre-bumped it) or the version published
-immediately before. A third value means the console is consuming an engine more
-than one release old, which is how alpha.4 survived two cuts unnoticed.
+**The console's engine pin is ONE value: the workspace engine version** (#179).
+The console names the engine by an exact crates.io version in its own manifest,
+which is what keeps a console release reproducible from published artifacts,
+and the workspace root's `[patch.crates-io]` redirects that name to
+`app/veredictum` for every build made inside this repository. So the pin may
+name the version being cut before crates.io carries it, every pull request in
+the window still compiles the console on both targets, and the engine every
+gate spawns is the engine the console links.
+`scripts/release/check-console-pin.sh` holds the manifest pin, `ENGINE_PIN`,
+`app/veredictum`'s version and the tag to that one value, and it also refuses a
+`Cargo.lock` carrying a registry-sourced `veredictum` — cargo drops an
+unmatchable patch and resolves the registry copy with no warning at all, which
+is the silent fallback the check exists to catch. It runs on every pull request
+(`ci.yml`, guards) and again at tag time inside `plan`.
+
+Two orderings lost. **Publishing the crate first**, ahead of `image-binary`,
+puts the immutable crates.io upload and its reviewer pause on the critical path
+before the image is built or scanned, and it fixes nothing for pull requests:
+the cut PR that pre-bumps the pin names a version crates.io does not carry yet,
+so that PR cannot go green. **Pre-bump plus a patch dropped in the publishing
+lane** needs the crate live before the image is built, so it inherits the same
+irreversibility. The cost of the patch, stated plainly: an in-repository build
+no longer proves the console's dependency line resolves against the registry.
+What it does prove is that the console links the engine this tree publishes,
+which is the property the drift window was destroying.
 
 **What the tag then does**, in order: `plan` re-verifies every fact above
 against the tagged commit and publishes nothing; the GitHub release is created

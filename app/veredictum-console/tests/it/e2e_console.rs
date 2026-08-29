@@ -588,21 +588,6 @@ async fn e2e_run_wizard_reaches_connect_and_scope() {
     h.finish().await;
 }
 
-/// True during a release-cut window, when no published engine speaks the
-/// console's current flags — the driven journeys skip with the reason
-/// printed, mirroring the integration gates' version-drift skip.
-fn engine_drift() -> bool {
-    let drift = !std::env::var("UI_E2E_ENGINE_DRIFT")
-        .unwrap_or_default()
-        .is_empty();
-    if drift {
-        println!(
-            "skipping: release-cut window — the workspace engine is ahead of the console's pin"
-        );
-    }
-    drift
-}
-
 /// A minimal fixture SUT for the driven-run journey: answers every request
 /// `500` deterministically, in THIS test process — the console server on the
 /// same host reaches it over loopback. The thread ends with the process.
@@ -881,9 +866,6 @@ async fn read_record(
 /// in-process fixture (every request answered 500).
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_wizard_drives_a_run_to_its_verdicts() {
-    if engine_drift() {
-        return;
-    }
     let Some(h) = Harness::start("driven-run").await else {
         return;
     };
@@ -1186,9 +1168,6 @@ async fn e2e_wizard_grades_the_real_cdrs() {
         println!(
             "skipping: UI_E2E_FERROEHR_URL / UI_E2E_EHRBASE_URL are unset (run with UI_E2E_REAL_SUTS=1)"
         );
-        return;
-    }
-    if engine_drift() {
         return;
     }
     let Some(h) = Harness::start("real-cdrs").await else {

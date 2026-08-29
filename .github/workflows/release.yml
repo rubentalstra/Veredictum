@@ -16,6 +16,14 @@
 #                                    └─ image-smoke
 #   announce ── needs everything, if: always()
 #
+# `publish-crate` stays LAST although the console consumes the engine from
+# crates.io, and that is no longer circular: the root manifest's
+# `[patch.crates-io]` resolves the console's exact pin to `app/veredictum`, so
+# `image-binary` builds against the tagged tree rather than against a registry
+# version this run has not uploaded yet (#179). The image therefore ships the
+# same engine source the crate publishes minutes later, and the irreversible
+# upload still happens after everything else has proven itself.
+#
 # `plan` re-verifies every release fact against the TAGGED commit before
 # anything is built or published: the tag matches the manifest, the changelog
 # section exists and is not empty, `CITATION.cff` agrees, `.zenodo.json` is in
@@ -156,13 +164,13 @@ jobs:
           echo "Release notes for $VERSION:"; cat release-notes.md
 
       # The console consumes the engine at an exact crates.io version and
-      # displays that same version in its chrome. Nothing held either to the
-      # release before #128: main shipped alpha.6 while both still read alpha.4,
-      # so the console consumed a two-release-old engine across two cuts. The
-      # policy, and why it allows two values rather than one, is the script's
-      # own header — it runs after the changelog check above, because it reads
-      # the previous published version from the section that check proves.
-      - name: The console's engine pin satisfies the release policy
+      # displays that same version in its chrome. Since #179 that is ONE value,
+      # the workspace engine version, which the root manifest's
+      # `[patch.crates-io]` resolves in-tree — so at tag time the tag, the
+      # engine manifest and both console copies of the pin are the same string.
+      # The same check runs on every pull request (`ci.yml`, guards); this call
+      # adds the tag's own version to what it compares.
+      - name: The console's engine pin names the version being released
         env:
           VERSION: ${{ steps.tag.outputs.version }}
         run: bash scripts/release/check-console-pin.sh "$VERSION"

@@ -128,33 +128,20 @@ CONSOLE_BIN="$ROOT/target/ui-e2e/veredictum-console"
 mkdir -p "$ROOT/target/ui-e2e"
 cp "$ROOT/target/debug/veredictum-console" "$CONSOLE_BIN"
 
-# The driven-run journey spawns the instrument itself. The console only ever
-# runs the engine version it PINS, so the harness builds the workspace engine
-# while the workspace version matches the pin, and flags the release-cut
-# window otherwise (see the else branch).
-ENGINE_DRIFT=""
-ENGINE_PIN="$(grep -m1 'pub const ENGINE_PIN' app/veredictum-console/src/lib.rs | cut -d'"' -f2)"
-WORKSPACE_VERSION="$(grep -m1 '^version = ' app/veredictum/Cargo.toml | cut -d'"' -f2)"
+# The driven-run journey spawns the instrument itself, and the console only
+# ever runs the engine version it PINS. The pin IS the workspace engine version
+# (#179), so the harness always has an engine both sides understand — and it
+# refuses to run at all rather than driving nothing when that stops holding.
+echo "── the console's engine pin names this tree's engine"
+bash scripts/release/check-console-pin.sh
 ENGINE_BIN="$ROOT/target/ui-e2e/veredictum"
-if [[ "$ENGINE_PIN" == "$WORKSPACE_VERSION" ]]; then
-  if [[ -z "${UI_E2E_NO_BUILD:-}" ]]; then
-    echo "── building the engine (cargo build -p veredictum)"
-    cargo build --locked -p veredictum --bin veredictum
-  fi
-  [[ -e "$ROOT/target/debug/veredictum" ]] \
-    || { echo "FATAL: target/debug/veredictum is missing — drop UI_E2E_NO_BUILD" >&2; exit 1; }
-  cp "$ROOT/target/debug/veredictum" "$ENGINE_BIN"
-else
-  # The cut window: the workspace is one version ahead of crates.io, and the
-  # console's CURRENT code may already speak flags the published pin lacks
-  # (the alpha.5 cut proved it: --progress is post-alpha.4). No engine both
-  # sides understand exists until the tag publishes, so the driven journeys
-  # skip with a printed reason — the same adjudication as run_live's
-  # SKIPPED(engine version drift) — and resume on the pin-bump PR.
-  echo "── release-cut window (workspace $WORKSPACE_VERSION, console pins $ENGINE_PIN): driven journeys will skip"
-  ENGINE_DRIFT=1
-  rm -f "$ENGINE_BIN"
+if [[ -z "${UI_E2E_NO_BUILD:-}" ]]; then
+  echo "── building the engine (cargo build -p veredictum)"
+  cargo build --locked -p veredictum --bin veredictum
 fi
+[[ -e "$ROOT/target/debug/veredictum" ]] \
+  || { echo "FATAL: target/debug/veredictum is missing — drop UI_E2E_NO_BUILD" >&2; exit 1; }
+cp "$ROOT/target/debug/veredictum" "$ENGINE_BIN"
 # An arm64 macOS binary carries an ad-hoc signature that a copy invalidates,
 # and the kernel then SIGKILLs the copy at exec. Re-signing is a no-op
 # elsewhere, because `codesign` exists only on macOS.
@@ -280,7 +267,6 @@ UI_E2E_SHOTS_DIR="$SHOTS_DIR" \
 UI_E2E_DOCS_SHOTS="${UI_E2E_DOCS_SHOTS:-}" \
 UI_E2E_FERROEHR_URL="$FERROEHR_SUT_URL" \
 UI_E2E_EHRBASE_URL="$EHRBASE_SUT_URL" \
-UI_E2E_ENGINE_DRIFT="${ENGINE_DRIFT:-}" \
 UI_E2E_UPLOAD_DIR="$UPLOAD_DIR" \
 UI_E2E_UPLOAD_REMOTE="$UPLOAD_DIR_REMOTE" \
   cargo nextest run --locked -p veredictum-console --features ssr \
