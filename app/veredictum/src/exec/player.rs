@@ -9,6 +9,11 @@
 //! adjudicated expected verdicts; the player answers the Nth matching request
 //! with the Nth recorded response (matching = method + path suffix), so a
 //! fixture file fully determines what any conformant runner must conclude.
+//!
+//! A replay judges every assertion a recorded exchange decides
+//! ([`crate::exec::assertions::eval_from_exchange`]) and REFUSES the entry
+//! for any family it cannot, on both assertion seams: no verdict is ever
+//! reproduced over an assertion nobody evaluated.
 
 #![expect(
     clippy::disallowed_types,
@@ -18,13 +23,16 @@
 
 use std::collections::BTreeMap;
 
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::exec::assertions::{ExchangeFacts, ReplayJudgement, replay_judgement};
+use crate::exec::outcome::StepJudgement;
 use crate::exec::state::{Captured, VarStore};
 use crate::exec::{StepDriver, StepObservation, outcome};
 use crate::ids::{CaptureName, CaseId, SmOperationRef};
-use crate::model::assertion::PostconditionRole;
+use crate::model::assertion::{Assertion, PostconditionRole};
 use crate::model::binding::WireFrom;
 use crate::model::case::{CaseCore, FlowStep};
 use crate::vocab::{FormatName, OutcomeKind};
@@ -161,6 +169,34 @@ impl<'a> TranscriptPlayer<'a> {
         bindings.find(|b| b.sm_operation == op && b.variant.is_none())
     }
 
+    /// Refuses the entry when `step` asserts a family the replay cannot judge.
+    ///
+    /// A transcript records the response side of the flow's own exchanges and
+    /// nothing else: no payload committed earlier in the row, no corpus, no
+    /// versioned read, no instance posture. An
+    /// [`ReplayJudgement::Unrecorded`] assertion is therefore unevaluable
+    /// here, and answering it `Ok` would let a pack entry claim a reproduced
+    /// verdict over an assertion nobody ran — so the entry is refused, naming
+    /// the case, the step and every family it could not judge.
+    fn refuse_unrecorded(case: &CaseCore, step: &FlowStep) -> Result<(), String> {
+        let unjudgeable: Vec<&str> = step
+            .assertions
+            .iter()
+            .filter(|assertion| replay_judgement(assertion) == ReplayJudgement::Unrecorded)
+            .map(Assertion::family)
+            .collect();
+        if unjudgeable.is_empty() {
+            return Ok(());
+        }
+        Err(format!(
+            "case {} step {} asserts families the transcript replay cannot judge ({}); a pack \
+             entry may not claim a verdict over assertions the replay never evaluated",
+            case.id,
+            step.step,
+            unjudgeable.join(", ")
+        ))
+    }
+
     /// Binds `step`'s captures from the recorded response, mirroring the live
     /// driver's closed capture grammar.
     ///
@@ -242,10 +278,41 @@ impl StepDriver for TranscriptPlayer<'_> {
         if let outcome::Observation::Kind(kind) = observation {
             self.bind_recorded_captures(step, binding, recorded, kind, vars);
         }
+        // The step's assertions decide the row only when the observation met
+        // the expectation (law b aborts the row otherwise, and `run_case`
+        // never reads the list), so that is exactly when the replay must be
+        // able to judge them.
+        if !matches!(
+            outcome::judge(expected, &observation),
+            StepJudgement::Continue
+        ) {
+            return Ok(StepObservation {
+                observation,
+                assertion_failures: Vec::new(),
+                advisories: Vec::new(),
+            });
+        }
+        Self::refuse_unrecorded(case, step)?;
+        let Ok(status) = StatusCode::from_u16(recorded.response.status) else {
+            return Ok(StepObservation::transport(format!(
+                "recorded status {} is not an HTTP status code",
+                recorded.response.status
+            )));
+        };
+        let body = recorded.response.body.as_ref().unwrap_or(&Value::Null);
+        let facts = ExchangeFacts { status, body };
+        let mut assertion_failures = Vec::new();
+        let mut advisories = Vec::new();
+        for assertion in &step.assertions {
+            match crate::exec::assertions::eval_from_exchange(assertion, facts) {
+                Ok(recorded_advisories) => advisories.extend(recorded_advisories),
+                Err(outcome) => assertion_failures.push(outcome),
+            }
+        }
         Ok(StepObservation {
             observation,
-            assertion_failures: Vec::new(),
-            advisories: Vec::new(),
+            assertion_failures,
+            advisories,
         })
     }
 
@@ -287,7 +354,7 @@ impl StepDriver for TranscriptPlayer<'_> {
             .postconditions
             .iter()
             .filter(|a| matches!(a.postcondition_role(), PostconditionRole::Judged))
-            .map(crate::model::assertion::Assertion::family)
+            .map(Assertion::family)
             .collect();
         if unjudgeable.is_empty() {
             return Ok(crate::exec::PostconditionOutcomes::default());
@@ -307,7 +374,7 @@ impl StepDriver for TranscriptPlayer<'_> {
     ) -> Result<Vec<String>, String> {
         let mut failures = Vec::new();
         for assertion in &case.postconditions {
-            if let crate::model::assertion::Assertion::Unique { over, .. } = assertion
+            if let Assertion::Unique { over, .. } = assertion
                 && let crate::refgrammar::ValueRef::Capture { name, .. } = &over.0
                 && let Err(crate::exec::assertions::AssertionFailure(m)) =
                     crate::exec::assertions::eval_unique(name, all_rows)

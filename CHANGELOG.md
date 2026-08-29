@@ -413,6 +413,22 @@ version on.
   flow's own exchanges and no versioned read, corpus reference or instance
   posture. Aggregate `unique` (law e) and the informative `message_exemplar`
   and `state` families are unaffected in both drivers.
+- **The transcript replay evaluates a step's assertions, or refuses the entry
+  (#255).** The player returned an empty failure list for every flow step, so a
+  verification-pack entry reproduced its adjudicated verdict without evaluating
+  a single `assert:` block — the pack's own passing case asserts
+  `instance_of: EHR` on its step-3 read-back and that assertion was never run.
+  A step's assertions are now judged from the recorded exchange through one
+  shared dispatch the live driver runs too: `returns` (its Boolean wire-presence
+  rule included), `xml_root`, `instance_of`, a `field` whose comparand carries
+  no `${…}` reference, and a `result_set` with inline rows, a count or columns.
+  The families whose ground a transcript never records — `equivalent` (the
+  payload committed earlier in the row), `version` and `signature` (a versioned
+  read and the addressed instance's signing posture), a referencing `field`
+  comparand and `result_set rows.from` (the resolver and the committed-set
+  uids) — refuse the entry by case, step and family, the way the postcondition
+  seam already does. A recorded exchange that contradicts its own step
+  assertion now fails its row instead of reproducing a pass.
 - **`assert: version` judges the envelope it names (#225).** The driver's
   version arm evaluated to `Ok(())` unconditionally, so every one of the
   catalogue's authored version assertions reported a pass it never earned. The

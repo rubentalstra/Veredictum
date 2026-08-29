@@ -680,33 +680,6 @@ impl<'a> HttpDriver<'a> {
         Ok(())
     }
 
-    /// A Boolean SM return (`has_directory`, `has_path`, `has_query`) is
-    /// realized on the wire as presence: 2xx = TRUE, the mapped not-found =
-    /// FALSE — the response body is the resource (or empty per `Prefer`),
-    /// never a boolean literal (SM `openehr_platform` `I_EHR_DIRECTORY` /
-    /// `I_DEFINITION_QUERY` `has_*`: Boolean; ITS-REST realizes them as GET).
-    fn eval_returns_assertion(
-        exchange: &Exchange,
-        body: &Value,
-        equals: Option<&Value>,
-        matches: Option<&str>,
-        omits: Option<&str>,
-    ) -> Result<(), AssertionFailure> {
-        if let Some(Value::Bool(want)) = equals {
-            let observed = exchange.status.is_success();
-            if observed == *want {
-                Ok(())
-            } else {
-                Err(AssertionFailure(format!(
-                    "returns: wire presence {observed} != expected {want} (status {})",
-                    exchange.status.as_u16()
-                )))
-            }
-        } else {
-            assertions::eval_returns(body, equals, matches, omits)
-        }
-    }
-
     /// Evaluate the pure-side assertions against one exchange.
     ///
     /// The single dispatch both assertion seams run: a step's own `assert:`
@@ -800,8 +773,8 @@ impl<'a> HttpDriver<'a> {
                     equals,
                     matches,
                     omits,
-                } => Self::eval_returns_assertion(
-                    exchange,
+                } => assertions::eval_returns_wire(
+                    exchange.status,
                     body,
                     equals.as_ref(),
                     matches.as_deref(),
@@ -835,16 +808,7 @@ impl<'a> HttpDriver<'a> {
                 } => assertions::eval_xml_root(body, name, *namespace, xsi_type.as_deref())
                     .map_err(AssertionOutcome::from),
                 Assertion::InstanceOf { rm_type, .. } => {
-                    // Structural check: the body self-identifies as the type.
-                    match body.get("_type").and_then(Value::as_str) {
-                        Some(t) if t == rm_type => Ok(()),
-                        Some(t) => Err(AssertionOutcome::Mismatch(format!(
-                            "instance_of: body is {t}, expected {rm_type}"
-                        ))),
-                        None => Err(AssertionOutcome::Mismatch(format!(
-                            "instance_of: body carries no _type (expected {rm_type})"
-                        ))),
-                    }
+                    assertions::eval_instance_of(body, rm_type).map_err(AssertionOutcome::from)
                 }
                 // The signature family is wire-asserted against the
                 // ORIGINAL_VERSION envelope the case's own flow reads (the
@@ -985,8 +949,6 @@ impl<'a> HttpDriver<'a> {
         expectation: ResultSetExpectation<'_>,
         vars: &VarStore,
     ) -> Result<Vec<String>, AssertionFailure> {
-        use crate::exec::resultset;
-        use crate::vocab::ResultSetMatch;
         let ResultSetExpectation {
             match_mode,
             rows,
@@ -994,11 +956,6 @@ impl<'a> HttpDriver<'a> {
             columns,
             cells,
         } = expectation;
-        let mut cmp = resultset::CellComparator::new(cells);
-        if let Some(cols) = columns {
-            let names: Vec<String> = cols.iter().map(|c| c.name.clone()).collect();
-            resultset::compare_columns(body, &names).map_err(|e| AssertionFailure(e.0))?;
-        }
         let expected_rows: Option<Vec<Value>> = match rows {
             Some(RowsSpec::Inline(rows)) => {
                 Some(rows.iter().map(|r| Value::Array(r.clone())).collect())
@@ -1006,23 +963,16 @@ impl<'a> HttpDriver<'a> {
             Some(RowsSpec::From(r)) => Some(self.expected_rows_from_ref(r, match_mode, vars)?),
             None => None,
         };
-        let outcome = match (match_mode, expected_rows, count) {
-            (ResultSetMatch::Count, _, Some(n)) => resultset::compare_count(body, n),
-            (ResultSetMatch::Ordered, Some(rows), _) => {
-                resultset::compare_ordered(body, &rows, &mut cmp)
-            }
-            (ResultSetMatch::Set, Some(rows), _) => resultset::compare_bag(body, &rows, &mut cmp),
-            (ResultSetMatch::Contains, Some(rows), _) => {
-                resultset::compare_contains(body, &rows, &mut cmp)
-            }
-            _ => {
-                return Err(AssertionFailure(
-                    "result_set: no comparable expectation resolved".into(),
-                ));
-            }
-        };
-        outcome.map_err(|e| AssertionFailure(e.0))?;
-        Ok(recorded_divergences(&cmp))
+        assertions::eval_result_set_against(
+            body,
+            assertions::ResolvedResultSet {
+                match_mode,
+                rows: expected_rows.as_deref(),
+                count,
+                columns,
+                cells,
+            },
+        )
     }
 }
 
@@ -1060,19 +1010,6 @@ impl StepAssertions {
             advisories: self.advisories,
         }
     }
-}
-
-/// The comparator's tolerated divergences, one reportable line each.
-fn recorded_divergences(cmp: &crate::exec::resultset::CellComparator) -> Vec<String> {
-    cmp.divergences()
-        .iter()
-        .map(|d| {
-            format!(
-                "result_set: {d} — ITS-REST docs/overview/Resources.md §Datetime format puts the \
-                 served spelling at SHOULD strength, so the row still passes"
-            )
-        })
-        .collect()
 }
 
 /// Whether two ixit `base_url`s address the SAME deployment: same scheme,
@@ -4172,8 +4109,8 @@ mod tests {
             status: StatusCode::OK,
             ..refused
         };
-        let failure = HttpDriver::eval_returns_assertion(
-            &ok,
+        let failure = assertions::eval_returns_wire(
+            ok.status,
             &Value::Null,
             Some(&Value::Bool(false)),
             None,

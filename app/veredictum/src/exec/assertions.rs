@@ -18,11 +18,13 @@
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+use reqwest::StatusCode;
+
 use crate::exec::resultset;
 use crate::exec::state::{Captured, VarStore};
-use crate::model::assertion::{Assertion, IgnoreSpec};
+use crate::model::assertion::{Assertion, ColumnSpec, IgnoreSpec, RowsSpec};
 use crate::refgrammar::{Segment, Template, ValueRef};
-use crate::vocab::IgnoreSetName;
+use crate::vocab::{CellComparison, IgnoreSetName, ResultSetMatch};
 
 /// One assertion failure (stable, human-readable — lands in the outcome
 /// record and the report).
@@ -606,6 +608,125 @@ pub fn eval_returns(
     Ok(())
 }
 
+/// Evaluate a `returns` assertion against one exchange's status and body.
+///
+/// A Boolean SM return (`has_directory`, `has_path`, `has_query`) is realized
+/// on the wire as PRESENCE: 2xx = TRUE, the mapped not-found = FALSE — the
+/// response body is the resource (or empty per `Prefer`), never a boolean
+/// literal (SM `openehr_platform` `I_EHR_DIRECTORY` / `I_DEFINITION_QUERY`
+/// `has_*`: Boolean; ITS-REST realizes them as GET). Every other predicate
+/// compares the served body, through [`eval_returns`].
+///
+/// # Errors
+/// [`AssertionFailure`] describing the mismatch.
+pub fn eval_returns_wire(
+    status: StatusCode,
+    body: &Value,
+    equals: Option<&Value>,
+    matches: Option<&str>,
+    omits: Option<&str>,
+) -> Result<(), AssertionFailure> {
+    let Some(Value::Bool(want)) = equals else {
+        return eval_returns(body, equals, matches, omits);
+    };
+    let observed = status.is_success();
+    if observed == *want {
+        return Ok(());
+    }
+    Err(AssertionFailure(format!(
+        "returns: wire presence {observed} != expected {want} (status {})",
+        status.as_u16()
+    )))
+}
+
+/// Evaluate an `instance_of` assertion structurally: the served body
+/// self-identifies as the named RM type.
+///
+/// # Errors
+/// [`AssertionFailure`] naming the type the body carries, or its absence.
+pub fn eval_instance_of(body: &Value, rm_type: &str) -> Result<(), AssertionFailure> {
+    match body.get("_type").and_then(Value::as_str) {
+        Some(t) if t == rm_type => Ok(()),
+        Some(t) => Err(AssertionFailure(format!(
+            "instance_of: body is {t}, expected {rm_type}"
+        ))),
+        None => Err(AssertionFailure(format!(
+            "instance_of: body carries no _type (expected {rm_type})"
+        ))),
+    }
+}
+
+/// One `result_set` expectation whose rows are already resolved to values.
+#[derive(Debug, Clone, Copy)]
+pub struct ResolvedResultSet<'a> {
+    /// How the expected rows are compared against the served ones.
+    pub match_mode: ResultSetMatch,
+    /// The expected rows; `None` where the assertion carries none.
+    pub rows: Option<&'a [Value]>,
+    /// The exact row count, for `match: count`.
+    pub count: Option<u64>,
+    /// The expected column aliases, when the row asserts them.
+    pub columns: Option<&'a [ColumnSpec]>,
+    /// The declared cell comparison; the default is the exact lexeme.
+    pub cells: CellComparison,
+}
+
+/// Compare a served `RESULT_SET` against a resolved expectation.
+///
+/// Returns the non-gating divergences the declared cell mode tolerated, one
+/// line each — empty under the default exact comparison.
+///
+/// # Errors
+/// [`AssertionFailure`] describing the first divergence that gates, or the
+/// absence of any comparable expectation.
+pub fn eval_result_set_against(
+    body: &Value,
+    expectation: ResolvedResultSet<'_>,
+) -> Result<Vec<String>, AssertionFailure> {
+    let ResolvedResultSet {
+        match_mode,
+        rows,
+        count,
+        columns,
+        cells,
+    } = expectation;
+    let mut cmp = resultset::CellComparator::new(cells);
+    if let Some(cols) = columns {
+        let names: Vec<String> = cols.iter().map(|c| c.name.clone()).collect();
+        resultset::compare_columns(body, &names).map_err(|e| AssertionFailure(e.0))?;
+    }
+    let outcome = match (match_mode, rows, count) {
+        (ResultSetMatch::Count, _, Some(n)) => resultset::compare_count(body, n),
+        (ResultSetMatch::Ordered, Some(rows), _) => {
+            resultset::compare_ordered(body, rows, &mut cmp)
+        }
+        (ResultSetMatch::Set, Some(rows), _) => resultset::compare_bag(body, rows, &mut cmp),
+        (ResultSetMatch::Contains, Some(rows), _) => {
+            resultset::compare_contains(body, rows, &mut cmp)
+        }
+        _ => {
+            return Err(AssertionFailure(
+                "result_set: no comparable expectation resolved".into(),
+            ));
+        }
+    };
+    outcome.map_err(|e| AssertionFailure(e.0))?;
+    Ok(recorded_divergences(&cmp))
+}
+
+/// The comparator's tolerated divergences, one reportable line each.
+fn recorded_divergences(cmp: &resultset::CellComparator) -> Vec<String> {
+    cmp.divergences()
+        .iter()
+        .map(|d| {
+            format!(
+                "result_set: {d} — ITS-REST docs/overview/Resources.md §Datetime format puts the \
+                 served spelling at SHOULD strength, so the row still passes"
+            )
+        })
+        .collect()
+}
+
 /// The XML Schema instance namespace, whose `type` attribute selects the
 /// concrete type of an element declared with an abstract one
 /// (<https://www.w3.org/TR/xmlschema-1/#xsi_type>).
@@ -896,6 +1017,182 @@ pub fn judgement_of(assertion: &Assertion) -> Judgement {
     }
 }
 
+/// The facts a RECORDED exchange carries: the status the server answered
+/// with, and the body it served.
+///
+/// This is the whole ground a transcript replay judges from — a recorded
+/// exchange carries no committed request payload, no corpus, no versioned
+/// read and no instance posture.
+#[derive(Debug, Clone, Copy)]
+pub struct ExchangeFacts<'a> {
+    /// The status code the recorded server answered with.
+    pub status: StatusCode,
+    /// The recorded response body, or [`Value::Null`] where it served none.
+    pub body: &'a Value,
+}
+
+/// Whether an assertion's facts are all in a recorded exchange.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplayJudgement {
+    /// Every fact is in the exchange, so [`eval_from_exchange`] judges it.
+    FromExchange,
+    /// A fact rides a seam a transcript never records: the payload committed
+    /// earlier in the row, a resolved corpus or capture reference, a
+    /// versioned-object read, or the signing posture of the addressed
+    /// instance. A replay REFUSES such an assertion rather than passing it.
+    Unrecorded,
+    /// Never judged on a step: aggregate (law e) or informative.
+    NotPerStep,
+}
+
+/// How a transcript replay may treat one assertion.
+///
+/// The match is exhaustive on purpose, exactly as [`judgement_of`] is: a new
+/// assertion variant cannot be added without saying whether a recorded
+/// exchange decides it, so no family can slip into a replay unevaluated.
+/// Two families split per assertion rather than per family — a `field`
+/// comparand carrying a `${…}` reference needs the resolver, and
+/// `result_set rows.from` names a corpus view over the committed-set uids
+/// provisioning bound.
+#[must_use]
+pub fn replay_judgement(assertion: &Assertion) -> ReplayJudgement {
+    match assertion {
+        Assertion::Returns { .. } | Assertion::XmlRoot { .. } | Assertion::InstanceOf { .. } => {
+            ReplayJudgement::FromExchange
+        }
+        Assertion::Field {
+            equals, not_equals, ..
+        } => {
+            if equals
+                .iter()
+                .chain(not_equals)
+                .all(|value| value.literal().is_some())
+            {
+                ReplayJudgement::FromExchange
+            } else {
+                ReplayJudgement::Unrecorded
+            }
+        }
+        Assertion::ResultSet { rows, .. } => match rows {
+            Some(RowsSpec::From(_)) => ReplayJudgement::Unrecorded,
+            Some(RowsSpec::Inline(_)) | None => ReplayJudgement::FromExchange,
+        },
+        Assertion::Equivalent { .. } | Assertion::Signature { .. } | Assertion::Version { .. } => {
+            ReplayJudgement::Unrecorded
+        }
+        Assertion::Unique { .. } | Assertion::MessageExemplar { .. } | Assertion::State { .. } => {
+            ReplayJudgement::NotPerStep
+        }
+    }
+}
+
+/// Evaluate one assertion from a recorded exchange alone.
+///
+/// Returns the non-gating divergences a passing assertion tolerated. An
+/// assertion [`replay_judgement`] classifies [`ReplayJudgement::Unrecorded`]
+/// answers [`AssertionOutcome::Unjudgeable`], never a pass: a replay that
+/// answered such an assertion `Ok` would reproduce a verdict over something
+/// nobody evaluated.
+///
+/// # Errors
+/// [`AssertionOutcome::Mismatch`] for a served value that contradicts the
+/// assertion, [`AssertionOutcome::Unjudgeable`] for a fact the exchange does
+/// not carry.
+pub fn eval_from_exchange(
+    assertion: &Assertion,
+    facts: ExchangeFacts<'_>,
+) -> Result<Vec<String>, AssertionOutcome> {
+    let unrecorded = || {
+        AssertionOutcome::Unjudgeable(format!(
+            "{}: the recorded exchange carries no ground for this family",
+            assertion.family()
+        ))
+    };
+    match replay_judgement(assertion) {
+        ReplayJudgement::NotPerStep => return Ok(Vec::new()),
+        ReplayJudgement::Unrecorded => return Err(unrecorded()),
+        ReplayJudgement::FromExchange => {}
+    }
+    let body = facts.body;
+    let judged: Result<(), AssertionFailure> = match assertion {
+        Assertion::Field {
+            path,
+            equals,
+            not_equals,
+            exists,
+            absent,
+            matches,
+            absent_or_matches,
+        } => eval_field(
+            body,
+            path,
+            equals
+                .as_ref()
+                .and_then(crate::model::value::TemplatedValue::literal)
+                .as_ref(),
+            not_equals
+                .as_ref()
+                .and_then(crate::model::value::TemplatedValue::literal)
+                .as_ref(),
+            *exists,
+            *absent,
+            matches.as_deref(),
+            absent_or_matches.as_deref(),
+        ),
+        Assertion::Returns {
+            equals,
+            matches,
+            omits,
+        } => eval_returns_wire(
+            facts.status,
+            body,
+            equals.as_ref(),
+            matches.as_deref(),
+            omits.as_deref(),
+        ),
+        Assertion::XmlRoot {
+            name,
+            namespace,
+            xsi_type,
+        } => eval_xml_root(body, name, *namespace, xsi_type.as_deref()),
+        Assertion::InstanceOf { rm_type, .. } => eval_instance_of(body, rm_type),
+        Assertion::ResultSet {
+            match_mode,
+            rows,
+            count,
+            columns,
+            cells,
+        } => {
+            let inline: Option<Vec<Value>> = match rows {
+                Some(RowsSpec::Inline(rows)) => {
+                    Some(rows.iter().map(|r| Value::Array(r.clone())).collect())
+                }
+                Some(RowsSpec::From(_)) | None => None,
+            };
+            return eval_result_set_against(
+                body,
+                ResolvedResultSet {
+                    match_mode: *match_mode,
+                    rows: inline.as_deref(),
+                    count: *count,
+                    columns: columns.as_deref(),
+                    cells: cells.unwrap_or_default(),
+                },
+            )
+            .map_err(AssertionOutcome::from);
+        }
+        // Every remaining family is Unrecorded or NotPerStep, both answered
+        // above; the arm keeps the dispatch total without a panic.
+        Assertion::Equivalent { .. }
+        | Assertion::Signature { .. }
+        | Assertion::Version { .. }
+        | Assertion::Unique { .. }
+        | Assertion::MessageExemplar { .. }
+        | Assertion::State { .. } => return Err(unrecorded()),
+    };
+    judged.map(|()| Vec::new()).map_err(AssertionOutcome::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -963,6 +1260,168 @@ mod tests {
                 "{document} changed judgement"
             );
         }
+    }
+
+    /// Every assertion variant's replay classification, pinned by name.
+    ///
+    /// A family silently reclassified `FromExchange` would let a
+    /// verification-pack entry reproduce a verdict over an assertion the
+    /// replay never evaluated, which is the silent pass the refusal exists to
+    /// prevent — so the classification is a test, not a convention.
+    #[test]
+    fn every_assertion_variant_declares_what_a_recorded_exchange_decides() {
+        let cases: &[(Value, ReplayJudgement)] = &[
+            (
+                json!({ "assert": "field", "path": "uid/value", "exists": true }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "field", "path": "ehr_id/value", "equals": "fixed" }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "field", "path": "ehr_id/value", "equals": "${first_ehr_id}" }),
+                ReplayJudgement::Unrecorded,
+            ),
+            (
+                json!({ "assert": "equivalent", "to": "committed" }),
+                ReplayJudgement::Unrecorded,
+            ),
+            (
+                json!({ "assert": "returns", "equals": true }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "result_set", "match": "count", "count": 1 }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "result_set", "match": "ordered", "rows": [["a"]] }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "result_set", "match": "ordered",
+                        "rows": { "from": "${ds:cnf.set.bp-10#magnitude_ge_140_by_uid}" } }),
+                ReplayJudgement::Unrecorded,
+            ),
+            (
+                json!({ "assert": "xml_root", "name": "composition" }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "instance_of", "rm_type": "COMPOSITION" }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "signature", "of": "${v1}", "present": true }),
+                ReplayJudgement::Unrecorded,
+            ),
+            (
+                json!({ "assert": "version", "count": 1 }),
+                ReplayJudgement::Unrecorded,
+            ),
+            (
+                json!({ "assert": "unique", "over": "${new_ehr_id}", "aggregate": true }),
+                ReplayJudgement::NotPerStep,
+            ),
+            (
+                json!({ "assert": "message_exemplar", "text": "EHR not found" }),
+                ReplayJudgement::NotPerStep,
+            ),
+            (
+                json!({ "assert": "state", "text": "the EHR exists" }),
+                ReplayJudgement::NotPerStep,
+            ),
+        ];
+        for (document, expected) in cases {
+            let assertion: Assertion = serde_json::from_value(document.clone())
+                .unwrap_or_else(|e| panic!("{document} does not parse: {e}"));
+            assert_eq!(
+                replay_judgement(&assertion),
+                *expected,
+                "{document} changed its replay classification"
+            );
+        }
+    }
+
+    /// The recorded-exchange dispatch judges what it classified judgeable and
+    /// answers UNJUDGEABLE for the rest — never a pass. An unjudgeable outcome
+    /// errors its row (law c), while a contradicted assertion fails it (law b).
+    #[test]
+    fn the_recorded_dispatch_judges_or_refuses_but_never_passes_silently() {
+        let body = json!({ "_type": "EHR", "ehr_id": { "value": "e-1" } });
+        let facts = ExchangeFacts {
+            status: StatusCode::OK,
+            body: &body,
+        };
+        let parse = |document: Value| -> Assertion {
+            serde_json::from_value(document).expect("the assertion parses")
+        };
+
+        assert_eq!(
+            eval_from_exchange(
+                &parse(json!({ "assert": "instance_of", "rm_type": "EHR" })),
+                facts
+            ),
+            Ok(Vec::new())
+        );
+        let mismatch = eval_from_exchange(
+            &parse(json!({ "assert": "instance_of", "rm_type": "FOLDER" })),
+            facts,
+        )
+        .expect_err("a body of another type contradicts the assertion");
+        assert!(
+            matches!(mismatch, AssertionOutcome::Mismatch(_)),
+            "{mismatch:?}"
+        );
+
+        // A family whose ground the exchange does not carry is inconclusive,
+        // and it never comes back as a pass.
+        let unjudgeable = eval_from_exchange(
+            &parse(json!({ "assert": "equivalent", "to": "committed" })),
+            facts,
+        )
+        .expect_err("no committed payload is recorded");
+        assert!(
+            matches!(unjudgeable, AssertionOutcome::Unjudgeable(_)),
+            "{unjudgeable:?}"
+        );
+
+        // Aggregate and informative families are not judged on a step at all.
+        assert_eq!(
+            eval_from_exchange(
+                &parse(json!({ "assert": "state", "text": "the EHR exists" })),
+                facts
+            ),
+            Ok(Vec::new())
+        );
+    }
+
+    /// The wire-presence rule a Boolean `returns` is judged by (SM
+    /// `openehr_platform` `I_EHR_DIRECTORY.has_directory`: Boolean, realized
+    /// by ITS-REST as a GET whose 2xx IS the TRUE).
+    #[test]
+    fn a_boolean_returns_is_judged_by_wire_presence() {
+        let body = Value::Null;
+        assert!(eval_returns_wire(StatusCode::OK, &body, Some(&json!(true)), None, None).is_ok());
+        assert!(
+            eval_returns_wire(
+                StatusCode::NOT_FOUND,
+                &body,
+                Some(&json!(false)),
+                None,
+                None
+            )
+            .is_ok()
+        );
+        assert!(
+            eval_returns_wire(StatusCode::NOT_FOUND, &body, Some(&json!(true)), None, None)
+                .is_err()
+        );
+        // A non-Boolean predicate compares the served body, not the status.
+        assert!(
+            eval_returns_wire(StatusCode::OK, &json!("v1.2"), None, Some("^v1\\."), None).is_ok()
+        );
     }
 
     #[test]
