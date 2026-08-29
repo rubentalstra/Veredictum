@@ -6,11 +6,12 @@
 # and the `invalid_body` variant that takes a case-supplied payload declares
 # only refusal outcomes.
 #
-# The uid literal lives HERE rather than in the case for the same reason the
-# `update_other_details` payload does: a patched body's `set` takes a literal
-# value. The case that reads it back —
-# I_EHR_STATUS.clear_ehr_queryable-client_supplied_uid — repeats the same
-# literal in its `not_equals` assertion, and its own header comment says so.
+# The uid literal lives HERE, and the case that reads it back
+# (I_EHR_STATUS.clear_ehr_queryable-client_supplied_uid) repeats the same
+# literal in its `not_equals` assertion; its own header comment says so. A
+# patched body's `set` renders the `${…}` reference grammar against the step's
+# scope, so the value may instead be authored once in that case's `with:` and
+# named here as a reference.
 #
 # The body is schema-valid on the way in: RM UML/classes/locatable.adoc
 # §Attributes types `uid` `0..1` ("Optional globally unique object identifier

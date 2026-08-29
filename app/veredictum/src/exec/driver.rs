@@ -1875,7 +1875,11 @@ impl HttpDriver<'_> {
                 ))
             }
             Some(RequestBody::Patched { from_capture, set }) => {
-                Self::patched_body(from_capture, set, vars).map(Some)
+                // A `set:` value is authored in the STEP's scope, the same one
+                // the header and URL templates resolve against, so the step's
+                // own `with:` values are in scope beside the bound captures.
+                let merged = Self::merge_with_vars(vars, with);
+                Self::patched_body(from_capture, set, &merged).map(Some)
             }
         }
     }
@@ -1890,6 +1894,12 @@ impl HttpDriver<'_> {
     /// non-object base is a loud step error, which the caller turns into a
     /// transport-class (inconclusive, runner-side) observation — never a
     /// silent no-op.
+    ///
+    /// Every string leaf of a `set:` value renders through the closed `${…}`
+    /// template grammar against `vars`, so a binding may patch in a value the
+    /// case supplies. A leaf naming an unbound reference is the same loud step
+    /// error; putting the unrendered `${…}` text on the wire would make the
+    /// exchange vacuous.
     fn patched_body(
         from_capture: &CaptureName,
         set: &[(String, Value)],
@@ -1947,7 +1957,9 @@ impl HttpDriver<'_> {
             ));
         };
         for (field, value) in set {
-            map.insert(field.clone(), value.clone());
+            let rendered = render_string_leaves(value.clone(), vars)
+                .map_err(|e| format!("patched body: set field {field}: {e}"))?;
+            map.insert(field.clone(), rendered);
         }
         Ok(patched)
     }
@@ -4056,6 +4068,62 @@ mod tests {
         let other = CaptureName::parse("composition_body").unwrap();
         let err = HttpDriver::patched_body(&other, &set, &VarStore::default()).unwrap_err();
         assert!(err.contains("holds no resource body"), "{err}");
+    }
+
+    /// A `set:` value renders through the `${…}` grammar, so a binding may
+    /// patch in a value the case supplies. An unbound reference is loud, and a
+    /// reference-free value is inserted verbatim.
+    #[test]
+    fn a_patched_set_value_renders_its_templates_and_refuses_an_unbound_one() {
+        let from = CaptureName::parse("status_body").unwrap();
+        let set = vec![(
+            "uid".to_owned(),
+            serde_json::json!({
+                "_type": "OBJECT_VERSION_ID",
+                "value": "${client_value}"
+            }),
+        )];
+
+        let mut vars = VarStore::default();
+        vars.set(
+            from.clone(),
+            Captured::Body(serde_json::json!({ "_type": "EHR_STATUS" })),
+        );
+        vars.set(
+            CaptureName::parse("client_value").unwrap(),
+            Captured::Scalar("cccccccc-2222-4222-8222-222222222222".to_owned()),
+        );
+        let patched = HttpDriver::patched_body(&from, &set, &vars).unwrap();
+        assert_eq!(
+            patched.get("uid"),
+            Some(&serde_json::json!({
+                "_type": "OBJECT_VERSION_ID",
+                "value": "cccccccc-2222-4222-8222-222222222222"
+            }))
+        );
+
+        let mut unbound = VarStore::default();
+        unbound.set(
+            from.clone(),
+            Captured::Body(serde_json::json!({ "_type": "EHR_STATUS" })),
+        );
+        let err = HttpDriver::patched_body(&from, &set, &unbound).unwrap_err();
+        assert!(err.contains("uid"), "{err}");
+        assert!(err.contains("client_value"), "{err}");
+
+        // A reference-free value is inserted verbatim.
+        let literal = vec![(
+            "uid".to_owned(),
+            serde_json::json!({ "_type": "OBJECT_VERSION_ID", "value": "fixed::sys::1" }),
+        )];
+        let patched = HttpDriver::patched_body(&from, &literal, &unbound).unwrap();
+        assert_eq!(
+            patched.get("uid"),
+            Some(&serde_json::json!({
+                "_type": "OBJECT_VERSION_ID",
+                "value": "fixed::sys::1"
+            }))
+        );
     }
 
     /// A `666|attestation|` member is the attestation wire shape RM common
