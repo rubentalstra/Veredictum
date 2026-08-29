@@ -12,6 +12,7 @@
 )]
 
 use veredictum::artifacts::load_root;
+use veredictum::exec::RowOutcome;
 use veredictum::exec::player::{ExpectedVerdict, Transcript, replay_entry, verdict_matches};
 
 fn load() -> (veredictum::artifacts::ArtifactSet, Transcript) {
@@ -119,6 +120,75 @@ fn the_aggregate_and_informative_families_do_not_block_a_replay() {
 
     let (expected, produced) = replay_entry(&set, entry).expect("replay");
     assert!(verdict_matches(expected, &produced));
+}
+
+/// A recorded exchange that CONTRADICTS its own step assertion must stop
+/// reproducing a passing verdict (#255). The pack's passing case asserts
+/// `instance_of: EHR` on its step-3 read-back, so a doctored transcript
+/// serving another RM type there has to fail the row at that step. The
+/// committed pack is untouched: the doctoring happens on the parsed copy.
+#[test]
+fn a_recorded_exchange_contradicting_its_step_assertion_stops_passing() {
+    let (set, mut transcript) = load();
+    let entry = transcript
+        .entries
+        .iter_mut()
+        .find(|e| matches!(e.expected_verdict, ExpectedVerdict::Passed))
+        .expect("a passing adjudication exists");
+    let read_back = entry
+        .steps
+        .iter_mut()
+        .find(|s| s.step == 3)
+        .expect("the passing entry records the step-3 read-back");
+    read_back.response.body = Some(serde_json::json!({
+        "_type": "FOLDER",
+        "ehr_id": { "value": "7d44b88c-4199-4bad-97dc-d78268e01391" }
+    }));
+
+    let (expected, produced) = replay_entry(&set, entry).expect("replay");
+    assert!(
+        matches!(produced, RowOutcome::Failed { step: 3, .. }),
+        "the contradicted assertion must fail the row at its own step, produced {produced:?}"
+    );
+    assert!(
+        !verdict_matches(expected, &produced),
+        "a step assertion the exchange contradicts must not reproduce `passed`"
+    );
+}
+
+/// The step seam refuses what it cannot judge, exactly as the postcondition
+/// seam does: a `version` assertion is judged against a versioned-object read
+/// the transcript never recorded, so an entry carrying one on a step whose
+/// observation met its expectation is REFUSED by name.
+#[test]
+fn a_step_assertion_the_replay_cannot_judge_refuses_the_entry() {
+    let (mut set, transcript) = load();
+    let entry = transcript
+        .entries
+        .iter()
+        .find(|e| matches!(e.expected_verdict, ExpectedVerdict::Passed))
+        .expect("a passing adjudication exists");
+    let case = set
+        .cases
+        .iter_mut()
+        .map(|(_, c)| c)
+        .find(|c| c.id == entry.case)
+        .expect("the entry's case is in the catalogue");
+    let unrecorded: veredictum::model::assertion::Assertion =
+        serde_json::from_value(serde_json::json!({ "assert": "version", "count": 1 }))
+            .expect("a version assertion parses");
+    case.flow
+        .iter_mut()
+        .find(|s| s.step == 3)
+        .expect("the case carries a step 3")
+        .assertions
+        .push(unrecorded);
+
+    let refusal = replay_entry(&set, entry).expect_err("the replay must refuse, never answer");
+    assert!(
+        refusal.contains("version") && refusal.contains(entry.case.as_str()),
+        "the refusal names neither the family nor the case: {refusal}"
+    );
 }
 
 #[test]

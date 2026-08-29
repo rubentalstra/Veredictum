@@ -62,6 +62,40 @@ impl TemplatedValue {
         })
     }
 
+    /// This value as plain JSON, when it carries no `${…}` reference anywhere.
+    ///
+    /// A reference-free tree needs no resolver: every string is its own
+    /// literal, so the answer is byte-identical to what
+    /// `Resolver::resolve_value` would produce for it. `None` says the tree
+    /// carries a reference, and the caller must resolve it (or refuse).
+    #[must_use]
+    pub fn literal(&self) -> Option<serde_json::Value> {
+        Some(match self {
+            Self::Null => serde_json::Value::Null,
+            Self::Bool(b) => serde_json::Value::Bool(*b),
+            Self::Number(n) => serde_json::Value::Number(n.clone()),
+            Self::Text(t) => {
+                if t.refs().next().is_some() {
+                    return None;
+                }
+                serde_json::Value::String(t.raw().to_owned())
+            }
+            Self::Seq(items) => serde_json::Value::Array(
+                items
+                    .iter()
+                    .map(Self::literal)
+                    .collect::<Option<Vec<_>>>()?,
+            ),
+            Self::Map(entries) => {
+                let mut map = serde_json::Map::new();
+                for (key, value) in entries {
+                    map.insert(key.clone(), value.literal()?);
+                }
+                serde_json::Value::Object(map)
+            }
+        })
+    }
+
     /// Every reference anywhere in the tree.
     #[must_use]
     pub fn refs(&self) -> Vec<&ValueRef> {
@@ -134,5 +168,34 @@ mod tests {
             ["absent", "flag", "count"]
         );
         assert_eq!(entries.first().map(|(_, v)| v), Some(&TemplatedValue::Null));
+    }
+
+    /// A reference-free tree reads as its own JSON literal; one reference
+    /// anywhere in it, however deep, withholds the literal so the caller has
+    /// to resolve it or refuse.
+    #[test]
+    fn only_a_reference_free_tree_reads_as_a_literal() {
+        let literal = TemplatedValue::from_value(&serde_json::json!({
+            "value": "other care",
+            "count": 3,
+            "flags": [true, serde_json::Value::Null]
+        }))
+        .unwrap();
+        assert_eq!(
+            literal.literal(),
+            Some(serde_json::json!({
+                "value": "other care",
+                "count": 3,
+                "flags": [true, serde_json::Value::Null]
+            }))
+        );
+
+        let referencing =
+            TemplatedValue::from_value(&serde_json::json!({ "uid": "${first_ehr_id}" })).unwrap();
+        assert_eq!(referencing.literal(), None);
+
+        let nested =
+            TemplatedValue::from_value(&serde_json::json!({ "a": [{ "b": "x${v1}y" }] })).unwrap();
+        assert_eq!(nested.literal(), None);
     }
 }
