@@ -1981,21 +1981,7 @@ impl HttpDriver<'_> {
             Some(RequestBody::Structured(template)) => {
                 // Structured templates reference the step's own with-values
                 // (`${q}`, `${fetch?}`) as well as captures.
-                let mut merged = vars.clone();
-                for (key, value) in with {
-                    if let Ok(name) = CaptureName::parse(key)
-                        && merged.get(&name).is_none()
-                    {
-                        match value {
-                            Value::String(s) => {
-                                merged.set(name, Captured::Scalar(s.clone()));
-                            }
-                            other => {
-                                merged.set(name, Captured::Body(other.clone()));
-                            }
-                        }
-                    }
-                }
+                let merged = Self::merge_with_vars(vars, with, WithScope::Structural);
                 Ok(Some(
                     self.resolver
                         .resolve_value(template, &merged)
@@ -2006,7 +1992,7 @@ impl HttpDriver<'_> {
                 // A `set:` value is authored in the STEP's scope, the same one
                 // the header and URL templates resolve against, so the step's
                 // own `with:` values are in scope beside the bound captures.
-                let merged = Self::merge_with_vars(vars, with);
+                let merged = Self::merge_with_vars(vars, with, WithScope::WireText);
                 Self::patched_body(from_capture, set, &merged).map(Some)
             }
         }
@@ -3080,40 +3066,56 @@ impl HttpDriver<'_> {
         Ok(Some(scopes))
     }
 
-    /// Captures plus the step's own scalar `with` values (the header/query
-    /// template resolution scope). A step's `with:` value SHADOWS a
-    /// same-named earlier capture in this step's scope — the step's explicit
-    /// input is the most specific binding, and the old keep-the-capture guard
-    /// silently rendered a STALE value into header templates (the run-2
-    /// triage, 2026-07-28: a case that captured `preceding_version_uid` at
-    /// step 1 and passed a newer uid under the same name at step 4 had its
-    /// If-Match rendered from step 1 — the SUT's 412 was correct and the red
-    /// row was this drop). The var store itself is not mutated; the shadow
-    /// lives only in the step-scoped merge.
-    fn merge_with_vars(vars: &VarStore, with: &BTreeMap<String, Value>) -> VarStore {
+    /// Captures plus the step's own `with` values, promoted in the shape
+    /// `scope` asks for: the step-scoped store every `${…}` template of that
+    /// step resolves against.
+    ///
+    /// A step's `with:` value SHADOWS a same-named capture. The step's
+    /// explicit input is the most specific binding in its own scope, and
+    /// letting the capture win puts a STALE value on the wire: the run-2
+    /// triage (2026-07-28) found a case that captured `preceding_version_uid`
+    /// at step 1 and passed a newer uid under the same name at step 4 having
+    /// its `If-Match` rendered from step 1, so the SUT's correct 412 read as a
+    /// red row. One grammar resolving in one step scope answers one way, so
+    /// the header, URL and body paths all merge through here. The var store
+    /// itself is not mutated; the shadow lives only in the merge.
+    fn merge_with_vars(
+        vars: &VarStore,
+        with: &BTreeMap<String, Value>,
+        scope: WithScope,
+    ) -> VarStore {
         let mut merged = vars.clone();
         for (key, value) in with {
-            // Every SCALAR `with:` value is promoted into the template vars —
-            // numbers and booleans render as their wire text exactly like the
-            // structured-body path does (a number-typed `url_fetch: 4` must
-            // reach a `${url_fetch?}` URL slot; silently skipping non-strings
-            // turned a runner gap into a fake SUT failure — the group-9
-            // triage). Objects/arrays stay out: they have no scalar wire
-            // text.
-            let text = match value {
-                Value::String(s) => Some(s.clone()),
-                Value::Number(n) => Some(n.to_string()),
-                Value::Bool(b) => Some(b.to_string()),
-                _ => None,
+            let Ok(name) = CaptureName::parse(key) else {
+                continue;
             };
-            if let Some(text) = text
-                && let Ok(name) = CaptureName::parse(key)
-            {
-                merged.set(name, Captured::Scalar(text));
-            }
+            // A number- or boolean-typed value reaches a URL slot as its wire
+            // text (`url_fetch: 4` -> `?fetch=4`; silently skipping non-strings
+            // turned a runner gap into a fake SUT failure, the group-9 triage)
+            // and a JSON body slot as the type the case authored, so the two
+            // scopes promote it differently.
+            let captured = match (scope, value) {
+                (_, Value::String(s)) => Captured::Scalar(s.clone()),
+                (WithScope::WireText, Value::Number(n)) => Captured::Scalar(n.to_string()),
+                (WithScope::WireText, Value::Bool(b)) => Captured::Scalar(b.to_string()),
+                (WithScope::WireText, _) => continue,
+                (WithScope::Structural, other) => Captured::Body(other.clone()),
+            };
+            merged.set(name, captured);
         }
         merged
     }
+}
+
+/// Which `with:` values a step-scoped merge promotes, and in what shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WithScope {
+    /// The header, query and URL scope: every scalar promotes as its wire
+    /// text. Objects and arrays stay out, having no scalar wire text.
+    WireText,
+    /// The structured-body scope: a string promotes as its text, and every
+    /// other value keeps the JSON type the case authored.
+    Structural,
 }
 
 impl<'a> HttpDriver<'a> {
@@ -3382,7 +3384,7 @@ impl StepDriver for HttpDriver<'_> {
         // Header templates resolve against captures AND the step's own
         // resolved `with` values (e.g. update_composition-non_existent
         // supplies preceding_version_uid inline, not as a capture).
-        let header_vars = Self::merge_with_vars(vars, &with);
+        let header_vars = Self::merge_with_vars(vars, &with, WithScope::WireText);
         let headers = match Self::compose_headers(
             self.set,
             self.ixit,
@@ -4346,7 +4348,7 @@ mod tests {
             "preceding_version_uid".to_owned(),
             serde_json::json!("vo::sys::2"),
         );
-        let merged = HttpDriver::merge_with_vars(&vars, &with);
+        let merged = HttpDriver::merge_with_vars(&vars, &with, WithScope::WireText);
         assert_eq!(
             merged.scalar(&CaptureName::parse("preceding_version_uid").unwrap()),
             Some("vo::sys::2"),
@@ -4357,6 +4359,60 @@ mod tests {
             vars.scalar(&CaptureName::parse("preceding_version_uid").unwrap()),
             Some("vo::sys::1")
         );
+    }
+
+    /// The same priority in the structured-body scope: the step's own `with:`
+    /// value wins over a same-named capture, and every non-string value keeps
+    /// the JSON type the case authored, so a body slot carries `5` where the
+    /// wire-text scope would carry `"5"`.
+    #[test]
+    fn with_value_shadows_same_named_capture_in_the_body_scope() {
+        let mut vars = VarStore::default();
+        vars.set(
+            CaptureName::parse("q").unwrap(),
+            Captured::Scalar("SELECT c FROM COMPOSITION c".to_owned()),
+        );
+        let mut with = BTreeMap::new();
+        with.insert("q".to_owned(), serde_json::json!("SELECT e FROM EHR e"));
+        with.insert("fetch".to_owned(), serde_json::json!(5));
+        let merged = HttpDriver::merge_with_vars(&vars, &with, WithScope::Structural);
+        assert_eq!(
+            merged.scalar(&CaptureName::parse("q").unwrap()),
+            Some("SELECT e FROM EHR e"),
+            "the step's explicit with: value wins in the body scope too"
+        );
+        assert_eq!(
+            merged.get(&CaptureName::parse("fetch").unwrap()),
+            Some(&Captured::Body(serde_json::json!(5))),
+            "a body slot keeps the authored JSON type"
+        );
+    }
+
+    /// The other direction, at both scopes: a capture the step does NOT name
+    /// in its `with:` still reaches the step's templates. Shadowing is a
+    /// same-name rule, never a switch that drops the capture scope.
+    #[test]
+    fn a_capture_the_step_does_not_supply_survives_both_scopes() {
+        let mut vars = VarStore::default();
+        vars.set(
+            CaptureName::parse("preceding_version_uid").unwrap(),
+            Captured::Scalar("vo::sys::1".to_owned()),
+        );
+        let mut with = BTreeMap::new();
+        with.insert("ehr_id".to_owned(), serde_json::json!("EHR-1"));
+        for scope in [WithScope::WireText, WithScope::Structural] {
+            let merged = HttpDriver::merge_with_vars(&vars, &with, scope);
+            assert_eq!(
+                merged.scalar(&CaptureName::parse("preceding_version_uid").unwrap()),
+                Some("vo::sys::1"),
+                "{scope:?}: the unshadowed capture must survive"
+            );
+            assert_eq!(
+                merged.scalar(&CaptureName::parse("ehr_id").unwrap()),
+                Some("EHR-1"),
+                "{scope:?}: the step's own value is bound beside it"
+            );
+        }
     }
 
     /// The group-9 triage regression: a NUMBER-typed `with:` value must
@@ -4412,20 +4468,20 @@ mod tests {
         .unwrap();
         let mut with = BTreeMap::new();
         with.insert("url_fetch".to_owned(), serde_json::json!(4));
-        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with);
+        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with, WithScope::WireText);
         let url = HttpDriver::build_url(&binding, "http://sut", &with, &vars).unwrap();
         assert_eq!(url, "http://sut/query/aql?fetch=4");
 
         // An unbound optional slot still omits the parameter.
         let empty = BTreeMap::new();
-        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &empty);
+        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &empty, WithScope::WireText);
         let url = HttpDriver::build_url(&binding, "http://sut", &empty, &vars).unwrap();
         assert_eq!(url, "http://sut/query/aql");
 
         // A bound-but-unrenderable (object) value is LOUD, never a drop.
         let mut with = BTreeMap::new();
         with.insert("url_fetch".to_owned(), serde_json::json!({"n": 4}));
-        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with);
+        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with, WithScope::WireText);
         let err = HttpDriver::build_url(&binding, "http://sut", &with, &vars).unwrap_err();
         assert!(err.contains("did not render as a scalar"), "{err}");
     }
@@ -4452,7 +4508,7 @@ mod tests {
 
         // Neither member bound: no query at all (the whole-set call).
         let empty = BTreeMap::new();
-        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &empty);
+        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &empty, WithScope::WireText);
         assert_eq!(
             HttpDriver::build_url(&binding, "http://sut", &empty, &vars).unwrap(),
             "http://sut/admin/ehr/all"
@@ -4461,7 +4517,7 @@ mod tests {
         // One member bound: the one-id subset.
         let mut with = BTreeMap::new();
         with.insert("ehr_id_subset".to_owned(), serde_json::json!("a"));
-        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with);
+        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with, WithScope::WireText);
         assert_eq!(
             HttpDriver::build_url(&binding, "http://sut", &with, &vars).unwrap(),
             "http://sut/admin/ehr/all?ehr_id=a"
@@ -4469,7 +4525,7 @@ mod tests {
 
         // Both bound: the repeated form, in authored member order.
         with.insert("ehr_id_subset_2".to_owned(), serde_json::json!("b"));
-        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with);
+        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with, WithScope::WireText);
         assert_eq!(
             HttpDriver::build_url(&binding, "http://sut", &with, &vars).unwrap(),
             "http://sut/admin/ehr/all?ehr_id=a&ehr_id=b"
@@ -4506,7 +4562,7 @@ mod tests {
         .unwrap();
         let mut with = BTreeMap::new();
         with.insert("ehr_id".to_owned(), serde_json::json!(["a", "b"]));
-        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with);
+        let vars = HttpDriver::merge_with_vars(&VarStore::default(), &with, WithScope::WireText);
         let err = HttpDriver::build_url(&binding, "http://sut", &with, &vars).unwrap_err();
         assert!(err.contains("single-valued parameter"), "{err}");
 

@@ -496,6 +496,21 @@ version on.
   and record gates — skipped themselves for the length of the drift window and
   execute again.
 
+- **A step's `with:` value wins over a same-named capture everywhere, and both
+  body paths are asserted on the wire (#231).** The driver answered the
+  with-versus-capture question two opposite ways in one file: a header, query
+  or URL slot took the step's own value, while a structured request body took
+  the capture and left the authored value unused. The step's explicit input is
+  now the most specific binding at every slot, so a case that passes a name
+  inline sends that value in the body exactly as it already did in an
+  `If-Match`. Under the old body resolution a step passing a name an earlier
+  step had captured sent the earlier value with no diagnostic, which is how a
+  negative case addressing an unknown identifier could be answered about the
+  provisioned one and still pass. No case in the committed catalogue collides
+  this way, so no verdict moves today. The named and structured body paths also
+  gained the recorded-request-body assertions the patched path already had:
+  what a case puts on the wire is now read back on all three.
+
 ### Security
 
 - The container image build and the release pipeline now fetch their pinned
