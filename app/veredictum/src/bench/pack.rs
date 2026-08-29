@@ -12,6 +12,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 
 use crate::bench::BenchError;
@@ -41,17 +42,23 @@ small upload, and it is not derived from any published library.";
 /// `DV_QUANTITY` in `mm[Hg]` under the
 /// `openEHR-EHR-OBSERVATION.blood_pressure.v2` archetype (openEHR RM
 /// `data_structures` §`HISTORY`/`POINT_EVENT`).
+///
+/// Its `archetype_node_id` and `archetype_details.archetype_id` both carry
+/// `openEHR-EHR-COMPOSITION.minimal.v1`, the archetype the named template
+/// roots at, which is what [`BenchPack::verify_fixture_roots`] proves at every
+/// load.
 const BP_COMPOSITION: &str = include_str!("fixtures/bp_composition.json");
 
 /// The pinned digest of [`BP_COMPOSITION`].
 const BP_COMPOSITION_SHA256: &str =
-    "9eaea10c5171d1f4648c8e932a21ce624312a2cad98f49115f35efbbb344a3ce";
+    "bc0d07f4a6f89e5b357cddd558b4c05a6ee9cd4083dda6646e1b23ee80ff1d47";
 
 /// Where [`BP_COMPOSITION`] comes from.
 const BP_COMPOSITION_PROVENANCE: &str = "\
 Authored in this repository for the smoke pack: a canonical-JSON COMPOSITION \
-declaring template id 'cnf.blood_pressure', carrying one POINT_EVENT with a \
-systolic and a diastolic DV_QUANTITY in mm[Hg].";
+declaring template id 'cnf.blood_pressure' and rooted at \
+openEHR-EHR-COMPOSITION.minimal.v1, the root that template defines, carrying \
+one POINT_EVENT with a systolic and a diastolic DV_QUANTITY in mm[Hg].";
 
 /// The invalid twin of [`BP_COMPOSITION`]: the same bytes with the mandatory
 /// `COMPOSITION.composer` member deleted and nothing else changed.
@@ -65,7 +72,7 @@ const BP_COMPOSITION_TWIN: &str = include_str!("fixtures/bp_composition.missing_
 
 /// The pinned digest of [`BP_COMPOSITION_TWIN`].
 const BP_COMPOSITION_TWIN_SHA256: &str =
-    "602039bed3f3daf060152af6034baf6d7ce74fde6ec77e8ff1cc89eda2b3e0b3";
+    "eaec78e4b3541189b63bc2a83cbff88e4727aa3893406e08777e7330cbfb72b6";
 
 /// Where [`BP_COMPOSITION_TWIN`] comes from.
 const BP_COMPOSITION_TWIN_PROVENANCE: &str = "\
@@ -848,6 +855,97 @@ impl BenchPack {
         Ok(())
     }
 
+    /// Verifies that every composition fixture declares the root archetype the
+    /// template it names actually roots at.
+    ///
+    /// A `COMPOSITION` carries its root twice: `archetype_node_id`, which "at
+    /// an archetype root point … is always the stringified form of the
+    /// `_archetype_id_` found in the `_archetype_details_` object" (openEHR RM
+    /// `UML/classes/locatable.adoc` §Attributes), and that
+    /// `archetype_details.archetype_id` itself, beside the
+    /// `archetype_details.template_id` naming the template active at this
+    /// point in the structure (openEHR RM `UML/classes/archetyped.adoc`
+    /// §Attributes). The operational template that id resolves to declares the
+    /// archetype its own `definition` roots at, so both declared ids must be
+    /// that root. A pack whose fixture declares another one measures a server's
+    /// refusals where it is validated, and a server's leniency where it is not.
+    /// The check runs at load, beside the digest pins.
+    ///
+    /// # Errors
+    /// [`BenchError::FixtureUnreadable`] when a fixture does not parse or
+    /// omits an id this check reads, [`BenchError::FixtureTemplate`] when a
+    /// composition names a template the pack does not seed, and
+    /// [`BenchError::FixtureRoot`] naming both declared ids and the template's
+    /// root when they differ.
+    pub fn verify_fixture_roots(&self) -> Result<(), BenchError> {
+        let templates = self.template_identities()?;
+        for fixture in self.fixtures() {
+            match fixture.kind {
+                FixtureKind::OperationalTemplate => continue,
+                FixtureKind::Composition | FixtureKind::InvalidComposition => {}
+            }
+            let declared = composition_roots(fixture.bytes).map_err(|detail| {
+                BenchError::FixtureUnreadable {
+                    pack: self.id,
+                    fixture: fixture.key,
+                    detail,
+                }
+            })?;
+            let Some(template) = templates
+                .iter()
+                .find(|identity| identity.id == declared.archetype_details.template_id.value)
+            else {
+                return Err(BenchError::FixtureTemplate {
+                    pack: self.id,
+                    fixture: fixture.key,
+                    template: declared.archetype_details.template_id.value,
+                    seeded: templates
+                        .iter()
+                        .map(|identity| identity.id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                });
+            };
+            if declared.archetype_node_id != template.root
+                || declared.archetype_details.archetype_id.value != template.root
+            {
+                return Err(BenchError::FixtureRoot(Box::new(RootMismatch {
+                    pack: self.id,
+                    fixture: fixture.key,
+                    template: template.id.clone(),
+                    root: template.root.clone(),
+                    node_id: declared.archetype_node_id,
+                    archetype_id: declared.archetype_details.archetype_id.value,
+                })));
+            }
+        }
+        Ok(())
+    }
+
+    /// The identity every operational template the pack seeds declares.
+    ///
+    /// # Errors
+    /// [`BenchError::FixtureUnreadable`] when a template does not parse or
+    /// declares no template id or no root archetype id.
+    fn template_identities(&self) -> Result<Vec<TemplateIdentity>, BenchError> {
+        let mut identities = Vec::new();
+        for fixture in self.fixtures() {
+            match fixture.kind {
+                FixtureKind::OperationalTemplate => {}
+                FixtureKind::Composition | FixtureKind::InvalidComposition => continue,
+            }
+            let identity = template_identity(fixture.bytes).map_err(|detail| {
+                BenchError::FixtureUnreadable {
+                    pack: self.id,
+                    fixture: fixture.key,
+                    detail,
+                }
+            })?;
+            identities.push(identity);
+        }
+        Ok(identities)
+    }
+
     /// The measured phases, in execution order.
     #[must_use]
     pub fn measure_phases(&self) -> Vec<&MeasurePhase> {
@@ -885,6 +983,125 @@ impl BenchPack {
             })
             .collect()
     }
+}
+
+/// What a composition fixture declares against what its template roots at.
+///
+/// Carried boxed by [`BenchError::FixtureRoot`], so the error type stays small
+/// enough for every `Result` in the engine to return it by value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RootMismatch {
+    /// The pack carrying the fixture.
+    pub pack: PackId,
+    /// The composition fixture key.
+    pub fixture: FixtureKey,
+    /// The template id the fixture declares.
+    pub template: String,
+    /// The archetype that template's definition roots at.
+    pub root: String,
+    /// The root `archetype_node_id` the fixture declares.
+    pub node_id: String,
+    /// The `archetype_details.archetype_id` the fixture declares.
+    pub archetype_id: String,
+}
+
+/// What an operational template declares about its own identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TemplateIdentity {
+    /// The template id, from `template/template_id/value`.
+    id: String,
+    /// The archetype the template's definition roots at, from
+    /// `template/definition/archetype_id/value`.
+    root: String,
+}
+
+/// What one composition fixture declares about the archetype it roots at.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct CompositionRoots {
+    /// The root `archetype_node_id`.
+    archetype_node_id: String,
+    /// The `ARCHETYPED` block naming the archetype and the template.
+    archetype_details: DeclaredArchetyped,
+}
+
+/// The `archetype_details` members the coherence check reads.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct DeclaredArchetyped {
+    /// The archetype the fixture declares as its root.
+    archetype_id: DeclaredId,
+    /// The template the fixture declares it was built from.
+    template_id: DeclaredId,
+}
+
+/// The `{ "value": … }` wrapper canonical JSON gives an identifier.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+struct DeclaredId {
+    /// The identifier itself.
+    value: String,
+}
+
+/// Reads an operational template's identity out of its XML.
+///
+/// The read is a total pull over two known element paths, so a document that
+/// is not well formed, ends with an element open, or omits either path is a
+/// failure rather than a default.
+fn template_identity(opt_xml: &str) -> Result<TemplateIdentity, String> {
+    let mut reader = quick_xml::Reader::from_str(opt_xml);
+    let mut path: Vec<String> = Vec::new();
+    let mut id: Option<String> = None;
+    let mut root: Option<String> = None;
+    loop {
+        let event = reader.read_event().map_err(|e| e.to_string())?;
+        match event {
+            quick_xml::events::Event::Eof if path.is_empty() => break,
+            quick_xml::events::Event::Eof => {
+                return Err(format!(
+                    "the document ends with {} element(s) still open",
+                    path.len()
+                ));
+            }
+            quick_xml::events::Event::Start(start) => {
+                path.push(String::from_utf8_lossy(start.local_name().as_ref()).into_owned());
+            }
+            quick_xml::events::Event::End(_) => {
+                path.pop();
+            }
+            quick_xml::events::Event::Text(text) => {
+                let decoded = text.decode().map_err(|e| e.to_string())?;
+                let trimmed = decoded.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                if path_is(&path, &["template", "template_id", "value"]) {
+                    id = Some(trimmed.to_owned());
+                } else if path_is(&path, &["template", "definition", "archetype_id", "value"]) {
+                    root = Some(trimmed.to_owned());
+                }
+            }
+            _ => {}
+        }
+    }
+    let id = id.ok_or_else(|| "no template/template_id/value".to_owned())?;
+    let root = root.ok_or_else(|| "no template/definition/archetype_id/value".to_owned())?;
+    Ok(TemplateIdentity { id, root })
+}
+
+/// Whether the open-element path is exactly this sequence of local names.
+fn path_is(path: &[String], expected: &[&str]) -> bool {
+    path.len() == expected.len()
+        && path
+            .iter()
+            .zip(expected)
+            .all(|(open, want)| open.as_str() == *want)
+}
+
+/// Reads the two root ids and the template id a composition fixture declares.
+///
+/// Every member this reads is mandatory on a root `COMPOSITION` the pack
+/// commits, so an absent one is a deserialization failure rather than a
+/// default.
+fn composition_roots(json: &str) -> Result<CompositionRoots, String> {
+    serde_json::from_str(json).map_err(|e| e.to_string())
 }
 
 /// The id every embedded pack is known by.
@@ -933,11 +1150,13 @@ const COMMUNITY_READS: &[(BenchOp, &str)] = &[
 /// The embedded pack ids, in the order `--pack` accepts them.
 pub const EMBEDDED: &[PackId] = &[AQL_MIX, COMMUNITY_VITALS, SMOKE];
 
-/// Loads one embedded pack by its id, verifying every fixture pin.
+/// Loads one embedded pack by its id, verifying every fixture pin and the
+/// coherence of every fixture root with its template.
 ///
 /// # Errors
-/// [`BenchError::UnknownPack`] for a token no embedded pack answers to, or
-/// [`BenchError::FixturePin`] when an embedded fixture's bytes moved.
+/// [`BenchError::UnknownPack`] for a token no embedded pack answers to,
+/// [`BenchError::FixturePin`] when an embedded fixture's bytes moved, or
+/// whatever [`BenchPack::verify_fixture_roots`] reports.
 pub fn load(token: &str) -> Result<BenchPack, BenchError> {
     let pack = match token {
         "smoke" => smoke(),
@@ -955,13 +1174,17 @@ pub fn load(token: &str) -> Result<BenchPack, BenchError> {
         }
     };
     pack.verify_pins()?;
+    pack.verify_fixture_roots()?;
     Ok(pack)
 }
 
 /// What the `smoke` pack exercises, ahead of its ceiling statement.
 const SMOKE_PREAMBLE: &str = "\
 One blood-pressure template, a small EHR corpus, and a mixed open-loop phase \
-over the read, write and query surface.";
+over the read, write and query surface. Version 1.1.0 moved the committed \
+composition onto openEHR-EHR-COMPOSITION.minimal.v1, the root its own template \
+defines, so the bytes offered to a server changed and a 1.1.0 record is not \
+comparable with a 1.0.0 one.";
 
 /// The `smoke` pack: one small bulk load, then one short open-loop phase
 /// over the whole operation vocabulary.
@@ -969,7 +1192,7 @@ over the read, write and query surface.";
 pub fn smoke() -> BenchPack {
     BenchPack {
         id: SMOKE,
-        version: "1.0.0".to_owned(),
+        version: "1.1.0".to_owned(),
         description: format!("{SMOKE_PREAMBLE} {}", failed_share_statement()),
         max_failed_share: DEFAULT_MAX_FAILED_SHARE,
         seed: 0x5645_5245_4449_4354,
@@ -1302,6 +1525,142 @@ mod tests {
             pack.verify_pins()?;
         }
         Ok(())
+    }
+
+    /// A composition fixture doctored to declare a root its template does not
+    /// have, for the refusal test below.
+    const DOCTORED_COMPOSITION: &str = r#"{
+  "_type": "COMPOSITION",
+  "archetype_node_id": "openEHR-EHR-COMPOSITION.encounter.v1",
+  "archetype_details": {
+    "_type": "ARCHETYPED",
+    "archetype_id": { "_type": "ARCHETYPE_ID", "value": "openEHR-EHR-COMPOSITION.encounter.v1" },
+    "template_id": { "_type": "TEMPLATE_ID", "value": "cnf.blood_pressure" },
+    "rm_version": "1.0.2"
+  }
+}"#;
+
+    /// A composition fixture naming a template no pack seeds, for the refusal
+    /// test below.
+    const UNSEEDED_TEMPLATE_COMPOSITION: &str = r#"{
+  "_type": "COMPOSITION",
+  "archetype_node_id": "openEHR-EHR-COMPOSITION.minimal.v1",
+  "archetype_details": {
+    "_type": "ARCHETYPED",
+    "archetype_id": { "_type": "ARCHETYPE_ID", "value": "openEHR-EHR-COMPOSITION.minimal.v1" },
+    "template_id": { "_type": "TEMPLATE_ID", "value": "cnf.absent" },
+    "rm_version": "1.0.2"
+  }
+}"#;
+
+    /// Replaces the smoke pack's composition fixture bytes, keeping every
+    /// other fixture and phase as the pack declares them.
+    fn with_composition_bytes(bytes: &'static str) -> BenchPack {
+        let pack = smoke();
+        let phases = pack
+            .phases
+            .iter()
+            .map(|phase| match phase {
+                BenchPhase::Seed(seed) => {
+                    let mut seed = seed.clone();
+                    for fixture in &mut seed.fixtures {
+                        if fixture.kind == FixtureKind::Composition {
+                            fixture.bytes = bytes;
+                        }
+                    }
+                    BenchPhase::Seed(seed)
+                }
+                other => other.clone(),
+            })
+            .collect();
+        pack.with_phases(phases)
+    }
+
+    /// Every embedded pack's composition fixtures declare the root their own
+    /// template roots at, which is what a validating server checks on commit.
+    #[test]
+    fn every_embedded_pack_agrees_with_its_own_templates() -> Result<(), BenchError> {
+        for id in EMBEDDED {
+            load(id.as_str())?.verify_fixture_roots()?;
+        }
+        Ok(())
+    }
+
+    /// The smoke template roots at the archetype its committed compositions
+    /// declare, read out of the template itself.
+    #[test]
+    fn the_smoke_template_declares_the_root_its_compositions_carry() -> Result<(), String> {
+        let identity = template_identity(BLOOD_PRESSURE_OPT)?;
+        assert_eq!(identity.id, "cnf.blood_pressure");
+        assert_eq!(identity.root, "openEHR-EHR-COMPOSITION.minimal.v1");
+        for bytes in [BP_COMPOSITION, BP_COMPOSITION_TWIN] {
+            let declared = composition_roots(bytes)?;
+            assert_eq!(declared.archetype_details.template_id.value, identity.id);
+            assert_eq!(declared.archetype_node_id, identity.root);
+            assert_eq!(declared.archetype_details.archetype_id.value, identity.root);
+        }
+        Ok(())
+    }
+
+    /// A composition that declares another archetype's root is refused, and
+    /// the refusal names both declared ids beside the template's own root.
+    #[test]
+    fn a_fixture_root_its_template_does_not_have_is_refused() {
+        let error = with_composition_bytes(DOCTORED_COMPOSITION)
+            .verify_fixture_roots()
+            .unwrap_err();
+        let BenchError::FixtureRoot(mismatch) = &error else {
+            panic!("expected a fixture-root refusal, got {error}");
+        };
+        assert_eq!(mismatch.fixture.as_str(), "bp_composition.json");
+        assert_eq!(mismatch.template, "cnf.blood_pressure");
+        assert_eq!(mismatch.root, "openEHR-EHR-COMPOSITION.minimal.v1");
+        assert_eq!(mismatch.node_id, "openEHR-EHR-COMPOSITION.encounter.v1");
+        assert_eq!(
+            mismatch.archetype_id,
+            "openEHR-EHR-COMPOSITION.encounter.v1"
+        );
+        let rendered = error.to_string();
+        assert!(
+            rendered.contains("openEHR-EHR-COMPOSITION.encounter.v1")
+                && rendered.contains("openEHR-EHR-COMPOSITION.minimal.v1"),
+            "{rendered}"
+        );
+    }
+
+    /// A composition naming a template the pack never seeds is refused by
+    /// name, never checked against some other template's root.
+    #[test]
+    fn a_fixture_naming_an_unseeded_template_is_refused() {
+        let error = with_composition_bytes(UNSEEDED_TEMPLATE_COMPOSITION)
+            .verify_fixture_roots()
+            .unwrap_err();
+        assert!(
+            matches!(error, BenchError::FixtureTemplate { .. }),
+            "{error}"
+        );
+        assert!(error.to_string().contains("cnf.absent"), "{error}");
+    }
+
+    /// A fixture that is not readable as a composition is refused, never
+    /// treated as coherent by default.
+    #[test]
+    fn an_unreadable_fixture_is_refused() {
+        let error = with_composition_bytes("{")
+            .verify_fixture_roots()
+            .unwrap_err();
+        assert!(
+            matches!(error, BenchError::FixtureUnreadable { .. }),
+            "{error}"
+        );
+    }
+
+    /// A truncated operational template is refused rather than read as far as
+    /// it goes.
+    #[test]
+    fn a_truncated_template_is_refused() {
+        let truncated = "<template><template_id><value>t</value></template_id>";
+        assert!(template_identity(truncated).is_err());
     }
 
     /// A moved pin is refused by key, never silently accepted.

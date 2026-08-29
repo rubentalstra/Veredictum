@@ -162,6 +162,41 @@ pub enum BenchError {
         /// What the embedded bytes actually hash to.
         actual: String,
     },
+    /// A composition fixture declares a root archetype its own template does
+    /// not root at, so every commit the pack makes is a composition no server
+    /// validating against that template may accept.
+    #[error(
+        "bench pack {}: fixture {} declares archetype_node_id {} and \
+         archetype_details.archetype_id {}, but its template {} roots at {}",
+        .0.pack, .0.fixture, .0.node_id, .0.archetype_id, .0.template, .0.root
+    )]
+    FixtureRoot(Box<pack::RootMismatch>),
+    /// A composition fixture names a template the pack does not seed, so
+    /// nothing in the pack says what root it should carry.
+    #[error(
+        "bench pack {pack}: fixture {fixture} declares template {template}, which the pack does \
+         not seed (seeded: {seeded})"
+    )]
+    FixtureTemplate {
+        /// The pack carrying the fixture.
+        pack: pack::PackId,
+        /// The composition fixture key.
+        fixture: pack::FixtureKey,
+        /// The template id the fixture declares.
+        template: String,
+        /// The template ids the pack does seed, comma-separated.
+        seeded: String,
+    },
+    /// An embedded fixture could not be read well enough to check it.
+    #[error("bench pack {pack}: fixture {fixture} cannot be read: {detail}")]
+    FixtureUnreadable {
+        /// The pack carrying the fixture.
+        pack: pack::PackId,
+        /// The fixture key.
+        fixture: pack::FixtureKey,
+        /// What the reader reported.
+        detail: String,
+    },
     /// `--auth basic` was selected without the user the header needs.
     #[error("--auth basic needs --user")]
     MissingUser,

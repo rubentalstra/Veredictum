@@ -1,10 +1,10 @@
 {
   "_type": "COMPOSITION",
   "name": { "_type": "DV_TEXT", "value": "blood pressure 0" },
-  "archetype_node_id": "openEHR-EHR-COMPOSITION.encounter.v1",
+  "archetype_node_id": "openEHR-EHR-COMPOSITION.minimal.v1",
   "archetype_details": {
     "_type": "ARCHETYPED",
-    "archetype_id": { "_type": "ARCHETYPE_ID", "value": "openEHR-EHR-COMPOSITION.encounter.v1" },
+    "archetype_id": { "_type": "ARCHETYPE_ID", "value": "openEHR-EHR-COMPOSITION.minimal.v1" },
     "template_id": { "_type": "TEMPLATE_ID", "value": "cnf.blood_pressure" },
     "rm_version": "1.0.2"
   },

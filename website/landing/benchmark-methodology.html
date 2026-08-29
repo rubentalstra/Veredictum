@@ -313,7 +313,7 @@
       </article>
       <article class="pack" id="pack-smoke">
         <div class="pack-head">
-          <h3><code>smoke</code> <span class="pack-version">version 1.0.0</span></h3>
+          <h3><code>smoke</code> <span class="pack-version">version 1.1.0</span></h3>
           <p class="pack-meta">seed <code>6216465318106710868</code> · 2 phases · failed-arrival ceiling <code>0.01</code> · drive it with <code>--pack smoke</code></p>
         </div>
         <svg class="timeline" viewBox="0 0 640 118" role="img" aria-label="The phases of the smoke pack, in execution order" xmlns="http://www.w3.org/2000/svg">
@@ -366,13 +366,13 @@
           </div>
           <div class="fixture">
             <p class="fixture-head"><code>bp_composition.json</code> · composition · 3.4 KiB · <code>application/json</code></p>
-            <p>Authored in this repository for the smoke pack: a canonical-JSON COMPOSITION declaring template id &apos;cnf.blood_pressure&apos;, carrying one POINT_EVENT with a systolic and a diastolic DV_QUANTITY in mm[Hg].</p>
-            <p class="fixture-pin">sha256 <code>9eaea10c5171d1f4648c8e932a21ce624312a2cad98f49115f35efbbb344a3ce</code></p>
+            <p>Authored in this repository for the smoke pack: a canonical-JSON COMPOSITION declaring template id &apos;cnf.blood_pressure&apos; and rooted at openEHR-EHR-COMPOSITION.minimal.v1, the root that template defines, carrying one POINT_EVENT with a systolic and a diastolic DV_QUANTITY in mm[Hg].</p>
+            <p class="fixture-pin">sha256 <code>bc0d07f4a6f89e5b357cddd558b4c05a6ee9cd4083dda6646e1b23ee80ff1d47</code></p>
           </div>
           <div class="fixture">
             <p class="fixture-head"><code>bp_composition.missing_composer.json</code> · invalid composition · 3.4 KiB · <code>application/json</code></p>
             <p>Derived in this repository from bp_composition.json by deleting the mandatory COMPOSITION.composer member and nothing else, so a server that validates a commit against the reference model refuses it.</p>
-            <p class="fixture-pin">sha256 <code>602039bed3f3daf060152af6034baf6d7ce74fde6ec77e8ff1cc89eda2b3e0b3</code></p>
+            <p class="fixture-pin">sha256 <code>eaec78e4b3541189b63bc2a83cbff88e4727aa3893406e08777e7330cbfb72b6</code></p>
           </div>
           <p class="pack-note">Each digest is verified when the pack loads, so a run
             refuses to start if a single byte of any fixture has moved. Two records that
@@ -384,7 +384,7 @@
         </details>
         <details class="pack-detail">
           <summary>The pack&#39;s own description, as every record carries it</summary>
-          <p class="pack-verbatim">One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface. This pack version pins a failed-arrival ceiling of 0.01: a record in which any repetition, phase and operation loses a larger share of its arrivals, on the target or on any baseline, is not submittable, because percentiles taken over failed arrivals measure the failure rather than the system.</p>
+          <p class="pack-verbatim">One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface. Version 1.1.0 moved the committed composition onto openEHR-EHR-COMPOSITION.minimal.v1, the root its own template defines, so the bytes offered to a server changed and a 1.1.0 record is not comparable with a 1.0.0 one. This pack version pins a failed-arrival ceiling of 0.01: a record in which any repetition, phase and operation loses a larger share of its arrivals, on the target or on any baseline, is not submittable, because percentiles taken over failed arrivals measure the failure rather than the system.</p>
         </details>
       </article>
     </div>

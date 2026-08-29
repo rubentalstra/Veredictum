@@ -63,11 +63,28 @@ fi
 # submissions tree paired with the record itself, ordered by path so the page
 # is byte-identical on any machine. Records under `examples/` demonstrate the
 # submission pipe and are deliberately not ranked.
+#
+# An absent submissions tree is the state of a repository with nothing merged
+# yet, so it renders the empty board silently. It is handled here rather than
+# left to `find`, which would print a not-found error on every clean-tree
+# invocation and, inside a process substitution, would report a genuine
+# failure to nobody. The listing is therefore taken first, and a find that
+# fails for any other reason stops the render.
 model_of() {
+  if [[ ! -d "$SUBMISSIONS" ]]; then
+    printf '[]'
+    return 0
+  fi
+  local listing
+  if ! listing="$(find "$SUBMISSIONS" -type f -name '*.json' -not -path "$SUBMISSIONS/examples/*" | sort)"; then
+    echo "::error::listing $SUBMISSIONS failed" >&2
+    return 1
+  fi
   local file model=''
   while IFS= read -r file; do
+    [[ -n "$file" ]] || continue
     model+="$(jq -c --arg path "${file#"$SUBMISSIONS"/}" '{path: $path, doc: .}' "$file")"$'\n'
-  done < <(find "$SUBMISSIONS" -type f -name '*.json' -not -path "$SUBMISSIONS/examples/*" | sort)
+  done <<<"$listing"
   printf '%s' "$model" | jq -s '.'
 }
 

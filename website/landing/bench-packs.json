@@ -365,8 +365,8 @@
     },
     {
       "id": "smoke",
-      "version": "1.0.0",
-      "description": "One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface. This pack version pins a failed-arrival ceiling of 0.01: a record in which any repetition, phase and operation loses a larger share of its arrivals, on the target or on any baseline, is not submittable, because percentiles taken over failed arrivals measure the failure rather than the system.",
+      "version": "1.1.0",
+      "description": "One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface. Version 1.1.0 moved the committed composition onto openEHR-EHR-COMPOSITION.minimal.v1, the root its own template defines, so the bytes offered to a server changed and a 1.1.0 record is not comparable with a 1.0.0 one. This pack version pins a failed-arrival ceiling of 0.01: a record in which any repetition, phase and operation loses a larger share of its arrivals, on the target or on any baseline, is not submittable, because percentiles taken over failed arrivals measure the failure rather than the system.",
       "max_failed_share": 0.01,
       "seed": 6216465318106710868,
       "fixtures": [
@@ -382,16 +382,16 @@
           "key": "bp_composition.json",
           "kind": "composition",
           "media_type": "application/json",
-          "bytes": 3484,
-          "sha256": "9eaea10c5171d1f4648c8e932a21ce624312a2cad98f49115f35efbbb344a3ce",
-          "provenance": "Authored in this repository for the smoke pack: a canonical-JSON COMPOSITION declaring template id 'cnf.blood_pressure', carrying one POINT_EVENT with a systolic and a diastolic DV_QUANTITY in mm[Hg]."
+          "bytes": 3480,
+          "sha256": "bc0d07f4a6f89e5b357cddd558b4c05a6ee9cd4083dda6646e1b23ee80ff1d47",
+          "provenance": "Authored in this repository for the smoke pack: a canonical-JSON COMPOSITION declaring template id 'cnf.blood_pressure' and rooted at openEHR-EHR-COMPOSITION.minimal.v1, the root that template defines, carrying one POINT_EVENT with a systolic and a diastolic DV_QUANTITY in mm[Hg]."
         },
         {
           "key": "bp_composition.missing_composer.json",
           "kind": "invalid_composition",
           "media_type": "application/json",
-          "bytes": 3443,
-          "sha256": "602039bed3f3daf060152af6034baf6d7ce74fde6ec77e8ff1cc89eda2b3e0b3",
+          "bytes": 3439,
+          "sha256": "eaec78e4b3541189b63bc2a83cbff88e4727aa3893406e08777e7330cbfb72b6",
           "provenance": "Derived in this repository from bp_composition.json by deleting the mandatory COMPOSITION.composer member and nothing else, so a server that validates a commit against the reference model refuses it."
         }
       ],
