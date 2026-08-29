@@ -1,0 +1,80 @@
+# The UPDATE half of the deactivated-EHR refusal on the directory route. RM ehr
+# master04-ehr_package.adoc §EHR Active Status names hierarchical Folders in the
+# contents the flag governs: "An EHR's 'contents' consist of everything other
+# than the `EHR_STATUS` object, i.e. its Compositions (Versioned objects
+# referred to by the `_compositions_` attribute), its hierarchical Folders
+# (Versioned objects referred to by the `_folders_` attribute) and any other
+# content that may be added in later releases of this specification." RM
+# UML/classes/ehr_status.adoc §Attributes states the permission itself: "True if
+# the EHR, other than the EHR_STATUS object, is allowed to be written to." A new
+# directory version is such a write, so the PUT is refused for the same reason
+# the POST is.
+#
+# SPEC SILENCE on the CODE, adjudicated as AMB-82 (fixed_handling): the ITS-REST
+# docs text never mentions `is_modifiable` outside the EHR-creation defaults and
+# `directory_update.yaml` declares no branch for a deactivated EHR. The
+# register's fixed handling is 409, the row ITS-REST overview
+# Requests_and_responses.md §HTTP status codes describes as "Indicates that the
+# request could not be processed because it might generate a duplicate or a
+# conflict".
+#
+# The create-side sibling is create_directory-ehr_not_modifiable; a server can
+# gate the POST and leave the PUT open, which is why this is its own row. Step 5
+# keeps the refusal honest: the served directory is still the step-1 structure.
+id: I_EHR_DIRECTORY.update_directory-ehr_not_modifiable
+kind: functional
+component: EHR_DIRECTORY
+sm_operation: I_EHR_DIRECTORY.update_directory
+capabilities: [DirectoryOps]
+exercises: [EhrStatus]
+profiles: [STANDARD]
+ambiguities: [AMB-82]
+test_purpose: >-
+  Updating the directory of an EHR whose EHR_STATUS.is_modifiable is false is
+  refused as a conflict with the EHR's deactivated state, and commits no new
+  version.
+description: "Update the directory of a deactivated EHR"
+spec_refs:
+  - "RM ehr §EHR Active Status (master04 — is_modifiable scopes to Compositions and hierarchical Folders)"
+  - "RM UML/classes/ehr_status §Attributes (is_modifiable — the write permission)"
+  - "ITS-REST overview Requests_and_responses §HTTP status codes"
+  - "SM openehr_platform §I_EHR_DIRECTORY.update_directory"
+  - "SM openehr_platform §I_EHR_STATUS.clear_ehr_modifiable"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  ehr: { commits: none }                 # mints ${ehr_id}; its EHR_STATUS v1 is is_modifiable = true
+data_sets: [cnf.directory.root_only, cnf.directory.v2]
+flow:
+  - step: 1                              # the directory to update, committed while the EHR is still active
+    call: create_directory
+    with: { ehr_id: "${ehr_id}", directory: "${ds:cnf.directory.root_only}" }
+    expect: created
+    capture: { preceding_version_uid: created.version_uid }
+  - step: 2
+    call: I_EHR_STATUS.get_ehr_status    # the payload the PUT modifies + the If-Match precondition
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid, status_body: ok.body }
+  - step: 3                              # deactivate: is_modifiable -> false
+    call: I_EHR_STATUS.clear_ehr_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    expect: updated
+  - step: 4                              # the precondition is CURRENT: only the deactivation refuses this PUT
+    call: update_directory
+    with:
+      ehr_id: "${ehr_id}"
+      directory: "${ds:cnf.directory.v2}"
+      preceding_version_uid: "${preceding_version_uid}"
+    expect: conflict
+  - step: 5                              # nothing was committed: the served directory is still the step-1 structure
+    call: get_directory
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    assert:
+      - { assert: equivalent, to: "${ds:cnf.directory.root_only}", ignoring: server_assigned }
+postconditions:
+  - assert: state
+    text: >-
+      The refused update committed no directory version: the deactivated EHR
+      still serves the structure created in step 1 (verified by step 5)

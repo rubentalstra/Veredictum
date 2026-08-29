@@ -79,6 +79,7 @@
   ],
   "options": [
     "adl14-partial-id-exact",
+    "aql-nonnumeric-aggregate-refused",
     "contribution-xml-unsupported",
     "directory-xml-supported",
     "directory-xml-write-accepted",

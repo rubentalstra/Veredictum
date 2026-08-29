@@ -97,6 +97,14 @@ pub struct CaseRecord {
     pub rows_driven: usize,
     /// How many rows selection admitted in total.
     pub rows_total: usize,
+    /// Non-gating observations the rows produced, in execution order.
+    ///
+    /// A recorded observation is a spec sentence of SHOULD strength that the
+    /// SUT did not follow while satisfying every MUST the row gates on, so it
+    /// changes no verdict. It stays out of `results.json` for exactly that
+    /// reason: the results document carries what a verdict is computed from,
+    /// and the run prints these beside the tally instead.
+    pub advisories: Vec<String>,
 }
 
 impl CaseRecord {
@@ -120,6 +128,9 @@ pub struct StepObservation {
     /// own channel: a mismatch fails the row, an unjudgeable assertion errors
     /// it. Only meaningful when the observation matched the expectation.
     pub assertion_failures: Vec<AssertionOutcome>,
+    /// Non-gating observations the step's assertions recorded: a SHOULD-strength
+    /// divergence a passing assertion tolerated (see [`CaseRecord::advisories`]).
+    pub advisories: Vec<String>,
 }
 
 impl StepObservation {
@@ -130,8 +141,29 @@ impl StepObservation {
         Self {
             observation: Observation::Transport(message),
             assertion_failures: Vec::new(),
+            advisories: Vec::new(),
         }
     }
+
+    /// This step's recorded observations, each prefixed with the row and step
+    /// it was made on.
+    #[must_use]
+    pub fn labelled_advisories(&self, row: usize, step: u32) -> Vec<String> {
+        self.advisories
+            .iter()
+            .map(|advisory| format!("row {row} step {step}: {advisory}"))
+            .collect()
+    }
+}
+
+/// What a row's judged postconditions produced: the outcomes that decide the
+/// row, and the non-gating divergences a passing assertion tolerated.
+#[derive(Debug, Default)]
+pub struct PostconditionOutcomes {
+    /// Judged outcomes, in evaluation order, each carrying its own channel.
+    pub failures: Vec<AssertionOutcome>,
+    /// Recorded non-gating observations, in evaluation order.
+    pub advisories: Vec<String>,
 }
 
 /// One step execution seam: the live HTTP driver and the transcript player
@@ -175,14 +207,14 @@ pub trait StepDriver {
     /// Evaluate the case's per-row postconditions (non-aggregate).
     ///
     /// # Errors
-    /// Interpreter defects only; assertion failures return in the list, each
+    /// Interpreter defects only; judged outcomes return in the record, each
     /// carrying the channel [`run_case`] routes it by.
     fn postconditions(
         &mut self,
         case: &CaseCore,
         row: usize,
         vars: &mut VarStore,
-    ) -> Result<Vec<AssertionOutcome>, String>;
+    ) -> Result<PostconditionOutcomes, String>;
 
     /// Evaluate the aggregate assertions once after the last row (law e),
     /// over the values collected across all rows.
@@ -303,6 +335,7 @@ pub fn run_case<D: StepDriver>(
 
     let mut rows = Vec::with_capacity(total);
     let mut row_states: Vec<VarStore> = Vec::with_capacity(total);
+    let mut advisories: Vec<String> = Vec::new();
     let mut vars = VarStore::default();
 
     for row in 0..total {
@@ -336,6 +369,7 @@ pub fn run_case<D: StepDriver>(
                 break 'steps;
             };
             let observed = driver.perform(case, step, expected, row, &mut vars)?;
+            advisories.extend(observed.labelled_advisories(row, step.step));
             match outcome::judge(expected, &observed.observation) {
                 StepJudgement::Continue => {
                     if let Some(failure) = judged_first(&observed.assertion_failures) {
@@ -367,7 +401,13 @@ pub fn run_case<D: StepDriver>(
         // Law b: row postconditions run only when every step held.
         if matches!(row_outcome, RowOutcome::Passed) {
             let postconditions = driver.postconditions(case, row, &mut vars)?;
-            if let Some(failure) = judged_first(&postconditions) {
+            advisories.extend(
+                postconditions
+                    .advisories
+                    .iter()
+                    .map(|line| format!("row {row} postconditions: {line}")),
+            );
+            if let Some(failure) = judged_first(&postconditions.failures) {
                 row_outcome = row_from_assertion(0, failure);
             }
         }
@@ -395,6 +435,7 @@ pub fn run_case<D: StepDriver>(
         rows_driven: rows.len(),
         rows_total: total,
         rows,
+        advisories,
     })
 }
 
@@ -425,6 +466,7 @@ mod tests {
             Ok(StepObservation {
                 observation,
                 assertion_failures: Vec::new(),
+                advisories: Vec::new(),
             })
         }
         fn provision(
@@ -441,8 +483,8 @@ mod tests {
             _c: &CaseCore,
             _r: usize,
             _v: &mut VarStore,
-        ) -> Result<Vec<AssertionOutcome>, String> {
-            Ok(Vec::new())
+        ) -> Result<PostconditionOutcomes, String> {
+            Ok(PostconditionOutcomes::default())
         }
         fn aggregates(&mut self, _c: &CaseCore, _rows: &[VarStore]) -> Result<Vec<String>, String> {
             Ok(self.aggregate_failure.clone().into_iter().collect())
@@ -574,6 +616,7 @@ mod tests {
             Ok(StepObservation {
                 observation: Observation::Kind(expected),
                 assertion_failures,
+                advisories: Vec::new(),
             })
         }
         fn provision(
@@ -595,13 +638,16 @@ mod tests {
             _c: &CaseCore,
             _r: usize,
             _v: &mut VarStore,
-        ) -> Result<Vec<AssertionOutcome>, String> {
-            Ok(self
-                .postconditions
-                .iter()
-                .cloned()
-                .map(AssertionOutcome::Mismatch)
-                .collect())
+        ) -> Result<PostconditionOutcomes, String> {
+            Ok(PostconditionOutcomes {
+                failures: self
+                    .postconditions
+                    .iter()
+                    .cloned()
+                    .map(AssertionOutcome::Mismatch)
+                    .collect(),
+                advisories: Vec::new(),
+            })
         }
         fn aggregates(&mut self, _c: &CaseCore, _rows: &[VarStore]) -> Result<Vec<String>, String> {
             Ok(Vec::new())
@@ -847,6 +893,7 @@ mod tests {
             rows: Vec::new(),
             rows_driven: 0,
             rows_total: 1,
+            advisories: Vec::new(),
         };
         assert!(
             !empty.passed(),

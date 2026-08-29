@@ -460,6 +460,10 @@ pub fn resolve_ignore_sets(
 ///
 /// # Errors
 /// [`AssertionFailure`] describing the violated predicate.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "mirrors the assertion's field set"
+)]
 pub fn eval_field(
     body: &Value,
     path: &str,
@@ -468,6 +472,7 @@ pub fn eval_field(
     exists: Option<bool>,
     absent: Option<bool>,
     matches: Option<&str>,
+    absent_or_matches: Option<&str>,
 ) -> Result<(), AssertionFailure> {
     let found = resolve_path(body, path);
     if let Some(true) = exists {
@@ -481,6 +486,12 @@ pub fn eval_field(
             Some(v) => Err(AssertionFailure(format!(
                 "{path}: expected absent, found {v}"
             ))),
+        };
+    }
+    if let Some(pattern) = absent_or_matches {
+        return match found {
+            None => Ok(()),
+            Some(actual) => match_serialized(path, actual, pattern),
         };
     }
     let Some(actual) = found else {
@@ -505,20 +516,26 @@ pub fn eval_field(
         return Ok(());
     }
     if let Some(pattern) = matches {
-        let re = regex::Regex::new(pattern)
-            .map_err(|e| AssertionFailure(format!("{path}: pattern does not compile: {e}")))?;
-        let text = match actual {
-            Value::String(s) => s.clone(),
-            other => other.to_string(),
-        };
-        if re.is_match(&text) {
-            return Ok(());
-        }
-        return Err(AssertionFailure(format!(
-            "{path}: {text:?} does not match {pattern:?}"
-        )));
+        return match_serialized(path, actual, pattern);
     }
     Ok(())
+}
+
+/// Match one resolved field value's serialized form against a regex, shared by
+/// the `matches` and `absent_or_matches` predicates.
+fn match_serialized(path: &str, actual: &Value, pattern: &str) -> Result<(), AssertionFailure> {
+    let re = regex::Regex::new(pattern)
+        .map_err(|e| AssertionFailure(format!("{path}: pattern does not compile: {e}")))?;
+    let text = match actual {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    };
+    if re.is_match(&text) {
+        return Ok(());
+    }
+    Err(AssertionFailure(format!(
+        "{path}: {text:?} does not match {pattern:?}"
+    )))
 }
 
 /// Evaluate the aggregate `unique` assertion over the per-row stores
@@ -1012,12 +1029,25 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
                 None
             )
             .is_ok()
         );
-        assert!(eval_field(&body, "is_queryable", None, None, Some(true), None, None).is_ok());
-        assert!(eval_field(&body, "subject", None, None, None, Some(true), None).is_ok());
+        assert!(
+            eval_field(
+                &body,
+                "is_queryable",
+                None,
+                None,
+                Some(true),
+                None,
+                None,
+                None
+            )
+            .is_ok()
+        );
+        assert!(eval_field(&body, "subject", None, None, None, Some(true), None, None).is_ok());
         // the server-set predicate: stored time must differ from the client value
         assert!(
             eval_field(
@@ -1025,6 +1055,7 @@ mod tests {
                 "audit/time_committed",
                 None,
                 Some(&json!("1990-01-01T00:00:00Z")),
+                None,
                 None,
                 None,
                 None
@@ -1037,6 +1068,7 @@ mod tests {
                 "audit/time_committed",
                 None,
                 Some(&json!("2026-07-21T10:00:00Z")),
+                None,
                 None,
                 None,
                 None
@@ -1590,9 +1622,30 @@ mod tests {
             "system_id": "sut.example.org",
             "versions": [ { "uid": { "value": "a::b::1" } } ]
         });
-        assert!(eval_field(&body, "system_id", None, None, None, None, Some(r"\.org$")).is_ok());
-        let failure = eval_field(&body, "system_id", None, None, None, None, Some(r"^\d+$"))
-            .expect_err("an identifier is not digits");
+        assert!(
+            eval_field(
+                &body,
+                "system_id",
+                None,
+                None,
+                None,
+                None,
+                Some(r"\.org$"),
+                None
+            )
+            .is_ok()
+        );
+        let failure = eval_field(
+            &body,
+            "system_id",
+            None,
+            None,
+            None,
+            None,
+            Some(r"^\d+$"),
+            None,
+        )
+        .expect_err("an identifier is not digits");
         assert!(failure.0.contains("does not match"), "{failure:?}");
 
         let failure = eval_field(
@@ -1603,22 +1656,82 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .expect_err("an unresolvable path cannot be compared");
         assert!(failure.0.contains("resolves to nothing"), "{failure:?}");
 
-        let failure = eval_field(&body, "system_id", None, None, None, Some(true), None)
+        let failure = eval_field(&body, "system_id", None, None, None, Some(true), None, None)
             .expect_err("a present attribute is not absent");
         assert!(failure.0.contains("expected absent"), "{failure:?}");
 
-        let failure = eval_field(&body, "audit", None, None, Some(true), None, None)
+        let failure = eval_field(&body, "audit", None, None, Some(true), None, None, None)
             .expect_err("an absent attribute is not present");
         assert!(failure.0.contains("expected present"), "{failure:?}");
 
         // An uncompilable pattern is a failure, not a pass.
-        assert!(eval_field(&body, "system_id", None, None, None, None, Some("(")).is_err());
+        assert!(eval_field(&body, "system_id", None, None, None, None, Some("("), None).is_err());
         // A row with no predicate at all asserts only that the path resolves.
-        assert!(eval_field(&body, "versions[0]/uid/value", None, None, None, None, None).is_ok());
+        assert!(
+            eval_field(
+                &body,
+                "versions[0]/uid/value",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None
+            )
+            .is_ok()
+        );
+    }
+
+    /// The optional-member predicate stays silent on an absent member and
+    /// judges a present one, which is what an OPTIONAL member carrying a
+    /// declared shape needs (ITS-REST `docs/query/Response.md` §Metadata).
+    #[test]
+    fn absent_or_matches_passes_on_absence_and_judges_on_presence() {
+        let body = json!({ "meta": { "_created": "2026-07-21T10:00:00Z" } });
+        // Absent: nothing to judge, so the row passes.
+        assert!(
+            eval_field(
+                &body,
+                "meta/_generator",
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some("^x")
+            )
+            .is_ok()
+        );
+        assert!(
+            eval_field(
+                &body,
+                "meta/_created",
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(r"^\d{4}-\d{2}-\d{2}T")
+            )
+            .is_ok()
+        );
+        let failure = eval_field(
+            &body,
+            "meta/_created",
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(r"^\d+$"),
+        )
+        .expect_err("an extended ISO 8601 date-time is not a run of digits");
+        assert!(failure.0.contains("does not match"), "{failure:?}");
     }
 
     /// A malformed index step addresses nothing rather than panicking or
@@ -1722,20 +1835,45 @@ mod tests {
     #[test]
     fn a_non_string_leaf_is_matched_as_its_json_text() {
         let body = json!({ "magnitude": 140, "uid": { "value": "a::b::1" } });
-        assert!(eval_field(&body, "magnitude", None, None, None, None, Some(r"^\d+$")).is_ok());
-        let failure = eval_field(&body, "magnitude", None, None, None, None, Some("^x"))
+        assert!(
+            eval_field(
+                &body,
+                "magnitude",
+                None,
+                None,
+                None,
+                None,
+                Some(r"^\d+$"),
+                None
+            )
+            .is_ok()
+        );
+        let failure = eval_field(&body, "magnitude", None, None, None, None, Some("^x"), None)
             .expect_err("140 does not start with x");
         assert!(failure.0.contains("\"140\""), "{failure:?}");
-        assert!(eval_field(&body, "uid", None, None, None, None, Some("a::b::1")).is_ok());
+        assert!(eval_field(&body, "uid", None, None, None, None, Some("a::b::1"), None).is_ok());
 
         // `not_equals` is the server-set predicate: equal to the client's own
         // value is the failure, anything else passes.
-        assert!(eval_field(&body, "magnitude", None, Some(&json!(1)), None, None, None).is_ok());
+        assert!(
+            eval_field(
+                &body,
+                "magnitude",
+                None,
+                Some(&json!(1)),
+                None,
+                None,
+                None,
+                None
+            )
+            .is_ok()
+        );
         let failure = eval_field(
             &body,
             "magnitude",
             None,
             Some(&json!(140)),
+            None,
             None,
             None,
             None,

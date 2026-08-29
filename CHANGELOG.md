@@ -19,6 +19,50 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **The Robot-battery coverage gaps close on released ground (#220).** Eleven
+  cases and one binding variant, each derived from the released text rather
+  than from the foreign suite's expectation.
+  - AQL `LIKE` gains its escape row: master03 §LIKE states "To match a literal
+    `?` or `*`, the respective character in a pattern must be escaped by using
+    the backslash `\` character", so an escaped wildcard selects only the
+    literal character while the unescaped twin still matches the whole set.
+  - `ORDER BY` and the aggregates gain their non-numeric rows: a DV_DATE_TIME
+    and a DV_TEXT path sort ascending by default, descending on `DESC`, and
+    resolve a tie on the leftmost expression with the next one; `MIN`/`MAX`
+    return the edges of a non-numeric ordered set in the input's own type and
+    `COUNT` returns an Integer over the same argument.
+  - A `result_set` assertion may declare `cells: instant`, and the two
+    non-numeric query cases above declare it on their date/time rows. ITS-REST
+    `docs/overview/Resources.md` §Datetime format assigns the query path only
+    a SHOULD ("Retrieval or querying those resources SHOULD return date,
+    datetime, or time values in the (original) format provided by underlying
+    backend engine"), and BASE `iso8601_timezone.adoc` §Description makes `Z`
+    "a literal meaning UTC …, i.e. timezone `+0000`", so a served `+00:00` is
+    the same fact as a committed `Z`. Under the mode the row gates on the
+    instant and the run prints the tolerated respelling as an `observed:` line
+    beside the tally. The default is unchanged exact-lexeme comparison, which
+    is what tests the unconditional write-path sentence one line above the
+    SHOULD; `match: count` refuses the modifier, because it compares no cell.
+  - `SUM` and `AVG` declare Integer or Real input and assign nothing outside
+    it, so register entry AMB-227 (option_select, upstream #229) records the
+    silence and twin cases pin the two branches a party may declare,
+    `aql-nonnumeric-aggregate-refused` and `aql-nonnumeric-aggregate-executed`.
+    No case asserts a value the released text leaves unassigned.
+  - The `is_modifiable` refusal reaches the update and delete routes. The
+    composition and directory PUT and DELETE are refused on a deactivated EHR
+    under register AMB-82, each row verifying through a read that the refused
+    write committed nothing, and the positive twin proves the RM carve-out:
+    the EHR_STATUS of a deactivated EHR is still writable, which is the only
+    route by which an EHR is reactivated.
+  - RESULT_SET metadata is judged exactly as far as the released ground
+    reaches. The docs text calls every member "optional (implementation
+    dependent)" and the released schema permits additional members, so nothing
+    is required; what a service does serve is held to its declared shape by a
+    new `absent_or_matches` field predicate, which passes on an absent member
+    and judges a present one.
+  - The catalogue carries 1130 cases and 249 bindings; the `AqlBasic`,
+    `CompositionOps`, `DirectoryOps` and `EhrStatus` depth floors move to 52,
+    63, 95 and 52.
 - **A client body `uid` never survives a content-object commit (#202).**
   Register entry AMB-226 (fixed_handling, upstream #221) records the silence
   the released text leaves on `composition_create`, `directory_create` and

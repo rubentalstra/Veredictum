@@ -245,6 +245,7 @@ impl StepDriver for TranscriptPlayer<'_> {
         Ok(StepObservation {
             observation,
             assertion_failures: Vec::new(),
+            advisories: Vec::new(),
         })
     }
 
@@ -281,7 +282,7 @@ impl StepDriver for TranscriptPlayer<'_> {
         case: &CaseCore,
         _row: usize,
         _vars: &mut VarStore,
-    ) -> Result<Vec<crate::exec::assertions::AssertionOutcome>, String> {
+    ) -> Result<crate::exec::PostconditionOutcomes, String> {
         let unjudgeable: Vec<&str> = case
             .postconditions
             .iter()
@@ -289,7 +290,7 @@ impl StepDriver for TranscriptPlayer<'_> {
             .map(crate::model::assertion::Assertion::family)
             .collect();
         if unjudgeable.is_empty() {
-            return Ok(Vec::new());
+            return Ok(crate::exec::PostconditionOutcomes::default());
         }
         Err(format!(
             "case {} carries postconditions the transcript replay cannot judge ({}); a pack entry \

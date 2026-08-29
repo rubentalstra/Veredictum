@@ -1,0 +1,90 @@
+# The LIKE escape, which the released text defines outright — QUERY AQL
+# master03-syntax §LIKE: "To match a literal `?` or `*`, the respective
+# character in a pattern must be escaped by using the backslash `\` character,
+# e.g. `\"test \?\"`." An escaped wildcard is therefore the CHARACTER, never the
+# wildcard, and the same sentence set fixes what the unescaped form does: "The
+# `?` wildcard in the pattern matches any single character, while the `*`
+# wildcard matches any sequence of zero or more characters".
+#
+# The case is authored against the committed BP set, whose ten
+# `c/context/start_time/value` values are the hours 00..09 of 2026-01-01
+# (recipe contract, digest-pinned in the corpus manifest) and contain no `?`
+# and no `*`. So each escaped pattern must select NOTHING, while its unescaped
+# twin selects the whole set — the control step, so a server that simply fails
+# to match anything cannot pass by accident.
+#
+# The escape is derived from the released sentence quoted above, never from a
+# foreign suite's expectation.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-like_escaped_wildcard
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+test_purpose: >-
+  A backslash-escaped `?` or `*` in a LIKE pattern matches that literal
+  character and never acts as a wildcard, while the unescaped character keeps
+  its wildcard meaning.
+description: "AQL LIKE: a backslash-escaped wildcard is a literal character"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §LIKE"
+  - "QUERY AQL master03-syntax §Identified Paths"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # generated: 10 BP compositions, event times 2026-01-01T00..09:00:00Z
+flow:
+  - step: 1                                 # control: the UNESCAPED `?` is the single-character wildcard
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        WHERE c/context/start_time/value LIKE '2026-01-01T0?:00:00Z'
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 10 }
+  - step: 2                                 # `\?` is the literal question mark: no committed value holds one
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        WHERE c/context/start_time/value LIKE '2026-01-01T0\?:00:00Z'
+      fetch: 100
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 0 }
+  - step: 3                                 # control: the UNESCAPED `*` spans zero or more characters
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        WHERE c/context/start_time/value LIKE '2026-01-01T*'
+      fetch: 100
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 10 }
+  - step: 4                                 # `\*` is the literal asterisk: no committed value holds one
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        WHERE c/context/start_time/value LIKE '2026-01-01T\*'
+      fetch: 100
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 0 }
+postconditions:
+  - assert: state
+    text: >-
+      The backslash escape removes a character's wildcard meaning: `\?` and
+      `\*` select only values carrying that literal character, while the
+      unescaped forms keep matching the whole committed set.

@@ -27,7 +27,7 @@ use crate::exec::assertions::{self, AssertionFailure, AssertionOutcome};
 use crate::exec::outcome::{self, Observation};
 use crate::exec::resolve::Resolver;
 use crate::exec::state::{Captured, VarStore};
-use crate::exec::{Provisioned, StepDriver, StepObservation};
+use crate::exec::{PostconditionOutcomes, Provisioned, StepDriver, StepObservation};
 use crate::ids::{CaptureName, SmOperationRef};
 use crate::ixit::{AuthMode, Instance, Ixit};
 use crate::model::assertion::{
@@ -551,6 +551,7 @@ impl<'a> HttpDriver<'a> {
         exists: Option<bool>,
         absent: Option<bool>,
         matches: Option<&str>,
+        absent_or_matches: Option<&str>,
         vars: &VarStore,
     ) -> Result<(), AssertionFailure> {
         let mut resolve =
@@ -573,6 +574,7 @@ impl<'a> HttpDriver<'a> {
                 exists,
                 absent,
                 matches,
+                absent_or_matches,
             ),
             (Err(e), _) | (_, Err(e)) => Err(AssertionFailure(e)),
         }
@@ -722,7 +724,7 @@ impl<'a> HttpDriver<'a> {
         exchange: &Exchange,
         signing: Option<&crate::exec::signature::SigningMode>,
         vars: &VarStore,
-    ) -> Vec<AssertionOutcome> {
+    ) -> StepAssertions {
         let ctx_defaults: Vec<String> = self
             .set
             .selectors
@@ -735,6 +737,7 @@ impl<'a> HttpDriver<'a> {
             })
             .unwrap_or_default();
         let mut failures = Vec::new();
+        let mut advisories = Vec::new();
         for assertion in assertions_list {
             let body = exchange.body.as_ref().unwrap_or(&Value::Null);
             let result: Result<(), AssertionOutcome> = match assertion {
@@ -745,6 +748,7 @@ impl<'a> HttpDriver<'a> {
                     exists,
                     absent,
                     matches,
+                    absent_or_matches,
                 } => self
                     .eval_field_assertion(
                         body,
@@ -754,6 +758,7 @@ impl<'a> HttpDriver<'a> {
                         *exists,
                         *absent,
                         matches.as_deref(),
+                        absent_or_matches.as_deref(),
                         vars,
                     )
                     .map_err(AssertionOutcome::from),
@@ -808,15 +813,20 @@ impl<'a> HttpDriver<'a> {
                     rows,
                     count,
                     columns,
+                    cells,
                 } => self
                     .eval_result_set(
                         body,
-                        *match_mode,
-                        rows.as_ref(),
-                        *count,
-                        columns.as_deref(),
+                        ResultSetExpectation {
+                            match_mode: *match_mode,
+                            rows: rows.as_ref(),
+                            count: *count,
+                            columns: columns.as_deref(),
+                            cells: cells.unwrap_or_default(),
+                        },
                         vars,
                     )
+                    .map(|recorded| advisories.extend(recorded))
                     .map_err(AssertionOutcome::from),
                 Assertion::XmlRoot {
                     name,
@@ -892,20 +902,99 @@ impl<'a> HttpDriver<'a> {
                 failures.push(outcome);
             }
         }
-        failures
+        StepAssertions {
+            failures,
+            advisories,
+        }
     }
 
+    /// The expected rows a `rows: { from: ${ds:…} }` corpus view names, over
+    /// the committed-set uids the `requires.commit` provisioning bound.
+    fn expected_rows_from_ref(
+        &mut self,
+        reference: &ValueRef,
+        match_mode: crate::vocab::ResultSetMatch,
+        vars: &VarStore,
+    ) -> Result<Vec<Value>, AssertionFailure> {
+        let spec = self
+            .resolver
+            .resolve_ref(reference, vars)
+            .map_err(|e| AssertionFailure(e.to_string()))?;
+        let uids = vars
+            .get(&committed_uids_handle())
+            .and_then(|c| match c {
+                Captured::List(items) => Some(items.clone()),
+                _ => None,
+            })
+            .ok_or_else(|| {
+                AssertionFailure(
+                    "result_set rows.from: no committed-set uids bound (requires.commit)".into(),
+                )
+            })?;
+        // Generic committed-uid selection specs (`select: uids|pairs`):
+        // index-addressed rows over the captured uid list, so a view can name
+        // WHICH committed objects a result must hold without recipe-specific
+        // semantics.
+        if let Some(select) = spec.get("select").and_then(Value::as_str) {
+            if matches!(match_mode, crate::vocab::ResultSetMatch::Count) {
+                return Err(AssertionFailure(
+                    "result_set rows.from: count match takes no rows".into(),
+                ));
+            }
+            return selected_rows(select, &spec, &uids);
+        }
+        let min = spec
+            .get("systolic_min")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        // bp series semantics: uid k has systolic 100+10k
+        let mut selected: Vec<(String, u64)> = uids
+            .iter()
+            .enumerate()
+            .filter_map(|(k, uid)| {
+                #[expect(
+                    clippy::as_conversions,
+                    reason = "committed-uid index widens exactly: usize is at most 64 bits on every supported target"
+                )]
+                let systolic = 100 + 10 * (k as u64);
+                (systolic >= min).then(|| (uid.clone(), systolic))
+            })
+            .collect();
+        match spec.get("order").and_then(Value::as_str) {
+            Some("systolic_desc") => {
+                selected.sort_by(|(ua, sa), (ub, sb)| sb.cmp(sa).then(ua.cmp(ub)));
+            }
+            _ => selected.sort_by(|(a, _), (b, _)| a.cmp(b)),
+        }
+        if let Some(limit) = spec.get("limit").and_then(Value::as_u64) {
+            selected.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+        }
+        Ok(selected
+            .into_iter()
+            .map(|(uid, _)| Value::Array(vec![Value::String(uid)]))
+            .collect())
+    }
+
+    /// Compare a served `RESULT_SET` against the case's expectation.
+    ///
+    /// Returns the non-gating divergences the declared cell mode tolerated,
+    /// one line each — empty under the default exact comparison.
     fn eval_result_set(
         &mut self,
         body: &Value,
-        match_mode: crate::vocab::ResultSetMatch,
-        rows: Option<&RowsSpec>,
-        count: Option<u64>,
-        columns: Option<&[crate::model::assertion::ColumnSpec]>,
+        expectation: ResultSetExpectation<'_>,
         vars: &VarStore,
-    ) -> Result<(), AssertionFailure> {
+    ) -> Result<Vec<String>, AssertionFailure> {
         use crate::exec::resultset;
         use crate::vocab::ResultSetMatch;
+        let ResultSetExpectation {
+            match_mode,
+            rows,
+            count,
+            columns,
+            cells,
+        } = expectation;
+        let mut cmp = resultset::CellComparator::new(cells);
         if let Some(cols) = columns {
             let names: Vec<String> = cols.iter().map(|c| c.name.clone()).collect();
             resultset::compare_columns(body, &names).map_err(|e| AssertionFailure(e.0))?;
@@ -914,91 +1003,76 @@ impl<'a> HttpDriver<'a> {
             Some(RowsSpec::Inline(rows)) => {
                 Some(rows.iter().map(|r| Value::Array(r.clone())).collect())
             }
-            Some(RowsSpec::From(r)) => {
-                // A committed-uid selection spec: evaluate over the captured
-                // uid list bound by the requires.commit provisioning.
-                let spec = self
-                    .resolver
-                    .resolve_ref(r, vars)
-                    .map_err(|e| AssertionFailure(e.to_string()))?;
-                let uids = vars
-                    .get(&committed_uids_handle())
-                    .and_then(|c| match c {
-                        Captured::List(items) => Some(items.clone()),
-                        _ => None,
-                    })
-                    .ok_or_else(|| {
-                        AssertionFailure(
-                            "result_set rows.from: no committed-set uids bound (requires.commit)"
-                                .into(),
-                        )
-                    })?;
-                // Generic committed-uid selection specs (`select: uids|pairs`):
-                // index-addressed rows over the captured uid list, so a view
-                // can name WHICH committed objects a result must hold without
-                // recipe-specific semantics.
-                if let Some(select) = spec.get("select").and_then(Value::as_str) {
-                    let rows = selected_rows(select, &spec, &uids)?;
-                    let outcome = match match_mode {
-                        ResultSetMatch::Ordered => resultset::compare_ordered(body, &rows),
-                        ResultSetMatch::Set => resultset::compare_bag(body, &rows),
-                        ResultSetMatch::Contains => resultset::compare_contains(body, &rows),
-                        ResultSetMatch::Count => {
-                            return Err(AssertionFailure(
-                                "result_set rows.from: count match takes no rows".into(),
-                            ));
-                        }
-                    };
-                    return outcome.map_err(|e| AssertionFailure(e.0));
-                }
-                let min = spec
-                    .get("systolic_min")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0);
-                // bp series semantics: uid k has systolic 100+10k
-                let mut selected: Vec<(String, u64)> = uids
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(k, uid)| {
-                        #[expect(
-                            clippy::as_conversions,
-                            reason = "committed-uid index widens exactly: usize is at most 64 bits on every supported target"
-                        )]
-                        let systolic = 100 + 10 * (k as u64);
-                        (systolic >= min).then(|| (uid.clone(), systolic))
-                    })
-                    .collect();
-                match spec.get("order").and_then(Value::as_str) {
-                    Some("systolic_desc") => {
-                        selected.sort_by(|(ua, sa), (ub, sb)| sb.cmp(sa).then(ua.cmp(ub)));
-                    }
-                    _ => selected.sort_by(|(a, _), (b, _)| a.cmp(b)),
-                }
-                if let Some(limit) = spec.get("limit").and_then(Value::as_u64) {
-                    selected.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
-                }
-                Some(
-                    selected
-                        .into_iter()
-                        .map(|(uid, _)| Value::Array(vec![Value::String(uid)]))
-                        .collect(),
-                )
-            }
+            Some(RowsSpec::From(r)) => Some(self.expected_rows_from_ref(r, match_mode, vars)?),
             None => None,
         };
         let outcome = match (match_mode, expected_rows, count) {
             (ResultSetMatch::Count, _, Some(n)) => resultset::compare_count(body, n),
-            (ResultSetMatch::Ordered, Some(rows), _) => resultset::compare_ordered(body, &rows),
-            (ResultSetMatch::Set, Some(rows), _) => resultset::compare_bag(body, &rows),
-            (ResultSetMatch::Contains, Some(rows), _) => resultset::compare_contains(body, &rows),
+            (ResultSetMatch::Ordered, Some(rows), _) => {
+                resultset::compare_ordered(body, &rows, &mut cmp)
+            }
+            (ResultSetMatch::Set, Some(rows), _) => resultset::compare_bag(body, &rows, &mut cmp),
+            (ResultSetMatch::Contains, Some(rows), _) => {
+                resultset::compare_contains(body, &rows, &mut cmp)
+            }
             _ => {
                 return Err(AssertionFailure(
                     "result_set: no comparable expectation resolved".into(),
                 ));
             }
         };
-        outcome.map_err(|e| AssertionFailure(e.0))
+        outcome.map_err(|e| AssertionFailure(e.0))?;
+        Ok(recorded_divergences(&cmp))
     }
+}
+
+/// One `result_set` assertion's expectation, as the driver evaluates it.
+#[derive(Debug, Clone, Copy)]
+struct ResultSetExpectation<'a> {
+    /// How the expected rows are compared against the served ones.
+    match_mode: crate::vocab::ResultSetMatch,
+    /// The expected rows, inline or as a corpus row-set reference.
+    rows: Option<&'a RowsSpec>,
+    /// The exact row count, for `match: count`.
+    count: Option<u64>,
+    /// The expected column aliases, when the row asserts them.
+    columns: Option<&'a [crate::model::assertion::ColumnSpec]>,
+    /// The declared cell comparison; the default is exact-lexeme.
+    cells: crate::vocab::CellComparison,
+}
+
+/// What one step's assertions produced: the failures that fail the row, and
+/// the non-gating divergences a passing assertion tolerated.
+#[derive(Debug, Default)]
+struct StepAssertions {
+    /// Assertion failures, in evaluation order, each carrying its own channel.
+    failures: Vec<AssertionOutcome>,
+    /// Recorded non-gating observations, in evaluation order.
+    advisories: Vec<String>,
+}
+
+impl StepAssertions {
+    /// Pairs these results with the step's classified observation.
+    fn into_observation(self, observation: Observation) -> StepObservation {
+        StepObservation {
+            observation,
+            assertion_failures: self.failures,
+            advisories: self.advisories,
+        }
+    }
+}
+
+/// The comparator's tolerated divergences, one reportable line each.
+fn recorded_divergences(cmp: &crate::exec::resultset::CellComparator) -> Vec<String> {
+    cmp.divergences()
+        .iter()
+        .map(|d| {
+            format!(
+                "result_set: {d} — ITS-REST docs/overview/Resources.md §Datetime format puts the \
+                 served spelling at SHOULD strength, so the row still passes"
+            )
+        })
+        .collect()
 }
 
 /// Whether two ixit `base_url`s address the SAME deployment: same scheme,
@@ -3287,6 +3361,7 @@ impl StepDriver for HttpDriver<'_> {
                 return Ok(StepObservation {
                     observation: Observation::Transport(e),
                     assertion_failures: Vec::new(),
+                    advisories: Vec::new(),
                 });
             }
         };
@@ -3324,6 +3399,7 @@ impl StepDriver for HttpDriver<'_> {
                 return Ok(StepObservation {
                     observation: Observation::Transport(e),
                     assertion_failures: Vec::new(),
+                    advisories: Vec::new(),
                 });
             }
         };
@@ -3368,7 +3444,12 @@ impl StepDriver for HttpDriver<'_> {
 
         // Post-step assertions only when the expectation held (the caller
         // aborts otherwise, law b) — evaluate optimistically here.
-        let mut assertion_failures =
+        // The signature assertions verify against the posture of the instance
+        // THIS step ran on (RM common master06 §Digital Signature: the mode is
+        // a deployment fact), so a party running two postures as two instances
+        // is judged per instance, never against one party-wide default.
+        let signing = self.ixit.signing_of(instance);
+        let mut assertions =
             self.eval_assertions(case, binding, &step.assertions, &exchange, signing, vars);
         // The expected outcome's declared header matchers and body selector
         // are executed assertions too (issues FerroEHR#403 + FerroEHR#415 — both were parsed
@@ -3385,16 +3466,13 @@ impl StepDriver for HttpDriver<'_> {
             // NOTE: a name in `crate::exec::headers::structural_token` outranks
             // that scope — ITS-REST `operations/composition_get.yaml` lets a
             // `uid_based_id` argument be spelled two ways, so it is not an identity.
-            assertion_failures.extend(
+            assertions.failures.extend(
                 self.eval_wire_expectation(expectation, &exchange, &headers, &header_vars)
                     .into_iter()
                     .map(AssertionOutcome::Mismatch),
             );
         }
-        Ok(StepObservation {
-            observation,
-            assertion_failures,
-        })
+        Ok(assertions.into_observation(observation))
     }
 
     fn provision(
@@ -3525,14 +3603,14 @@ impl StepDriver for HttpDriver<'_> {
         case: &CaseCore,
         row: usize,
         vars: &mut VarStore,
-    ) -> Result<Vec<AssertionOutcome>, String> {
+    ) -> Result<PostconditionOutcomes, String> {
         let judged: Vec<&Assertion> = case
             .postconditions
             .iter()
             .filter(|a| matches!(a.postcondition_role(), PostconditionRole::Judged))
             .collect();
         if judged.is_empty() {
-            return Ok(Vec::new());
+            return Ok(PostconditionOutcomes::default());
         }
         self.resolver.bind_row(case, row);
         self.row = u32::try_from(row).unwrap_or(u32::MAX);
@@ -3541,25 +3619,32 @@ impl StepDriver for HttpDriver<'_> {
         // flow and another way after it. A row that completed no step served
         // nothing to judge against, which is inconclusive, never a pass.
         let Some(last) = self.last_step.clone() else {
-            return Ok(judged
-                .iter()
-                .map(|_| {
-                    AssertionOutcome::Unjudgeable(
-                        "postcondition: the row completed no flow step, so nothing was served to \
-                         judge it against"
-                            .to_owned(),
-                    )
-                })
-                .collect());
+            return Ok(PostconditionOutcomes {
+                failures: judged
+                    .iter()
+                    .map(|_| {
+                        AssertionOutcome::Unjudgeable(
+                            "postcondition: the row completed no flow step, so nothing was \
+                             served to judge it against"
+                                .to_owned(),
+                        )
+                    })
+                    .collect(),
+                advisories: Vec::new(),
+            });
         };
-        Ok(self.eval_assertions(
+        let assertions = self.eval_assertions(
             case,
             last.binding,
             judged,
             &last.exchange,
             last.signing,
             vars,
-        ))
+        );
+        Ok(PostconditionOutcomes {
+            failures: assertions.failures,
+            advisories: assertions.advisories,
+        })
     }
 
     fn aggregates(

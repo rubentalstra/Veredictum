@@ -81,7 +81,7 @@ different places. A validation failure is one status code on a composition
 operation and a different one on EHR creation, and the released specification is
 what decides which. A kind a binding cannot map is a validation finding.
 
-There are 248 bindings today, and `validate` checks that every operation a case
+There are 249 bindings today, and `validate` checks that every operation a case
 calls has one.
 
 ## The closed vocabularies

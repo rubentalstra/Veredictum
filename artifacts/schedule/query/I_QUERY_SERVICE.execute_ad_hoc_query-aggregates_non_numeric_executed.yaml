@@ -1,0 +1,54 @@
+# The executing branch of register AMB-227 (option_select, upstream #229): a
+# SUT declaring aql-nonnumeric-aggregate-executed answers a SUM over an input
+# type outside the function's declared Integer-or-Real set (QUERY AQL
+# master03-syntax §SUM) instead of refusing it. The refusing twin is
+# aggregates_non_numeric_refused.
+#
+# The only thing asserted is the SHAPE the released text does fix for every
+# aggregate — QUERY AQL master03-syntax §Aggregate functions: aggregate
+# functions return "a single result based on a group of rows of the result set
+# rather than on a single row". So the answer is exactly one row, whatever the
+# server computed for it. The CELL is left unasserted on purpose: no released
+# sentence assigns a value for SUM over a non-numeric input, and inventing one
+# is the private resolution the register exists to prevent.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-aggregates_non_numeric_executed
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+option: aql-nonnumeric-aggregate-executed  # AMB-227 option_select branch
+ambiguities: [AMB-227]
+test_purpose: >-
+  An aggregate whose input value type falls outside the function's declared
+  set executes to a single aggregate row on a SUT declaring the executing
+  branch — never to one row per input value.
+description: "SUM over a non-numeric input executes to one aggregate row (declared branch)"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §SUM"
+  - "QUERY AQL master03-syntax §Aggregate functions"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # ten input values, so a per-row answer would be ten rows
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT SUM(c/name/value) AS s
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 1 }   # an aggregate is a single result over the group of rows
+postconditions:
+  - assert: state
+    text: >-
+      The declared executing branch held: the aggregate answered with one row
+      over the ten input values (AMB-227), and no value was asserted for a
+      cell the released text leaves unassigned.

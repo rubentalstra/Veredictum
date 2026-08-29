@@ -952,6 +952,90 @@ fn a_field_assertion_that_fails_names_its_path() -> Fallible {
     Ok(())
 }
 
+/// A served `RESULT_SET` whose date/time cells are spelled with `+00:00`
+/// against a case that spells them `Z`.
+fn result_set_query(cells: Option<&str>) -> (Value, Value) {
+    let binding = json!({
+        "sm_operation": "I_QUERY_SERVICE.execute_ad_hoc_query",
+        "its": "its-rest",
+        "request": { "method": "GET", "path": "/query/aql" },
+        "outcomes": { "ok": { "status": 200 } }
+    });
+    let mut assertion = json!({
+        "assert": "result_set", "match": "ordered",
+        "rows": [["2026-01-01T00:00:00Z"], ["2026-01-01T09:00:00Z"]]
+    });
+    if let (Some(cells), Some(object)) = (cells, assertion.as_object_mut()) {
+        object.insert("cells".to_owned(), json!(cells));
+    }
+    let case_document = json!({
+        "id": "WIRE-result_set_cells", "kind": "functional", "component": "QUERY",
+        "sm_operation": "I_QUERY_SERVICE.execute_ad_hoc_query",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [{ "step": 1, "call": "execute_ad_hoc_query", "expect": "ok",
+                   "assert": [assertion] }]
+    });
+    (binding, case_document)
+}
+
+/// `cells: instant` gates the row on the instant and RECORDS the respelling,
+/// while the default exact comparison fails the same answer.
+///
+/// ITS-REST `docs/overview/Resources.md` §Datetime format assigns the query
+/// path only a SHOULD ("Retrieval or querying those resources SHOULD return
+/// date, datetime, or time values in the (original) format provided by
+/// underlying backend engine"), and BASE `UML/classes/iso8601_timezone.adoc`
+/// §Description makes `Z` "a literal meaning UTC …, i.e. timezone `+0000`".
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_instant_cell_mode_passes_a_respelled_offset_and_records_it() -> Fallible {
+    for (cells, failures, advisories) in [(None, 1_usize, 0_usize), (Some("instant"), 0, 2)] {
+        let sut = FakeSut::start();
+        sut.mount(
+            Mock::given(method("GET"))
+                .and(path("/query/aql"))
+                .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                    "rows": [["2026-01-01T00:00:00+00:00"], ["2026-01-01T09:00:00+00:00"]]
+                }))),
+        );
+        let (binding, case_document) = result_set_query(cells);
+        let mut vars = VarStore::default();
+        let observed = drive_one(&sut, &[binding], case_document, OutcomeKind::Ok, &mut vars)?;
+        assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
+        assert_eq!(
+            observed.assertion_failures.len(),
+            failures,
+            "cells {cells:?}: {:?}",
+            observed.assertion_failures
+        );
+        assert_eq!(
+            observed.advisories.len(),
+            advisories,
+            "cells {cells:?}: {:?}",
+            observed.advisories
+        );
+        assert!(
+            observed
+                .advisories
+                .iter()
+                .all(|a| a.contains("+00:00") && a.contains("Datetime format")),
+            "an observation names the served spelling and its spec sentence: {:?}",
+            observed.advisories
+        );
+        assert!(
+            observed
+                .labelled_advisories(0, 1)
+                .iter()
+                .all(|a| a.starts_with("row 0 step 1: ")),
+            "a recorded observation names the row and step it was made on"
+        );
+    }
+    Ok(())
+}
+
 /// Row postconditions read the LAST answer of the row, so a field
 /// postcondition is evaluated against the body the read step brought back.
 #[test]
@@ -995,7 +1079,7 @@ fn postconditions_are_evaluated_over_the_rows_last_answer() -> Fallible {
     );
     let step = core.flow.first().ok_or("the case declares no flow step")?;
     driver.perform(&core, step, OutcomeKind::Ok, 0, &mut vars)?;
-    let failures = driver.postconditions(&core, 0, &mut vars)?;
+    let failures = driver.postconditions(&core, 0, &mut vars)?.failures;
     assert_eq!(
         failures.len(),
         1,

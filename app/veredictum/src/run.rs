@@ -619,6 +619,7 @@ fn not_applicable_record(case: &CaseCore, citation: &str) -> CaseRecord {
         }],
         rows_driven: 0,
         rows_total: crate::exec::row_count(case),
+        advisories: Vec::new(),
     }
 }
 

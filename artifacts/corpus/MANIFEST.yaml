@@ -1614,7 +1614,7 @@ cnf.tpl.ecc_item_structure_type_narrowing:
 
 # ── the generated loaded-db corpus ────────────────────────────────────────────
 cnf.set.query-bp-10:
-  generated_by: { recipe: query_bp, digest: "sha256:a40cec50cdc09dca7f24081ef40e1caad60b21663c2ed0929ae80888e9bc359a" }
+  generated_by: { recipe: query_bp, digest: "sha256:747a67c4f18928f96570bdc89a532cf8ee42544323d824ebdca21c438ca0701f" }
   format: canonical-json
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }

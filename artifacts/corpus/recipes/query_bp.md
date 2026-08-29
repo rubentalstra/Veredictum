@@ -7,8 +7,11 @@ chapter's loaded-db corpus).
   (`cnf.opt.blood_pressure`, openEHR-EHR-OBSERVATION.blood_pressure.v2),
   category event (openehr::433).
 - Composition k (k = 0..9): systolic magnitude = 100 + 10k mmHg (100..190),
-  diastolic = 60 + 5k mmHg; event time = 2026-01-01T00:00:00Z + k hours; all
-  other fields fixed; name/value = "Blood pressure".
+  diastolic = 60 + 5k mmHg; event time = 2026-01-01T00:00:00Z + k hours, written
+  in the extended ISO 8601 form `2026-01-01T0k:00:00Z`; COMPOSITION name/value =
+  "blood pressure k", so the ten composition names are distinct and sort in the
+  same order as the event times; OBSERVATION name/value = "Blood pressure" on
+  all ten; all other fields fixed.
 - Committed in index order into the case's EHR.
 - Views over the set are declarative projections evaluated on these values
   (runner-independent):

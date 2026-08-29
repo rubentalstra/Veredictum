@@ -542,6 +542,32 @@ pub enum ResultSetMatch {
     Contains,
 }
 
+/// How a `result_set` assertion compares a scalar cell (`cells:` of the
+/// `result_set` assertion).
+///
+/// The default is [`CellComparison::Lexeme`], which is the only comparison
+/// that can test the write-path preservation sentence of ITS-REST
+/// `specifications/docs/overview/Resources.md` §Datetime format: a body
+/// date/time "will be preserved as it was sent by the client, and passed to
+/// the underlying backend engine as is", stated with no RFC 2119 keyword and
+/// no condition. [`CellComparison::Instant`] is declared by a case whose cells
+/// are read back through a QUERY, where the same section drops to
+/// SHOULD-strength — "Retrieval or querying those resources SHOULD return
+/// date, datetime, or time values in the (original) format provided by
+/// underlying backend engine, avoiding any format change" — so the instant is
+/// the fact the row may gate on and the spelling is not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CellComparison {
+    /// Exact lexeme equality (the default when a case declares no `cells:`).
+    #[default]
+    Lexeme,
+    /// ISO 8601 date/time cells carrying an explicit UTC designator or offset
+    /// compare by the instant they denote; every other cell keeps exact
+    /// lexeme equality.
+    Instant,
+}
+
 /// The ITS a binding realizes. Closed to the REST ITS until another ITS
 /// binding layer is registered by schedule release.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1115,6 +1141,11 @@ impl ResultSetMatch {
         ResultSetMatch::Count,
         ResultSetMatch::Contains,
     ];
+}
+
+impl CellComparison {
+    /// All variants, in vocabulary order (schema emission derives from this).
+    pub const ALL: &[CellComparison] = &[CellComparison::Lexeme, CellComparison::Instant];
 }
 
 impl ItsName {

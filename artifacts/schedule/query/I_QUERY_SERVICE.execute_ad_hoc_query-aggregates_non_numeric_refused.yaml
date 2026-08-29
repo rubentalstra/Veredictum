@@ -1,0 +1,43 @@
+# The refusing branch of register AMB-227 (option_select, upstream #229): AQL
+# declares SUM and AVG over "either Integer or Real" input values (QUERY AQL
+# master03-syntax §SUM, §AVG) and assigns nothing to an argument outside that
+# set. A SUM over the DV_TEXT composition name parses under the released
+# grammar and names only RM classes and paths, so the OAS 400_Query syntax
+# trigger is never reached by the letter — the refusal is the party's declared
+# branch, not a spec mandate. The executing twin is
+# aggregates_non_numeric_executed.
+#
+# Nothing here asserts a VALUE for the aggregate, on either branch, because
+# none is assigned.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-aggregates_non_numeric_refused
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+option: aql-nonnumeric-aggregate-refused   # AMB-227 option_select branch
+ambiguities: [AMB-227]
+test_purpose: >-
+  An aggregate whose input value type falls outside the function's declared
+  set is refused as an invalid query on a SUT declaring the refusing branch.
+description: "SUM over a non-numeric input is refused (declared branch)"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §SUM"
+  - "QUERY AQL master03-syntax §AVG"
+  - "ITS-REST query §400_Query"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.set.query-bp-10]             # a loaded EHR, so acceptance would have input values to be wrong with
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT SUM(c/name/value) AS s
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+      fetch: 100                            # fetch always explicit
+    expect: invalid_query
