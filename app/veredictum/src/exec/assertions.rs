@@ -798,10 +798,111 @@ pub fn is_wire_dependent(assertion: &Assertion) -> bool {
     )
 }
 
+/// When the driver judges an assertion's declared facts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Judgement {
+    /// Judged where it is authored: on its flow step, or after the flow for a
+    /// postcondition.
+    PerStep,
+    /// Judged once per case, after the last row (interpreter law e).
+    Aggregate,
+    /// Carries no pass/fail criterion of its own. Exactly two members, both
+    /// adjudicated: `message_exemplar` (register AMB-1 — the schedule's error
+    /// prose is never a criterion) and `state`, whose machine verification is
+    /// the case its `verified_by` names.
+    Informative,
+}
+
+/// The judgement the driver gives an assertion.
+///
+/// The match is exhaustive on purpose: a new assertion variant cannot be added
+/// without classifying it here, and a variant classified [`Judgement::PerStep`]
+/// that no evaluator reaches would be an assertion authored in the catalogue
+/// and never judged — the silent-pass class this instrument refuses.
+#[must_use]
+pub fn judgement_of(assertion: &Assertion) -> Judgement {
+    match assertion {
+        Assertion::Field { .. }
+        | Assertion::Equivalent { .. }
+        | Assertion::Returns { .. }
+        | Assertion::ResultSet { .. }
+        | Assertion::XmlRoot { .. }
+        | Assertion::InstanceOf { .. }
+        | Assertion::Signature { .. }
+        | Assertion::Version { .. } => Judgement::PerStep,
+        Assertion::Unique { .. } => Judgement::Aggregate,
+        Assertion::MessageExemplar { .. } | Assertion::State { .. } => Judgement::Informative,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Every assertion variant's judgement, pinned by name.
+    ///
+    /// Reclassifying a judged family as informative is how a whole catalogue
+    /// chapter goes back to passing on an arm that evaluates nothing, so the
+    /// classification is a test, not a convention.
+    #[test]
+    fn every_assertion_variant_declares_when_it_is_judged() {
+        let cases: &[(Value, Judgement)] = &[
+            (
+                json!({ "assert": "field", "path": "uid/value", "exists": true }),
+                Judgement::PerStep,
+            ),
+            (
+                json!({ "assert": "equivalent", "to": "committed" }),
+                Judgement::PerStep,
+            ),
+            (
+                json!({ "assert": "returns", "equals": true }),
+                Judgement::PerStep,
+            ),
+            (
+                json!({ "assert": "result_set", "match": "count", "count": 1 }),
+                Judgement::PerStep,
+            ),
+            (
+                json!({ "assert": "xml_root", "name": "composition" }),
+                Judgement::PerStep,
+            ),
+            (
+                json!({ "assert": "instance_of", "rm_type": "COMPOSITION" }),
+                Judgement::PerStep,
+            ),
+            (
+                json!({ "assert": "signature", "of": "${v1}", "present": true }),
+                Judgement::PerStep,
+            ),
+            (
+                json!({ "assert": "version", "count": 1 }),
+                Judgement::PerStep,
+            ),
+            (
+                json!({ "assert": "unique", "over": "${new_ehr_id}", "aggregate": true }),
+                Judgement::Aggregate,
+            ),
+            (
+                json!({ "assert": "message_exemplar", "text": "EHR not found" }),
+                Judgement::Informative,
+            ),
+            (
+                json!({ "assert": "state", "text": "the EHR exists" }),
+                Judgement::Informative,
+            ),
+        ];
+        for (document, expected) in cases {
+            let assertion: Assertion = serde_json::from_value(document.clone())
+                .unwrap_or_else(|e| panic!("{document} does not parse: {e}"));
+            assert_eq!(
+                judgement_of(&assertion),
+                *expected,
+                "{document} changed judgement"
+            );
+        }
+    }
 
     #[test]
     fn path_resolution_addresses_objects_and_lists() {

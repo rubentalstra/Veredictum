@@ -279,6 +279,22 @@ version on.
   reserved and always absent.
 ### Fixed
 
+- **`assert: version` judges the envelope it names (#225).** The driver's
+  version arm evaluated to `Ok(())` unconditionally, so every one of the
+  catalogue's authored version assertions reported a pass it never earned. The
+  arm now reads the `ORIGINAL_VERSION` envelope the assertion names — the
+  step's own body when that body already is the envelope, otherwise the
+  family's `…/version/{version_uid}` read — and judges `uid_pattern` against
+  `uid.value`, `change_type` against `commit_audit.change_type` mapped from the
+  openEHR `audit change type` codes, and `lifecycle_state` against the served
+  coded term. `count` is judged against the family's `REVISION_HISTORY`, which
+  is the only released wire surface disclosing how many versions a container
+  holds: `VERSIONED_OBJECT.version_count` is an RM function, and the released
+  ITS-JSON `VERSIONED_OBJECT` schema closes the served object to
+  `uid`/`owner_id`/`time_created`. A declared fact the ITS gives no read for —
+  a `count` on a family with no revision history, an envelope member on a
+  family with no version read, a version reference that resolves to nothing —
+  fails the row by name instead of passing silently.
 - **A failed run is never submittable (#197).** Submittability counted
   repetitions and baseline blocks and read no error count, so a run whose
   arrivals all failed still stamped `submittable: true` and was rankable on the

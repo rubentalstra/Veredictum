@@ -39,3 +39,4 @@ mod pipeline_seams;
 mod run_transcript;
 mod schema_drift;
 mod verification_pack;
+mod version_asserts;

@@ -257,7 +257,7 @@ fn strip_entity_tag(value: &str) -> &str {
 /// optionally a dotted branch triple (BASE `base_types` master05 §Syntaxes,
 /// `version_tree_id = trunk_version, [ '.', branch_number, '.',
 /// branch_version ]`).
-const VERSION_TREE_ID: &str = r"[1-9][0-9]*(?:\.[0-9]+\.[0-9]+)?";
+pub(crate) const VERSION_TREE_ID: &str = r"[1-9][0-9]*(?:\.[0-9]+\.[0-9]+)?";
 
 /// A `uid` — an ISO OID, a UUID, or a reverse-domain internet id (BASE
 /// `base_types` master05 §Syntaxes: `uid = iso_oid | uuid | internet_id`).
@@ -267,7 +267,7 @@ const VERSION_TREE_ID: &str = r"[1-9][0-9]*(?:\.[0-9]+\.[0-9]+)?";
 /// `creating_system_id = uid` — so they share the fragment. None of the three
 /// alternatives admits `:` or `"`, which anchors it to its own
 /// `::`-delimited segment by construction.
-const UID: &str = concat!(
+pub(crate) const UID: &str = concat!(
     r"(?:[0-9A-Fa-f]+(?:-[0-9A-Fa-f]+){4}",
     r"|[0-9]+(?:\.[0-9]+)*",
     r"|(?:[A-Za-z0-9]|[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9])",
