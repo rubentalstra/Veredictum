@@ -282,6 +282,20 @@ version on.
   keeps its own never-answered floor as defence in depth and now also asserts
   that a record claiming `submittable` agrees with the engine's arithmetic.
 
+- **The smoke pack commits a composition its own template roots at (#208).**
+  `bp_composition.json` and its invalid twin declared
+  `openEHR-EHR-COMPOSITION.encounter.v1` in both `archetype_node_id` and
+  `archetype_details.archetype_id`, while the template they name,
+  `cnf.blood_pressure`, roots at `openEHR-EHR-COMPOSITION.minimal.v1`. Both
+  fixtures now carry the template's own root, their sha256 pins move with the
+  bytes, and the pack is `smoke@1.1.0`: a record produced at 1.1.0 is not
+  comparable with a 1.0.0 one, because the bytes offered to the server changed.
+  Loading any pack now also proves the coherence the fixtures lost — every
+  composition fixture's two declared root ids are read back and compared
+  against the root its named operational template defines, and a mismatch, an
+  unseeded template id, or an unreadable fixture refuses the load with a typed
+  error naming both ids.
+
 - The committed party statements declare their AMB-220 branch, verified
   first-hand against each running SUT: FerroEHR refuses an RM-undefined
   containment pair as an invalid query, EHRbase executes it to an empty
