@@ -165,6 +165,48 @@ progress" since October 2021, zero comments); Release-1.0.0 dated 2018-12-28,
 never released. Repo: last content work 2022; 2024 = link fixes; May 2026 =
 Antora toolchain migration only; issues #1/#2 date from 2017.
 
+### 3.5 Authorship of the chapters this catalogue cites
+
+§3.2 says which chapters are fleshed. This section says who wrote them,
+because the coverage of the catalogue in §8 descends from that work.
+
+`platform_test_schedule/master00-amendment_record.adoc` names **P Pazos**
+first among the raisers of revision 0.8.0 (23 Nov 2021, "Rewrite main
+schedule based on EhrBase", with W Wagner and T Beale), 0.8.5 (21 Feb 2022,
+with T Beale) and 0.8.6 (24 Mar 2022, "Improved headings based on openEHR
+Service Model", his alone). Those three revisions made master06–09 the
+fleshed core §8 draws on, and
+`guide/master00-amendment_record.adoc` names him with T Beale on the
+Conformance Guide's initial writing. Recounted against this repository on
+2026-08-29: **127 of the 1119 case cores cite master06, master07, master08 or
+master09** (22 / 31 / 40 / 34 respectively), and 349 cite some chapter of the
+Test Schedule.
+
+Pablo Pazos wrote the original EHRbase conformance tests in 2019 at Hannover
+Medical School. The Robot battery of §3.3 is that work: 179 of its 223 files
+read "Copyright (c) 2019 Wladislaw Wagner (Vitasystems GmbH), Pablo Pazos
+(Hannover Medical School)". His
+[openEHR conformance verification framework](https://github.com/ppazos/openehr-conformance-verification)
+is his own expanded formalization of it, presented at EHRCON23, and it
+carries a conformance testing specification of its own.
+
+Three positions this record treats as settled were in print in his work
+before this document stated them: anchoring test cases on the Service Model
+rather than on the REST ITS (§7, principle 2), the Conformance Statement as
+the artifact a supplier publishes (§6.4), and the principle that a test
+report is not a certificate (§6.1's attestation rungs). They appear in his
+2019 openEHR SEC presentation and in the 2023 framework design
+([Discourse 17238](https://discourse.openehr.org/t/17238), 2026-08-29).
+
+Nothing from that framework is imported here: no test case, no data set, no
+fixture. The Test Schedule citation is to its chapters as the structural
+guide to which behaviours need covering, and every expectation resolves
+against a released component (§7). Two facts bound any future reuse. The
+framework repository carries no LICENSE file, so reuse of its material needs
+its author's permission first. And its demographic tests target his own
+demographic-API proposal rather than the demographic API openEHR has since
+published, so they do not transfer to master10 unread.
+
 ## 4. History distilled — what carries forward, and why it stalled
 
 The 2021–2022 community design era (Discourse threads 1616/1851/2239/2285/
@@ -2699,7 +2741,12 @@ proposing a format and demonstrating one.
   [2239](https://discourse.openehr.org/t/conformance-framework-description/2239),
   [2285](https://discourse.openehr.org/t/openehr-conformance-verification-design-document/2285),
   [2358](https://discourse.openehr.org/t/conformance-schedule-progress-data-types/2358),
-  [2373](https://discourse.openehr.org/t/conformance-testing-implementation-alternatives/2373).
+  [2373](https://discourse.openehr.org/t/conformance-testing-implementation-alternatives/2373),
+  [17238](https://discourse.openehr.org/t/17238) (the 2026-08-29 authorship
+  exchange behind §3.5).
+- Conformance verification framework (P Pazos / CaboLabs), presented at
+  EHRCON23: <https://github.com/ppazos/openehr-conformance-verification> —
+  carries no LICENSE file; nothing from it is imported here (§3.5).
 - Governance: <https://openehr.org/governance/> (openEHR Foundation + openEHR
   International CIC); HL7–openEHR joint statements (Amsterdam Jun 2025;
   [Dublin "Converge & Collaborate" May 2026](https://discourse.openehr.org/t/converge-collaborate-2026-joint-statement-from-hl7-international-and-openehr-international-press-release/16843));
