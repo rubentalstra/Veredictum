@@ -249,4 +249,98 @@ mod tests {
         assert!(compare_columns(&rs, &["uid".to_owned()]).is_ok());
         assert!(compare_columns(&rs, &["id".to_owned()]).is_err());
     }
+
+    /// Rule 1: comparison scope is `rows`, and `ResultSet.yaml` requires it —
+    /// a response carrying none is a mismatch every comparator reports the
+    /// same way, never an empty set that silently satisfies a `count: 0`.
+    #[test]
+    fn a_response_without_rows_fails_every_comparator() {
+        let no_rows = json!({ "meta": { "_href": "x" }, "columns": [] });
+        for mismatch in [
+            compare_ordered(&no_rows, &[]).expect_err("ordered needs rows"),
+            compare_bag(&no_rows, &[]).expect_err("bag needs rows"),
+            compare_contains(&no_rows, &[]).expect_err("contains needs rows"),
+            compare_count(&no_rows, 0).expect_err("count needs rows"),
+        ] {
+            assert!(
+                mismatch.0.contains("ResultSet.yaml requires rows"),
+                "{mismatch:?}"
+            );
+        }
+        // A rows member of the wrong JSON type is the same mismatch.
+        assert!(compare_count(&json!({ "rows": 3 }), 0).is_err());
+    }
+
+    /// Each comparator names its own count mismatch, so a red row says which
+    /// rule it violated rather than only that something differed.
+    #[test]
+    fn each_comparator_reports_its_own_count_mismatch() {
+        let rs = json!({ "rows": [["a"], ["b"]] });
+
+        let ordered = compare_ordered(&rs, &[json!(["a"])]).expect_err("2 rows are not 1");
+        assert_eq!(ordered.0, "row count 2 != expected 1");
+
+        let bag = compare_bag(&rs, &[json!(["a"])]).expect_err("2 rows are not 1");
+        assert_eq!(bag.0, "row count 2 != expected 1 (bag equality)");
+
+        let count = compare_count(&rs, 5).expect_err("2 rows are not 5");
+        assert_eq!(count.0, "row count 2 != expected 5");
+
+        // `contains` permits extras by construction, so the same input holds.
+        assert!(compare_contains(&rs, &[json!(["a"])]).is_ok());
+        let unmatched =
+            compare_contains(&rs, &[json!(["z"])]).expect_err("z is in no row of the set");
+        assert!(
+            unmatched
+                .0
+                .starts_with("expected row 0 has no bag-wise match")
+        );
+    }
+
+    /// Column identity is the `AS` alias, else `#<0-based index>`
+    /// (`ResultSetColumn.yaml`), and columns compare only when the case asserts
+    /// them — so an assertion against a response carrying none is a mismatch.
+    #[test]
+    fn column_identity_falls_back_to_the_positional_name() {
+        let unaliased = json!({ "columns": [{ "path": "/uid" }, { "name": "sys" }], "rows": [] });
+        assert!(
+            compare_columns(&unaliased, &["#0".to_owned(), "sys".to_owned()]).is_ok(),
+            "an unaliased column is identified by its 0-based index"
+        );
+
+        let count =
+            compare_columns(&unaliased, &["#0".to_owned()]).expect_err("2 columns are not 1");
+        assert_eq!(count.0, "column count 2 != expected 1");
+
+        let missing = compare_columns(&json!({ "rows": [] }), &["uid".to_owned()])
+            .expect_err("columns were asserted");
+        assert_eq!(missing.0, "columns asserted but the response carries none");
+    }
+
+    /// Rule 3 applies recursively: a nested list of RM objects compares
+    /// element-wise with numeric leaves by value, and a length difference at
+    /// any depth is a difference.
+    #[test]
+    fn nested_list_cells_compare_element_wise() {
+        let a = json!([{ "_type": "DV_COUNT", "magnitude": 1 }, { "_type": "DV_COUNT", "magnitude": 2 }]);
+        let b = json!([{ "_type": "DV_COUNT", "magnitude": 1.0 }, { "_type": "DV_COUNT", "magnitude": 2.0 }]);
+        assert!(cells_equal(&a, &b));
+
+        let shorter = json!([{ "_type": "DV_COUNT", "magnitude": 1 }]);
+        assert!(!cells_equal(&a, &shorter));
+
+        // An object missing a member the other carries is a difference, and so
+        // is a member present under a different key.
+        assert!(!cells_equal(
+            &json!({ "a": 1, "b": 2 }),
+            &json!({ "a": 1, "c": 2 })
+        ));
+
+        // A scalar row (not an array) still compares as one cell.
+        let rs = json!({ "rows": ["u1", "u2"] });
+        assert!(compare_ordered(&rs, &[json!("u1"), json!("u2")]).is_ok());
+        let positional =
+            compare_ordered(&rs, &[json!("u1"), json!("u9")]).expect_err("row 1 differs");
+        assert!(positional.0.starts_with("row 1:"), "{positional:?}");
+    }
 }

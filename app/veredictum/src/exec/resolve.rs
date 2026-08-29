@@ -824,4 +824,715 @@ mod tests {
         let v = r.resolve_value(&payload, &vars).unwrap();
         assert!(v.get("ehr_id").unwrap().as_str().unwrap().contains('-'));
     }
+
+    /// A case core carrying one matrix row and one fixture row, so the row-,
+    /// fixture- and recipe-bound references all have ground to resolve against.
+    fn bound_case() -> CaseCore {
+        serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_SERVICE.create_ehr-bound", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "capabilities": ["EhrOperations"], "profiles": ["CORE"],
+            "test_purpose": "t", "description": "d",
+            "spec_refs": ["CNF platform_test_schedule master06 §create_ehr data sets"],
+            "requires": { "templates": ["cnf.tpl.baked"] },
+            "parameters": { "iteration": "reset_per_row",
+                "matrix": {
+                    "columns": ["ehr_status", "is_queryable", "is_modifiable"],
+                    "rows": [["provided", true, false], ["absent", true, true]]
+                } },
+            "flow": [ { "step": 1, "call": "create_ehr", "expect": "created" } ]
+        }))
+        .unwrap()
+    }
+
+    /// A manifest carrying the baked template key the bound case requires,
+    /// plus the generated set the other tests read.
+    fn manifest_with_template() -> CorpusManifest {
+        serde_saphyr::from_str(
+            "cnf.set.bp-10:\n  generated_by: { recipe: bp_series, digest: \"sha256:x\" }\n  \
+             format: canonical-json\n  validity: { verdict: valid }\n  provenance: p\n\
+             cnf.tpl.baked:\n  source: baked.opt\n  format: opt-xml\n  \
+             template_id: cnf.minimal_event\n  validity: { verdict: valid }\n  provenance: p\n",
+        )
+        .unwrap()
+    }
+
+    /// The corpus format a manifest key declares is what routes an upload, and
+    /// a key the manifest does not carry declares nothing.
+    #[test]
+    fn the_declared_corpus_format_and_row_index_are_readable() {
+        let m = manifest_with_template();
+        let dir = PathBuf::from(".");
+        let mut r = Resolver::new(&m, &dir, None);
+        assert_eq!(
+            r.corpus_format(&CorpusKey::parse("cnf.tpl.baked").unwrap()),
+            Some(crate::vocab::CorpusFormat::OptXml)
+        );
+        assert_eq!(
+            r.corpus_format(&CorpusKey::parse("cnf.absent.key").unwrap()),
+            None
+        );
+
+        assert_eq!(r.row_index(), 0, "an unbound resolver sits at row 0");
+        let case = bound_case();
+        r.bind_row(&case, 1);
+        assert_eq!(r.row_index(), 1);
+        assert_eq!(r.row_cell("ehr_status"), Some(&MatrixCell::Absent));
+        assert_eq!(r.row_cell("no_such_column"), None);
+        // The debug rendering names the bound row and hides the rest.
+        assert!(format!("{r:?}").contains("row_index: 1"), "{r:?}");
+    }
+
+    /// A constant-constraint case stamps the manifest `template_id` of its one
+    /// baked template; a varying-constraint case (constraint columns declared)
+    /// stamps the deterministic PER-ROW synthesized id instead, so the carrier
+    /// and the OPT the driver uploads for that row name the same template.
+    #[test]
+    fn the_carrier_template_id_follows_the_constraint_model() {
+        let m = manifest_with_template();
+        let dir = PathBuf::from(".");
+        let vars = VarStore::default();
+        let payload: TemplatedValue =
+            serde_json::from_value(serde_json::json!("${recipe:content_instance(row)}")).unwrap();
+
+        let mut baked: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "CONT-DV_TEXT-baked", "kind": "content", "component": "CONTENT",
+            "rm_class": "DV_TEXT", "test_purpose": "t", "description": "d", "spec_refs": [],
+            "requires": { "templates": ["cnf.tpl.baked"] },
+            "parameters": { "iteration": "reset_per_row",
+                "matrix": { "columns": ["value"], "rows": [["a"], ["b"]] } },
+            "flow": [ { "step": 1, "call": "create_composition", "expect": "created" } ]
+        }))
+        .unwrap();
+        let mut r = Resolver::new(&m, &dir, None);
+        r.bind_row(&baked, 0);
+        let carrier = r.resolve_value(&payload, &vars).unwrap();
+        assert_eq!(
+            carrier["archetype_details"]["template_id"]["value"],
+            Value::String("cnf.minimal_event".to_owned()),
+            "the manifest's own template_id, not the corpus key"
+        );
+
+        // A required template the manifest does not carry falls back to the
+        // key itself rather than dropping the stamp.
+        baked.requires.templates = vec![CorpusKey::parse("cnf.tpl.unlisted").unwrap()];
+        let mut r = Resolver::new(&m, &dir, None);
+        r.bind_row(&baked, 0);
+        let carrier = r.resolve_value(&payload, &vars).unwrap();
+        assert_eq!(
+            carrier["archetype_details"]["template_id"]["value"],
+            Value::String("cnf.tpl.unlisted".to_owned())
+        );
+
+        let varying: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "CONT-DV_TEXT-varying", "kind": "content", "component": "CONTENT",
+            "rm_class": "DV_TEXT", "test_purpose": "t", "description": "d", "spec_refs": [],
+            "constraint_context": {
+                "template": "cnf.tpl.baked", "path": "/content[0]",
+                "constraint_columns": ["C_STRING.pattern"]
+            },
+            "parameters": { "iteration": "reset_per_row",
+                "matrix": { "columns": ["value", "C_STRING.pattern"],
+                            "rows": [["a", "^a$"], ["b", "^b$"]] } },
+            "flow": [ { "step": 1, "call": "create_composition", "expect": "created" } ]
+        }))
+        .unwrap();
+        let mut r = Resolver::new(&m, &dir, None);
+        r.bind_row(&varying, 1);
+        let carrier = r.resolve_value(&payload, &vars).unwrap();
+        let stamped = carrier["archetype_details"]["template_id"]["value"]
+            .as_str()
+            .expect("the carrier stamps a template id")
+            .to_owned();
+        assert_eq!(
+            stamped,
+            recipes::synth_template_id(
+                "CONT-DV_TEXT-varying",
+                1,
+                &[
+                    MatrixCell::Literal(serde_json::json!("b")),
+                    MatrixCell::Literal(serde_json::json!("^b$")),
+                ]
+            ),
+            "the per-row synthesized id, matching the OPT the driver uploads"
+        );
+    }
+
+    /// Every way a corpus entry can fail to yield a data set is a TYPED
+    /// resolution error naming the key: an unknown key, an unreadable source,
+    /// a source that is not the JSON its format declares, a generated set with
+    /// no registered generator, and an entry declaring neither source nor
+    /// recipe. None of them may resolve to an empty payload.
+    #[test]
+    fn every_unresolvable_corpus_entry_is_a_typed_error() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        assert_fs::prelude::FileWriteStr::write_str(
+            &assert_fs::prelude::PathChild::child(&dir, "broken.json"),
+            "{ not json",
+        )
+        .unwrap();
+        let m: CorpusManifest = serde_saphyr::from_str(
+            "cnf.missing.file:\n  source: nowhere.json\n  format: canonical-json\n  \
+             validity: { verdict: valid }\n  provenance: p\n\
+             cnf.broken.json:\n  source: broken.json\n  format: canonical-json\n  \
+             validity: { verdict: valid }\n  provenance: p\n\
+             cnf.no.generator:\n  generated_by: { recipe: no_such_recipe, digest: \"sha256:x\" }\n  \
+             format: canonical-json\n  validity: { verdict: valid }\n  provenance: p\n\
+             cnf.empty.entry:\n  format: canonical-json\n  validity: { verdict: valid }\n  \
+             provenance: p\n",
+        )
+        .unwrap();
+        let mut r = Resolver::new(&m, dir.path(), None);
+
+        let unknown = CorpusKey::parse("cnf.not.in.manifest").unwrap();
+        assert!(matches!(
+            r.data_set(&unknown),
+            Err(ResolveError::UnknownCorpusKey(key)) if key == unknown
+        ));
+
+        for (key, needle) in [
+            ("cnf.missing.file", "nowhere.json"),
+            ("cnf.broken.json", "JSON parse"),
+            ("cnf.no.generator", "has no registered generator"),
+            ("cnf.empty.entry", "neither source nor generated_by"),
+        ] {
+            let failure = r
+                .data_set(&CorpusKey::parse(key).unwrap())
+                .expect_err("the entry cannot yield a data set");
+            let message = failure.to_string();
+            assert!(message.contains(key), "{message}");
+            assert!(message.contains(needle), "{message}");
+        }
+    }
+
+    /// A text-format source reaches the driver as a JSON string carrier, and a
+    /// loaded set is cached: the second read of the same key never touches the
+    /// filesystem again.
+    #[test]
+    fn a_text_source_is_carried_as_a_string_and_cached() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        let opt = "<template xmlns=\"http://schemas.openehr.org/v1\"/>";
+        assert_fs::prelude::FileWriteStr::write_str(
+            &assert_fs::prelude::PathChild::child(&dir, "baked.opt"),
+            opt,
+        )
+        .unwrap();
+        let m: CorpusManifest = serde_saphyr::from_str(
+            "cnf.tpl.baked:\n  source: baked.opt\n  format: opt-xml\n  \
+             validity: { verdict: valid }\n  provenance: p\n",
+        )
+        .unwrap();
+        let mut r = Resolver::new(&m, dir.path(), None);
+        let key = CorpusKey::parse("cnf.tpl.baked").unwrap();
+        assert_eq!(r.data_set(&key).unwrap(), Value::String(opt.to_owned()));
+
+        // Cached: the same key still resolves after its file is gone.
+        std::fs::remove_file(dir.path().join("baked.opt")).unwrap();
+        assert_eq!(r.data_set(&key).unwrap(), Value::String(opt.to_owned()));
+    }
+
+    /// The AQL-chapter generated set is its own manifest key with its own
+    /// digest pin, and a view the manifest does not DECLARE is refused before
+    /// any evaluator runs — a case cannot reach a projection the corpus never
+    /// promised.
+    #[test]
+    fn a_generated_set_resolves_and_an_undeclared_view_is_refused() {
+        let m: CorpusManifest = serde_saphyr::from_str(
+            "cnf.query.bp:\n  generated_by: { recipe: query_bp, digest: \"sha256:x\" }\n  \
+             format: canonical-json\n  validity: { verdict: valid }\n  provenance: p\n  \
+             views:\n    all_uids_asc: { select: s }\n",
+        )
+        .unwrap();
+        let dir = PathBuf::from(".");
+        let mut r = Resolver::new(&m, &dir, None);
+        let key = CorpusKey::parse("cnf.query.bp").unwrap();
+        let set = r.data_set(&key).unwrap();
+        assert_eq!(set.as_array().map(Vec::len), Some(10));
+
+        let declared = ViewName::parse("all_uids_asc").unwrap();
+        assert_eq!(
+            r.view(&key, &declared).unwrap(),
+            serde_json::json!({ "systolic_min": 0, "order": "uid" })
+        );
+
+        let undeclared = ViewName::parse("top3_systolic_desc_uids").unwrap();
+        let failure = r
+            .view(&key, &undeclared)
+            .expect_err("the manifest declares no such view");
+        assert!(
+            failure
+                .to_string()
+                .contains("view not declared in the manifest"),
+            "{failure}"
+        );
+        assert!(matches!(
+            r.view(&CorpusKey::parse("cnf.absent").unwrap(), &declared),
+            Err(ResolveError::UnknownCorpusKey(_))
+        ));
+
+        // A whole data set reaches a step through `${ds:<key>}` with no view.
+        let vars = VarStore::default();
+        let whole = r
+            .resolve_ref(&ValueRef::parse("ds:cnf.query.bp").unwrap(), &vars)
+            .unwrap();
+        assert_eq!(whole.as_array().map(Vec::len), Some(10));
+    }
+
+    /// A manifest may DECLARE a view the runner has no evaluator for — the
+    /// `corpus-integrity` gate catches that at validate time, and at run time
+    /// it is a typed failure naming the view rather than an empty projection.
+    #[test]
+    fn a_declared_view_with_no_evaluator_fails_by_name() {
+        let m: CorpusManifest = serde_saphyr::from_str(
+            "cnf.set.bp-10:\n  generated_by: { recipe: bp_series, digest: \"sha256:x\" }\n  \
+             format: canonical-json\n  validity: { verdict: valid }\n  provenance: p\n  \
+             views:\n    invented_projection: { select: s }\n",
+        )
+        .unwrap();
+        let dir = PathBuf::from(".");
+        let mut r = Resolver::new(&m, &dir, None);
+        let failure = r
+            .view(
+                &CorpusKey::parse("cnf.set.bp-10").unwrap(),
+                &ViewName::parse("invented_projection").unwrap(),
+            )
+            .expect_err("the runner registers no such evaluator");
+        assert!(
+            failure
+                .to_string()
+                .contains("view invented_projection has no registered evaluator"),
+            "{failure}"
+        );
+        assert!(
+            !Resolver::REGISTERED_VIEWS.contains(&"invented_projection"),
+            "the registered list is what the validate gate checks against"
+        );
+    }
+
+    /// The two attribute-addressed views read their attribute off the loaded
+    /// data set, and a set that does not carry it is a typed view failure —
+    /// never a silently absent expectation.
+    #[test]
+    fn attribute_views_report_the_attribute_they_could_not_find() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        assert_fs::prelude::FileWriteStr::write_str(
+            &assert_fs::prelude::PathChild::child(&dir, "signed.json"),
+            r#"{ "signature": "sha256:abc",
+                 "minimal/minimal:0/ism_transition/current_state|code": "532" }"#,
+        )
+        .unwrap();
+        assert_fs::prelude::FileWriteStr::write_str(
+            &assert_fs::prelude::PathChild::child(&dir, "bare.json"),
+            "{}",
+        )
+        .unwrap();
+        let views =
+            "  views:\n    signature: { select: s }\n    current_state_code: { select: s }\n";
+        let m: CorpusManifest = serde_saphyr::from_str(&format!(
+            "cnf.security.signed_version:\n  source: signed.json\n  format: canonical-json\n  \
+             validity: {{ verdict: valid }}\n  provenance: p\n{views}\
+             cnf.bare:\n  source: bare.json\n  format: canonical-json\n  \
+             validity: {{ verdict: valid }}\n  provenance: p\n{views}"
+        ))
+        .unwrap();
+        let mut r = Resolver::new(&m, dir.path(), None);
+
+        let signed = CorpusKey::parse("cnf.security.signed_version").unwrap();
+        assert_eq!(
+            r.view(&signed, &ViewName::parse("signature").unwrap())
+                .unwrap(),
+            Value::String("sha256:abc".to_owned())
+        );
+        assert_eq!(
+            r.view(&signed, &ViewName::parse("current_state_code").unwrap())
+                .unwrap(),
+            Value::String("532".to_owned())
+        );
+
+        let bare = CorpusKey::parse("cnf.bare").unwrap();
+        for (view, needle) in [
+            ("signature", "signature attribute missing"),
+            ("current_state_code", "flat key missing"),
+        ] {
+            let failure = r
+                .view(&bare, &ViewName::parse(view).unwrap())
+                .expect_err("the set carries no such attribute");
+            assert!(failure.to_string().contains(needle), "{failure}");
+        }
+    }
+
+    /// `${row.…}` is bound to the CURRENT row and nothing else: an unbound
+    /// resolver and a column the matrix does not carry are both typed errors,
+    /// while `null` stays a first-class literal null in the payload.
+    #[test]
+    fn row_references_resolve_only_against_the_bound_row() {
+        let m = manifest();
+        let dir = PathBuf::from(".");
+        let vars = VarStore::default();
+        let reference = ValueRef::parse("row.ehr_status").unwrap();
+
+        let mut unbound = Resolver::new(&m, &dir, None);
+        let failure = unbound
+            .resolve_ref(&reference, &vars)
+            .expect_err("no row is bound");
+        assert!(
+            failure.to_string().contains("without a bound row"),
+            "{failure}"
+        );
+
+        let case = bound_case();
+        let mut r = Resolver::new(&m, &dir, None);
+        r.bind_row(&case, 0);
+        let absent_column = ValueRef::parse("row.no_such_column").unwrap();
+        let failure = r
+            .resolve_ref(&absent_column, &vars)
+            .expect_err("the matrix carries no such column");
+        assert!(
+            failure
+                .to_string()
+                .contains("column no_such_column not in the matrix"),
+            "{failure}"
+        );
+        assert_eq!(
+            r.resolve_ref(&ValueRef::parse("row.is_modifiable").unwrap(), &vars)
+                .unwrap(),
+            Value::Bool(false)
+        );
+
+        // A `null` CELL is a literal null in the payload, distinct from the
+        // `absent` sentinel the map resolver drops.
+        let nulled: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_SERVICE.create_ehr-nulled", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "capabilities": ["EhrOperations"], "profiles": ["CORE"],
+            "test_purpose": "t", "description": "d",
+            "spec_refs": ["CNF platform_test_schedule master06 §create_ehr data sets"],
+            "parameters": { "iteration": "reset_per_row",
+                "matrix": { "columns": ["subject"], "rows": [[null], ["absent"]] } },
+            "flow": [ { "step": 1, "call": "create_ehr", "expect": "created" } ]
+        }))
+        .unwrap();
+        let payload: TemplatedValue =
+            serde_json::from_value(serde_json::json!({ "subject": "${row.subject}" })).unwrap();
+        r.bind_row(&nulled, 0);
+        assert_eq!(
+            r.resolve_value(&payload, &vars).unwrap(),
+            serde_json::json!({ "subject": null }),
+            "a null cell stays a literal null"
+        );
+        r.bind_row(&nulled, 1);
+        assert_eq!(
+            r.resolve_value(&payload, &vars).unwrap(),
+            serde_json::json!({}),
+            "an absent cell drops the field"
+        );
+    }
+
+    /// A fixture row exposes its three declared fields and its data set; an
+    /// unbound fixture is a typed error, and a row declaring no defect
+    /// resolves that field to null and drops it from an object payload.
+    #[test]
+    fn fixture_references_expose_the_row_and_refuse_an_unbound_one() {
+        let dir = assert_fs::TempDir::new().unwrap();
+        assert_fs::prelude::FileWriteStr::write_str(
+            &assert_fs::prelude::PathChild::child(&dir, "invalid.json"),
+            r#"{ "_type": "COMPOSITION" }"#,
+        )
+        .unwrap();
+        let m: CorpusManifest = serde_saphyr::from_str(
+            "cnf.invalid.one:\n  source: invalid.json\n  format: canonical-json\n  \
+             validity: { verdict: invalid, defect: \"missing mandatory language\", \
+             spec_ref: \"RM ehr composition.adoc §Attributes\" }\n  provenance: p\n",
+        )
+        .unwrap();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_COMPOSITION.create_composition-fixtures", "kind": "functional",
+            "component": "EHR_COMPOSITION",
+            "sm_operation": "I_EHR_COMPOSITION.create_composition",
+            "capabilities": ["CompositionOperations"], "profiles": ["CORE"],
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "parameters": { "iteration": "reset_per_row", "fixture_set": [
+                { "data_set": "cnf.invalid.one", "expected": "validation_failed",
+                  "defect": "missing mandatory language" },
+                { "data_set": "cnf.invalid.one", "expected": "created" }
+            ] },
+            "flow": [ { "step": 1, "call": "create_composition", "expect": "${fixture.expected}" } ]
+        }))
+        .unwrap();
+        let vars = VarStore::default();
+
+        let mut unbound = Resolver::new(&m, dir.path(), None);
+        for body in ["fixture.data_set", "ds:fixture"] {
+            let failure = unbound
+                .resolve_ref(&ValueRef::parse(body).unwrap(), &vars)
+                .expect_err("no fixture row is bound");
+            assert!(
+                failure.to_string().contains("without a fixture row"),
+                "{failure}"
+            );
+        }
+
+        let mut r = Resolver::new(&m, dir.path(), None);
+        r.bind_row(&case, 0);
+        assert_eq!(
+            r.resolve_ref(&ValueRef::parse("fixture.data_set").unwrap(), &vars)
+                .unwrap(),
+            Value::String("cnf.invalid.one".to_owned())
+        );
+        assert_eq!(
+            r.resolve_ref(&ValueRef::parse("fixture.expected").unwrap(), &vars)
+                .unwrap(),
+            Value::String("validation_failed".to_owned())
+        );
+        assert_eq!(
+            r.resolve_ref(&ValueRef::parse("fixture.defect").unwrap(), &vars)
+                .unwrap(),
+            Value::String("missing mandatory language".to_owned())
+        );
+        assert_eq!(
+            r.resolve_ref(&ValueRef::parse("ds:fixture").unwrap(), &vars)
+                .unwrap(),
+            serde_json::json!({ "_type": "COMPOSITION" })
+        );
+
+        // The valid twin declares no defect: the field resolves to null and is
+        // dropped from an object payload rather than committed as `null`.
+        let payload: TemplatedValue =
+            serde_json::from_value(serde_json::json!({ "defect": "${fixture.defect}" })).unwrap();
+        r.bind_row(&case, 1);
+        assert_eq!(
+            r.resolve_ref(&ValueRef::parse("fixture.defect").unwrap(), &vars)
+                .unwrap(),
+            Value::Null
+        );
+        assert_eq!(
+            r.resolve_value(&payload, &vars).unwrap(),
+            serde_json::json!({})
+        );
+    }
+
+    /// Every captured shape resolves to its own JSON form, an OPTIONAL capture
+    /// that never bound resolves to null (and drops from an object payload),
+    /// and a REQUIRED capture that never bound is a typed error — never an
+    /// empty string sent to the server.
+    #[test]
+    fn captures_resolve_by_shape_and_an_unbound_required_one_is_refused() {
+        let m = manifest();
+        let dir = PathBuf::from(".");
+        let mut r = Resolver::new(&m, &dir, None);
+        let mut vars = VarStore::default();
+        vars.set(
+            crate::ids::CaptureName::parse("uid").unwrap(),
+            Captured::Scalar("abc::sys::1".to_owned()),
+        );
+        vars.set(
+            crate::ids::CaptureName::parse("uids").unwrap(),
+            Captured::List(vec!["a".to_owned(), "b".to_owned()]),
+        );
+        vars.set(
+            crate::ids::CaptureName::parse("body").unwrap(),
+            Captured::Body(serde_json::json!({ "_type": "EHR" })),
+        );
+        vars.set(
+            crate::ids::CaptureName::parse("t1").unwrap(),
+            Captured::InstantMs {
+                lo: 1_767_225_600_000,
+                hi: 1_767_225_600_000,
+            },
+        );
+
+        let mut resolve = |body: &str| r.resolve_ref(&ValueRef::parse(body).unwrap(), &vars);
+        assert_eq!(
+            resolve("uid").unwrap(),
+            Value::String("abc::sys::1".to_owned())
+        );
+        assert_eq!(resolve("uids").unwrap(), serde_json::json!(["a", "b"]));
+        assert_eq!(
+            resolve("body").unwrap(),
+            serde_json::json!({ "_type": "EHR" })
+        );
+        assert_eq!(
+            resolve("t1").unwrap(),
+            serde_json::json!(1_767_225_600_000_i64),
+            "an instant capture resolves to the upper bound of its window"
+        );
+        assert_eq!(resolve("ghost?").unwrap(), Value::Null);
+        let failure = resolve("ghost").expect_err("a required capture never bound");
+        assert!(
+            failure.to_string().contains("capture ghost is not bound"),
+            "{failure}"
+        );
+
+        // The fixed temporal rules render as ISO 8601 instants.
+        assert_eq!(
+            resolve("time:before(t1)").unwrap(),
+            Value::String("2025-12-31T23:59:59.999Z".to_owned())
+        );
+        let unresolvable =
+            resolve("time:after(uid)").expect_err("a scalar capture is not a commit instant");
+        assert!(matches!(unresolvable, ResolveError::Vars(_)));
+
+        // An unresolved optional drops the field entirely.
+        let payload: TemplatedValue =
+            serde_json::from_value(serde_json::json!({ "uid": "${ghost?}" })).unwrap();
+        assert_eq!(
+            r.resolve_value(&payload, &vars).unwrap(),
+            serde_json::json!({})
+        );
+    }
+
+    /// The two registered recipes resolve against the bound row, an
+    /// `ehr_status: absent` row resolves to null and drops from the payload,
+    /// and a recipe name the runner does not register is a typed error.
+    #[test]
+    fn recipe_references_resolve_only_the_registered_names() {
+        let m = manifest();
+        let dir = PathBuf::from(".");
+        let vars = VarStore::default();
+        let case = bound_case();
+
+        let mut unbound = Resolver::new(&m, &dir, None);
+        for body in ["recipe:ehr_status(row)", "recipe:content_instance(row)"] {
+            let failure = unbound
+                .resolve_ref(&ValueRef::parse(body).unwrap(), &vars)
+                .expect_err("no row is bound");
+            assert!(
+                failure.to_string().contains("without a bound row"),
+                "{failure}"
+            );
+        }
+
+        let mut r = Resolver::new(&m, &dir, None);
+        r.bind_row(&case, 0);
+        let status = r
+            .resolve_ref(&ValueRef::parse("recipe:ehr_status(row)").unwrap(), &vars)
+            .unwrap();
+        assert_eq!(status["_type"], Value::String("EHR_STATUS".to_owned()));
+        assert_eq!(status["is_modifiable"], Value::Bool(false));
+
+        // Row 1 declares `ehr_status: absent`: the recipe product is null, and
+        // an object payload drops the member rather than sending `null`.
+        r.bind_row(&case, 1);
+        assert_eq!(
+            r.resolve_ref(&ValueRef::parse("recipe:ehr_status(row)").unwrap(), &vars)
+                .unwrap(),
+            Value::Null
+        );
+        let payload: TemplatedValue = serde_json::from_value(serde_json::json!({
+            "ehr_status": "${recipe:ehr_status(row)}"
+        }))
+        .unwrap();
+        assert_eq!(
+            r.resolve_value(&payload, &vars).unwrap(),
+            serde_json::json!({})
+        );
+
+        // A content case with no rm_class cannot build an instance.
+        let failure = r
+            .resolve_ref(
+                &ValueRef::parse("recipe:content_instance(row)").unwrap(),
+                &vars,
+            )
+            .expect_err("the bound case declares no rm_class");
+        assert!(
+            failure.to_string().contains("without an rm_class"),
+            "{failure}"
+        );
+
+        let unregistered = r
+            .resolve_ref(&ValueRef::parse("recipe:no_such(row)").unwrap(), &vars)
+            .expect_err("the runner registers no such recipe");
+        assert!(matches!(unregistered, ResolveError::UnknownRecipe(_)));
+    }
+
+    /// `${ixit:dump_location}` reads the party declaration exactly as
+    /// `system_id` does: declared it resolves, undeclared it is the typed
+    /// error the run turns into a cited not-applicable record.
+    #[test]
+    fn the_dump_location_fact_resolves_only_from_the_declaration() {
+        let m = manifest();
+        let dir = PathBuf::from(".");
+        let vars = VarStore::default();
+        let reference = ValueRef::parse("ixit:dump_location").unwrap();
+
+        let declared: crate::ixit::Ixit = serde_json::from_value(serde_json::json!({
+            "instances": { "sut": { "base_url": "http://x", "auth": { "mode": "none" } } },
+            "dump_location": "/var/lib/ehr/dump"
+        }))
+        .unwrap();
+        let mut r = Resolver::new(&m, &dir, Some(&declared));
+        assert_eq!(
+            r.resolve_ref(&reference, &vars).unwrap(),
+            Value::String("/var/lib/ehr/dump".to_owned())
+        );
+
+        let mut bare = Resolver::new(&m, &dir, None);
+        assert!(matches!(
+            bare.resolve_ref(&reference, &vars),
+            Err(ResolveError::Ixit("dump_location"))
+        ));
+    }
+
+    /// A template mixing literals and references RENDERS to a string, while a
+    /// single-reference template yields the referenced value verbatim — the
+    /// difference between a URL segment and a whole committed payload.
+    #[test]
+    fn a_mixed_template_renders_and_a_single_reference_stays_typed() {
+        let m = manifest();
+        let dir = PathBuf::from(".");
+        let mut r = Resolver::new(&m, &dir, None);
+        let mut vars = VarStore::default();
+        vars.set(
+            crate::ids::CaptureName::parse("ehr_id").unwrap(),
+            Captured::Scalar("e-1".to_owned()),
+        );
+        vars.set(
+            crate::ids::CaptureName::parse("uids").unwrap(),
+            Captured::List(vec!["a".to_owned()]),
+        );
+
+        let mixed = Template::parse("/ehr/${ehr_id}/composition").unwrap();
+        assert_eq!(
+            r.resolve_template(&mixed, &vars).unwrap(),
+            Value::String("/ehr/e-1/composition".to_owned())
+        );
+        // A non-string reference inside a mixed template renders as its JSON.
+        let with_list = Template::parse("uids=${uids}").unwrap();
+        assert_eq!(
+            r.resolve_template(&with_list, &vars).unwrap(),
+            Value::String(r#"uids=["a"]"#.to_owned())
+        );
+
+        let single = Template::parse("${uids}").unwrap();
+        assert_eq!(
+            r.resolve_template(&single, &vars).unwrap(),
+            serde_json::json!(["a"]),
+            "a single reference keeps the referenced value's own type"
+        );
+    }
+
+    /// Every `TemplatedValue` arm resolves to its own JSON, so a payload tree
+    /// carrying scalars and lists reaches the wire unchanged.
+    #[test]
+    fn the_whole_payload_tree_resolves_arm_by_arm() {
+        let m = manifest();
+        let dir = PathBuf::from(".");
+        let mut r = Resolver::new(&m, &dir, None);
+        let vars = VarStore::default();
+        let payload: TemplatedValue = serde_json::from_value(serde_json::json!({
+            "null": null,
+            "bool": true,
+            "number": 42,
+            "text": "plain",
+            "list": [1, "two", false, null]
+        }))
+        .unwrap();
+        assert_eq!(
+            r.resolve_value(&payload, &vars).unwrap(),
+            serde_json::json!({
+                "null": null, "bool": true, "number": 42, "text": "plain",
+                "list": [1, "two", false, null]
+            })
+        );
+    }
 }

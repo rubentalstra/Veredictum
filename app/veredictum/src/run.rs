@@ -1348,12 +1348,11 @@ mod tests {
         assert!(extension_family(&set, &on_released).is_none());
     }
 
-    /// A `requires.import` case is party-scoped on the capabilities the
-    /// IMPORT family's cases gate, not on its own released-read ones: the
-    /// precondition is established over an extension route, so a party that
-    /// serves none has no received version for the read to serve.
-    #[test]
-    fn an_import_precondition_is_scoped_to_the_party_that_serves_the_family() {
+    /// The IMPORT world: an extension binding realizing the extract family, a
+    /// released read binding, the catalogue's own import case (which says
+    /// which capability the family is claimed under), and a reader case whose
+    /// `requires.import` precondition provisions over that family.
+    fn import_world() -> (ArtifactSet, CaseCore) {
         let import: crate::model::binding::OperationBinding =
             serde_json::from_value(serde_json::json!({
                 "sm_operation": "I_EHR_EXTRACT_SERVICE.import_ehr_extract",
@@ -1410,17 +1409,16 @@ mod tests {
         }))
         .unwrap();
 
-        let statement = |caps: &[&str]| -> crate::party::Statement {
-            serde_json::from_value(serde_json::json!({
-                "product": { "name": "p", "version": "1", "vendor": "v", "identifier": "i" },
-                "schedule_release": "CNF-2.0",
-                "spec_versions": { "rm": "1.2.0", "its_rest": "1.1.0" },
-                "claims": { "capabilities": caps, "profiles": ["CORE"] },
-                "tech_profiles": [ { "its": "its-rest", "formats": ["canonical-json"] } ],
-                "options": []
-            }))
-            .unwrap()
-        };
+        (set, reader)
+    }
+
+    /// A `requires.import` case is party-scoped on the capabilities the
+    /// IMPORT family's cases gate, not on its own released-read ones: the
+    /// precondition is established over an extension route, so a party that
+    /// serves none has no received version for the read to serve.
+    #[test]
+    fn an_import_precondition_is_scoped_to_the_party_that_serves_the_family() {
+        let (set, reader) = import_world();
         let serving = statement(&["EhrExtract", "Versioning"]);
         assert!(
             unservable_import(&set, Some(&serving), &reader)
@@ -1454,6 +1452,46 @@ mod tests {
             unservable_import(&set, Some(&read_only), &plain)
                 .expect("well-formed anchors")
                 .is_none()
+        );
+    }
+
+    /// Through the whole law an unservable PRECONDITION arrives as an
+    /// unrealized exception carrying the family's register citation plus the
+    /// ISO/IEC 9646 selection ground — the same channel the case's own flow
+    /// would be excused through, so the record reads the same either way.
+    #[test]
+    fn an_unservable_precondition_is_excused_through_the_whole_law() {
+        let (set, reader) = import_world();
+        let exception = selection_exception(
+            &set,
+            &ixit(&serde_json::json!({})),
+            Some(&statement(&["Versioning"])),
+            &reader,
+        )
+        .expect("the law is decidable")
+        .expect("the unservable precondition excuses the case");
+        match &exception {
+            Exception::Unrealized(citation) => {
+                assert!(citation.contains("requires.import"), "{citation}");
+                assert!(citation.contains("AMB-34"), "{citation}");
+                assert!(
+                    citation.contains("ISO/IEC 9646 test selection"),
+                    "{citation}"
+                );
+            }
+            other => panic!("expected an unrealized exception, got {other:?}"),
+        }
+
+        // A party claiming the family's capability drives the case.
+        assert!(
+            selection_exception(
+                &set,
+                &ixit(&serde_json::json!({})),
+                Some(&statement(&["EhrExtract", "Versioning"])),
+                &reader,
+            )
+            .expect("the law is decidable")
+            .is_none()
         );
     }
 
@@ -2265,5 +2303,466 @@ mod tests {
             [RowOutcome::NotApplicable { citation }] => assert_eq!(citation, "the citation"),
             other => panic!("expected one cited not-applicable row, got {other:?}"),
         }
+    }
+
+    /// The coverage fraction of a run that considered nothing is 1.0: no case
+    /// was withheld from the interpreter, so an empty selection can never
+    /// publish itself as a coverage shortfall.
+    #[test]
+    fn an_empty_run_reports_full_interpreter_coverage() {
+        let empty = RunReport::default().interpreter_coverage();
+        assert!((empty - 1.0).abs() < f64::EPSILON, "{empty}");
+        let partial = RunReport {
+            interpreter_run: 3,
+            considered: 4,
+            ..RunReport::default()
+        }
+        .interpreter_coverage();
+        assert!((partial - 0.75).abs() < f64::EPSILON, "{partial}");
+    }
+
+    /// A flow step naming a `variant` drives THAT realization, so a
+    /// selection-time guard judges exactly the binding the driver will send;
+    /// a step naming no variant takes the variant-less binding.
+    #[test]
+    fn a_variant_step_selects_its_own_realization() {
+        let base: serde_json::Value = serde_json::json!({
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "its": "its-rest",
+            "request": { "method": "GET", "path": "/ehr/{ehr_id}/ehr_status" },
+            "outcomes": { "ok": { "status": 200 } }
+        });
+        let mut at_version = base.clone();
+        at_version["variant"] = serde_json::json!("at_version");
+        at_version["applies"] = serde_json::json!({ "its_rest": ">=9.9.9" });
+
+        let mut set = ArtifactSet::default();
+        for (name, document) in [("plain.yaml", &base), ("variant.yaml", &at_version)] {
+            set.bindings.push((
+                std::path::PathBuf::from(name),
+                serde_json::from_value(document.clone()).unwrap(),
+            ));
+        }
+
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-at_version", "kind": "functional",
+            "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "flow": [
+                { "step": 1, "call": "get_ehr_status", "variant": "at_version", "expect": "ok" }
+            ]
+        }))
+        .unwrap();
+
+        // The variant binding carries the unmet floor, so selecting the plain
+        // one instead would silently drive a wire this party never declared.
+        let versions = crate::party::SpecVersions {
+            its_rest: Some("1.1.0".to_owned()),
+            ..crate::party::SpecVersions::default()
+        };
+        let unmet = unmet_binding_floors(&set, &case, &versions);
+        assert_eq!(unmet.len(), 1, "{unmet:?}");
+        assert!(unmet[0].contains(">=9.9.9"), "{unmet:?}");
+
+        // Through the whole law the same floor is an unrealized exception.
+        let exception = selection_exception(
+            &set,
+            &ixit(&serde_json::json!({})),
+            Some(&statement(&["EhrStatus"])),
+            &case,
+        )
+        .expect("the law is decidable")
+        .expect("the unmet operation floor excuses the case");
+        match &exception {
+            Exception::Unrealized(citation) => {
+                assert!(
+                    citation.contains("operation version floor unmet"),
+                    "{citation}"
+                );
+            }
+            other => panic!("expected an unrealized exception, got {other:?}"),
+        }
+
+        // A step whose operation no binding realizes narrows nothing.
+        let unbound: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_SERVICE.create_ehr-unbound", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{ "step": 1, "call": "create_ehr", "expect": "created" }]
+        }))
+        .unwrap();
+        assert!(unmet_binding_floors(&set, &unbound, &versions).is_empty());
+    }
+
+    /// A malformed dotted call in a flow step resolves to no operation, so the
+    /// extension marker is absent rather than derived from a mis-parsed
+    /// anchor.
+    #[test]
+    fn a_malformed_dotted_call_marks_no_extension_family() {
+        let (set, _) = selection_world();
+        let malformed: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-malformed", "kind": "functional",
+            "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "flow": [{ "step": 1, "call": "NOT_AN_INTERFACE.get", "expect": "ok" }]
+        }))
+        .unwrap();
+        assert!(extension_family(&set, &malformed).is_none());
+        assert!(fully_unrealized(&set, &malformed).is_none());
+        // The floor check resolves the same way, so a malformed call narrows
+        // selection by nothing rather than by a mis-parsed binding's range.
+        assert!(
+            unmet_binding_floors(&set, &malformed, &statement(&["EhrStatus"]).spec_versions)
+                .is_empty()
+        );
+
+        // A case with no SM anchor at all has nothing to resolve a sibling
+        // call against, so neither predicate fires.
+        let anchorless: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "CONT-DV_TEXT-anchorless", "kind": "content", "component": "CONTENT",
+            "rm_class": "DV_TEXT",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{ "step": 1, "call": "create_composition", "expect": "created" }]
+        }))
+        .unwrap();
+        assert!(extension_family(&set, &anchorless).is_none());
+        assert!(fully_unrealized(&set, &anchorless).is_none());
+    }
+
+    /// A case whose every operation is `unrealized` on this ITS is
+    /// not-applicable with the binding's own citation, before any party
+    /// declaration is consulted.
+    #[test]
+    fn a_fully_unrealized_case_is_excused_with_its_binding_citation() {
+        let unrealized: crate::model::binding::OperationBinding =
+            serde_json::from_value(serde_json::json!({
+                "sm_operation": "I_EHR_STATUS.get_ehr_status",
+                "its": "its-rest",
+                "unrealized": {
+                    "reason": "the release surfaces no such route",
+                    "source": "SM i_ehr_status.adoc vs ITS-REST ehr.openapi.yaml",
+                    "ambiguity": "AMB-77"
+                },
+                "request": { "method": "GET", "path": "/ehr/{ehr_id}/ehr_status" },
+                "outcomes": { "ok": { "status": 200 } }
+            }))
+            .unwrap();
+        let mut set = ArtifactSet::default();
+        set.bindings
+            .push((std::path::PathBuf::from("u.yaml"), unrealized));
+        let (_, case) = selection_world();
+
+        let citation = fully_unrealized(&set, &case).expect("every step is unrealized");
+        assert!(citation.contains("AMB-77"), "{citation}");
+
+        let exception = selection_exception(
+            &set,
+            &ixit(&serde_json::json!({})),
+            Some(&statement(&["EhrStatus"])),
+            &case,
+        )
+        .expect("the law is decidable")
+        .expect("an unrealized case is excused");
+        match &exception {
+            Exception::Unrealized(citation) => assert!(citation.contains("AMB-77"), "{citation}"),
+            other => panic!("expected an unrealized exception, got {other:?}"),
+        }
+    }
+
+    /// The whole law routes an unclaimed-capability case to a GUARDED
+    /// exception, and an EXTENSION case to an unrealized one — the two arms
+    /// mean different things and are recorded differently.
+    #[test]
+    fn the_law_routes_unclaimed_capabilities_and_extensions_apart() {
+        let (set, case) = selection_world();
+        let exception = selection_exception(
+            &set,
+            &ixit(&serde_json::json!({})),
+            Some(&statement(&["EhrOperations"])),
+            &case,
+        )
+        .expect("the law is decidable")
+        .expect("the ICS claims none of this case's capabilities");
+        match &exception {
+            Exception::Guarded(citation) => {
+                assert!(citation.contains("EhrStatus"), "{citation}");
+                assert!(citation.contains("master02-overview.adoc"), "{citation}");
+            }
+            other => panic!("expected a guarded exception, got {other:?}"),
+        }
+
+        let extension: crate::model::binding::OperationBinding =
+            serde_json::from_value(serde_json::json!({
+                "sm_operation": "I_PARTY_RELATIONSHIP.get_party_relationship",
+                "its": "its-rest",
+                "extension": {
+                    "family": "party-relationship",
+                    "reason": "the release surfaces no PARTY_RELATIONSHIP resource",
+                    "source": "SM i_party_relationship.adoc vs ITS-REST demographic.openapi.yaml",
+                    "ambiguity": "AMB-32"
+                },
+                "request": { "method": "GET", "path": "/demographic/party_relationship/{versioned_object_uid}" },
+                "outcomes": { "ok": { "status": 200 } }
+            }))
+            .unwrap();
+        let mut extension_set = ArtifactSet::default();
+        extension_set
+            .bindings
+            .push((std::path::PathBuf::from("e.yaml"), extension));
+        let on_extension: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "X-extension", "kind": "functional", "component": "DEMOGRAPHIC",
+            "sm_operation": "I_PARTY_RELATIONSHIP.get_party_relationship",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["PartyRelationshipOperations"],
+            "flow": [{ "step": 1, "call": "get_party_relationship", "expect": "ok" }]
+        }))
+        .unwrap();
+        let exception = selection_exception(
+            &extension_set,
+            &ixit(&serde_json::json!({})),
+            Some(&statement(&["EhrOperations"])),
+            &on_extension,
+        )
+        .expect("the law is decidable")
+        .expect("the ICS claims none of the extension family's capabilities");
+        match &exception {
+            Exception::Unrealized(citation) => {
+                assert!(citation.contains("extension realization"), "{citation}");
+                assert!(citation.contains("AMB-32"), "{citation}");
+            }
+            other => panic!("expected an unrealized exception, got {other:?}"),
+        }
+
+        // A party that CLAIMS the family's capability drives the case.
+        assert!(
+            selection_exception(
+                &extension_set,
+                &ixit(&serde_json::json!({})),
+                Some(&statement(&["PartyRelationshipOperations"])),
+                &on_extension,
+            )
+            .expect("the law is decidable")
+            .is_none()
+        );
+    }
+
+    /// A provisioning arm over an extension route only fires when the tree
+    /// actually realizes that family: no statement, or no extension binding,
+    /// and the precondition scoping declines to excuse anything.
+    #[test]
+    fn a_provisioning_scope_needs_both_a_statement_and_a_realized_family() {
+        let (set, _) = selection_world();
+        let importing: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-imported", "kind": "functional",
+            "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "requires": { "import": { "extract": "cnf.extract.one", "container": "X_VERSIONED_COMPOSITION" } },
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
+
+        // The statement-blind sweep scopes nothing away.
+        assert_eq!(unservable_import(&set, None, &importing).unwrap(), None);
+        // With a statement but no extension binding for the family, there is
+        // no extension route to scope against.
+        assert_eq!(
+            unservable_import(&set, Some(&statement(&["EhrStatus"])), &importing).unwrap(),
+            None
+        );
+        // A case with no import precondition is never touched by the arm.
+        let (_, plain) = selection_world();
+        assert_eq!(
+            unservable_import(&set, Some(&statement(&["EhrStatus"])), &plain).unwrap(),
+            None
+        );
+        assert_eq!(
+            unservable_party_relationship(&set, Some(&statement(&["EhrStatus"])), &plain).unwrap(),
+            None
+        );
+    }
+
+    /// The capabilities a family's cases gate are collected from the CASES
+    /// that drive it: a case on a released route contributes nothing, so the
+    /// scoping list never widens past the family it describes.
+    #[test]
+    fn only_cases_driving_the_family_contribute_its_capabilities() {
+        let extension: crate::model::binding::OperationBinding =
+            serde_json::from_value(serde_json::json!({
+                "sm_operation": "I_PARTY_RELATIONSHIP.get_party_relationship",
+                "its": "its-rest",
+                "extension": {
+                    "family": "party-relationship",
+                    "reason": "the release surfaces no PARTY_RELATIONSHIP resource",
+                    "source": "SM i_party_relationship.adoc vs ITS-REST demographic.openapi.yaml",
+                    "ambiguity": "AMB-32"
+                },
+                "request": { "method": "GET", "path": "/demographic/party_relationship/{versioned_object_uid}" },
+                "outcomes": { "ok": { "status": 200 } }
+            }))
+            .unwrap();
+        let (mut set, released_case) = selection_world();
+        set.bindings
+            .push((std::path::PathBuf::from("e.yaml"), extension));
+        let on_extension: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "X-extension", "kind": "functional", "component": "DEMOGRAPHIC",
+            "sm_operation": "I_PARTY_RELATIONSHIP.get_party_relationship",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["PartyRelationshipOperations"],
+            "flow": [{ "step": 1, "call": "get_party_relationship", "expect": "ok" }]
+        }))
+        .unwrap();
+        set.cases
+            .push((std::path::PathBuf::from("released.yaml"), released_case));
+        set.cases
+            .push((std::path::PathBuf::from("extension.yaml"), on_extension));
+
+        let claiming = capabilities_claiming_family(&set, "party-relationship");
+        assert_eq!(
+            claiming,
+            vec![CapabilityName::parse("PartyRelationshipOperations").unwrap()],
+            "the released-route case contributes nothing"
+        );
+        assert!(capabilities_claiming_family(&set, "ehr-extract").is_empty());
+    }
+
+    /// A terminology requirement is judged against the DECLARED lane per
+    /// namespace: a namespace served by an unreachable server, and one the
+    /// case needs unreachable but the party declares reachable, are both
+    /// cited, and a case addressing an undeclared instance leaves that
+    /// instance to the instance guard.
+    #[test]
+    fn terminology_reachability_is_judged_per_declared_namespace() {
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-term_down", "kind": "functional",
+            "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "requires": { "terminology": { "served": ["SNOMED-CT"] } },
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
+        let lane = |reachable: bool| {
+            serde_json::json!({
+                "terminology": {
+                    "posture": "fail_closed",
+                    "servers": [
+                        { "name": "ts", "namespaces": ["SNOMED-CT"], "reachable": reachable }
+                    ]
+                }
+            })
+        };
+
+        let unreachable = ixit(&lane(false));
+        let citation = unsatisfied_terminology(&case, &unreachable)
+            .expect("the case needs the namespace answered");
+        assert!(citation.contains("declares unreachable"), "{citation}");
+        assert!(unsatisfied_terminology(&case, &ixit(&lane(true))).is_none());
+
+        // The mirror direction: a case that NEEDS the server-down branch is
+        // excused on a party whose server is reachable.
+        let needs_down: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-term_up", "kind": "functional",
+            "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "requires": { "terminology": { "unreachable": ["SNOMED-CT"] } },
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
+        let citation = unsatisfied_terminology(&needs_down, &ixit(&lane(true)))
+            .expect("a reachable server cannot produce the down branch");
+        assert!(citation.contains("declared reachable"), "{citation}");
+        assert!(unsatisfied_terminology(&needs_down, &ixit(&lane(false))).is_none());
+
+        // A namespace no declared server answers is cited on both directions.
+        let elsewhere = serde_json::json!({
+            "terminology": {
+                "posture": "fail_closed",
+                "servers": [{ "name": "ts", "namespaces": ["LOINC"], "reachable": true }]
+            }
+        });
+        assert!(
+            unsatisfied_terminology(&case, &ixit(&elsewhere))
+                .expect("no server answers for the namespace")
+                .contains("seeded no such namespace")
+        );
+        assert!(
+            unsatisfied_terminology(&needs_down, &ixit(&elsewhere))
+                .expect("no server answers for the namespace")
+                .contains("no such unreachable namespace")
+        );
+
+        // A step addressing an instance the party does not declare is the
+        // instance guard's business, so the terminology guard skips it and
+        // reports nothing — one case never carries two citations.
+        let elsewhere_case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-readonly", "kind": "functional",
+            "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "requires": { "terminology": { "served": ["SNOMED-CT"] } },
+            "flow": [
+                { "step": 1, "call": "get_ehr_status", "on": "readonly", "expect": "ok" }
+            ]
+        }))
+        .unwrap();
+        assert_eq!(
+            unsatisfied_terminology(&elsewhere_case, &ixit(&lane(true))),
+            None
+        );
+        assert_eq!(
+            unsatisfied_spec_profile(&elsewhere_case, &ixit(&lane(true))),
+            None
+        );
+    }
+
+    /// `${ixit:dump_location}` is collected exactly as `system_id` is: a case
+    /// reading it on a party that declares none is excused by name.
+    #[test]
+    fn an_undeclared_dump_location_is_collected_by_name() {
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-dump", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "flow": [{
+                "step": 1, "call": "get_ehr_status", "expect": "ok",
+                "with": { "path": "${ixit:dump_location}" }
+            }]
+        }))
+        .unwrap();
+        assert_eq!(
+            undeclared_ixit_facts(&case, &ixit(&serde_json::json!({}))),
+            vec!["dump_location"]
+        );
+        let declared = ixit(&serde_json::json!({ "dump_location": "/var/lib/ehr" }));
+        assert!(undeclared_ixit_facts(&case, &declared).is_empty());
+    }
+
+    /// A content case whose authored core carries NO decision table is
+    /// synthesized unchanged: the synthesis derives its matrix from the table,
+    /// so an absent one leaves the case exactly as authored.
+    #[test]
+    fn a_content_case_without_a_decision_table_synthesizes_unchanged() {
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "CONT-DV_TEXT-no_table", "kind": "content", "component": "CONTENT",
+            "rm_class": "DV_TEXT",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{ "step": 1, "call": "create_composition", "expect": "created" }]
+        }))
+        .unwrap();
+        let synthesized = synthesize_content_case(&case);
+        assert!(synthesized.parameters.is_none());
+        assert_eq!(synthesized.flow.len(), 1);
+        assert_eq!(synthesized.id, case.id);
     }
 }

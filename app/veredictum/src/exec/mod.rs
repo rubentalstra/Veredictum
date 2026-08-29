@@ -529,4 +529,341 @@ mod tests {
         ));
         assert!(matches!(record.rows[1], RowOutcome::Passed));
     }
+
+    /// A driver whose provisioning outcome, assertion results and
+    /// postconditions are all scripted per row, so law a's two non-Ready
+    /// verdicts and law b's assertion channel are exercised on their own.
+    struct Provisioning {
+        grounds: Vec<Provisioned>,
+        assertion_failures: Vec<Vec<String>>,
+        postconditions: Vec<String>,
+        performed: usize,
+        cursor: usize,
+    }
+
+    impl Provisioning {
+        fn ready(assertion_failures: Vec<Vec<String>>) -> Self {
+            Self {
+                grounds: vec![Provisioned::Ready; assertion_failures.len().max(1)],
+                assertion_failures,
+                postconditions: Vec::new(),
+                performed: 0,
+                cursor: 0,
+            }
+        }
+    }
+
+    impl StepDriver for Provisioning {
+        fn perform(
+            &mut self,
+            _case: &CaseCore,
+            _step: &FlowStep,
+            expected: OutcomeKind,
+            _row: usize,
+            _vars: &mut VarStore,
+        ) -> Result<StepObservation, String> {
+            let assertion_failures = self
+                .assertion_failures
+                .get(self.performed)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(AssertionOutcome::Mismatch)
+                .collect();
+            self.performed += 1;
+            Ok(StepObservation {
+                observation: Observation::Kind(expected),
+                assertion_failures,
+            })
+        }
+        fn provision(
+            &mut self,
+            _c: &CaseCore,
+            _r: usize,
+            _v: &mut VarStore,
+        ) -> Result<Provisioned, String> {
+            let outcome = self
+                .grounds
+                .get(self.cursor)
+                .cloned()
+                .unwrap_or(Provisioned::Ready);
+            self.cursor += 1;
+            Ok(outcome)
+        }
+        fn postconditions(
+            &mut self,
+            _c: &CaseCore,
+            _r: usize,
+            _v: &mut VarStore,
+        ) -> Result<Vec<AssertionOutcome>, String> {
+            Ok(self
+                .postconditions
+                .iter()
+                .cloned()
+                .map(AssertionOutcome::Mismatch)
+                .collect())
+        }
+        fn aggregates(&mut self, _c: &CaseCore, _rows: &[VarStore]) -> Result<Vec<String>, String> {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Law a's two non-Ready verdicts are kept apart, because they mean
+    /// opposite things about the server: an unrealizable ground records the
+    /// row NOT-APPLICABLE with its register citation, while a REFUSED
+    /// provisioning exchange records it inconclusive at step 0 — never a SUT
+    /// failure of the behaviour the case is about.
+    #[test]
+    fn an_unprovisionable_row_is_excused_or_inconclusive_and_never_driven() {
+        let case = two_row_case();
+        let mut driver = Provisioning {
+            grounds: vec![
+                Provisioned::RowNotApplicable {
+                    citation: "AMB-99: no such ground on this profile".to_owned(),
+                },
+                Provisioned::RowErrored {
+                    reason: "template upload answered 500".to_owned(),
+                },
+            ],
+            assertion_failures: Vec::new(),
+            postconditions: Vec::new(),
+            performed: 0,
+            cursor: 0,
+        };
+        let record = run_case(&case, None, &mut driver).unwrap();
+
+        assert_eq!(
+            record.rows[0],
+            RowOutcome::NotApplicable {
+                citation: "AMB-99: no such ground on this profile".to_owned()
+            }
+        );
+        assert_eq!(
+            record.rows[1],
+            RowOutcome::Errored {
+                step: 0,
+                reason: "template upload answered 500".to_owned()
+            }
+        );
+        assert_eq!(
+            driver.performed, 0,
+            "neither row's steps are driven once provisioning did not succeed"
+        );
+        assert!(
+            !record.passed(),
+            "an inconclusive row is not a passing case"
+        );
+    }
+
+    /// A case whose every row is excused still rolls up as passed: an N/A row
+    /// carries a citation rather than evidence against the server, so it never
+    /// turns a case red on its own.
+    #[test]
+    fn a_wholly_excused_case_rolls_up_as_passed() {
+        let case = two_row_case();
+        let mut driver = Provisioning {
+            grounds: vec![
+                Provisioned::RowNotApplicable {
+                    citation: "AMB-99".to_owned(),
+                };
+                2
+            ],
+            assertion_failures: Vec::new(),
+            postconditions: Vec::new(),
+            performed: 0,
+            cursor: 0,
+        };
+        let record = run_case(&case, None, &mut driver).unwrap();
+        assert!(record.passed());
+        assert_eq!(record.rows_driven, 2);
+        assert_eq!(record.rows_total, 2);
+    }
+
+    /// Law b through the ASSERTION channel: a step whose observation matched
+    /// the expectation but whose post-step assertion failed fails the row at
+    /// that step and aborts the rest of it.
+    #[test]
+    fn a_failed_step_assertion_fails_the_row_at_its_own_step() {
+        let case = two_row_case();
+        // Row 0: step 1's assertion fails, so step 2 never runs (2 performs
+        // total: row 0 step 1, then row 1 steps 1 and 2 — 3 in all).
+        let mut driver = Provisioning::ready(vec![
+            vec!["body/uid did not match".to_owned()],
+            Vec::new(),
+            Vec::new(),
+        ]);
+        let record = run_case(&case, None, &mut driver).unwrap();
+        assert_eq!(
+            record.rows[0],
+            RowOutcome::Failed {
+                step: 1,
+                reason: "body/uid did not match".to_owned()
+            }
+        );
+        assert!(matches!(record.rows[1], RowOutcome::Passed));
+        assert_eq!(driver.performed, 3, "row 0 aborted after its first step");
+
+        // With every assertion holding, the case passes and law e's aggregate
+        // pass runs over the collected row states.
+        let mut clean = Provisioning::ready(vec![Vec::new(); 4]);
+        let record = run_case(&case, None, &mut clean).unwrap();
+        assert!(record.passed());
+        assert_eq!(clean.performed, 4, "both steps of both rows drove");
+    }
+
+    /// Law b again, on the row POSTCONDITIONS: they run only when every step
+    /// held, and a failure lands on the row at step 0 (the row, not a step).
+    #[test]
+    fn row_postconditions_fail_the_row_at_step_zero() {
+        let case = two_row_case();
+        let mut driver = Provisioning::ready(vec![Vec::new(); 4]);
+        driver.postconditions = vec!["the read-back is not equivalent".to_owned()];
+        let record = run_case(&case, None, &mut driver).unwrap();
+        for row in &record.rows {
+            assert_eq!(
+                row,
+                &RowOutcome::Failed {
+                    step: 0,
+                    reason: "the read-back is not equivalent".to_owned()
+                }
+            );
+        }
+    }
+
+    /// The reserved matrix `expected` column is the NORMATIVE per-row
+    /// override: a row naming its own outcome kind is judged against that,
+    /// while the flow's own `expect` is the inherited default.
+    #[test]
+    fn the_reserved_expected_column_overrides_the_flow_expectation() {
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_SERVICE.create_ehr-per_row_expectation",
+            "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "capabilities": ["EhrOperations"], "profiles": ["CORE"],
+            "test_purpose": "per-row expectation", "description": "per-row expectation",
+            "spec_refs": ["CNF platform_test_schedule master06 §create_ehr data sets"],
+            "parameters": { "iteration": "reset_per_row", "matrix": {
+                "columns": ["ehr_id", "expected"],
+                "rows": [["absent", "created"], ["provided", "already_exists"]]
+            } },
+            "flow": [{ "step": 1, "call": "create_ehr", "expect": "created" }]
+        }))
+        .unwrap();
+
+        assert_eq!(
+            expected_kind(&case, &case.flow[0], 0),
+            Some(OutcomeKind::Created)
+        );
+        assert_eq!(
+            expected_kind(&case, &case.flow[0], 1),
+            Some(OutcomeKind::AlreadyExists),
+            "row 1's own column, not the flow's `created`"
+        );
+
+        // A row index past the matrix has no per-row override, so the flow's
+        // expectation is what it inherits.
+        assert_eq!(
+            expected_kind(&case, &case.flow[0], 9),
+            Some(OutcomeKind::Created)
+        );
+    }
+
+    /// `${fixture.expected}` resolves per fixture-set row, and a row the set
+    /// does not carry resolves to NOTHING — which the interpreter records as
+    /// an errored row rather than guessing an expectation.
+    #[test]
+    fn a_fixture_row_carries_its_own_expectation_and_a_missing_one_errors() {
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_COMPOSITION.create_composition-fixtures",
+            "kind": "functional", "component": "EHR_COMPOSITION",
+            "sm_operation": "I_EHR_COMPOSITION.create_composition",
+            "capabilities": ["CompositionOperations"], "profiles": ["CORE"],
+            "test_purpose": "fixture expectations", "description": "fixture expectations",
+            "spec_refs": ["CNF platform_test_schedule master06 §create_ehr data sets"],
+            "parameters": { "iteration": "reset_per_row", "fixture_set": [
+                { "data_set": "cnf.valid.one", "expected": "created" },
+                { "data_set": "cnf.invalid.one", "expected": "validation_failed",
+                  "defect": "empty 1..* list", "spec_ref": "RM data_structures §ITEM_LIST" }
+            ] },
+            "flow": [{ "step": 1, "call": "create_composition", "expect": "${fixture.expected}" }]
+        }))
+        .unwrap();
+
+        assert_eq!(row_count(&case), 2, "the fixture set is the row axis");
+        assert_eq!(
+            expected_kind(&case, &case.flow[0], 0),
+            Some(OutcomeKind::Created)
+        );
+        assert_eq!(
+            expected_kind(&case, &case.flow[0], 1),
+            Some(OutcomeKind::ValidationFailed)
+        );
+        assert_eq!(
+            expected_kind(&case, &case.flow[0], 2),
+            None,
+            "a row the fixture set does not carry resolves to no expectation"
+        );
+
+        // Driven, the unresolvable row is INCONCLUSIVE: the interpreter never
+        // substitutes a default outcome for a row it cannot resolve.
+        let mut truncated = case.clone();
+        if let Some(parameters) = &mut truncated.parameters
+            && let Some(fixtures) = &mut parameters.fixture_set
+        {
+            fixtures.clear();
+        }
+        let mut driver = Provisioning::ready(Vec::new());
+        let record = run_case(&truncated, None, &mut driver).unwrap();
+        assert_eq!(record.rows_total, 1, "an empty axis still drives one row");
+        assert_eq!(
+            record.rows[0],
+            RowOutcome::Errored {
+                step: 1,
+                reason: "no expected kind resolvable for this row".to_owned()
+            }
+        );
+        assert_eq!(driver.performed, 0);
+    }
+
+    /// A case with no `parameters` at all is one row, and a record with no
+    /// rows at all never counts as passed.
+    #[test]
+    fn the_row_axis_is_never_empty_and_an_empty_record_never_passes() {
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_SERVICE.create_ehr-single",
+            "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "capabilities": ["EhrOperations"], "profiles": ["CORE"],
+            "test_purpose": "single row", "description": "single row",
+            "spec_refs": ["CNF platform_test_schedule master06 §create_ehr data sets"],
+            "flow": [{ "step": 1, "call": "create_ehr", "expect": "created" }]
+        }))
+        .unwrap();
+        assert_eq!(row_count(&case), 1);
+
+        let empty = CaseRecord {
+            case: case.id.clone(),
+            format: None,
+            rows: Vec::new(),
+            rows_driven: 0,
+            rows_total: 1,
+        };
+        assert!(
+            !empty.passed(),
+            "a case that produced no row proves nothing"
+        );
+    }
+
+    /// A driver-internal failure reaches the interpreter as a TRANSPORT
+    /// observation with no assertion results, which law c classifies as
+    /// inconclusive — the `Err` channel stays reserved for interpreter defects.
+    #[test]
+    fn a_driver_internal_failure_is_a_transport_observation() {
+        let observed = StepObservation::transport("connection refused".to_owned());
+        assert_eq!(
+            observed.observation,
+            Observation::Transport("connection refused".to_owned())
+        );
+        assert!(observed.assertion_failures.is_empty());
+    }
 }

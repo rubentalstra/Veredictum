@@ -1620,4 +1620,267 @@ mod tests {
         // A row with no predicate at all asserts only that the path resolves.
         assert!(eval_field(&body, "versions[0]/uid/value", None, None, None, None, None).is_ok());
     }
+
+    /// A malformed index step addresses nothing rather than panicking or
+    /// silently dropping the step: an assertion over a mis-authored path
+    /// reports "resolves to nothing" instead of passing over the whole body.
+    #[test]
+    fn a_malformed_index_step_resolves_to_nothing() {
+        let body = json!({ "versions": [{ "uid": "a" }, { "uid": "b" }] });
+        assert_eq!(
+            resolve_path(&body, "versions[1]/uid"),
+            Some(&json!("b")),
+            "the well-formed index addresses its element"
+        );
+        // A non-numeric index, an unterminated one, and an index past the end.
+        for path in ["versions[x]/uid", "versions[0/uid", "versions[9]/uid"] {
+            assert_eq!(resolve_path(&body, path), None, "{path}");
+        }
+        // A bare index step with no attribute indexes the CURRENT value.
+        assert_eq!(resolve_path(&body, "versions/[0]/uid"), Some(&json!("a")));
+        // A leading and a doubled separator are empty steps, which are skipped.
+        assert_eq!(resolve_path(&body, "//versions[0]//uid"), Some(&json!("a")));
+    }
+
+    /// A template the driver was supposed to pre-resolve is a LOUD failure:
+    /// only captures render here, so a `${row.…}` or an unbound or non-scalar
+    /// capture never becomes an empty segment in a compared value.
+    #[test]
+    fn only_scalar_captures_render_and_everything_else_is_refused() {
+        use crate::refgrammar::Template;
+
+        let mut vars = VarStore::default();
+        vars.set(
+            crate::ids::CaptureName::parse("ehr_id").unwrap(),
+            Captured::Scalar("e-1".to_owned()),
+        );
+        vars.set(
+            crate::ids::CaptureName::parse("uids").unwrap(),
+            Captured::List(vec!["a".to_owned()]),
+        );
+
+        let bound = Template::parse("/ehr/${ehr_id}").unwrap();
+        assert_eq!(render_template(&bound, &vars).unwrap(), "/ehr/e-1");
+
+        let non_scalar = Template::parse("${uids}").unwrap();
+        assert_eq!(
+            render_template(&non_scalar, &vars),
+            Err("capture uids is not scalar".to_owned())
+        );
+
+        let unbound = Template::parse("${ghost}").unwrap();
+        assert_eq!(
+            render_template(&unbound, &vars),
+            Err("capture ghost is not bound".to_owned())
+        );
+
+        let driver_side = Template::parse("${row.ehr_id}").unwrap();
+        let failure = render_template(&driver_side, &vars)
+            .expect_err("a row reference is the driver's to resolve");
+        assert!(
+            failure.contains("must be resolved by the driver"),
+            "{failure}"
+        );
+    }
+
+    /// An ignore path descends through objects and lists, and an empty path
+    /// strips nothing — an ignore set can never quietly blank a whole body.
+    #[test]
+    fn an_ignore_path_descends_and_an_empty_one_strips_nothing() {
+        let body = json!({
+            "context": { "start_time": "t", "setting": "s" },
+            "versions": [
+                { "uid": "a", "commit_audit": { "time_committed": "t1" } },
+                { "uid": "b", "commit_audit": { "time_committed": "t2" } }
+            ]
+        });
+
+        let nested = strip_ignored(&body, &["context/start_time".to_owned()]);
+        assert_eq!(nested["context"], json!({ "setting": "s" }));
+        assert_eq!(nested["versions"], body["versions"], "untouched elsewhere");
+
+        // Through a list: every element loses the named leaf.
+        let through_list =
+            strip_ignored(&body, &["versions/commit_audit/time_committed".to_owned()]);
+        for version in through_list["versions"].as_array().unwrap() {
+            assert_eq!(version["commit_audit"], json!({}));
+            assert!(version["uid"].is_string(), "siblings survive");
+        }
+
+        // An empty path names nothing, so the body comes back whole.
+        assert_eq!(strip_ignored(&body, &[String::new()]), body);
+        assert_eq!(strip_ignored(&body, &["/".to_owned()]), body);
+        // A path through a scalar leaf strips nothing rather than failing.
+        assert_eq!(
+            strip_ignored(&body, &["context/setting/deeper".to_owned()]),
+            body
+        );
+    }
+
+    /// A non-string leaf is compared as its JSON text, so a numeric or object
+    /// value still faces a `matches:` predicate rather than passing untested.
+    #[test]
+    fn a_non_string_leaf_is_matched_as_its_json_text() {
+        let body = json!({ "magnitude": 140, "uid": { "value": "a::b::1" } });
+        assert!(eval_field(&body, "magnitude", None, None, None, None, Some(r"^\d+$")).is_ok());
+        let failure = eval_field(&body, "magnitude", None, None, None, None, Some("^x"))
+            .expect_err("140 does not start with x");
+        assert!(failure.0.contains("\"140\""), "{failure:?}");
+        assert!(eval_field(&body, "uid", None, None, None, None, Some("a::b::1")).is_ok());
+
+        // `not_equals` is the server-set predicate: equal to the client's own
+        // value is the failure, anything else passes.
+        assert!(eval_field(&body, "magnitude", None, Some(&json!(1)), None, None, None).is_ok());
+        let failure = eval_field(
+            &body,
+            "magnitude",
+            None,
+            Some(&json!(140)),
+            None,
+            None,
+            None,
+        )
+        .expect_err("the value is the client-supplied one");
+        assert!(failure.0.contains("must be server-set"), "{failure:?}");
+    }
+
+    /// The aggregate `unique` assertion (law e) ignores rows that never bound
+    /// the capture: a row excused before it committed anything must not count
+    /// as a duplicate of another excused row.
+    #[test]
+    fn unique_ignores_rows_that_bound_nothing() {
+        let name = crate::ids::CaptureName::parse("ehr_id").unwrap();
+        let mut bound = VarStore::default();
+        bound.set(name.clone(), Captured::Scalar("e-1".to_owned()));
+        let mut same = VarStore::default();
+        same.set(name.clone(), Captured::Scalar("e-1".to_owned()));
+
+        assert!(
+            eval_unique(&name, &[VarStore::default(), VarStore::default()]).is_ok(),
+            "two rows that bound nothing are not two duplicates"
+        );
+        assert!(eval_unique(&name, &[bound.clone(), VarStore::default()]).is_ok());
+        let failure = eval_unique(&name, &[bound, VarStore::default(), same])
+            .expect_err("the same id at two rows is a duplicate");
+        assert!(failure.0.contains("repeats at row 2"), "{failure:?}");
+    }
+
+    /// A `returns` predicate reads a non-string body as its JSON text, so a
+    /// numeric or object response is judged rather than passing untested.
+    #[test]
+    fn returns_predicates_read_a_non_string_body_as_its_json() {
+        let count = json!(7);
+        assert!(eval_returns(&count, None, Some(r"^\d$"), None).is_ok());
+        let failure =
+            eval_returns(&count, None, Some("^x"), None).expect_err("7 does not start with x");
+        assert!(failure.0.contains("does not match"), "{failure:?}");
+        assert!(eval_returns(&count, None, None, Some("nowhere")).is_ok());
+        assert!(eval_returns(&count, None, None, Some("7")).is_err());
+
+        // An uncompilable pattern is a failure on both predicate channels.
+        assert!(eval_returns(&count, None, Some("("), None).is_err());
+    }
+
+    /// A namespace-qualified `xsi:type` `QName` is judged against the SAME
+    /// expectation as the root, so a type from another schema's target
+    /// namespace is refused even when its local name matches.
+    #[test]
+    fn an_xsi_type_in_the_wrong_namespace_is_refused() {
+        use crate::vocab::XmlNamespace;
+
+        // The root binds the published namespace with a PREFIX and leaves no
+        // default, so the unprefixed xsi:type QName resolves to NO namespace.
+        let unqualified_type = Value::String(
+            r#"<oe:version xmlns:oe="http://schemas.openehr.org/v1"
+                           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                           xsi:type="ORIGINAL_VERSION"/>"#
+                .to_owned(),
+        );
+        let failure = eval_xml_root(
+            &unqualified_type,
+            "version",
+            Some(XmlNamespace::Published),
+            Some("ORIGINAL_VERSION"),
+        )
+        .expect_err("the type QName resolves to no namespace");
+        assert!(
+            failure.0.contains("resolves to NO namespace"),
+            "{failure:?}"
+        );
+        // The same document passes when only the root's namespace is asserted.
+        assert!(
+            eval_xml_root(
+                &unqualified_type,
+                "version",
+                Some(XmlNamespace::Published),
+                None
+            )
+            .is_ok()
+        );
+
+        // A type QName bound to another namespace names another schema's type.
+        let foreign_type = Value::String(
+            r#"<version xmlns="http://schemas.openehr.org/v1"
+                        xmlns:other="http://example.invalid/other"
+                        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                        xsi:type="other:ORIGINAL_VERSION"/>"#
+                .to_owned(),
+        );
+        let failure = eval_xml_root(
+            &foreign_type,
+            "version",
+            Some(XmlNamespace::Published),
+            Some("ORIGINAL_VERSION"),
+        )
+        .expect_err("the type is another schema's");
+        assert!(failure.0.contains("is in namespace"), "{failure:?}");
+
+        // A prefix the document never bound is refused on both QNames.
+        let unbound_type_prefix = Value::String(
+            r#"<version xmlns="http://schemas.openehr.org/v1"
+                        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                        xsi:type="zz:ORIGINAL_VERSION"/>"#
+                .to_owned(),
+        );
+        let failure = eval_xml_root(&unbound_type_prefix, "version", None, Some("x"))
+            .expect_err("the xsi:type prefix is unbound");
+        assert!(
+            failure.0.contains("is not bound to any namespace"),
+            "{failure:?}"
+        );
+
+        let unbound_root_prefix = Value::String("<zz:version/>".to_owned());
+        let failure = eval_xml_root(&unbound_root_prefix, "version", None, None)
+            .expect_err("the root's prefix is unbound");
+        assert!(
+            failure.0.contains("is not bound to any namespace"),
+            "{failure:?}"
+        );
+    }
+
+    /// The wire-dependent set is exactly the three assertions whose facts a
+    /// pure evaluator cannot produce: the pure evaluators here handle the
+    /// rest, so a new assertion silently joining the driver-only set would
+    /// stop being evaluated at all.
+    #[test]
+    fn only_the_driver_read_assertions_are_wire_dependent() {
+        let assertion = |document: Value| -> Assertion {
+            serde_json::from_value(document).expect("an authored assertion")
+        };
+
+        for wire in [
+            json!({ "assert": "version", "of": "${uid}", "lifecycle_state": "532" }),
+            json!({ "assert": "signature", "of": "${uid}", "present": true }),
+            json!({ "assert": "instance_of", "rm_type": "COMPOSITION" }),
+        ] {
+            assert!(is_wire_dependent(&assertion(wire.clone())), "{wire}");
+        }
+        for pure in [
+            json!({ "assert": "field", "path": "uid/value", "exists": true }),
+            json!({ "assert": "unique", "over": "${ehr_id}", "aggregate": true }),
+            json!({ "assert": "returns", "equals": 1 }),
+        ] {
+            assert!(!is_wire_dependent(&assertion(pure.clone())), "{pure}");
+        }
+    }
 }

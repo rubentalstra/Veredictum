@@ -678,4 +678,101 @@ mod tests {
         let bare = response(&[("etag", "\"rs-1\"")]);
         assert_eq!(evaluate(&e, &bare, &judged, &VarStore::default()).len(), 1);
     }
+
+    /// `negotiated` has nothing sound to compare against when the driver sent
+    /// no `Accept`: the endpoint default was negotiated, so the matcher passes
+    /// rather than inventing an expected media type.
+    #[test]
+    fn negotiated_without_an_accept_asserts_nothing() {
+        let e = expectation(&serde_json::json!({ "Content-Type": "negotiated" }));
+        let any = response(&[("content-type", "application/xml")]);
+        assert!(evaluate(&e, &any, &ctx(), &VarStore::default()).is_empty());
+
+        // With an `Accept` sent, a MISSING content type is its own failure line
+        // distinct from the mismatch one, so a red row says which happened.
+        let negotiating = RequestContext {
+            accept: Some("application/xml"),
+            ..RequestContext::default()
+        };
+        let failures = evaluate(&e, &response(&[]), &negotiating, &VarStore::default());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0].ends_with("got none"), "{failures:?}");
+    }
+
+    /// The stale-precondition rule degrades honestly: an empty entity tag is a
+    /// failure, and a row that committed nothing to compare against falls back
+    /// to presence rather than manufacturing a red row.
+    #[test]
+    fn the_latest_version_uid_matcher_degrades_to_presence() {
+        let e = expectation(&serde_json::json!({ "ETag": "latest-version-uid" }));
+
+        let empty = response(&[("etag", "W/\"\"")]);
+        let with_uid = RequestContext {
+            last_version_uid: Some("abc::sys::2"),
+            ..RequestContext::default()
+        };
+        let failures = evaluate(&e, &empty, &with_uid, &VarStore::default());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0].contains("empty entity tag"), "{failures:?}");
+
+        // Nothing tracked to compare against: presence and non-emptiness are
+        // all the runner can soundly assert, so any non-empty tag passes.
+        let anything = response(&[("etag", "\"whatever\"")]);
+        assert!(evaluate(&e, &anything, &ctx(), &VarStore::default()).is_empty());
+        assert_eq!(evaluate(&e, &empty, &ctx(), &VarStore::default()).len(), 1);
+    }
+
+    /// A `pattern:` and a literal expectation both report their own
+    /// missing-value line, so an absent header never reads as a form mismatch.
+    #[test]
+    fn a_missing_value_is_reported_by_pattern_and_literal_alike() {
+        let pattern = expectation(&serde_json::json!({ "ETag": "pattern:W/\"[^\"]+\"" }));
+        let failures = evaluate(&pattern, &response(&[]), &ctx(), &VarStore::default());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0].contains("got none"), "{failures:?}");
+
+        let literal = expectation(&serde_json::json!({ "Location": "/ehr/x" }));
+        let failures = evaluate(&literal, &response(&[]), &ctx(), &VarStore::default());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert_eq!(failures[0], "header Location: expected a value, got none");
+    }
+
+    /// A literal whose `${…}` template cannot resolve is reported as an
+    /// unresolvable declaration: the value the binding declares was never
+    /// checked, which must never read as the server matching it.
+    #[test]
+    fn an_unresolvable_literal_template_is_reported_as_uncheckable() {
+        let e = expectation(&serde_json::json!({ "Location": "/ehr/${ehr_id}" }));
+        let observed = response(&[("location", "/ehr/anything")]);
+        let failures = evaluate(&e, &observed, &ctx(), &VarStore::default());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(
+            failures[0].contains("literal template unresolvable"),
+            "{failures:?}"
+        );
+
+        // Bound, the same declaration is an exact-match assertion.
+        let mut vars = VarStore::default();
+        vars.set(
+            CaptureName::parse("ehr_id").unwrap(),
+            Captured::Scalar("anything".to_owned()),
+        );
+        assert!(evaluate(&e, &observed, &ctx(), &vars).is_empty());
+    }
+
+    /// An unterminated `<` is not a placeholder: it stays in the pattern
+    /// verbatim, so a mis-authored matcher fails loudly on the value it does
+    /// not match instead of silently dropping the rest of the expectation.
+    #[test]
+    fn an_unterminated_placeholder_stays_in_the_pattern() {
+        let e = expectation(&serde_json::json!({ "ETag": "pattern:W/\"<n\"" }));
+        let literal_tail = response(&[("etag", "W/\"<n\"")]);
+        assert!(evaluate(&e, &literal_tail, &ctx(), &VarStore::default()).is_empty());
+        let resolved_as_grammar = response(&[("etag", "W/\"2\"")]);
+        assert_eq!(
+            evaluate(&e, &resolved_as_grammar, &ctx(), &VarStore::default()).len(),
+            1,
+            "an unterminated `<n` never resolves to the version-tree grammar"
+        );
+    }
 }

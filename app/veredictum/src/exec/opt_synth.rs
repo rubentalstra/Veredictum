@@ -1724,4 +1724,283 @@ mod tests {
         assert_eq!(det_uid("cnf.tpl.x.r0"), det_uid("cnf.tpl.x.r0"));
         assert_ne!(det_uid("a"), det_uid("b"));
     }
+
+    /// An `rm_class` with no registered value synthesizer is a TYPED error
+    /// naming the class: emitting an unconstrained OPT instead would bake no
+    /// constraint at all, so every rejection row of that case would pass
+    /// vacuously.
+    #[test]
+    fn an_unsynthesizable_rm_class_is_a_typed_error() {
+        let refused = synthesize_value_opt(
+            "CONT-DV_STATE-validate",
+            "DV_STATE",
+            "cnf.tpl.x.r0",
+            &cols(&["value"]),
+            &[lit("x")],
+        );
+        let Err(SynthError::Unsupported(message)) = refused else {
+            panic!("an unknown rm_class must not synthesize: {refused:?}");
+        };
+        assert!(
+            message.contains("no value synthesizer for rm_class DV_STATE"),
+            "{message}"
+        );
+    }
+
+    /// A constrained code list binds a rubric per code in the component
+    /// ontology, so a `value = rubric` commit has something to match: an
+    /// archetype-LOCAL code binds under its bare code, while a qualified
+    /// external terminology binds under `terminology::code` rather than
+    /// pretending the external code is archetype-local.
+    #[test]
+    fn a_constrained_code_list_binds_a_rubric_per_code() {
+        let local = synth(
+            "CONT-DV_CODED_TEXT-validate_code_list",
+            "DV_CODED_TEXT",
+            &["C_CODE_PHRASE.code_list", "C_CODE_PHRASE.terminology_id"],
+            vec![lit("[at0005, at0006]"), lit("local")],
+        );
+        assert!(local.contains("C_CODE_PHRASE"), "{local}");
+        assert!(local.contains("<code_list>at0005</code_list>"), "{local}");
+        assert!(local.contains("<value>local</value>"), "{local}");
+        assert!(local.contains("Rubric for at0005"), "{local}");
+
+        let external = synth(
+            "CONT-DV_CODED_TEXT-validate_code_list",
+            "DV_CODED_TEXT",
+            &["C_CODE_PHRASE.code_list", "C_CODE_PHRASE.terminology_id"],
+            vec![lit("[73211009]"), lit("SNOMED-CT")],
+        );
+        assert!(external.contains("<value>SNOMED-CT</value>"), "{external}");
+        assert!(
+            external.contains("Rubric for SNOMED-CT::73211009"),
+            "the external code binds under its qualified form: {external}"
+        );
+
+        // Absent a terminology column the list is archetype-local.
+        let defaulted = synth(
+            "CONT-DV_CODED_TEXT-validate_code_list",
+            "DV_CODED_TEXT",
+            &["C_CODE_PHRASE.code_list"],
+            vec![lit("[at0005]")],
+        );
+        assert!(defaulted.contains("<value>local</value>"), "{defaulted}");
+    }
+
+    /// A `CONSTRAINT_REF` proxies an external terminology query (AM ADL1.4
+    /// master04 §Reference Objects), so the emitted OPT carries the reference
+    /// rather than a baked code list — its rubric is the terminology service's
+    /// to resolve.
+    #[test]
+    fn a_constraint_ref_is_emitted_instead_of_a_code_list() {
+        let xml = synth(
+            "CONT-DV_CODED_TEXT-validate_constraint_ref",
+            "DV_CODED_TEXT",
+            &["CONSTRAINT_REF.reference"],
+            vec![lit("ac0001")],
+        );
+        assert!(xml.contains("xsi:type=\"CONSTRAINT_REF\""), "{xml}");
+        assert!(xml.contains("<reference>ac0001</reference>"), "{xml}");
+        // The value's defining_code is the reference, so the row bakes no code
+        // list of its own; the only `code_list` in the template is the
+        // carrier's own COMPOSITION.category constraint.
+        assert_eq!(xml.matches("<code_list>").count(), 1, "{xml}");
+        assert!(xml.contains("<code_list>433</code_list>"), "{xml}");
+    }
+
+    /// A `DV_IDENTIFIER` row constraining neither a pattern nor a list emits
+    /// the OPEN identifier: the RM mandatory-attribute checks are then the
+    /// only thing under test, which is what such a row asserts.
+    #[test]
+    fn an_unconstrained_identifier_emits_the_open_shape() {
+        let open = synth(
+            "CONT-DV_IDENTIFIER-validate_open",
+            "DV_IDENTIFIER",
+            &["attribute"],
+            vec![lit("id")],
+        );
+        assert!(open.contains("DV_IDENTIFIER"), "{open}");
+        assert!(!open.contains("C_STRING"), "{open}");
+
+        // A list on a NAMED field binds to that field, not to `id`.
+        let listed = synth(
+            "CONT-DV_IDENTIFIER-validate_list",
+            "DV_IDENTIFIER",
+            &["attribute", "C_STRING.list"],
+            vec![lit("issuer"), lit("[NHS, HL7]")],
+        );
+        assert!(
+            listed.contains("<rm_attribute_name>issuer</rm_attribute_name>"),
+            "{listed}"
+        );
+        assert!(listed.contains("<list>NHS</list>"), "{listed}");
+    }
+
+    /// An integer list or range cell the parsers cannot read is a CATALOGUE
+    /// defect reported as a typed error: a dropped member would emit an OPT
+    /// missing the very value the row's expected rejection rests on, so the
+    /// row would pass vacuously.
+    #[test]
+    fn an_unreadable_integer_constraint_cell_is_a_typed_error() {
+        let refused = synthesize_value_opt(
+            "CONT-DV_MULTIMEDIA-validate_size_list",
+            "DV_MULTIMEDIA",
+            "cnf.tpl.x.r0",
+            &cols(&["media_type", "C_INTEGER.list"]),
+            &[lit("image/png"), lit("[1, two]")],
+        );
+        let Err(SynthError::Unsupported(message)) = refused else {
+            panic!("a non-integer list member must not synthesize: {refused:?}");
+        };
+        assert!(message.contains("C_INTEGER.list"), "{message}");
+        assert!(message.contains("\"two\""), "{message}");
+
+        for (cell, needle) in [
+            ("notarange", "is not a `lo..hi` range"),
+            ("lo..9", "lower bound"),
+            ("1..hi", "upper bound"),
+        ] {
+            let refused = synthesize_value_opt(
+                "CONT-DV_MULTIMEDIA-validate_size_range",
+                "DV_MULTIMEDIA",
+                "cnf.tpl.x.r0",
+                &cols(&["media_type", "C_INTEGER.range"]),
+                &[lit("image/png"), lit(cell)],
+            );
+            let Err(SynthError::Unsupported(message)) = refused else {
+                panic!("{cell:?} must not synthesize: {refused:?}");
+            };
+            assert!(message.contains(needle), "{cell:?}: {message}");
+        }
+
+        // Both authored range forms are read.
+        for cell in ["1..64", "[1, 64]"] {
+            let xml = synth(
+                "CONT-DV_MULTIMEDIA-validate_size_range",
+                "DV_MULTIMEDIA",
+                &["media_type", "C_INTEGER.range"],
+                vec![lit("image/png"), lit(cell)],
+            );
+            assert!(xml.contains("<lower>1</lower>"), "{cell}: {xml}");
+            assert!(xml.contains("<upper>64</upper>"), "{cell}: {xml}");
+        }
+    }
+
+    /// The interval's inner limit type is read off the CASE ID, and
+    /// `date_time` is matched before `date`/`time`; a case naming no inner type
+    /// is a count interval.
+    #[test]
+    fn the_interval_inner_type_follows_the_case_id() {
+        for (case, inner) in [
+            ("CONT-DV_INTERVAL-date_time_open", "DV_DATE_TIME"),
+            ("CONT-DV_INTERVAL-validate_date_open", "DV_DATE"),
+            ("CONT-DV_INTERVAL-time_open", "DV_TIME"),
+            ("CONT-DV_INTERVAL-duration_open", "DV_DURATION"),
+            ("CONT-DV_INTERVAL-quantity_open", "DV_QUANTITY"),
+            ("CONT-DV_INTERVAL-ordinal_open", "DV_ORDINAL"),
+            ("CONT-DV_INTERVAL-scale_open", "DV_SCALE"),
+            ("CONT-DV_INTERVAL-proportion_open", "DV_PROPORTION"),
+            ("CONT-DV_INTERVAL-validate_open", "DV_COUNT"),
+        ] {
+            let xml = synth(case, "DV_INTERVAL", &["expected"], vec![lit("created")]);
+            assert!(
+                xml.contains(&format!("DV_INTERVAL&lt;{inner}&gt;")),
+                "{case}: {xml}"
+            );
+            // An open interval constrains neither side.
+            assert!(
+                !xml.contains("<rm_attribute_name>lower</rm_attribute_name>"),
+                "{case}: {xml}"
+            );
+        }
+    }
+
+    /// Each ordinal bound carries ITS OWN authored value set: a null cell
+    /// leaves that side unconstrained, and the reserved `default` token is
+    /// accepted rather than reported as a droppable member.
+    #[test]
+    fn each_ordinal_bound_carries_its_own_authored_value_set() {
+        let unconstrained = synth(
+            "CONT-DV_INTERVAL-ordinal_range",
+            "DV_INTERVAL",
+            &["lower_c_dv_ordinal_list", "upper_c_dv_ordinal_list"],
+            vec![MatrixCell::Null, MatrixCell::Null],
+        );
+        assert!(
+            unconstrained.contains("DV_INTERVAL&lt;DV_ORDINAL&gt;"),
+            "{unconstrained}"
+        );
+        assert!(
+            !unconstrained.contains("<rm_attribute_name>lower</rm_attribute_name>"),
+            "a null list cell leaves the side unconstrained: {unconstrained}"
+        );
+
+        // The two bounds' sets differ per row, and each is emitted from its
+        // own cell rather than from a shared list.
+        let per_bound = synth(
+            "CONT-DV_INTERVAL-ordinal_range",
+            "DV_INTERVAL",
+            &["lower_c_dv_ordinal_list", "upper_c_dv_ordinal_list"],
+            vec![lit("[1|[local::at0005]]"), lit("[3|[local::at0007]]")],
+        );
+        assert!(per_bound.contains("at0005"), "{per_bound}");
+        assert!(per_bound.contains("at0007"), "{per_bound}");
+        assert!(
+            per_bound.contains("<rm_attribute_name>upper</rm_attribute_name>"),
+            "{per_bound}"
+        );
+
+        // The reserved `default` token is not a malformed entry.
+        let defaulted = synth(
+            "CONT-DV_INTERVAL-ordinal_range",
+            "DV_INTERVAL",
+            &["lower_c_dv_ordinal_list"],
+            vec![lit("default")],
+        );
+        assert!(
+            defaulted.contains("DV_INTERVAL&lt;DV_ORDINAL&gt;"),
+            "{defaulted}"
+        );
+
+        // A genuinely malformed entry IS refused, so the two paths are apart.
+        let refused = synthesize_value_opt(
+            "CONT-DV_INTERVAL-ordinal_range",
+            "DV_INTERVAL",
+            "cnf.tpl.x.r0",
+            &cols(&["lower_c_dv_ordinal_list"]),
+            &[lit("[1|local::at0005]")],
+        );
+        let Err(SynthError::Unsupported(message)) = refused else {
+            panic!("a malformed ordinal entry must not synthesize: {refused:?}");
+        };
+        assert!(message.contains("lower_c_dv_ordinal_list"), "{message}");
+    }
+
+    /// A `_lower`/`_upper` pattern limit is emitted only when the row carries
+    /// the column that anchors it, so a half-authored bound leaves its side
+    /// unconstrained rather than baking a default pattern.
+    #[test]
+    fn a_pattern_limit_is_emitted_only_from_its_own_columns() {
+        let date_time = synth(
+            "CONT-DV_INTERVAL-date_time_range",
+            "DV_INTERVAL",
+            &["expected"],
+            vec![lit("created")],
+        );
+        assert!(
+            !date_time.contains("<rm_attribute_name>lower</rm_attribute_name>"),
+            "no month_validity_lower column, so no lower limit: {date_time}"
+        );
+
+        let time = synth(
+            "CONT-DV_INTERVAL-time_range",
+            "DV_INTERVAL",
+            &["expected"],
+            vec![lit("created")],
+        );
+        assert!(
+            !time.contains("<rm_attribute_name>upper</rm_attribute_name>"),
+            "no minute_validity_upper column, so no upper limit: {time}"
+        );
+    }
 }

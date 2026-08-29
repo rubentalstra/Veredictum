@@ -37,6 +37,7 @@ mod perf_driver;
 mod perf_seeding;
 mod pipeline_seams;
 mod postconditions;
+mod run_execution;
 mod run_transcript;
 mod schema_drift;
 mod verification_pack;
