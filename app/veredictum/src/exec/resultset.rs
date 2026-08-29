@@ -471,19 +471,20 @@ mod tests {
     fn each_comparator_reports_its_own_count_mismatch() {
         let rs = json!({ "rows": [["a"], ["b"]] });
 
-        let ordered = compare_ordered(&rs, &[json!(["a"], &mut lexeme())]).expect_err("2 rows are not 1");
+        let ordered =
+            compare_ordered(&rs, &[json!(["a"])], &mut lexeme()).expect_err("2 rows are not 1");
         assert_eq!(ordered.0, "row count 2 != expected 1");
 
-        let bag = compare_bag(&rs, &[json!(["a"], &mut lexeme())]).expect_err("2 rows are not 1");
+        let bag = compare_bag(&rs, &[json!(["a"])], &mut lexeme()).expect_err("2 rows are not 1");
         assert_eq!(bag.0, "row count 2 != expected 1 (bag equality)");
 
         let count = compare_count(&rs, 5).expect_err("2 rows are not 5");
         assert_eq!(count.0, "row count 2 != expected 5");
 
         // `contains` permits extras by construction, so the same input holds.
-        assert!(compare_contains(&rs, &[json!(["a"], &mut lexeme())]).is_ok());
-        let unmatched =
-            compare_contains(&rs, &[json!(["z"], &mut lexeme())]).expect_err("z is in no row of the set");
+        assert!(compare_contains(&rs, &[json!(["a"])], &mut lexeme()).is_ok());
+        let unmatched = compare_contains(&rs, &[json!(["z"])], &mut lexeme())
+            .expect_err("z is in no row of the set");
         assert!(
             unmatched
                 .0
@@ -533,8 +534,8 @@ mod tests {
         // A scalar row (not an array) still compares as one cell.
         let rs = json!({ "rows": ["u1", "u2"] });
         assert!(compare_ordered(&rs, &[json!("u1"), json!("u2")], &mut lexeme()).is_ok());
-        let positional =
-            compare_ordered(&rs, &[json!("u1"), json!("u9")], &mut lexeme()).expect_err("row 1 differs");
+        let positional = compare_ordered(&rs, &[json!("u1"), json!("u9")], &mut lexeme())
+            .expect_err("row 1 differs");
         assert!(positional.0.starts_with("row 1:"), "{positional:?}");
     }
     /// The default stays exact-lexeme, which is the only comparison that can

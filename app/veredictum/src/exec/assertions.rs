@@ -1835,20 +1835,45 @@ mod tests {
     #[test]
     fn a_non_string_leaf_is_matched_as_its_json_text() {
         let body = json!({ "magnitude": 140, "uid": { "value": "a::b::1" } });
-        assert!(eval_field(&body, "magnitude", None, None, None, None, Some(r"^\d+$")).is_ok());
-        let failure = eval_field(&body, "magnitude", None, None, None, None, Some("^x"))
+        assert!(
+            eval_field(
+                &body,
+                "magnitude",
+                None,
+                None,
+                None,
+                None,
+                Some(r"^\d+$"),
+                None
+            )
+            .is_ok()
+        );
+        let failure = eval_field(&body, "magnitude", None, None, None, None, Some("^x"), None)
             .expect_err("140 does not start with x");
         assert!(failure.0.contains("\"140\""), "{failure:?}");
-        assert!(eval_field(&body, "uid", None, None, None, None, Some("a::b::1")).is_ok());
+        assert!(eval_field(&body, "uid", None, None, None, None, Some("a::b::1"), None).is_ok());
 
         // `not_equals` is the server-set predicate: equal to the client's own
         // value is the failure, anything else passes.
-        assert!(eval_field(&body, "magnitude", None, Some(&json!(1)), None, None, None).is_ok());
+        assert!(
+            eval_field(
+                &body,
+                "magnitude",
+                None,
+                Some(&json!(1)),
+                None,
+                None,
+                None,
+                None
+            )
+            .is_ok()
+        );
         let failure = eval_field(
             &body,
             "magnitude",
             None,
             Some(&json!(140)),
+            None,
             None,
             None,
             None,

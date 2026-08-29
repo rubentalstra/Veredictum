@@ -1079,7 +1079,7 @@ fn postconditions_are_evaluated_over_the_rows_last_answer() -> Fallible {
     );
     let step = core.flow.first().ok_or("the case declares no flow step")?;
     driver.perform(&core, step, OutcomeKind::Ok, 0, &mut vars)?;
-    let failures = driver.postconditions(&core, 0, &mut vars)?;
+    let failures = driver.postconditions(&core, 0, &mut vars)?.failures;
     assert_eq!(
         failures.len(),
         1,

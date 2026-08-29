@@ -27,7 +27,7 @@ use crate::exec::assertions::{self, AssertionFailure, AssertionOutcome};
 use crate::exec::outcome::{self, Observation};
 use crate::exec::resolve::Resolver;
 use crate::exec::state::{Captured, VarStore};
-use crate::exec::{Provisioned, StepDriver, StepObservation};
+use crate::exec::{PostconditionOutcomes, Provisioned, StepDriver, StepObservation};
 use crate::ids::{CaptureName, SmOperationRef};
 use crate::ixit::{AuthMode, Instance, Ixit};
 use crate::model::assertion::{
@@ -3603,14 +3603,14 @@ impl StepDriver for HttpDriver<'_> {
         case: &CaseCore,
         row: usize,
         vars: &mut VarStore,
-    ) -> Result<Vec<AssertionOutcome>, String> {
+    ) -> Result<PostconditionOutcomes, String> {
         let judged: Vec<&Assertion> = case
             .postconditions
             .iter()
             .filter(|a| matches!(a.postcondition_role(), PostconditionRole::Judged))
             .collect();
         if judged.is_empty() {
-            return Ok(Vec::new());
+            return Ok(PostconditionOutcomes::default());
         }
         self.resolver.bind_row(case, row);
         self.row = u32::try_from(row).unwrap_or(u32::MAX);
@@ -3619,25 +3619,32 @@ impl StepDriver for HttpDriver<'_> {
         // flow and another way after it. A row that completed no step served
         // nothing to judge against, which is inconclusive, never a pass.
         let Some(last) = self.last_step.clone() else {
-            return Ok(judged
-                .iter()
-                .map(|_| {
-                    AssertionOutcome::Unjudgeable(
-                        "postcondition: the row completed no flow step, so nothing was served to \
-                         judge it against"
-                            .to_owned(),
-                    )
-                })
-                .collect());
+            return Ok(PostconditionOutcomes {
+                failures: judged
+                    .iter()
+                    .map(|_| {
+                        AssertionOutcome::Unjudgeable(
+                            "postcondition: the row completed no flow step, so nothing was \
+                             served to judge it against"
+                                .to_owned(),
+                        )
+                    })
+                    .collect(),
+                advisories: Vec::new(),
+            });
         };
-        Ok(self.eval_assertions(
+        let assertions = self.eval_assertions(
             case,
             last.binding,
             judged,
             &last.exchange,
             last.signing,
             vars,
-        ))
+        );
+        Ok(PostconditionOutcomes {
+            failures: assertions.failures,
+            advisories: assertions.advisories,
+        })
     }
 
     fn aggregates(
