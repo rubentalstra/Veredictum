@@ -627,6 +627,179 @@ mod tests {
         (dir, path)
     }
 
+    /// The sustained-window ladder: only its rungs exist, nothing shorter
+    /// than the case's own normative window, and the default is the first
+    /// rung.
+    #[test]
+    fn only_the_ladders_rungs_are_sustainable_windows() {
+        for hours in SustainedWindow::LADDER {
+            let window = SustainedWindow::hours(*hours).expect("a rung of the ladder");
+            assert_eq!(window.seconds(), hours * 3600);
+        }
+        assert!(SustainedWindow::hours(0).is_none());
+        assert!(SustainedWindow::hours(3).is_none(), "3h is not a rung");
+        assert!(SustainedWindow::hours(24).is_none());
+        assert_eq!(SustainedWindow::default().seconds(), 3600);
+    }
+
+    /// Class selection over the committed catalogue, and the refusal when
+    /// the tree carries no case of the asked-for class.
+    #[test]
+    fn class_selection_finds_its_case_or_names_the_class_it_could_not() {
+        let loaded = committed_catalogue();
+        let (path, case) = performance_case_of_class(&loaded, PerfClass::Poc, "POC")
+            .expect("the catalogue carries the POC class");
+        assert_eq!(case.class, PerfClass::Poc);
+        assert!(path.to_string_lossy().ends_with(".yaml"), "{path:?}");
+
+        let error = performance_case_of_class(&Loaded::default(), PerfClass::Poc, "POC")
+            .expect_err("an empty tree carries no performance case");
+        assert!(
+            matches!(&error, Error::Missing(m) if m.contains("class POC")),
+            "{error}"
+        );
+    }
+
+    /// The two run-context readers over the committed tree, and their
+    /// refusals over an empty one. Each names the artifact it wanted, so a
+    /// half-built root cannot look like an empty catalogue.
+    #[test]
+    fn the_run_context_readers_load_or_name_the_missing_artifact() {
+        let loaded = committed_catalogue();
+        assert!(
+            scale_opt_xml(&loaded)
+                .expect("the committed corpus carries the blood-pressure OPT")
+                .contains("template"),
+            "the OPT fixture is not an operational template"
+        );
+        let (catalogue, pack) =
+            journey_context(&loaded).expect("the committed tree carries the journey context");
+        assert!(catalogue.check_invariants().is_ok());
+        assert!(
+            !pack.templates.is_empty(),
+            "the loaded pack carries no template"
+        );
+
+        let empty = Loaded::default();
+        let error = scale_opt_xml(&empty).expect_err("an empty tree has no corpus directory");
+        assert!(
+            matches!(&error, Error::Missing(m) if m.contains("corpus directory")),
+            "{error}"
+        );
+        let error = journey_context(&empty).expect_err("an empty tree has no journey catalogue");
+        assert!(
+            matches!(&error, Error::Missing(m) if m.contains("journey_catalogue")),
+            "{error}"
+        );
+    }
+
+    /// Seeding refuses an unknown scale key before it opens a single
+    /// connection: a corpus key nobody defined has no volumetric shape, and
+    /// guessing one would publish a measurement of an unnamed population.
+    #[test]
+    fn seeding_refuses_an_unknown_corpus_key_before_any_wire_call() {
+        let ixit: crate::ixit::Ixit = serde_json::from_value(serde_json::json!({
+            "instances": { "sut": { "base_url": "http://127.0.0.1:1", "auth": { "mode": "none" } } }
+        }))
+        .expect("the single-instance topology parses");
+        let client = PerfClient::from_instance(
+            ixit.default_instance().expect("the default instance"),
+            &ixit,
+        )
+        .expect("a credential-less client builds");
+        let pack = JourneyPack {
+            templates: Vec::new(),
+            aux: crate::perf_run::pack::AuxPayloads::default(),
+        };
+        let error = seed_corpus(
+            &client,
+            "cnf.scale.7k",
+            "<opt/>",
+            &pack,
+            1,
+            &|_| {},
+            &mut |_| {},
+        )
+        .expect_err("no such rung of the scale ladder");
+        assert!(
+            matches!(&error, Error::Instrument(m) if m.contains("cnf.scale.7k")),
+            "{error}"
+        );
+    }
+
+    /// Every instrument reads its class token through the same closed
+    /// vocabulary, and an unknown one is refused before the catalogue is
+    /// read, let alone a SUT contacted.
+    #[test]
+    fn an_unknown_class_token_is_refused_by_all_three_instruments() {
+        let root = Path::new("artifacts");
+        let ixit = Path::new("ixit.json");
+        let measured = run_measured(
+            &MeasuredRequest {
+                root,
+                ixit,
+                results: Path::new("results.json"),
+                class: "PLATINUM",
+                seed_workers: 1,
+                window: SustainedWindow::default(),
+            },
+            &|_| {},
+        )
+        .expect_err("PLATINUM is not a performance class");
+        assert!(matches!(measured, Error::Selector(_)), "{measured}");
+
+        let stress = run_stress(
+            &StressRequest {
+                root,
+                ixit,
+                corpus_class: "PLATINUM",
+                seed_workers: 1,
+                step_secs: 10,
+                bisections: 0,
+                max_rate: 8.0,
+            },
+            &|_| {},
+        )
+        .expect_err("PLATINUM is not a performance class");
+        assert!(matches!(stress, Error::Selector(_)), "{stress}");
+
+        let probe = run_aql_probe(
+            &ProbeRequest {
+                root,
+                ixit,
+                corpus_class: "PLATINUM",
+                seed_workers: 1,
+                requests: 1,
+            },
+            &|_| {},
+        )
+        .expect_err("PLATINUM is not a performance class");
+        assert!(matches!(probe, Error::Selector(_)), "{probe}");
+    }
+
+    /// The seeding milestones the disk anchors are probed at are a closed
+    /// set, and each renders distinctly in a progress line.
+    #[test]
+    fn every_seed_stage_renders_distinctly() {
+        let rendered: Vec<String> = [
+            SeedStage::BeforeScale,
+            SeedStage::AfterScale,
+            SeedStage::AfterWard,
+        ]
+        .iter()
+        .map(|stage| format!("{stage:?}"))
+        .collect();
+        assert_eq!(rendered.len(), 3);
+        let mut unique = rendered.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(
+            unique.len(),
+            3,
+            "two milestones render the same: {rendered:?}"
+        );
+    }
+
     /// A merge over the committed catalogue: one record per case, no orphans,
     /// the set written back sorted.
     #[test]

@@ -501,6 +501,24 @@ jobs:
       # the outcome that gates a merge.
       - name: GnuPG is present, so the interop gate cannot skip
         run: gpg --version
+      # The same shape, for the container-runtime-coupled paths (#192): the
+      # resource sampler's Engine API reads, the disk anchor and the
+      # maintenance settling, and the AQL probe's `pg_stat_statements`
+      # attribution are all another program's reply, so `env_coupled.rs`
+      # drives a real engine and skips with a printed reason when none
+      # answers. This step refuses a runner without one, and pre-pulls the
+      # image so three parallel tests do not race the same pull. The pin is
+      # read from the test's own constant, so there is no second copy to
+      # drift. It rides THIS job rather than a lane of its own, because a
+      # separate job would rebuild the whole workspace to run three tests.
+      - name: A container runtime and the pinned image are present, so the environment-coupled gates cannot skip
+        run: |
+          set -euo pipefail
+          docker version --format '{{.Server.Version}}'
+          image="$(grep -E '^const DB_IMAGE' app/veredictum/tests/it/env_coupled.rs | cut -d'"' -f2)"
+          echo "pinned database image: ${image}"
+          docker pull "$image"
+          docker image inspect "$image" >/dev/null
       - run: cargo build --locked --workspace --all-targets
       # The `ci` profile: never stop at the first failure, so one run reports the
       # whole failure surface.
