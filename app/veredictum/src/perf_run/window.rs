@@ -8,6 +8,7 @@
 //! Shared by the class runs (conformance) and the stress ladder
 //! (exploration).
 
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Instant;
@@ -16,7 +17,8 @@ use hdrhistogram::Histogram;
 
 use crate::ixit::{Environment, Ixit};
 use crate::perf::{
-    ClassVerdict, Measurement, OperationMeasurement, PerfOp, PerformanceCase, class_verdict,
+    ClassVerdict, Measurement, OperationMeasurement, PerfOp, PerformanceCase, Principal,
+    class_verdict,
 };
 use crate::perf_run::client::PerfPrincipals;
 use crate::perf_run::corpus::SeededCorpus;
@@ -49,6 +51,50 @@ struct Completion {
     recorded: bool,
 }
 
+/// Why the generator could not fire a planned arrival.
+///
+/// A fault is the INSTRUMENT failing to drive the schedule, so it is never
+/// a wire observation about the server: it fails the window instead of
+/// landing in a histogram as an error arrival.
+#[derive(Debug, Clone, Copy)]
+enum GeneratorFault {
+    /// The principal set driving the window declares no instance for the
+    /// arrival's principal, so no request was ever sent.
+    UndeclaredPrincipal(Principal),
+}
+
+impl std::fmt::Display for GeneratorFault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::UndeclaredPrincipal(principal) => write!(
+                f,
+                "the ixit declares no instance for the {principal:?} principal"
+            ),
+        }
+    }
+}
+
+/// Everything one window's collector folded out of its arrival reports.
+struct CollectedWindow {
+    /// The per-operation recorders, in first-arrival order.
+    recorders: Vec<(PerfOp, OpRecorder)>,
+    /// The generator faults, counted per `<operation>: <reason>` line.
+    generator_faults: BTreeMap<String, u64>,
+}
+
+/// What one planned arrival reports back to the collector.
+enum ArrivalReport {
+    /// The arrival fired and its response was timed.
+    Completed(Completion),
+    /// The generator could not fire the arrival at all.
+    NotFired {
+        /// The operation the arrival would have driven.
+        op: PerfOp,
+        /// Why the generator could not fire it.
+        fault: GeneratorFault,
+    },
+}
+
 /// One executed open-loop window's raw outcome — the shared core the class
 /// runs (conformance) and the knee stress ladder (exploration) both drive.
 #[derive(Debug)]
@@ -64,38 +110,50 @@ pub struct WindowOutcome {
     pub generator_bound: bool,
 }
 
-/// Folds every completion the dispatcher reports into per-operation
-/// recorders, returning them beside the generator-fault count.
+/// Folds every arrival report the dispatcher sends into per-operation
+/// recorders, returning them beside the generator faults the window hit.
 ///
-/// Only recorded arrivals reach a histogram. An arrival the generator could
-/// not fire, and the statically impossible histogram-construction failure,
-/// both count as generator faults instead.
-fn collect_completions(rx: mpsc::Receiver<Completion>) -> (Vec<(PerfOp, OpRecorder)>, u64) {
+/// Only a recorded completion reaches a histogram. An arrival the generator
+/// could not fire carries no latency at all, so it is counted per
+/// `<operation>: <reason>` line instead, warmup arrivals included: an
+/// instrument that could not drive the schedule has no measurement to
+/// publish about either span.
+///
+/// The empty prototype is built once and cloned per operation, so the only
+/// bounds check the crate can refuse happens here rather than per arrival.
+///
+/// # Errors
+/// A message when the latency-histogram bounds are refused.
+fn collect_completions(rx: mpsc::Receiver<ArrivalReport>) -> Result<CollectedWindow, String> {
+    let empty = Histogram::new_with_bounds(1, HDR_MAX_US, 3)
+        .map_err(|e| format!("latency histogram bounds refused: {e}"))?;
     let mut recorders: Vec<(PerfOp, OpRecorder)> = Vec::new();
-    let mut generator_faults: u64 = 0;
-    for done in rx {
+    let mut generator_faults: BTreeMap<String, u64> = BTreeMap::new();
+    for report in rx {
+        let done = match report {
+            ArrivalReport::Completed(done) => done,
+            ArrivalReport::NotFired { op, fault } => {
+                let counted = generator_faults
+                    .entry(format!("{}: {fault}", op.as_str()))
+                    .or_default();
+                *counted = counted.saturating_add(1);
+                continue;
+            }
+        };
         if !done.recorded {
-            continue;
-        }
-        if done.latency_us == u64::MAX {
-            generator_faults = generator_faults.saturating_add(1);
             continue;
         }
         let index = if let Some(index) = recorders.iter().position(|(op, _)| *op == done.op) {
             index
         } else {
-            let Ok(histogram) = Histogram::new_with_bounds(1, HDR_MAX_US, 3) else {
-                generator_faults = generator_faults.saturating_add(1);
-                continue;
-            };
             recorders.push((
                 done.op,
                 OpRecorder {
-                    histogram,
+                    histogram: empty.clone(),
                     errors: 0,
                 },
             ));
-            recorders.len() - 1
+            recorders.len().saturating_sub(1)
         };
         if let Some((_, recorder)) = recorders.get_mut(index) {
             let value = done.latency_us.clamp(1, HDR_MAX_US);
@@ -105,7 +163,10 @@ fn collect_completions(rx: mpsc::Receiver<Completion>) -> (Vec<(PerfOp, OpRecord
             }
         }
     }
-    (recorders, generator_faults)
+    Ok(CollectedWindow {
+        recorders,
+        generator_faults,
+    })
 }
 
 /// Execute one open-loop window: the journey workload at `rate` operation
@@ -113,8 +174,10 @@ fn collect_completions(rx: mpsc::Receiver<Completion>) -> (Vec<(PerfOp, OpRecord
 /// span.
 ///
 /// # Errors
-/// A message on schedule construction or aggregation failure (individual
-/// arrival faults are error observations, not run failures).
+/// A message on schedule construction or aggregation failure, and one
+/// naming the count when the generator could not fire an arrival. An
+/// individual arrival's WIRE fault is an error observation instead, never a
+/// run failure.
 #[expect(
     clippy::too_many_lines,
     reason = "one measured-window procedure: schedule → collect → aggregate"
@@ -139,13 +202,17 @@ pub fn run_window(
     let total = schedule.arrivals.len();
     let captures = CaptureStore::new();
 
-    let (tx, rx) = mpsc::channel::<Completion>();
+    let (tx, rx) = mpsc::channel::<ArrivalReport>();
     let collector = std::thread::spawn(move || collect_completions(rx));
 
     let start = Instant::now();
     let dispatched_measured = Arc::new(AtomicU64::new(0));
-    // Failure sampling (the first FAILURE_SAMPLES failed arrivals).
+    // Failure sampling (the first FAILURE_SAMPLES failed arrivals), and the
+    // same bound over the arrivals the generator could not fire.
     let failure_samples = Arc::new(AtomicU32::new(0));
+    // The dispatcher alone reports an unfired arrival, so its own sample
+    // counter needs no sharing.
+    let mut fault_samples: u32 = 0;
     progress(format!(
         "open-loop schedule: {total} arrivals ({} measured) at {rate}/s aggregate \
          ({warmup_s}s warmup + {duration_s}s measured, {} journeys interleaved)",
@@ -161,6 +228,26 @@ pub fn run_window(
     // the sustained-load denominator.
     let dispatch_span = std::thread::scope(|scope| {
         for (i, planned_arrival) in schedule.arrivals.iter().enumerate() {
+            // The principal the arrival is driven by. Without its client
+            // nothing can be sent, so the arrival is a generator fault and
+            // never a wire observation about the server.
+            let principal = planned_arrival.op.principal();
+            let Some(client) = principals.client(principal) else {
+                let fault = GeneratorFault::UndeclaredPrincipal(principal);
+                if fault_samples < FAILURE_SAMPLES {
+                    fault_samples = fault_samples.saturating_add(1);
+                    progress(format!(
+                        "arrival not fired: {} at {:?}: {fault}",
+                        planned_arrival.op.as_str(),
+                        planned_arrival.at,
+                    ));
+                }
+                let _closed = tx.send(ArrivalReport::NotFired {
+                    op: planned_arrival.op,
+                    fault,
+                });
+                continue;
+            };
             let planned = start + planned_arrival.at;
             let now = Instant::now();
             if planned > now {
@@ -170,14 +257,14 @@ pub fn run_window(
                 dispatched_measured.fetch_add(1, Ordering::Relaxed);
             }
             let tx = tx.clone();
-            let principals = principals.clone();
+            let client = client.clone();
             let captures = &captures;
             let arrival_index = u64::try_from(i).unwrap_or(u64::MAX);
             let failure_samples = Arc::clone(&failure_samples);
             scope.spawn(move || {
                 let mut observed: Option<u16> = None;
                 let outcome = perform(
-                    &principals,
+                    &client,
                     arrival_index,
                     planned_arrival,
                     corpus,
@@ -207,12 +294,12 @@ pub fn run_window(
                         planned_arrival.at,
                     ));
                 }
-                let _closed = tx.send(Completion {
+                let _closed = tx.send(ArrivalReport::Completed(Completion {
                     op: planned_arrival.op,
                     latency_us,
                     ok,
                     recorded: planned_arrival.recorded,
-                });
+                }));
             });
             if i % 1000 == 999 {
                 progress(format!("dispatched {}/{total} arrivals", i + 1));
@@ -224,16 +311,22 @@ pub fn run_window(
 
     // A panic payload is `Box<dyn Any>`, not a `Display` error: recover the
     // message the panic carried so the run reports WHY the collector died.
-    let (recorders, generator_faults) = collector.join().map_err(|payload| {
+    let collected = collector.join().map_err(|payload| {
         let detail = payload
             .downcast_ref::<&str>()
             .map(|message| (*message).to_owned())
             .or_else(|| payload.downcast_ref::<String>().cloned())
             .unwrap_or_else(|| "non-string panic payload".to_owned());
         format!("collector thread panicked: {detail}")
-    })?;
-    if generator_faults > 0 {
-        return Err(format!("{generator_faults} generator faults"));
+    })??;
+    let faulted: u64 = collected.generator_faults.values().copied().sum();
+    if faulted > 0 {
+        let detail: Vec<String> = collected
+            .generator_faults
+            .iter()
+            .map(|(reason, count)| format!("{reason} ({count} arrivals)"))
+            .collect();
+        return Err(format!("{faulted} generator faults: {}", detail.join("; ")));
     }
 
     // Offered load actually sustained: measured arrivals over the actual
@@ -269,7 +362,7 @@ pub fn run_window(
     };
 
     let mut operations: Vec<OperationMeasurement> = Vec::new();
-    for (op, recorder) in &recorders {
+    for (op, recorder) in &collected.recorders {
         operations.push(OperationMeasurement::from_histogram(
             op.as_str(),
             &recorder.histogram,
@@ -296,8 +389,8 @@ pub fn run_window(
 /// test harness drives synthetic second-scale windows.
 ///
 /// # Errors
-/// A message on schedule construction or aggregation failure (individual
-/// arrival faults are error observations, not run failures).
+/// As [`run_window`], plus the case's own invariant check and the class
+/// verdict computation.
 #[expect(clippy::too_many_arguments, reason = "the one case-drive seam")]
 pub fn drive_case(
     case: &PerformanceCase,
