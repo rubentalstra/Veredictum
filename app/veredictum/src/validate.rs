@@ -6067,7 +6067,7 @@ some prose\n\
 mod binding_selection_tests {
     use super::*;
 
-    fn set_with_bindings(bindings: serde_json::Value) -> ArtifactSet {
+    fn set_with_bindings(bindings: &serde_json::Value) -> ArtifactSet {
         let mut set = ArtifactSet::default();
         for (index, binding) in bindings
             .as_array()
@@ -6084,7 +6084,7 @@ mod binding_selection_tests {
         set
     }
 
-    fn one_step_case(step: serde_json::Value) -> CaseCore {
+    fn one_step_case(step: &serde_json::Value) -> CaseCore {
         serde_json::from_value(serde_json::json!({
             "id": "SEL-variant_mirror", "kind": "functional", "component": "EHR",
             "sm_operation": "I_EHR_SERVICE.create_ehr",
@@ -6100,14 +6100,14 @@ mod binding_selection_tests {
     /// mirrors must select nothing there — the divergence issue #173 records.
     #[test]
     fn only_variant_ful_bindings_select_nothing_in_both_mirrors() {
-        let set = set_with_bindings(serde_json::json!([{
+        let set = set_with_bindings(&serde_json::json!([{
             "sm_operation": "I_EHR_SERVICE.create_ehr",
             "its": "its-rest",
             "variant": "xml_body",
             "request": { "method": "POST", "path": "/ehr" },
             "outcomes": { "created": { "status": 201 } }
         }]));
-        let case = one_step_case(serde_json::json!({
+        let case = one_step_case(&serde_json::json!({
             "step": 1, "call": "create_ehr", "expect": "created"
         }));
         let step = case.flow.first().unwrap();
@@ -6122,7 +6122,7 @@ mod binding_selection_tests {
     /// mirrors, and a variant-less binding remains the unnamed fallback.
     #[test]
     fn a_named_variant_selects_the_exact_match_and_bare_falls_back() {
-        let set = set_with_bindings(serde_json::json!([
+        let set = set_with_bindings(&serde_json::json!([
             {
                 "sm_operation": "I_EHR_SERVICE.create_ehr",
                 "its": "its-rest",
@@ -6137,14 +6137,14 @@ mod binding_selection_tests {
                 "outcomes": { "created": { "status": 201 } }
             }
         ]));
-        let named = one_step_case(serde_json::json!({
+        let named = one_step_case(&serde_json::json!({
             "step": 1, "call": "create_ehr", "expect": "created", "variant": "xml_body"
         }));
         let step = named.flow.first().unwrap();
         let selected = select_binding_for_step(&set, &named, step).unwrap();
         assert_eq!(selected.variant.as_deref(), Some("xml_body"));
 
-        let bare = one_step_case(serde_json::json!({
+        let bare = one_step_case(&serde_json::json!({
             "step": 1, "call": "create_ehr", "expect": "created"
         }));
         let step = bare.flow.first().unwrap();
