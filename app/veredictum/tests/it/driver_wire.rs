@@ -1357,3 +1357,317 @@ fn a_literal_patched_set_value_stays_byte_identical() -> Fallible {
     assert_eq!(body.get("uid"), literal.get("uid"));
     Ok(())
 }
+
+/// A binding whose request body is a NAMED payload role: the case supplies the
+/// resource under that name and the wire carries it.
+fn named_body_binding() -> Value {
+    json!({
+        "sm_operation": "I_EHR_COMPOSITION.create_composition",
+        "its": "its-rest",
+        "request": {
+            "method": "POST",
+            "path": "/ehr/{ehr_id}/composition",
+            "body": "composition"
+        },
+        "outcomes": { "created": { "status": 201 } }
+    })
+}
+
+/// A one-step commit driving the named-body binding, with the given `with:`.
+fn named_body_case(with: &Value) -> Value {
+    json!({
+        "id": "WIRE-named_body", "kind": "functional", "component": "EHR_COMPOSITION",
+        "sm_operation": "I_EHR_COMPOSITION.create_composition",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [{
+            "step": 1, "call": "create_composition", "expect": "created", "with": with
+        }]
+    })
+}
+
+/// The composition the case posts, and the only thing the wire may carry.
+fn posted_composition() -> Value {
+    json!({
+        "_type": "COMPOSITION",
+        "archetype_node_id": "openEHR-EHR-COMPOSITION.encounter.v1",
+        "name": { "_type": "DV_TEXT", "value": "encounter" }
+    })
+}
+
+/// The named-body path puts the case's payload on the wire UNCHANGED. Nothing
+/// asserted the served request body on this path, which is how a body defect
+/// reaches a SUT while the row still goes green: the status classifies, the
+/// response assertions pass, and what was sent is never read back.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_named_body_reaches_the_wire_as_the_case_authored_it() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/ehr/EHR-1/composition"))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+    let mut vars = VarStore::default();
+    let observed = drive_one(
+        &sut,
+        &[named_body_binding()],
+        named_body_case(&json!({ "ehr_id": "EHR-1", "composition": posted_composition() })),
+        OutcomeKind::Created,
+        &mut vars,
+    )?;
+    assert_eq!(
+        observed.observation,
+        Observation::Kind(OutcomeKind::Created)
+    );
+    assert_eq!(
+        received_body(&sut)?,
+        posted_composition(),
+        "the wire body must be the payload the case named"
+    );
+    Ok(())
+}
+
+/// The ad-hoc query binding: a STRUCTURED request body whose slots resolve
+/// against the step's scope, one mandatory (`${q}`) and one optional
+/// (`${fetch?}`).
+fn structured_body_binding() -> Value {
+    json!({
+        "sm_operation": "I_QUERY_SERVICE.execute_ad_hoc_query",
+        "its": "its-rest",
+        "request": {
+            "method": "POST",
+            "path": "/query/aql",
+            "body": { "q": "${q}", "fetch": "${fetch?}" }
+        },
+        "outcomes": { "ok": { "status": 200 } }
+    })
+}
+
+/// A one-step query driving the structured-body binding, with the given `with:`.
+fn structured_body_case(with: &Value) -> Value {
+    json!({
+        "id": "WIRE-structured_body", "kind": "functional", "component": "QUERY",
+        "sm_operation": "I_QUERY_SERVICE.execute_ad_hoc_query",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [{
+            "step": 1, "call": "execute_ad_hoc_query", "expect": "ok", "with": with
+        }]
+    })
+}
+
+/// Drive the structured-body query with the given `with:` over the given var
+/// store, and return what the step observed beside the body the SUT received.
+fn structured_body_on_the_wire(
+    sut: &FakeSut,
+    with: &Value,
+    vars: &mut VarStore,
+) -> Result<(StepObservation, Value), Box<dyn std::error::Error>> {
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/query/aql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "rows": [] }))),
+    );
+    let observed = drive_one(
+        sut,
+        &[structured_body_binding()],
+        structured_body_case(with),
+        OutcomeKind::Ok,
+        vars,
+    )?;
+    let body = received_body(sut)?;
+    Ok((observed, body))
+}
+
+/// The structured-body path renders the step's scope onto the wire: the
+/// case's own value fills its slot, a NUMBER keeps its JSON type rather than
+/// becoming quoted text, and an unbound optional slot is omitted instead of
+/// being sent as a literal `${fetch?}` or a null.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_structured_body_reaches_the_wire_rendered() -> Fallible {
+    let sut = FakeSut::start();
+    let mut vars = VarStore::default();
+    let (observed, body) = structured_body_on_the_wire(
+        &sut,
+        &json!({ "q": "SELECT e FROM EHR e", "fetch": 5 }),
+        &mut vars,
+    )?;
+    assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
+    assert_eq!(
+        body.get("q"),
+        Some(&json!("SELECT e FROM EHR e")),
+        "the mandatory body slot must carry the case's own value"
+    );
+    assert_eq!(
+        body.get("fetch"),
+        Some(&json!(5)),
+        "a numeric body slot must keep the type the case authored"
+    );
+
+    let sut = FakeSut::start();
+    let mut vars = VarStore::default();
+    let (_, body) =
+        structured_body_on_the_wire(&sut, &json!({ "q": "SELECT e FROM EHR e" }), &mut vars)?;
+    assert_eq!(
+        body.get("fetch"),
+        None,
+        "an unbound optional body slot is omitted, never sent unrendered"
+    );
+    Ok(())
+}
+
+/// The with-versus-capture priority at the BODY seam, direction one: a
+/// structured slot the step does not name in its `with:` renders from the
+/// capture, so an earlier step's answer still addresses this request.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_structured_body_slot_renders_the_capture_the_step_did_not_supply() -> Fallible {
+    let sut = FakeSut::start();
+    let mut vars = VarStore::default();
+    vars.set(
+        veredictum::ids::CaptureName::parse("q")?,
+        veredictum::exec::state::Captured::Scalar("SELECT c FROM COMPOSITION c".to_owned()),
+    );
+    let (observed, body) = structured_body_on_the_wire(&sut, &json!({}), &mut vars)?;
+    assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
+    assert_eq!(
+        body.get("q"),
+        Some(&json!("SELECT c FROM COMPOSITION c")),
+        "the capture must fill a body slot the step left unnamed"
+    );
+    Ok(())
+}
+
+/// Direction two, the shadowing pin: the step's own `with:` value wins over a
+/// same-named capture in the structured body, exactly as it does in a header
+/// or a URL slot. Letting the capture win puts a STALE value on the wire and
+/// makes the case's authored input dead text with no diagnostic.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_structured_body_slot_takes_the_steps_with_value_over_the_capture() -> Fallible {
+    let sut = FakeSut::start();
+    let mut vars = VarStore::default();
+    vars.set(
+        veredictum::ids::CaptureName::parse("q")?,
+        veredictum::exec::state::Captured::Scalar("SELECT c FROM COMPOSITION c".to_owned()),
+    );
+    let (observed, body) =
+        structured_body_on_the_wire(&sut, &json!({ "q": "SELECT e FROM EHR e" }), &mut vars)?;
+    assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
+    assert_eq!(
+        body.get("q"),
+        Some(&json!("SELECT e FROM EHR e")),
+        "the step's explicit with: value must reach the wire"
+    );
+    Ok(())
+}
+
+/// The setter binding again, this time with a templated `If-Match`: the header
+/// seam of the same with-versus-capture priority.
+fn if_match_status_binding() -> Value {
+    json!({
+        "sm_operation": "I_EHR_STATUS.set_ehr_queryable",
+        "its": "its-rest",
+        "request": {
+            "method": "PUT",
+            "path": "/ehr/{ehr_id}/ehr_status",
+            "body": { "is_queryable": false },
+            "headers": { "If-Match": "\"${preceding_version_uid}\"" }
+        },
+        "outcomes": { "ok": { "status": 200 } }
+    })
+}
+
+/// Drive the If-Match setter and return what the step observed beside the
+/// entity tag the SUT received.
+fn if_match_on_the_wire(
+    sut: &FakeSut,
+    with: &Value,
+    vars: &mut VarStore,
+) -> Result<(StepObservation, String), Box<dyn std::error::Error>> {
+    sut.mount(
+        Mock::given(method("PUT"))
+            .and(path("/ehr/EHR-1/ehr_status"))
+            .respond_with(ResponseTemplate::new(200)),
+    );
+    let observed = drive_one(
+        sut,
+        &[if_match_status_binding()],
+        patched_status_case(with),
+        OutcomeKind::Ok,
+        vars,
+    )?;
+    let received = sut.requests();
+    let request = received.first().ok_or("the SUT received no request")?;
+    let sent = request
+        .headers
+        .get("if-match")
+        .ok_or("the request carried no If-Match")?;
+    Ok((observed, sent.to_str()?.to_owned()))
+}
+
+/// A var store holding the version identifier an earlier step captured.
+fn bound_preceding_version_uid() -> Result<VarStore, Box<dyn std::error::Error>> {
+    let mut vars = VarStore::default();
+    vars.set(
+        veredictum::ids::CaptureName::parse("preceding_version_uid")?,
+        veredictum::exec::state::Captured::Scalar("vo::sut::1".to_owned()),
+    );
+    Ok(vars)
+}
+
+/// The header seam, direction one: a header slot the step does not name in its
+/// `with:` renders from the capture the earlier step bound.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_header_slot_renders_the_capture_the_step_did_not_supply() -> Fallible {
+    let sut = FakeSut::start();
+    let mut vars = bound_preceding_version_uid()?;
+    let (observed, sent) = if_match_on_the_wire(&sut, &json!({ "ehr_id": "EHR-1" }), &mut vars)?;
+    assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
+    assert_eq!(
+        sent, "\"vo::sut::1\"",
+        "the capture must fill a header slot the step left unnamed"
+    );
+    Ok(())
+}
+
+/// The header seam, direction two — the run-2 triage regression on the wire:
+/// the step's own `with:` value wins, so the newer identifier the case passes
+/// inline is what `If-Match` carries. Rendering the step-1 capture instead made
+/// the SUT's correct 412 read as a red row.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_header_slot_takes_the_steps_with_value_over_the_capture() -> Fallible {
+    let sut = FakeSut::start();
+    let mut vars = bound_preceding_version_uid()?;
+    let (observed, sent) = if_match_on_the_wire(
+        &sut,
+        &json!({ "ehr_id": "EHR-1", "preceding_version_uid": "vo::sut::2" }),
+        &mut vars,
+    )?;
+    assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
+    assert_eq!(
+        sent, "\"vo::sut::2\"",
+        "the step's explicit with: value must reach the wire"
+    );
+    Ok(())
+}
