@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>404 — page not found · Veredictum</title>
   <meta name="robots" content="noindex">
+  <!-- The policy travels as a <meta> element because GitHub Pages sets no
+       response headers; frame-ancestors is ignored in meta form (W3C CSP3
+       §3.3) and kept for header-serving mirrors.
+       style-src carries 'unsafe-inline' because the page's whole style is
+       the inline <style> block below — there is no external sheet to hash
+       against, and the block is committed content, not injected. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
   <style>
     :root {
