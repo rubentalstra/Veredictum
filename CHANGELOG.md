@@ -96,6 +96,13 @@ version on.
   reserved and always absent.
 ### Fixed
 
+- The committed party statements declare their AMB-220 branch, verified
+  first-hand against each running SUT: FerroEHR refuses an RM-undefined
+  containment pair as an invalid query, EHRbase executes it to an empty
+  result. Without a declared branch the verdict pipeline's static review
+  rightly refused every judgement over these statements, which surfaced the
+  moment the console's export gates woke from their engine-pin drift skip.
+
 - **The console image runs the engine it ships against (#172).** The console
   pinned `veredictum` at `0.1.0-alpha.6` after `0.1.0` published, so the image
   spawned the pre-release engine and passed it flags that version never

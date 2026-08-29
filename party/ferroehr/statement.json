@@ -90,6 +90,7 @@
     "party-xml-supported",
     "party-xml-write-accepted",
     "sf-deprecated-types-unsupported",
+    "undefined-containment-refused",
     "versioned-party-xml-unsupported",
     "xml-namespace-negotiated"
   ],
