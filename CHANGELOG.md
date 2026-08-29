@@ -63,6 +63,22 @@ version on.
   - The catalogue carries 1130 cases and 249 bindings; the `AqlBasic`,
     `CompositionOps`, `DirectoryOps` and `EhrStatus` depth floors move to 52,
     63, 95 and 52.
+- **The content-validation chapter reaches inside the data structure (#220).**
+  Nine cases close the constraint axes the chapter never carried. A dedicated
+  `CONT-DV_TEXT-validate_pattern` runs a real regular expression through
+  `C_STRING.pattern` on a DV_TEXT, the sibling the DV_URI and DV_EHR_URI cases
+  already had. Four cardinality cases constrain the member container of each RM
+  container class — `ITEM_TREE.items`, `ITEM_LIST.items`, `ITEM_TABLE.rows` and
+  `CLUSTER.items` — over all six intervals and member counts 0, 1, 3 and 6;
+  `CLUSTER.items` is 1..1 in the RM, so a zero-member CLUSTER is refused even
+  under an unbounded cardinality, which is the one place the four classes
+  differ. `CONT-ELEMENT-value_null_flavour_existence` puts
+  `C_ATTRIBUTE.existence` on both ELEMENT attributes and pins the invariant
+  that ties them: exactly one of `value` and `null_flavour` is present, so
+  committing both or neither is refused. Three `CONT-ITEM-type_*` cases narrow
+  an ITEM_TREE member slot through `C_OBJECT.rm_type_name` across the abstract
+  ITEM class and its CLUSTER and ELEMENT subtypes. The catalogue carries 1128
+  cases, and the `ArchetypeValidation` depth floor moves to 134.
 - **A client body `uid` never survives a content-object commit (#202).**
   Register entry AMB-226 (fixed_handling, upstream #221) records the silence
   the released text leaves on `composition_create`, `directory_create` and

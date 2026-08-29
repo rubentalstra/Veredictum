@@ -483,8 +483,9 @@ fn family_band(family: &str, topic: &str) -> Option<(&'static str, &'static str)
                 ("Content validation", "Data types")
             } else {
                 match topic {
-                    "COMP" | "COMPOSITION" | "HIST" | "HISTORY" | "EVENT" | "ITEM_STR"
-                    | "ITEM_STRUCTURE" | "OBS" | "OBSERVATION" => {
+                    "CLUSTER" | "COMP" | "COMPOSITION" | "ELEMENT" | "EVENT" | "HIST"
+                    | "HISTORY" | "ITEM" | "ITEM_LIST" | "ITEM_STR" | "ITEM_STRUCTURE"
+                    | "ITEM_TABLE" | "ITEM_TREE" | "OBS" | "OBSERVATION" => {
                         ("Content validation", "Structure & cardinality")
                     }
                     _ => return None,
@@ -1105,20 +1106,6 @@ mod tests {
             band_of("CONT-DV_INTERVAL_DV_COUNT-validate_open").unwrap(),
             ("Content validation", "Interval data types")
         );
-        // Both the current and the retired structure spellings land together,
-        // so an older committed results.json still renders.
-        for id in [
-            "CONT-OBS-state_ex_opt-protocol_ex_opt",
-            "CONT-OBSERVATION-state_protocol_existence",
-            "CONT-ITEM_STR-type_any",
-            "CONT-ITEM_STRUCTURE-type_narrowing",
-        ] {
-            assert_eq!(
-                band_of(id).unwrap(),
-                ("Content validation", "Structure & cardinality"),
-                "{id}"
-            );
-        }
         assert_eq!(
             band_of("SF-FLAT-commit_roundtrip_ctx_defaults").unwrap(),
             ("Simplified formats", "FLAT & STRUCTURED")
@@ -1143,6 +1130,35 @@ mod tests {
             band_of("PERF-hospital_sim-class_POC").unwrap(),
             ("Performance", "Hospital simulation")
         );
+    }
+
+    /// Every structural content topic lands in one band, current spellings and
+    /// retired ones alike, so an older committed `results.json` still renders.
+    #[test]
+    fn every_structural_content_topic_shares_one_band() {
+        for id in [
+            "CONT-OBS-state_ex_opt-protocol_ex_opt",
+            "CONT-OBSERVATION-state_protocol_existence",
+            "CONT-ITEM_STR-type_any",
+            "CONT-ITEM_STRUCTURE-type_narrowing",
+            "CONT-COMP-content_card_any-context_any",
+            "CONT-COMPOSITION-context_existence",
+            "CONT-HIST-events_card_any-summary_ex_opt",
+            "CONT-HISTORY-events_cardinality_count6",
+            "CONT-EVENT-type_any",
+            "CONT-ITEM_TREE-items_cardinality",
+            "CONT-ITEM_LIST-items_cardinality",
+            "CONT-ITEM_TABLE-rows_cardinality",
+            "CONT-CLUSTER-items_cardinality",
+            "CONT-ELEMENT-value_null_flavour_existence",
+            "CONT-ITEM-type_cluster",
+        ] {
+            assert_eq!(
+                band_of(id).unwrap(),
+                ("Content validation", "Structure & cardinality"),
+                "{id}"
+            );
+        }
     }
 
     #[test]

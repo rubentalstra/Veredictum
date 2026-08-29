@@ -1,0 +1,30 @@
+# CATALOGUE ADDITION: the CLUSTER-narrowed member of the CONT-ITEM-type_*
+# family. C_OBJECT.rm_type_name names the reference-model type the node
+# corresponds to, so a member slot narrowed to CLUSTER refuses the sibling
+# ELEMENT subtype of the abstract ITEM class.
+id: CONT-ITEM-type_cluster
+kind: content
+component: CONTENT
+rm_class: ITEM
+status: active
+capabilities: [ArchetypeValidation]
+profiles: [CORE]
+test_purpose: >-
+  ITEM is CLUSTER: an ITEM_TREE member slot narrowed to CLUSTER accepts a
+  committed CLUSTER and rejects the ELEMENT sibling (class not allowed).
+description: "ITEM_TREE.items member type against a CLUSTER-narrowed archetype slot"
+spec_refs:
+  - "AM AOM1.4 §C_OBJECT (rm_type_name) — the reference-model type a node constrains"
+  - "RM data_structures §ITEM (abstract parent of CLUSTER and ELEMENT) / §CLUSTER / §ELEMENT"
+  - "RM data_structures §ITEM_TREE (items: List<ITEM>, 0..1 — can include 0 or more CLUSTERs and/or 0 or more individual ELEMENTs)"
+applies: { rm: ">=1.0.2" }
+constraint_context:
+  # C_OBJECT.rm_type_name = CLUSTER on the ITEM_TREE member slot.
+  template: cnf.tpl.ecc_item_type_narrowing
+  path: "/content[openEHR-EHR-EVALUATION.minimal.v1]/data/items"
+  constraint_columns: ["slot_type"]
+decision_table:
+  columns: [slot_type, committed_type, expected, violates]
+  rows:
+    - ["CLUSTER", "CLUSTER", accepted, []]
+    - ["CLUSTER", "ELEMENT", rejected, ["constraint(C_OBJECT.rm_type_name): ELEMENT is not an allowed type for a CLUSTER-narrowed slot"]]
