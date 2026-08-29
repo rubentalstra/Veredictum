@@ -33,6 +33,25 @@ version on.
   commit is accepted, that the version identity the response names is not the
   client's value, and that the client's own identifier addresses nothing
   afterwards.
+- **The web console reads bench records (#166).** A `/benchmarks` surface
+  lists every `bench-result*.json` under the mounted output directory, and
+  takes uploaded ones through a plain HTML form that needs no JavaScript. An
+  uploaded batch is transient and swept on a timer, because the console stores
+  nothing of its own. A record opens in full: the pack and the machine that
+  offered the load, the posture block with every item labelled `verified` or
+  `declared-only`, whether the record is submittable and which requirement it
+  misses, the cross-repetition percentiles in microseconds with the millisecond
+  reading beside them, the failed-arrival reading of every repetition and phase
+  on the target and on each baseline, the same-machine baselines with their
+  pinned images and recipe, and the relative index the record derived. Two or
+  more records align side by side, and the pack, host, posture, scale and
+  submittability mismatches are stated above the numbers rather than left for a
+  reader to notice. Every figure carries the discipline that produced it, and
+  the benchmark-versus-conformance boundary statement renders verbatim from the
+  record on every one of those views. The per-operation `HdrHistogram` V2
+  encodings are tabulated rather than drawn: decoding one is the engine's own
+  histogram reader, which the console reaches once its engine pin carries the
+  bench module (#179).
 - **`is_modifiable` judges the whole CONTRIBUTION, in any member order
   (#201).** No released text says when `EHR_STATUS.is_modifiable` is evaluated
   relative to a commit, so register entry AMB-225 records the atomic-set

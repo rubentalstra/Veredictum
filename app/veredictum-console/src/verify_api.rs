@@ -461,7 +461,7 @@ pub mod route {
     //! whole mechanism: a file upload with zero JavaScript, working before
     //! the WASM bundle has loaded and working with it disabled entirely.
 
-    use axum::response::IntoResponse as _;
+    use crate::redirect::{percent_encode, see_other};
 
     /// Accepts one uploaded bundle and redirects to its verification.
     ///
@@ -503,32 +503,6 @@ pub mod route {
             crate::export_api::VERIFY_PATH,
             percent_encode(reason)
         ))
-    }
-
-    /// The POST-redirect-GET answer, so a reload never re-posts the upload.
-    fn see_other(location: &str) -> axum::response::Response {
-        (
-            axum::http::StatusCode::SEE_OTHER,
-            [(axum::http::header::LOCATION, location.to_owned())],
-        )
-            .into_response()
-    }
-
-    /// Percent-encodes a diagnostic for one query-parameter value.
-    ///
-    /// Hand-rolled over the unreserved set (RFC 3986 §2.3) rather than
-    /// pulling an encoding crate for one call site; everything outside that
-    /// set is escaped, which is always valid if occasionally verbose.
-    fn percent_encode(value: &str) -> String {
-        use std::fmt::Write as _;
-        value.bytes().fold(String::new(), |mut out, byte| {
-            if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
-                out.push(char::from(byte));
-            } else {
-                let _ = write!(out, "%{byte:02X}");
-            }
-            out
-        })
     }
 }
 

@@ -81,14 +81,24 @@ async fn main() -> anyhow::Result<()> {
             veredictum_console::verify_api::UPLOAD_PATH,
             axum::routing::post(veredictum_console::verify_api::route::upload),
         )
-        // axum defaults to a 2 MiB body; the upload route needs its own cap,
-        // and the page refuses anything past the same number itself so the
-        // reader gets a sentence rather than a bare 413.
+        // S10's own upload (#166), the same plain-form mechanism: a batch of
+        // bench-result documents, read and listed, never stored.
+        .route(
+            veredictum_console::bench_api::UPLOAD_PATH,
+            axum::routing::post(veredictum_console::bench_api::route::upload),
+        )
+        // axum defaults to a 2 MiB body; the upload routes need their own cap,
+        // and each page refuses anything past its own number itself so the
+        // reader gets a sentence rather than a bare 413. The layer is one
+        // value for the whole router, so it is the larger of the two.
         .layer(axum::extract::DefaultBodyLimit::max(
-            usize::try_from(veredictum_console::verify_api::unpack::MAX_UPLOAD_BYTES)
-                .unwrap_or(usize::MAX),
+            usize::try_from(
+                veredictum_console::verify_api::unpack::MAX_UPLOAD_BYTES
+                    .max(veredictum_console::bench_api::upload::MAX_BATCH_BYTES),
+            )
+            .unwrap_or(usize::MAX),
         ))
-        // These two handlers are outside the reactive route tree, so they
+        // These three handlers are outside the reactive route tree, so they
         // take the state as an extension rather than through `expect_context`.
         .layer(axum::Extension(state.clone()))
         .leptos_routes_with_context(

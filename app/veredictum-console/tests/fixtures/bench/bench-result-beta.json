@@ -1,0 +1,311 @@
+{
+  "boundary_statement": "This is a benchmark record for comparative speed. It is not a conformance record, not a certificate, and not a performance-class rating; a bench result may motivate a class run, never substitute for one.",
+  "cross": {
+    "mixed": {
+      "operations": {
+        "create_composition": {
+          "p50_us": {
+            "iqr": 0.0,
+            "median": 13007.0
+          },
+          "p75_us": {
+            "iqr": 0.0,
+            "median": 19503.0
+          },
+          "p90_us": {
+            "iqr": 0.0,
+            "median": 23407.0
+          },
+          "p999_us": {
+            "iqr": 0.0,
+            "median": 26015.0
+          },
+          "p99_us": {
+            "iqr": 0.0,
+            "median": 25743.0
+          },
+          "repetitions": 3,
+          "throughput_ops_s": {
+            "iqr": 0.0,
+            "median": 10.0
+          }
+        },
+        "get_ehr": {
+          "p50_us": {
+            "iqr": 0.0,
+            "median": 2701.0
+          },
+          "p75_us": {
+            "iqr": 0.0,
+            "median": 4051.0
+          },
+          "p90_us": {
+            "iqr": 0.0,
+            "median": 4863.0
+          },
+          "p999_us": {
+            "iqr": 0.0,
+            "median": 5403.0
+          },
+          "p99_us": {
+            "iqr": 0.0,
+            "median": 5347.0
+          },
+          "repetitions": 3,
+          "throughput_ops_s": {
+            "iqr": 0.0,
+            "median": 16.666666666666668
+          }
+        }
+      },
+      "regime": "open-loop"
+    }
+  },
+  "environment": {
+    "arch": "aarch64",
+    "available_parallelism": 4,
+    "cpu_model": "Neoverse-N1",
+    "os": "linux",
+    "total_memory_bytes": 16777216000
+  },
+  "finished_at": "2026-08-28T11:08:00Z",
+  "label": "Beta CDR 2.0",
+  "methodology": {
+    "coordinated_omission_free": true,
+    "open_loop": true,
+    "repetitions": 1,
+    "seed_once_measure_n": true,
+    "statement": "Seed once, measure N times. Measured phases are open-loop: arrivals fire at their planned instants regardless of any other request's completion, and every latency is measured from the planned arrival instant, so coordinated omission cannot hide a stall. Seed phases are closed-loop by construction and are reported as bulk-load throughput only."
+  },
+  "pack": {
+    "description": "A hand-authored record used only by the console's own read gates. It drives one seed phase and one open-loop measured phase over two operations, which is the smallest shape that exercises every section the benchmark surface renders.",
+    "fixtures": {
+      "blood_pressure.opt": "3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128",
+      "bp_composition.json": "468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947"
+    },
+    "id": "console-fixture",
+    "max_failed_share": 0.01,
+    "seed": 6216465318106710868,
+    "version": "1.0.0"
+  },
+  "posture": {
+    "comparability": [
+      {
+        "deployment_configures": "response",
+        "item": "compression",
+        "profile_declares": "off",
+        "source": "the deployment's own reverse proxy configuration, read first-hand at the pinned tag"
+      }
+    ],
+    "items": [
+      {
+        "assurance": "declared-only",
+        "declared": "off",
+        "item": "audit",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "released ITS-REST defines no read operation for an audit trail",
+            "observed": "(not observable)",
+            "outcome": "not-observable"
+          },
+          {
+            "bracket": "after",
+            "evidence": "released ITS-REST defines no read operation for an audit trail",
+            "observed": "(not observable)",
+            "outcome": "not-observable"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "none",
+        "item": "version_signing",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "three versions committed by this run read back with no signature attribute",
+            "observed": "none",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "three versions committed by this run read back with no signature attribute",
+            "observed": "none",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "template",
+        "item": "commit_validation",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "the pack's invalid twin was refused 422 inside the measured window",
+            "observed": "template",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "the pack's invalid twin was refused 422 inside the measured window",
+            "observed": "template",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "basic",
+        "item": "authn",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "one uncredentialed read was refused 401",
+            "observed": "basic",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "one uncredentialed read was refused 401",
+            "observed": "basic",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "off",
+        "item": "tls",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "the recorded base URL names the http scheme",
+            "observed": "off",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "the recorded base URL names the http scheme",
+            "observed": "off",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "response",
+        "item": "compression",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "one read stating Accept-Encoding came back Content-Encoding: gzip",
+            "observed": "response",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "one read stating Accept-Encoding came back Content-Encoding: gzip",
+            "observed": "response",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "declared-only",
+        "declared": "single",
+        "item": "tenancy",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "released ITS-REST defines no read operation for tenancy",
+            "observed": "(not observable)",
+            "outcome": "not-observable"
+          },
+          {
+            "bracket": "after",
+            "evidence": "released ITS-REST defines no read operation for tenancy",
+            "observed": "(not observable)",
+            "outcome": "not-observable"
+          }
+        ]
+      }
+    ],
+    "profile": "minimal",
+    "summary": "The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant."
+  },
+  "repetitions": [
+    {
+      "phases": {
+        "mixed": {
+          "dispatched_measured_arrivals": 1600,
+          "duration_s": 60,
+          "generator_bound": false,
+          "offered_load_sustained_per_s": 26.666666666666668,
+          "operations": {
+            "create_composition": {
+              "count": 600,
+              "errors": 0,
+              "errors_by_class": {},
+              "hdr_v2_base64": "HISTEwAAAaAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAAIMCBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBuEBBn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bl8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8G",
+              "max_us": 26015,
+              "p50_us": 13007,
+              "p75_us": 19503,
+              "p90_us": 23407,
+              "p999_us": 26015,
+              "p99_us": 25743,
+              "throughput_ops_s": 10.0
+            },
+            "get_ehr": {
+              "count": 1000,
+              "errors": 0,
+              "errors_by_class": {},
+              "hdr_v2_base64": "HISTEwAAAZAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAADUKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCi8KFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKFQoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwo=",
+              "max_us": 5403,
+              "p50_us": 2701,
+              "p75_us": 4051,
+              "p90_us": 4863,
+              "p999_us": 5403,
+              "p99_us": 5347,
+              "throughput_ops_s": 16.666666666666668
+            }
+          },
+          "planned_measured_arrivals": 1600,
+          "rate_per_s": 26.666666666666668,
+          "regime": "open-loop",
+          "warmup_arrivals": 267,
+          "warmup_s": 10
+        }
+      },
+      "repetition": 1
+    }
+  ],
+  "scale": {
+    "declared_workers": true,
+    "factor": 0.1,
+    "reference_configuration": false
+  },
+  "schema_version": "0.1.0",
+  "seed_phases": [
+    {
+      "bulk_load_writes_per_s": 24.096385542168676,
+      "compositions_per_ehr": 5,
+      "ehrs": 200,
+      "elapsed_s": 41.5,
+      "name": "seed",
+      "regime": "closed-loop",
+      "whole_loop_ms_per_composition": 41.5,
+      "workers": 8
+    }
+  ],
+  "started_at": "2026-08-28T11:00:00Z",
+  "submittable": false,
+  "submittable_unmet": [
+    "repetitions",
+    "baseline"
+  ],
+  "target": {
+    "base_url": "http://beta.invalid/openehr/v1"
+  }
+}

@@ -41,6 +41,7 @@ compile_error!("features \"hydrate\" and \"ssr\" cannot be enabled at the same t
 pub const ENGINE_PIN: &str = "0.1.0";
 
 pub mod app;
+pub mod bench_api;
 pub mod catalogue_api;
 pub mod components;
 #[cfg(feature = "ssr")]
@@ -49,6 +50,7 @@ pub mod export;
 pub mod export_api;
 pub mod pages;
 pub mod record_api;
+pub mod redirect;
 pub mod run_api;
 pub mod run_job;
 #[cfg(feature = "ssr")]

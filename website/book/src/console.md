@@ -182,6 +182,61 @@ The manifest's signature is an ordinary detached OpenPGP signature, so
 `gpg --verify` accepts a bundle too. Nobody has to trust this console to check
 this console.
 
+## Benchmarks: speed records, read as speed records
+
+`/benchmarks` reads the JSON document a `veredictum bench` run writes. It lists
+every `bench-result*.json` under the mounted output directory and takes
+uploaded ones through the same plain-form mechanism `/verify` uses. An uploaded
+batch is transient and swept on a timer, because the console stores nothing of
+its own.
+
+![The benchmark record list in light mode](console/img/benchmarks-light.png)
+![The same list in dark mode](console/img/benchmarks-dark.png)
+
+The first thing on every one of these pages is the boundary statement, read
+verbatim out of the record: a bench result is a comparative speed measurement,
+and it is not a conformance record, not a certificate, and not a
+performance-class rating. A table of speed numbers is exactly the artifact
+somebody quotes out of context, so the sentence that says what it is not
+travels with it.
+
+One record opens in full. The header names the pack, the system, the machine
+that offered the load, the seed and the scale, then says whether the record may
+be offered for ranking and, when it may not, which requirement it misses and
+what that requirement asks for. The posture block follows, one line per
+disclosed item, each labelled `verified` where a black-box canary read it off
+the running system at both ends of the measured window and `declared-only`
+where released ITS-REST discloses nothing to read. Two speed numbers are
+comparable only when the same features were switched on behind them, which is
+why the posture reads before any figure.
+
+Then the numbers: the cross-repetition percentiles per phase in microseconds
+with the millisecond reading beside them, the failed-arrival share of every
+repetition and phase on the target and on each baseline, the same-machine
+baselines with their pinned image digests and upstream recipe, and the relative
+index the run derived against each of them. Every figure carries the discipline
+that produced it, because a closed-loop average and an open-loop percentile
+answer different questions and are never read against one another.
+
+![One bench record in full](console/img/benchmark-detail-light.png)
+
+Each operation carries the standard HdrHistogram V2 encoding of its own
+latencies, so every percentile on the page is recomputable from the record
+itself. The console tabulates rather than draws it: decoding one is the
+engine's own histogram reader, which the console reaches once its engine pin
+carries the bench module.
+
+Selecting two or more records aligns them side by side, one column per record,
+one row per phase, operation and metric. What makes the view worth having is
+the block above the numbers: the columns' packs, generator hosts, posture
+profiles, full disclosures and scale factors are compared, and every
+disagreement is stated before a reader reaches a cell. A column that is not
+submittable says so with the requirement it misses; a set of columns taken on
+different hosts where one carries no relative index says that nothing in the
+table is comparable across them.
+
+![Two records aligned side by side](console/img/benchmark-compare-light.png)
+
 ## An address the console does not serve
 
 A path outside the route tree answers `404` and renders it: the same chrome,

@@ -17,6 +17,7 @@ use leptos_router::{
     components::{ParentRoute, Route, Router, Routes},
 };
 
+use crate::pages::benchmarks::Benchmarks;
 use crate::pages::catalogue::{Case, Catalogue, Chapter};
 use crate::pages::instrument::Instrument;
 use crate::pages::not_found::NotFound;
@@ -107,6 +108,7 @@ pub fn App() -> impl IntoView {
                     <Route path=(StaticSegment("run"), StaticSegment("live")) view=Live />
                     <Route path=(StaticSegment("run"), StaticSegment("results")) view=Results />
                     <Route path=(StaticSegment("run"), StaticSegment("verdicts")) view=Verdicts />
+                    <Route path=StaticSegment("benchmarks") view=Benchmarks />
                     <Route path=StaticSegment("verify") view=Verify />
                 </ParentRoute>
             </Routes>
