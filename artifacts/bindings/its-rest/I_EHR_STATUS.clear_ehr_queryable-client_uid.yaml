@@ -6,12 +6,11 @@
 # and the `invalid_body` variant that takes a case-supplied payload declares
 # only refusal outcomes.
 #
-# The uid literal lives HERE, and the case that reads it back
-# (I_EHR_STATUS.clear_ehr_queryable-client_supplied_uid) repeats the same
-# literal in its `not_equals` assertion; its own header comment says so. A
-# patched body's `set` renders the `${…}` reference grammar against the step's
-# scope, so the value may instead be authored once in that case's `with:` and
-# named here as a reference.
+# The uid value is the step's `${client_uid}`: the driving case authors the
+# literal in its own `with:` beside the assertions that read it back, so the
+# binding carries no case data and every copy of the literal lives in one
+# file. A patched body's `set` renders the `${…}` reference grammar against
+# the step's scope.
 #
 # The body is schema-valid on the way in: RM UML/classes/locatable.adoc
 # §Attributes types `uid` `0..1` ("Optional globally unique object identifier
@@ -32,7 +31,7 @@ request:
       is_queryable: false                   # the SM operation's own effect, unchanged
       uid:                                  # the client's chosen version identifier (AMB-226)
         _type: OBJECT_VERSION_ID
-        value: "3b6c9f18-0000-4000-8000-0000000004c3::cnf.client.example.com::1"
+        value: "${client_uid}"
   headers:
     If-Match: '"${preceding_version_uid}"'  # REQUIRED (If-Match.yaml); realizes SM preceding_version_uid (ITS-REST overview §If-Match)
     Prefer: "return=representation"

@@ -17,9 +17,10 @@
 # identifier in the body, which is never the identifier of the version the
 # write creates.
 #
-# The uid the request carries is the `client_uid` variant binding's literal,
-# repeated below in the `not_equals` assertion; the two are one value and the
-# binding's header comment says so from the other side.
+# The uid the request carries is step 2's `client_uid` value, which the
+# variant binding writes into the body as `${client_uid}`; the `not_equals`
+# assertion and step 4's address repeat the same literal, so every copy of it
+# lives in this file.
 #
 # WHAT THIS CASE ASSERTS. Step 2: the commit is accepted. Step 3: the VERSION
 # envelope's own `uid` is the identifier the commit's `ETag` named and is not
@@ -64,8 +65,11 @@ flow:
       - { assert: field, path: "is_queryable", equals: true }
   - step: 2
     call: clear_ehr_queryable
-    variant: client_uid                  # the variant binding writes the client-chosen uid into the body
-    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    variant: client_uid                  # the variant binding writes ${client_uid} into the body
+    with:
+      ehr_id: "${ehr_id}"
+      preceding_version_uid: "${status_version_uid}"
+      client_uid: "3b6c9f18-0000-4000-8000-0000000004c3::cnf.client.example.com::1"
     expect: updated                      # no released branch refuses a body uid on this commit
     capture: { version_uid: updated.version_uid }
   - step: 3                              # the committed version's identity is the server's
