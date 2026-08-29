@@ -11,7 +11,7 @@
 //! passing row out of an unevaluated expectation.
 
 use serde_json::{Value, json};
-use veredictum::exec::RowOutcome;
+use veredictum::exec::{RowOutcome, StepDriver as _};
 use veredictum::model::assertion::{Assertion, PostconditionRole};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -228,4 +228,90 @@ fn every_assertion_family_carries_a_postcondition_role() {
             assertion.family()
         );
     }
+}
+
+/// A row that completed NO flow step served nothing to judge a postcondition
+/// against, and that is INCONCLUSIVE — a family reporting no finding over an
+/// exchange that never happened would manufacture a passing row out of an
+/// unevaluated expectation.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_row_that_completed_no_step_leaves_its_postconditions_unjudgeable() -> Fallible {
+    let judged = json!([
+        { "assert": "field", "path": "uid/value", "exists": true },
+        { "assert": "instance_of", "rm_type": "EHR" }
+    ]);
+    let sut = FakeSut::start();
+    let set = artifact_set(&[create_ehr_binding()]);
+    let topology = ixit(&sut.base_url());
+    let core = case(case_document(&judged));
+    let mut driver = veredictum::exec::driver::HttpDriver::new(&set, &topology, None)?;
+    let mut vars = veredictum::exec::state::VarStore::default();
+    let outcomes = driver.postconditions(&core, 0, &mut vars)?;
+    assert_eq!(
+        outcomes.failures.len(),
+        2,
+        "one unjudgeable outcome per judged family: {:?}",
+        outcomes.failures
+    );
+    for failure in &outcomes.failures {
+        assert!(
+            failure.reason().contains("completed no flow step"),
+            "{failure:?}"
+        );
+    }
+    assert!(outcomes.advisories.is_empty());
+
+    // A case with no JUDGED postcondition asks nothing of the last step, so
+    // the seam reports nothing rather than an absence.
+    let informative = json!([{ "assert": "message_exemplar", "text": "t" }]);
+    let core = case(case_document(&informative));
+    let outcomes = driver.postconditions(&core, 0, &mut vars)?;
+    assert!(outcomes.failures.is_empty(), "{:?}", outcomes.failures);
+    Ok(())
+}
+
+/// `unique` is AGGREGATE: it is judged across the whole parameter matrix
+/// rather than inside one row, so two rows binding the same value fail while
+/// distinct bindings pass. A per-row evaluation could never see the
+/// duplication at all.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_unique_aggregate_is_judged_across_the_rows_not_inside_one() -> Fallible {
+    let sut = FakeSut::start();
+    let set = artifact_set(&[create_ehr_binding()]);
+    let topology = ixit(&sut.base_url());
+    let core = case(case_document(&json!([
+        { "assert": "unique", "over": "${minted}", "aggregate": true }
+    ])));
+    let mut driver = veredictum::exec::driver::HttpDriver::new(&set, &topology, None)?;
+
+    let row =
+        |value: &str| -> Result<veredictum::exec::state::VarStore, Box<dyn std::error::Error>> {
+            let mut vars = veredictum::exec::state::VarStore::default();
+            vars.set(
+                veredictum::ids::CaptureName::parse("minted")?,
+                veredictum::exec::state::Captured::Scalar(value.to_owned()),
+            );
+            Ok(vars)
+        };
+    let distinct = [row("uid-1")?, row("uid-2")?];
+    assert!(
+        driver.aggregates(&core, &distinct)?.is_empty(),
+        "two distinct bindings satisfy uniqueness"
+    );
+
+    let repeated = [row("uid-1")?, row("uid-1")?];
+    let failures = driver.aggregates(&core, &repeated)?;
+    let first = failures
+        .first()
+        .ok_or("a repeated binding must fail the aggregate")?;
+    assert!(first.contains("uid-1"), "{first}");
+    Ok(())
 }

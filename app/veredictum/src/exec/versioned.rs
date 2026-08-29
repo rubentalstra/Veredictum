@@ -308,6 +308,73 @@ mod tests {
     fn the_uid_pattern_vocabulary_is_closed() -> Result<(), String> {
         assert_eq!(expand_uid_literal("::<system>::1")?, format!("::{UID}::1"));
         assert_eq!(expand_uid_literal("<unknown>::x").unwrap_err(), "unknown");
+        // Each token names the segment BASE `base_types` master05 §Syntaxes
+        // defines: `uuid` and `system` are both `uid`, `n` is the version
+        // tree.
+        assert_eq!(uid_pattern_token("uuid"), Some(UID));
+        assert_eq!(uid_pattern_token("system"), Some(UID));
+        assert_eq!(uid_pattern_token("n"), Some(VERSION_TREE_ID));
+        assert_eq!(uid_pattern_token("anything"), None);
+        // An unterminated `<` is a literal run, escaped like any other — the
+        // vocabulary is closed and nothing here widens into a wildcard.
+        assert_eq!(expand_uid_literal("a.b<n")?, regex::escape("a.b<n"));
+        assert_eq!(expand_uid_literal("a.b")?, regex::escape("a.b"));
+        Ok(())
+    }
+
+    /// Every judge fails LOUDLY on a representation that carries nothing to
+    /// judge, and names what the released text says should have been there:
+    /// a silent pass would let a server earn the row by serving less.
+    #[test]
+    fn a_representation_that_carries_nothing_fails_rather_than_passes() -> Result<(), String> {
+        let bare = json!({ "_type": "ORIGINAL_VERSION" });
+        assert_eq!(envelope_uid(&bare), None);
+        let pattern = regex::Regex::new("^.*$").map_err(|e| e.to_string())?;
+        let uid = eval_uid_pattern(&bare, &pattern, "<uuid>").unwrap_err();
+        assert!(uid.0.contains("carries no uid.value"), "{}", uid.0);
+
+        let lifecycle = eval_lifecycle_state(&bare, "openehr::532|complete|").unwrap_err();
+        assert!(
+            lifecycle.0.contains("carries no coded lifecycle_state"),
+            "{}",
+            lifecycle.0
+        );
+        // A coded term missing its terminology names no term at all.
+        assert_eq!(coded_text_term(&json!({ "defining_code": {} })), None);
+        assert_eq!(
+            coded_text_term(&json!({
+                "defining_code": { "code_string": "532", "terminology_id": {} }
+            })),
+            None
+        );
+        assert_eq!(coded_text_term(&json!({})), None);
+        // The rubric is optional: an absent `value` renders as the empty
+        // rubric rather than dropping the term.
+        assert_eq!(
+            coded_text_term(&json!({
+                "defining_code": {
+                    "code_string": "532",
+                    "terminology_id": { "value": "openehr" }
+                }
+            })),
+            Some("openehr::532||".to_owned())
+        );
+
+        // A code outside the three classes the schedule asserts is named as
+        // outside them, never mapped into the nearest one.
+        let outside = json!({
+            "commit_audit": { "change_type": {
+                "defining_code": { "code_string": "816" }
+            } }
+        });
+        let change = eval_change_type(&outside, ChangeType::Create).unwrap_err();
+        assert!(
+            change.0.contains("816") && change.0.contains("outside"),
+            "{}",
+            change.0
+        );
+
+        assert_eq!(version_count(&json!({ "items": [] })), Ok(0));
         Ok(())
     }
 

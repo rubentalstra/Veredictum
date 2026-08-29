@@ -4926,6 +4926,68 @@ mod tests {
         );
     }
 
+    /// An extract the precondition cannot read the identities out of fails
+    /// LOUDLY, naming the missing part: minting a handle from a guess would
+    /// address a version the receiving system never holds.
+    #[test]
+    fn an_unreadable_extract_names_the_identity_it_could_not_mint() {
+        let key = crate::ids::CorpusKey::parse("cnf.messaging.ehr_extract.v1").unwrap();
+        let wrapped = |wrapper: Value| {
+            serde_json::json!({
+                "chapters": [ { "items": [ { "item": wrapper } ] } ]
+            })
+        };
+        let mint = |extract: &Value| {
+            HttpDriver::imported_identities(
+                extract,
+                crate::vocab::XVersionedClass::Composition,
+                &key,
+            )
+            .unwrap_err()
+        };
+
+        // The container itself carries no identity.
+        let no_uid = wrapped(serde_json::json!({
+            "_type": "X_VERSIONED_COMPOSITION", "versions": []
+        }));
+        assert!(mint(&no_uid).contains("carries no uid.value"), "{no_uid}");
+
+        // A member version carries none.
+        let version_without_uid = wrapped(serde_json::json!({
+            "_type": "X_VERSIONED_COMPOSITION",
+            "uid": { "value": "comp-vo" },
+            "versions": [ { "_type": "ORIGINAL_VERSION" } ]
+        }));
+        assert!(
+            mint(&version_without_uid).contains("a version of the"),
+            "{version_without_uid}"
+        );
+
+        // A member uid that is not an OBJECT_VERSION_ID names no position in
+        // the version tree, so "latest" is undecidable.
+        let not_an_ovid = wrapped(serde_json::json!({
+            "_type": "X_VERSIONED_COMPOSITION",
+            "uid": { "value": "comp-vo" },
+            "versions": [ { "uid": { "value": "not-an-object-version-id" } } ]
+        }));
+        assert!(
+            mint(&not_an_ovid).contains("is not an OBJECT_VERSION_ID"),
+            "{not_an_ovid}"
+        );
+
+        // Branches only: master06 §Version Identification puts every branch
+        // under a trunk, so a container with no trunk version is unreadable.
+        let branch_only = wrapped(serde_json::json!({
+            "_type": "X_VERSIONED_COMPOSITION",
+            "uid": { "value": "comp-vo" },
+            "versions": [ { "uid": { "value": "comp-vo::other::1.1.1" } } ]
+        }));
+        assert!(
+            mint(&branch_only).contains("carries no trunk version"),
+            "{branch_only}"
+        );
+    }
+
     #[test]
     fn base64_and_list_extraction() {
         assert_eq!(
@@ -5051,5 +5113,561 @@ mod tests {
         // Undeclared: untouched (scope is the version floors' job).
         let none = HttpDriver::spell_committal_headers(headers, None);
         assert!(none.contains_key("openehr-audit-details"));
+    }
+
+    /// One request spec from its authored form.
+    fn request_spec(document: Value) -> RequestSpec {
+        serde_json::from_value(document).unwrap()
+    }
+
+    /// A path `{param}` resolves from the step's `with:` first and the bound
+    /// captures second, and every resolved value is percent-encoded — an
+    /// `OBJECT_VERSION_ID`'s `::` separators reach the socket escaped instead
+    /// of addressing a resource nobody named.
+    #[test]
+    fn a_path_parameter_resolves_from_with_then_captures_and_is_percent_encoded() {
+        let spec = request_spec(serde_json::json!({
+            "method": "GET",
+            "path": "/ehr/{ehr_id}/composition/{version_uid}"
+        }));
+        let mut vars = VarStore::default();
+        vars.set(
+            CaptureName::parse("version_uid").unwrap(),
+            Captured::Scalar("8849182c::sys.example::1".to_owned()),
+        );
+        let with = BTreeMap::from([("ehr_id".to_owned(), serde_json::json!("7d44b88c c0ff ee00"))]);
+        assert_eq!(
+            render_path(&spec, &with, &vars).unwrap(),
+            "/ehr/7d44b88c%20c0ff%20ee00/composition/8849182c%3A%3Asys.example%3A%3A1"
+        );
+
+        // A `with:` value that is not a string is no path value: resolution
+        // falls through to the captures, and an unresolved slot is LOUD —
+        // sending the literal `{ehr_id}` would address a resource that does
+        // not exist and turn the whole case into a false red.
+        let numeric = BTreeMap::from([("ehr_id".to_owned(), serde_json::json!(7))]);
+        let error = render_path(&spec, &numeric, &vars).unwrap_err();
+        assert_eq!(error, "path param {ehr_id} unresolved");
+        assert_eq!(
+            render_path(&spec, &BTreeMap::new(), &VarStore::default()).unwrap_err(),
+            "path param {ehr_id} unresolved"
+        );
+    }
+
+    /// The `with:` override pass over a SINGLE-VALUED query parameter: a
+    /// scalar renders as its wire text, `null` omits the parameter, and a
+    /// list or an object is refused — repeatability is the binding's
+    /// declaration, and neither shape has wire text any released parameter
+    /// grammar defines.
+    #[test]
+    fn a_single_valued_query_backfill_takes_scalars_and_refuses_the_rest() {
+        let spec = request_spec(serde_json::json!({
+            "method": "GET",
+            "path": "/query/aql",
+            "query": { "fetch": "${url_fetch?}" }
+        }));
+        let rendered = |value: Value| {
+            render_query(
+                &spec,
+                &BTreeMap::from([("fetch".to_owned(), value)]),
+                &VarStore::default(),
+            )
+        };
+        assert_eq!(
+            rendered(serde_json::json!("10")).unwrap(),
+            vec![("fetch".to_owned(), "10".to_owned())]
+        );
+        assert_eq!(
+            rendered(serde_json::json!(10)).unwrap(),
+            vec![("fetch".to_owned(), "10".to_owned())]
+        );
+        assert_eq!(
+            rendered(serde_json::json!(true)).unwrap(),
+            vec![("fetch".to_owned(), "true".to_owned())]
+        );
+        assert_eq!(rendered(Value::Null).unwrap(), Vec::new());
+
+        let listed = rendered(serde_json::json!(["a", "b"])).unwrap_err();
+        assert!(
+            listed.contains("repeatability is the \\\n                             binding's")
+                || listed.contains("repeatability"),
+            "{listed}"
+        );
+        let objected = rendered(serde_json::json!({ "n": 1 })).unwrap_err();
+        assert!(
+            objected.contains("a query parameter value is a scalar"),
+            "{objected}"
+        );
+    }
+
+    /// The REPEATED form's `with:` backfill expands element-wise (RFC 6570
+    /// `{?p*}`), and a member with no scalar wire text is refused by name
+    /// rather than JSON-encoded into one pair nobody can parse.
+    #[test]
+    fn a_repeated_query_backfill_expands_and_refuses_a_non_scalar_member() {
+        let spec = request_spec(serde_json::json!({
+            "method": "DELETE",
+            "path": "/admin/ehr",
+            "query": { "ids": ["${id?}"] }
+        }));
+        let rendered = |value: Value| {
+            render_query(
+                &spec,
+                &BTreeMap::from([("ids".to_owned(), value)]),
+                &VarStore::default(),
+            )
+        };
+        assert_eq!(
+            rendered(serde_json::json!(["a", 2, true])).unwrap(),
+            vec![
+                ("ids".to_owned(), "a".to_owned()),
+                ("ids".to_owned(), "2".to_owned()),
+                ("ids".to_owned(), "true".to_owned()),
+            ]
+        );
+        let error = rendered(serde_json::json!([{ "id": "a" }])).unwrap_err();
+        assert_eq!(error, "a query parameter value is a scalar, not a object");
+    }
+
+    /// The equivalence diagnostic names the differing PATHS — a missing key,
+    /// a surplus key, an array-length difference and an unequal leaf — and
+    /// caps the list, so a red row carries triage-usable evidence instead of
+    /// two truncated previews.
+    #[test]
+    fn the_equivalence_diagnostic_names_the_paths_that_differ() {
+        let got = serde_json::json!({
+            "_type": "COMPOSITION",
+            "name": { "value": "served" },
+            "surplus": 1,
+            "items": [{ "a": 1 }]
+        });
+        let want = serde_json::json!({
+            "name": { "value": "committed" },
+            "missing": "gone",
+            "items": [{ "a": 1 }, { "a": 2 }]
+        });
+        let message = equivalence_mismatch(&got, &want).0;
+        assert!(
+            message.contains("$/name/value: got \"served\" want \"committed\""),
+            "{message}"
+        );
+        assert!(
+            message.contains("$/missing: absent in retrieved"),
+            "{message}"
+        );
+        assert!(
+            message.contains("$/surplus: surplus in retrieved (1)"),
+            "{message}"
+        );
+        assert!(
+            message.contains("$/items: array length 1 vs 2"),
+            "{message}"
+        );
+        // `_type` on one side only is what the comparator tolerates, so the
+        // diagnostic never lists it.
+        assert!(!message.contains("_type"), "{message}");
+
+        // Past the shown budget the count is stated rather than the list run
+        // on: a leaf preview is truncated to keep one line readable.
+        let wide_got = serde_json::json!({ "k": "x" });
+        let wide_want: Value = Value::Object(
+            (0..9)
+                .map(|k| (format!("k{k}"), Value::String("y".repeat(80))))
+                .collect(),
+        );
+        let wide = equivalence_mismatch(&wide_got, &wide_want).0;
+        assert!(wide.contains("and 4 more differing path(s)"), "{wide}");
+        assert!(
+            wide.contains('…'),
+            "a long leaf is previewed, not dumped: {wide}"
+        );
+    }
+
+    /// The IMF-fixdate reader (RFC 9110 §5.6.7) parses the released example
+    /// and reports every other form as ABSENT, which only leaves the commit
+    /// window at its runner-clock bounds.
+    #[test]
+    fn an_imf_fixdate_parses_and_every_other_form_is_absent() {
+        assert_eq!(
+            parse_http_date_ms("Sun, 06 Nov 1994 08:49:37 GMT"),
+            Some(784_111_777_000)
+        );
+        // A pre-epoch stamp is signed, not wrapped.
+        assert_eq!(parse_http_date_ms("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
+        assert_eq!(
+            parse_http_date_ms("Wed, 31 Dec 1969 23:59:59 GMT"),
+            Some(-1_000)
+        );
+        // Every refusal: the wrong field count, a non-GMT zone, a month
+        // outside the twelve, and unparsable numerics.
+        for other in [
+            "Sun, 06 Nov 1994 08:49:37",
+            "Sun, 06 Nov 1994 08:49:37 CET",
+            "Sun, 06 Nix 1994 08:49:37 GMT",
+            "Sun, 6th Nov 1994 08:49:37 GMT",
+            "Sun, 06 Nov 19x4 08:49:37 GMT",
+            "Sun, 06 Nov 1994 08:49 GMT",
+            "Sun, 06 Nov 1994 0x:49:37 GMT",
+            "Sun, 06 Nov 1994 08:4x:37 GMT",
+            "Sun, 06 Nov 1994 08:49:3x GMT",
+        ] {
+            assert_eq!(parse_http_date_ms(other), None, "{other} must not parse");
+        }
+    }
+
+    /// Both shape namers, which is what a diagnostic says instead of "not an
+    /// object": the JSON kinds and the four capture kinds.
+    #[test]
+    fn every_json_and_capture_kind_names_its_own_shape() {
+        assert_eq!(json_shape(&Value::Null), "null");
+        assert_eq!(json_shape(&serde_json::json!(true)), "boolean");
+        assert_eq!(json_shape(&serde_json::json!(1)), "number");
+        assert_eq!(json_shape(&serde_json::json!("s")), "string");
+        assert_eq!(json_shape(&serde_json::json!([])), "array");
+        assert_eq!(json_shape(&serde_json::json!({})), "object");
+
+        assert_eq!(
+            json_shape_of_captured(&Captured::Scalar(String::new())),
+            "a scalar"
+        );
+        assert_eq!(
+            json_shape_of_captured(&Captured::List(Vec::new())),
+            "a list"
+        );
+        assert_eq!(
+            json_shape_of_captured(&Captured::Body(Value::Null)),
+            "a body"
+        );
+        assert_eq!(
+            json_shape_of_captured(&Captured::InstantMs { lo: 0, hi: 1 }),
+            "an instant"
+        );
+    }
+
+    /// The committed-uid selection specs address rows by INDEX into the
+    /// captured uid list, and every malformed spec is refused by name — a
+    /// silently narrowed expectation would manufacture a passing row.
+    #[test]
+    fn a_committed_uid_selection_addresses_rows_by_index_or_refuses_loudly() {
+        let uids = ["uid-0".to_owned(), "uid-1".to_owned()];
+        let rows = selected_rows(
+            "uids",
+            &serde_json::json!({ "select": "uids", "indices": [1, 0] }),
+            &uids,
+        )
+        .unwrap();
+        assert_eq!(
+            rows,
+            vec![serde_json::json!(["uid-1"]), serde_json::json!(["uid-0"])]
+        );
+        let pairs = selected_rows(
+            "pairs",
+            &serde_json::json!({ "select": "pairs", "pairs": [["f1", 0]] }),
+            &uids,
+        )
+        .unwrap();
+        assert_eq!(pairs, vec![serde_json::json!(["f1", "uid-0"])]);
+
+        let refused =
+            |select: &str, spec: Value| selected_rows(select, &spec, &uids).unwrap_err().0;
+        assert!(
+            refused("uids", serde_json::json!({ "indices": [9] })).contains("index 9 out of range"),
+            "an index past the committed set must be loud"
+        );
+        assert!(
+            refused("uids", serde_json::json!({ "indices": ["x"] })).contains("non-integer index"),
+        );
+        assert!(refused("uids", serde_json::json!({})).contains("without indices"));
+        assert!(refused("pairs", serde_json::json!({})).contains("without pairs"));
+        assert!(
+            refused("pairs", serde_json::json!({ "pairs": [["f1"]] }))
+                .contains("is not [literal, committed-uid index]")
+        );
+        assert!(
+            refused("pairs", serde_json::json!({ "pairs": [["f1", 9]] }))
+                .contains("index 9 out of range")
+        );
+        assert!(refused("nothing", serde_json::json!({})).contains("unknown selection nothing"));
+    }
+
+    /// The demographic create route follows the payload's own concrete RM
+    /// type — ITS-REST 1.1.0 surfaces one endpoint per PARTY subtype — and a
+    /// payload naming no subtype is refused rather than guessed at.
+    #[test]
+    fn the_party_create_variant_follows_the_payloads_concrete_rm_type() {
+        let variant = |rm_type: Value| {
+            HttpDriver::party_create_variant(&serde_json::json!({ "_type": rm_type }))
+        };
+        assert_eq!(variant(serde_json::json!("PERSON")).unwrap(), None);
+        assert_eq!(variant(serde_json::json!("AGENT")).unwrap(), Some("agent"));
+        assert_eq!(variant(serde_json::json!("GROUP")).unwrap(), Some("group"));
+        assert_eq!(
+            variant(serde_json::json!("ORGANISATION")).unwrap(),
+            Some("organisation")
+        );
+        assert_eq!(variant(serde_json::json!("ROLE")).unwrap(), Some("role"));
+        assert!(
+            variant(serde_json::json!("PARTY"))
+                .unwrap_err()
+                .contains("PARTY"),
+            "an abstract class names no create endpoint"
+        );
+        assert!(
+            HttpDriver::party_create_variant(&serde_json::json!({}))
+                .unwrap_err()
+                .contains("<no _type>")
+        );
+    }
+
+    /// Every declared format names the media type its requests carry.
+    #[test]
+    fn every_declared_format_names_its_media_type() {
+        assert_eq!(
+            HttpDriver::media_type(FormatName::CanonicalJson),
+            "application/json"
+        );
+        assert_eq!(
+            HttpDriver::media_type(FormatName::CanonicalXml),
+            "application/xml"
+        );
+        assert_eq!(
+            HttpDriver::media_type(FormatName::WtFlat),
+            "application/openehr.wt.flat+json"
+        );
+        assert_eq!(
+            HttpDriver::media_type(FormatName::WtStructured),
+            "application/openehr.wt.structured+json"
+        );
+        assert_eq!(
+            HttpDriver::media_type(FormatName::Wt),
+            "application/openehr.wt+json"
+        );
+    }
+
+    /// The versioned family is addressed by the SM operation the case anchors
+    /// on, or by the concrete RM type its committed members name. Both
+    /// mappings are closed: an operation or a type outside them is NOT a
+    /// versioned family, which is a loud failure rather than a guess.
+    #[test]
+    fn a_versioned_family_is_addressed_by_operation_or_by_committed_member_type() {
+        let of = |call: &str| VersionedFamily::of_operation(&SmOperationRef::parse(call).unwrap());
+        assert_eq!(
+            of("I_EHR_COMPOSITION.get_composition"),
+            Some(VersionedFamily::Composition)
+        );
+        assert_eq!(
+            of("I_EHR_STATUS.get_ehr_status"),
+            Some(VersionedFamily::EhrStatus)
+        );
+        assert_eq!(
+            of("I_EHR_DIRECTORY.get_folder"),
+            Some(VersionedFamily::Directory)
+        );
+        assert_eq!(of("I_PARTY.get_party"), Some(VersionedFamily::Party));
+        assert_eq!(
+            of("I_ITS_REST_VERSIONED_PARTY.get_versioned_party"),
+            Some(VersionedFamily::Party)
+        );
+        assert_eq!(
+            of("I_PARTY_RELATIONSHIP.get_party_relationship"),
+            Some(VersionedFamily::PartyRelationship)
+        );
+        // `I_DEMOGRAPHIC_SERVICE` carries both demographic families, so the
+        // operation name is the discriminator.
+        assert_eq!(
+            of("I_DEMOGRAPHIC_SERVICE.create_party_relationship"),
+            Some(VersionedFamily::PartyRelationship)
+        );
+        assert_eq!(
+            of("I_DEMOGRAPHIC_SERVICE.create_party"),
+            Some(VersionedFamily::Party)
+        );
+        assert_eq!(of("I_DEMOGRAPHIC_SERVICE.list_versions"), None);
+        assert_eq!(of("I_EHR_SERVICE.create_ehr"), None);
+
+        assert_eq!(
+            VersionedFamily::of_rm_type("COMPOSITION"),
+            Some(VersionedFamily::Composition)
+        );
+        assert_eq!(
+            VersionedFamily::of_rm_type("EHR_STATUS"),
+            Some(VersionedFamily::EhrStatus)
+        );
+        assert_eq!(
+            VersionedFamily::of_rm_type("FOLDER"),
+            Some(VersionedFamily::Directory)
+        );
+        for party in ["PERSON", "AGENT", "GROUP", "ORGANISATION", "ROLE"] {
+            assert_eq!(
+                VersionedFamily::of_rm_type(party),
+                Some(VersionedFamily::Party),
+                "{party}"
+            );
+        }
+        assert_eq!(
+            VersionedFamily::of_rm_type("PARTY_RELATIONSHIP"),
+            Some(VersionedFamily::PartyRelationship)
+        );
+        assert_eq!(VersionedFamily::of_rm_type("CONTRIBUTION"), None);
+    }
+
+    /// Each family declares only the reads the RELEASED ITS-REST actually
+    /// realizes — the directory and the relationship declare none, which is
+    /// what makes their version facts loudly unjudgeable instead of silently
+    /// passing — and a family is resolved only when exactly one is named.
+    #[test]
+    fn each_family_declares_only_the_reads_the_released_its_rest_realizes() {
+        assert_eq!(
+            VersionedFamily::Composition.envelope_read(),
+            Some(("I_EHR_COMPOSITION.get_versioned_composition", "version"))
+        );
+        assert_eq!(
+            VersionedFamily::EhrStatus.envelope_read(),
+            Some(("I_EHR_STATUS.get_versioned_ehr_status", "version"))
+        );
+        assert_eq!(
+            VersionedFamily::Party.envelope_read(),
+            Some(("I_PARTY.get_party_at_version", "versioned_party"))
+        );
+        assert_eq!(VersionedFamily::Directory.envelope_read(), None);
+        assert_eq!(VersionedFamily::PartyRelationship.envelope_read(), None);
+
+        assert_eq!(
+            VersionedFamily::Composition.revision_history_read(),
+            Some("I_ITS_REST_REVISION_HISTORY.versioned_composition_revision_history")
+        );
+        assert_eq!(
+            VersionedFamily::EhrStatus.revision_history_read(),
+            Some("I_ITS_REST_REVISION_HISTORY.versioned_ehr_status_revision_history")
+        );
+        assert_eq!(
+            VersionedFamily::Party.revision_history_read(),
+            Some("I_ITS_REST_REVISION_HISTORY.versioned_party_revision_history")
+        );
+        assert_eq!(VersionedFamily::Directory.revision_history_read(), None);
+        assert_eq!(
+            VersionedFamily::PartyRelationship.revision_history_read(),
+            None
+        );
+
+        // One family, or none: a guess between two containers is never made.
+        assert_eq!(
+            HttpDriver::one_family(std::collections::BTreeSet::from([
+                VersionedFamily::Composition
+            ])),
+            Some(VersionedFamily::Composition)
+        );
+        assert_eq!(
+            HttpDriver::one_family(std::collections::BTreeSet::new()),
+            None
+        );
+        assert_eq!(
+            HttpDriver::one_family(std::collections::BTreeSet::from([
+                VersionedFamily::Composition,
+                VersionedFamily::Directory
+            ])),
+            None
+        );
+    }
+
+    /// The `version_tree_id` reader (RM common master06 §Version
+    /// Identification): the trunk number alone, or the trunk plus the branch
+    /// pair, and anything that is not an `OBJECT_VERSION_ID` is ABSENT rather
+    /// than a partly-parsed tree.
+    #[test]
+    fn an_object_version_ids_version_tree_is_read_or_reported_absent() {
+        assert_eq!(
+            HttpDriver::version_tree_id("comp-vo::sys.example::2"),
+            Some(vec![2])
+        );
+        assert_eq!(
+            HttpDriver::version_tree_id("comp-vo::sys.example::1.1.3"),
+            Some(vec![1, 1, 3])
+        );
+        assert_eq!(HttpDriver::version_tree_id("no-separators"), None);
+        assert_eq!(HttpDriver::version_tree_id("comp-vo::sys::x"), None);
+        assert_eq!(HttpDriver::version_tree_id("comp-vo::sys::1.x"), None);
+    }
+
+    /// A LIST capture reads every member its `[*]` body path reaches, and a
+    /// path that reaches nothing — a missing attribute, a member that is not
+    /// an array, a non-string leaf — binds an empty list rather than a
+    /// half-populated one.
+    #[test]
+    fn a_list_capture_reads_every_member_its_body_path_reaches() {
+        let body = serde_json::json!({
+            "rows": [
+                { "id": { "value": "v1" } },
+                { "id": { "value": "v2" } },
+                { "id": {} }
+            ],
+            "count": 3,
+            "scalar": "one"
+        });
+        assert_eq!(extract_list(&body, "rows[*].id.value"), vec!["v1", "v2"]);
+        assert_eq!(extract_list(&body, "scalar"), vec!["one"]);
+        assert!(extract_list(&body, "count[*]").is_empty());
+        assert!(extract_list(&body, "absent[*].id").is_empty());
+        assert!(
+            extract_list(&body, "count").is_empty(),
+            "a number is no list member: only strings bind"
+        );
+    }
+
+    /// A credential mode that reads the environment NAMES the variable it
+    /// could not read, and a credential-less instance sends no header at all.
+    #[test]
+    fn a_credential_mode_names_the_environment_variable_it_could_not_read() {
+        let ixit: Ixit = serde_json::from_value(serde_json::json!({
+            "instances": { "sut": { "base_url": "http://x", "auth": { "mode": "none" } } }
+        }))
+        .unwrap();
+        assert_eq!(
+            HttpDriver::auth_header(&ixit, &AuthMode::None, None).unwrap(),
+            None
+        );
+
+        let basic = HttpDriver::auth_header(
+            &ixit,
+            &AuthMode::Basic {
+                user_env: "VEREDICTUM_TEST_ABSENT_USER".to_owned(),
+                password_env: "VEREDICTUM_TEST_ABSENT_PASSWORD".to_owned(),
+            },
+            None,
+        )
+        .unwrap_err();
+        assert!(basic.contains("VEREDICTUM_TEST_ABSENT_USER"), "{basic}");
+
+        let bearer = HttpDriver::auth_header(
+            &ixit,
+            &AuthMode::Bearer {
+                token_env: "VEREDICTUM_TEST_ABSENT_TOKEN".to_owned(),
+            },
+            None,
+        )
+        .unwrap_err();
+        assert!(bearer.contains("VEREDICTUM_TEST_ABSENT_TOKEN"), "{bearer}");
+    }
+
+    /// A member's `preceding_version_uid` is read in every shape the corpus
+    /// authors it in: the bare uid, the single-element list the ITS
+    /// contribution schema permits, and the two absences.
+    #[test]
+    fn a_members_preceding_version_uid_is_read_in_every_authored_shape() {
+        let of = |member: Value| HttpDriver::member_preceding(&member);
+        assert_eq!(
+            of(serde_json::json!({ "preceding_version_uid": "vo::sys::1" })),
+            Some(serde_json::json!("vo::sys::1"))
+        );
+        assert_eq!(
+            of(serde_json::json!({ "preceding_version_uid": ["vo::sys::1"] })),
+            Some(serde_json::json!("vo::sys::1"))
+        );
+        assert_eq!(of(serde_json::json!({ "preceding_version_uid": [] })), None);
+        assert_eq!(
+            of(serde_json::json!({ "preceding_version_uid": Value::Null })),
+            None
+        );
+        assert_eq!(of(serde_json::json!({})), None);
     }
 }

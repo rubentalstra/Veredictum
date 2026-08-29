@@ -276,3 +276,122 @@ pub fn write_file(path: &Path, body: &str) -> Result<(), Error> {
         source,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every filesystem failure NAMES the path it was working on: a seam that
+    /// reported only the operating system's message would leave an operator
+    /// guessing which of a run's several documents failed.
+    #[test]
+    fn every_filesystem_failure_names_the_path_it_was_working_on() {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let missing = dir.path().join("absent.json");
+        let error = read_json::<serde_json::Value>(&missing, "results")
+            .expect_err("nothing was written there");
+        assert!(
+            matches!(&error, Error::Read { path, .. } if path == &missing),
+            "{error}"
+        );
+        assert!(error.to_string().contains("absent.json"), "{error}");
+
+        let unwritable = dir.path().join("no-such-directory/results.json");
+        let error = write_file(&unwritable, "{}").expect_err("the parent does not exist");
+        assert!(
+            matches!(&error, Error::Write { path, .. } if path == &unwritable),
+            "{error}"
+        );
+
+        // The parent is created on demand, and a path with no parent asks for
+        // nothing rather than failing.
+        ensure_parent_dir(&unwritable).expect("the parent is created");
+        write_file(&unwritable, "{}").expect("the file lands once its parent exists");
+        ensure_parent_dir(Path::new("")).expect("a parentless path creates nothing");
+    }
+
+    /// A document that does not parse as its typed model is reported against
+    /// the reader that wanted it, with the parser's own diagnostic attached.
+    #[test]
+    fn a_document_that_does_not_parse_names_the_reader_that_wanted_it() {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let path = dir.path().join("ixit.json");
+        std::fs::write(&path, "{ not json").expect("staging the malformed document");
+        let error =
+            read_json::<serde_json::Value>(&path, "results").expect_err("the document is not JSON");
+        assert!(
+            matches!(&error, Error::Parse { context, .. } if context == "results"),
+            "{error}"
+        );
+
+        let error = load_ixit(&path).expect_err("the document is not a topology");
+        assert!(
+            matches!(&error, Error::Parse { context, .. } if context == "ixit"),
+            "{error}"
+        );
+        let error =
+            load_ixit(&dir.path().join("absent.json")).expect_err("nothing was written there");
+        assert!(matches!(error, Error::Read { .. }), "{error}");
+    }
+
+    /// A tree whose files failed their own load stages is reported one
+    /// diagnostic per FILE, and every diagnostic reaches the rendered error —
+    /// a summary naming only the first would hide the rest of the tree.
+    #[test]
+    fn a_defective_tree_renders_one_diagnostic_per_file() {
+        let dir = assert_fs::TempDir::new().expect("temp dir");
+        let root = dir.path().join("artifacts");
+        std::fs::create_dir_all(root.join("schedule/performance"))
+            .expect("the performance directory");
+        for name in ["PERF-one.yaml", "PERF-two.yaml"] {
+            std::fs::write(
+                root.join("schedule/performance").join(name),
+                "id: [broken\n",
+            )
+            .expect("staging a defective case");
+        }
+        let error = load_clean_root(&root).expect_err("neither case loads");
+        let Error::Artifacts(diagnostics) = &error else {
+            panic!("a per-file failure is Error::Artifacts, got {error}");
+        };
+        assert_eq!(diagnostics.len(), 2, "{diagnostics:?}");
+        let rendered = error.to_string();
+        for name in ["PERF-one.yaml", "PERF-two.yaml"] {
+            assert!(
+                rendered.contains(name),
+                "the rendered error hides {name}: {rendered}"
+            );
+        }
+    }
+
+    /// Every emitted document is pretty JSON with a trailing newline, which is
+    /// what makes a re-run's bytes comparable against a committed record.
+    #[test]
+    fn an_emitted_document_is_pretty_json_with_a_trailing_newline() {
+        let document = to_json_document(&serde_json::json!({ "b": 1, "a": 2 }), "example")
+            .expect("the value serializes");
+        assert_eq!(document, "{\n  \"b\": 1,\n  \"a\": 2\n}\n");
+    }
+
+    /// The invariant families render with one prefixed line each, so two
+    /// seams reporting the same violation report it the same way.
+    #[test]
+    fn results_invariants_render_one_prefixed_line_per_violation() {
+        let missing = |case: &str| crate::party::PartyError::MissingCitation {
+            case: case.to_owned(),
+            status: "skipped",
+        };
+        let violations = || vec![missing("CASE-one"), missing("CASE-two")];
+        let recorded = Error::RecordedInvariants(violations()).to_string();
+        assert_eq!(
+            recorded,
+            Error::ResultsInvariants(violations()).to_string(),
+            "both seams report one violation the same way"
+        );
+        let lines: Vec<&str> = recorded.lines().collect();
+        assert_eq!(lines.len(), 2, "{recorded}");
+        for line in lines {
+            assert!(line.starts_with("results invariant: "), "{line}");
+        }
+    }
+}

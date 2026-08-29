@@ -1,21 +1,30 @@
 // SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//! The two exploration instruments against the fake SUT: the AQL probe's
-//! answer classification and the stress ladder's step arithmetic.
+//! The measured instruments against the fake SUT: the AQL probe's answer
+//! classification, the stress ladder's step arithmetic, and the pipeline
+//! preamble all three share.
 //!
-//! Both are exploration evidence, never a conformance record, so what these
-//! tests pin is that each one reports honestly: a failing request is a
-//! recorded finding rather than an instrument error, an unavailable
-//! attribution channel says so in the artifact instead of fabricating rows,
-//! and a step that leaves the envelope is named as breached. The ladders here
-//! are deliberately tiny — one-second holds, two rungs — because the
-//! arithmetic is what is under test, not throughput.
+//! The probe and the ladder are exploration evidence, never a conformance
+//! record, so what these tests pin is that each one reports honestly: a
+//! failing request is a recorded finding rather than an instrument error, an
+//! unavailable attribution channel says so in the artifact instead of
+//! fabricating rows, and a step that leaves the envelope is named as
+//! breached. The ladders here are deliberately tiny — one-second holds, two
+//! rungs — because the arithmetic is what is under test, not throughput.
+//!
+//! The pipeline seams are driven to the point where the instrument would
+//! contact the population it measures. Everything up to and including the
+//! seeding's first wire call is drivable against a stub; the sustained window
+//! past it is not, because the smallest rung of the scale ladder is ten
+//! thousand seeded EHRs and a stub answering them would measure nothing.
 
 #![expect(
     clippy::unwrap_used,
     reason = "test-support helpers (not `#[test]` fns, so the clippy.toml in-tests scoping does not reach them) are panic-idiomatic: a broken harness must abort the test loudly, Book ch11"
 )]
+
+use std::path::{Path, PathBuf};
 
 use serde_json::json;
 use veredictum::ixit::{Environment, Ixit};
@@ -24,6 +33,11 @@ use veredictum::perf_run::client::{PerfClient, PerfPrincipals};
 use veredictum::perf_run::corpus::SeededCorpus;
 use veredictum::perf_run::pack::{AuxPayloads, JourneyPack};
 use veredictum::perf_run::schedule::JourneyWorkload;
+use veredictum::pipeline::measured::{
+    MeasuredRequest, ProbeRequest, StressRequest, SustainedWindow, run_aql_probe, run_measured,
+    seed_corpus,
+};
+use veredictum::pipeline::{Error, measured};
 use veredictum::probe::{ProbeOptions, run_probe};
 use veredictum::stress::{StressOptions, run_stress};
 use wiremock::matchers::{method, path};
@@ -419,5 +433,288 @@ fn a_refusing_sut_breaches_the_error_tolerance() -> Fallible {
     );
     let errors: u64 = step.operations.iter().map(|op| op.errors).sum();
     assert!(errors > 0, "a refusing SUT produced no error arrival");
+    Ok(())
+}
+
+/// The committed artifact root, addressed from this package rather than from
+/// whatever directory the runner was started in.
+fn artifact_root() -> &'static Path {
+    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../artifacts"))
+}
+
+/// Writes one ixit document into `dir` and returns its path.
+fn staged_ixit(dir: &assert_fs::TempDir, document: &serde_json::Value) -> PathBuf {
+    let path = dir.path().join("ixit.json");
+    std::fs::write(&path, document.to_string()).unwrap();
+    path
+}
+
+/// The topology every pipeline instrument needs: one instance addressing the
+/// fake SUT, plus the environment block a measured run makes mandatory
+/// (a throughput number with no deployment described is unreadable).
+fn staged_topology(dir: &assert_fs::TempDir, base_url: &str) -> PathBuf {
+    staged_ixit(
+        dir,
+        &json!({
+            "instances": { "sut": { "base_url": base_url, "auth": { "mode": "none" } } },
+            "environment": {
+                "exclusive_server": true, "hardware_class": "test-stub",
+                "cores": 1, "memory_gb": 1, "storage_class": "ram",
+                "topology": "wiremock fake SUT"
+            }
+        }),
+    )
+}
+
+/// A SUT that refuses the OPT upload, which is the FIRST wire call every
+/// seeding makes: the scale ladder's constraint carrier goes up before a
+/// single EHR is created, so a refusal there stops the instrument before it
+/// allocates the population.
+fn mount_refusing_seed(sut: &FakeSut) {
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/definition/template/adl1.4"))
+            .respond_with(ResponseTemplate::new(500)),
+    );
+}
+
+/// Seeding is judged by what the SUT answered, and a refused OPT upload is
+/// named as the stage that failed rather than swallowed into a population
+/// nothing carries.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_refused_opt_upload_fails_the_seeding_by_name() -> Fallible {
+    let sut = FakeSut::start();
+    mount_refusing_seed(&sut);
+    let ixit: Ixit = serde_json::from_value(json!({
+        "instances": { "sut": { "base_url": sut.base_url(), "auth": { "mode": "none" } } }
+    }))?;
+    let client = PerfClient::from_instance(ixit.default_instance()?, &ixit)?;
+    let stages = std::sync::Mutex::new(Vec::new());
+    let error = seed_corpus(
+        &client,
+        "cnf.scale.10k",
+        "<template/>",
+        &empty_pack(),
+        1,
+        &|_| {},
+        &mut |stage| stages.lock().unwrap().push(format!("{stage:?}")),
+    )
+    .expect_err("a refused OPT upload establishes no corpus");
+    assert!(
+        matches!(&error, Error::Instrument(m) if m.contains("seeding failed")),
+        "{error}"
+    );
+    assert_eq!(
+        *stages.lock().unwrap(),
+        vec!["BeforeScale".to_owned()],
+        "the empty-baseline milestone is observed before the first write, and no later one is"
+    );
+    Ok(())
+}
+
+/// Every instrument reads its catalogue, its topology and its class case
+/// BEFORE it contacts anything, and each preamble failure names the artifact
+/// it wanted — a half-built root must never look like an empty catalogue.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn each_instrument_names_the_artifact_its_preamble_could_not_read() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let good_ixit = staged_topology(&dir, "http://127.0.0.1:1");
+    let empty_root = dir.path().join("no-such-root");
+    let missing_ixit = dir.path().join("no-such-ixit.json");
+    // A root whose performance case does not load: reported one diagnostic
+    // per file, never as a tree that simply carries no case.
+    let defective_root = dir.path().join("defective");
+    std::fs::create_dir_all(defective_root.join("schedule/performance"))?;
+    std::fs::write(
+        defective_root.join("schedule/performance/PERF-broken.yaml"),
+        "id: [not a case id\n",
+    )?;
+    // A topology with no `environment` block: mandatory for every measured
+    // instrument, because a number without the deployment described is not a
+    // measurement of anything.
+    let envless = dir.path().join("envless.json");
+    std::fs::write(
+        &envless,
+        json!({ "instances": { "sut": { "base_url": "http://127.0.0.1:1", "auth": { "mode": "none" } } } })
+            .to_string(),
+    )?;
+
+    for (root, ixit, expected) in [
+        (empty_root.as_path(), good_ixit.as_path(), "class"),
+        (defective_root.as_path(), good_ixit.as_path(), "artifacts"),
+        (empty_root.as_path(), missing_ixit.as_path(), "read"),
+        (empty_root.as_path(), envless.as_path(), "environment"),
+    ] {
+        let measured = run_measured(
+            &MeasuredRequest {
+                root,
+                ixit,
+                results: &dir.path().join("results.json"),
+                class: "POC",
+                seed_workers: 1,
+                window: SustainedWindow::default(),
+            },
+            &|_| {},
+        )
+        .expect_err("the preamble must refuse before any wire call");
+        let stress = measured::run_stress(
+            &StressRequest {
+                root,
+                ixit,
+                corpus_class: "POC",
+                seed_workers: 1,
+                step_secs: 10,
+                bisections: 0,
+                max_rate: 8.0,
+            },
+            &|_| {},
+        )
+        .expect_err("the preamble must refuse before any wire call");
+        let probe = run_aql_probe(
+            &ProbeRequest {
+                root,
+                ixit,
+                corpus_class: "POC",
+                seed_workers: 1,
+                requests: 1,
+            },
+            &|_| {},
+        )
+        .expect_err("the preamble must refuse before any wire call");
+        for error in [measured, stress, probe] {
+            let matched = match expected {
+                "class" => matches!(&error, Error::Missing(m) if m.contains("class POC")),
+                "artifacts" => matches!(error, Error::Artifacts(_)),
+                "read" => matches!(error, Error::Read { .. }),
+                _ => matches!(&error, Error::Instrument(m) if m.contains("environment")),
+            };
+            assert!(matched, "{expected}: {error}");
+        }
+    }
+    Ok(())
+}
+
+/// The three instruments reach the SAME seeding over the committed
+/// catalogue's own POC case, and a SUT that refuses it stops each of them
+/// with the seeding named: no report, no probe record, and no measurement
+/// merged into the results document.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_refused_seeding_stops_every_instrument_before_it_records_anything() -> Fallible {
+    let sut = FakeSut::start();
+    mount_refusing_seed(&sut);
+    let dir = assert_fs::TempDir::new()?;
+    let ixit = staged_topology(&dir, &sut.base_url());
+    let results = dir.path().join("results.json");
+
+    let measured = run_measured(
+        &MeasuredRequest {
+            root: artifact_root(),
+            ixit: &ixit,
+            results: &results,
+            class: "POC",
+            seed_workers: 1,
+            window: SustainedWindow::default(),
+        },
+        &|_| {},
+    )
+    .expect_err("a refused seeding is no measured window");
+    assert!(
+        matches!(&measured, Error::Instrument(m) if m.contains("seeding failed")),
+        "{measured}"
+    );
+    assert!(
+        !results.exists(),
+        "a refused seeding must merge nothing into the results record"
+    );
+
+    let stress = measured::run_stress(
+        &StressRequest {
+            root: artifact_root(),
+            ixit: &ixit,
+            corpus_class: "POC",
+            seed_workers: 1,
+            step_secs: 10,
+            bisections: 0,
+            max_rate: 8.0,
+        },
+        &|_| {},
+    )
+    .expect_err("a refused seeding is no stress ladder");
+    assert!(
+        matches!(&stress, Error::Instrument(m) if m.contains("seeding failed")),
+        "{stress}"
+    );
+
+    let probe = run_aql_probe(
+        &ProbeRequest {
+            root: artifact_root(),
+            ixit: &ixit,
+            corpus_class: "POC",
+            seed_workers: 1,
+            requests: 1,
+        },
+        &|_| {},
+    )
+    .expect_err("a refused seeding is no probe");
+    assert!(
+        matches!(&probe, Error::Instrument(m) if m.contains("seeding failed")),
+        "{probe}"
+    );
+    Ok(())
+}
+
+/// A measured run whose ixit declares no `containers` block SAYS so and
+/// carries on: resource sampling is optional by capability, so its absence is
+/// a stated boundary of the record rather than a failed run.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_measured_run_states_that_it_sampled_no_resources() -> Fallible {
+    let sut = FakeSut::start();
+    mount_refusing_seed(&sut);
+    let dir = assert_fs::TempDir::new()?;
+    let ixit = staged_topology(&dir, &sut.base_url());
+
+    let seen = std::sync::Mutex::new(Vec::new());
+    let error = run_measured(
+        &MeasuredRequest {
+            root: artifact_root(),
+            ixit: &ixit,
+            results: &dir.path().join("results.json"),
+            class: "POC",
+            seed_workers: 1,
+            window: SustainedWindow::default(),
+        },
+        &|event| seen.lock().unwrap().push(format!("{event:?}")),
+    )
+    .expect_err("a refused seeding is no measured window");
+    assert!(matches!(&error, Error::Instrument(_)), "{error}");
+
+    let observed = seen.lock().unwrap();
+    assert!(
+        observed
+            .iter()
+            .any(|line| line.contains("resources: not sampled")
+                && line.contains("`containers` block")),
+        "the run never stated its unsampled resources: {observed:?}"
+    );
+    assert!(
+        observed.iter().any(|line| line.starts_with("CaseStarted")),
+        "the selected case was never announced: {observed:?}"
+    );
     Ok(())
 }

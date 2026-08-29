@@ -116,7 +116,12 @@ fn manifest() -> Value {
             "source": "set.json",
             "format": "canonical-json",
             "validity": { "verdict": "valid" },
-            "provenance": "authored in-test: the two-composition commit set"
+            "provenance": "authored in-test: the two-composition commit set",
+            "views": {
+                "all_uids_asc": { "select": "every committed uid, ascending" },
+                "magnitude_ge_140_by_uid": { "select": "the uids whose systolic is at least 140" },
+                "top3_systolic_desc_uids": { "select": "the three highest systolic uids" }
+            }
         },
         "cnf.test.tree": {
             "source": "tree.json",
@@ -450,6 +455,178 @@ fn a_pairs_selection_spec_pairs_a_literal_with_the_committed_uid() -> Fallible {
         observed.assertion_failures.is_empty(),
         "the ten authored pairs are the ten served rows: {:?}",
         observed.assertion_failures
+    );
+    Ok(())
+}
+
+/// The ten uids a `bp_series` commit set binds, in commit order — the k-th
+/// carries systolic 100 + 10k, which is the generator's own contract.
+const SERIES: [&str; 10] = [
+    "uid-a", "uid-b", "uid-c", "uid-d", "uid-e", "uid-f", "uid-g", "uid-h", "uid-i", "uid-j",
+];
+
+/// A one-step query case asserting the served rows against a view of the
+/// COMMIT SET (the magnitude-filtered projections), rather than of the tree.
+fn series_case(view: &str, match_mode: &str) -> Value {
+    json!({
+        "id": format!("WIRE-series_{view}"), "kind": "functional", "component": "QUERY",
+        "sm_operation": "I_QUERY_SERVICE.execute_ad_hoc_query",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [{
+            "step": 1, "call": "execute_ad_hoc_query", "expect": "ok",
+            "with": { "q": "SELECT o/uid/value AS uid FROM EHR e CONTAINS OBSERVATION o" },
+            "assert": [{
+                "assert": "result_set",
+                "match": match_mode,
+                "rows": { "from": format!("${{ds:cnf.test.set#{view}}}") }
+            }]
+        }]
+    })
+}
+
+/// Serve `rows` from the query route and judge a series case against them.
+fn drive_series(
+    view: &str,
+    match_mode: &str,
+    rows: &Value,
+    corpus_dir: &std::path::Path,
+) -> Result<StepObservation, Box<dyn std::error::Error>> {
+    let set = artifact_set_over_corpus(&[query_binding()], manifest(), corpus_dir);
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/query/aql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "rows": rows }))),
+    );
+    let mut vars = VarStore::default();
+    committed(&mut vars, &SERIES)?;
+    drive_query(
+        &sut.base_url(),
+        &set,
+        series_case(view, match_mode),
+        &mut vars,
+    )
+}
+
+/// The one-column rows a uid list projects to.
+fn rows_of(uids: &[&str]) -> Value {
+    Value::Array(uids.iter().map(|uid| json!([uid])).collect())
+}
+
+/// The magnitude-filtered views project the committed uid list through the
+/// generator's own contract — the k-th committed object carries systolic
+/// 100 + 10k — so an answer is judged against the objects the run actually
+/// committed rather than against a hard-coded set.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_magnitude_view_projects_the_committed_uids_the_generator_defines() -> Fallible {
+    let dir = corpus(&folder_tree("unused", "unused"))?;
+
+    // The whole set, uid-ascending: the bag and order anchors.
+    let observed = drive_series("all_uids_asc", "ordered", &rows_of(&SERIES), dir.path())?;
+    assert!(
+        observed.assertion_failures.is_empty(),
+        "every committed uid is expected, ascending: {:?}",
+        observed.assertion_failures
+    );
+
+    // systolic >= 140 selects the fifth committed object onward.
+    let at_least_140 = ["uid-e", "uid-f", "uid-g", "uid-h", "uid-i", "uid-j"];
+    let observed = drive_series(
+        "magnitude_ge_140_by_uid",
+        "ordered",
+        &rows_of(&at_least_140),
+        dir.path(),
+    )?;
+    assert!(
+        observed.assertion_failures.is_empty(),
+        "the filter starts at 100 + 10*4 = 140: {:?}",
+        observed.assertion_failures
+    );
+
+    // ORDER BY systolic DESC LIMIT 3: the top of the ladder, newest first.
+    let observed = drive_series(
+        "top3_systolic_desc_uids",
+        "ordered",
+        &rows_of(&["uid-j", "uid-i", "uid-h"]),
+        dir.path(),
+    )?;
+    assert!(
+        observed.assertion_failures.is_empty(),
+        "the limit takes the three highest magnitudes: {:?}",
+        observed.assertion_failures
+    );
+
+    // A server serving one row too many fails the row, and the failure is a
+    // conformance finding rather than a silently widened expectation.
+    let observed = drive_series(
+        "top3_systolic_desc_uids",
+        "ordered",
+        &rows_of(&["uid-j", "uid-i", "uid-h", "uid-g"]),
+        dir.path(),
+    )?;
+    assert!(
+        !observed.assertion_failures.is_empty(),
+        "a fourth served row must fail the limited projection"
+    );
+    Ok(())
+}
+
+/// A `rows.from` expectation is only evaluable over the uid list the run
+/// committed, and only against a match mode that takes rows: both degenerate
+/// combinations are refused rather than passed vacuously.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_rows_from_expectation_refuses_what_it_cannot_evaluate() -> Fallible {
+    let dir = corpus(&folder_tree("unused", "unused"))?;
+    let set = artifact_set_over_corpus(&[query_binding()], manifest(), dir.path());
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/query/aql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "rows": [] }))),
+    );
+
+    // Nothing was committed, so no projection over the committed uids exists.
+    let mut vars = VarStore::default();
+    let observed = drive_query(
+        &sut.base_url(),
+        &set,
+        series_case("all_uids_asc", "ordered"),
+        &mut vars,
+    )?;
+    let failure = observed
+        .assertion_failures
+        .first()
+        .ok_or("an unbound uid list must fail the assertion")?;
+    assert!(
+        failure.reason().contains("no committed-set uids bound"),
+        "{failure:?}"
+    );
+
+    // `match: count` counts rows and takes none, so an index-addressed row
+    // spec beside it states an expectation the mode cannot use.
+    let mut vars = VarStore::default();
+    committed(&mut vars, &SERIES)?;
+    let observed = drive_query(
+        &sut.base_url(),
+        &set,
+        query_case("f2_scoped_uids", "count", &Value::Null),
+        &mut vars,
+    )?;
+    let failure = observed
+        .assertion_failures
+        .first()
+        .ok_or("a count match with rows must fail the assertion")?;
+    assert!(
+        failure.reason().contains("count match takes no rows"),
+        "{failure:?}"
     );
     Ok(())
 }
