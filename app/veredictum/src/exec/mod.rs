@@ -566,7 +566,10 @@ mod tests {
                 .assertion_failures
                 .get(self.performed)
                 .cloned()
-                .unwrap_or_default();
+                .unwrap_or_default()
+                .into_iter()
+                .map(AssertionOutcome::Mismatch)
+                .collect();
             self.performed += 1;
             Ok(StepObservation {
                 observation: Observation::Kind(expected),
@@ -592,8 +595,13 @@ mod tests {
             _c: &CaseCore,
             _r: usize,
             _v: &mut VarStore,
-        ) -> Result<Vec<String>, String> {
-            Ok(self.postconditions.clone())
+        ) -> Result<Vec<AssertionOutcome>, String> {
+            Ok(self
+                .postconditions
+                .iter()
+                .cloned()
+                .map(AssertionOutcome::Mismatch)
+                .collect())
         }
         fn aggregates(&mut self, _c: &CaseCore, _rows: &[VarStore]) -> Result<Vec<String>, String> {
             Ok(Vec::new())
