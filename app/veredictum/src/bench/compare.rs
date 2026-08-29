@@ -235,6 +235,11 @@ pub struct ComparisonColumn {
     /// baselines. The one figure that carries across columns taken on
     /// different hosts.
     pub relative: Vec<RelativeIndex>,
+    /// The posture profile the run declared.
+    pub posture_profile: String,
+    /// The whole disclosure on one line, which is what decides whether two
+    /// columns describe the same sport.
+    pub posture_signature: String,
 }
 
 /// One aligned row: the same phase, operation and metric across every column.
@@ -312,6 +317,8 @@ pub fn compare(paths: &[PathBuf]) -> Result<Comparison, BenchError> {
             reference_configuration: result.scale.reference_configuration,
             environment: result.environment.labels(),
             relative: result.relative.clone(),
+            posture_profile: result.posture.profile.clone(),
+            posture_signature: result.posture.signature(),
         });
         results.push(result);
     }
@@ -383,6 +390,26 @@ fn warnings(columns: &[ComparisonColumn]) -> Vec<String> {
         warnings.push(
             "the columns were generated from DIFFERENT hosts, so a latency difference may be the generator's".to_owned(),
         );
+    }
+    let profiles: BTreeSet<&str> = columns
+        .iter()
+        .map(|column| column.posture_profile.as_str())
+        .collect();
+    if profiles.len() > 1 {
+        warnings.push(format!(
+            "the columns ran under DIFFERENT posture profiles ({}), so they measured systems with different features switched on",
+            profiles.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    let postures: BTreeSet<&str> = columns
+        .iter()
+        .map(|column| column.posture_signature.as_str())
+        .collect();
+    if postures.len() > 1 {
+        warnings.push(format!(
+            "the columns disclosed DIFFERENT postures ({}), so a difference between them may be a feature rather than the system",
+            postures.into_iter().collect::<Vec<_>>().join(" | ")
+        ));
     }
     let scales: BTreeSet<String> = columns
         .iter()

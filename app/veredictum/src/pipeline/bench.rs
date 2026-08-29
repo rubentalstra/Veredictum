@@ -15,6 +15,7 @@ use crate::bench::baselines::{BaselineRun, DockerCli, run_baselines};
 use crate::bench::client::AuthKind;
 use crate::bench::compare::Comparison;
 use crate::bench::pack::BenchPack;
+use crate::bench::posture::PostureProfile;
 use crate::bench::render::COMPARISON_FILE;
 use crate::bench::result::BenchResult;
 use crate::bench::run::BenchRun;
@@ -26,6 +27,8 @@ use crate::pipeline::{Error, RenderedFile};
 pub struct BenchRequest<'a> {
     /// The embedded pack to drive.
     pub pack: &'a BenchPack,
+    /// The posture profile the run declares, out of the pack's own set.
+    pub profile: &'a PostureProfile,
     /// The system's base URL.
     pub base_url: &'a str,
     /// How the client presents itself.
@@ -67,9 +70,9 @@ pub struct BenchOutcome {
 ///
 /// # Errors
 /// [`Error::Instrument`] carrying the engine's own diagnostic, which already
-/// names the exchange, the phase, or the baseline that failed. A missing
-/// container runtime is refused before the target is touched, so the flag
-/// never produces a half-anchored record.
+/// names the exchange, the phase, the posture item, or the baseline that
+/// failed. A missing container runtime is refused before the target is
+/// touched, so the flag never produces a half-anchored record.
 pub fn run_bench(
     request: &BenchRequest<'_>,
     progress: &(dyn Fn(String) + Sync),
@@ -84,6 +87,7 @@ pub fn run_bench(
         &BenchRun {
             pack: request.pack,
             base_url: request.base_url,
+            profile: request.profile,
             auth: request.auth,
             user: request.user,
             credential: None,
@@ -99,6 +103,7 @@ pub fn run_bench(
         let baselines = run_baselines(
             &BaselineRun {
                 pack: request.pack,
+                profile: request.profile,
                 repetitions: request.repetitions,
                 scale: request.scale,
                 seed_workers: request.seed_workers,

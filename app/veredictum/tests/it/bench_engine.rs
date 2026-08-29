@@ -20,13 +20,72 @@ use veredictum::bench::pack::{
     BenchOp, BenchPack, BenchPhase, MeasurePhase, MixEntry, SeedPhase, aql_mix, community_vitals,
     smoke,
 };
+use veredictum::bench::posture::{
+    Assurance, AuditSink, CompressionMode, MINIMAL, PostureItem, PostureProfile, SigningScheme,
+    Tenancy, ValidationDepth,
+};
 use veredictum::bench::relative::{GapReason, RELATIVE_DERIVATION};
 use veredictum::bench::result::{BaselineRecord, BenchResult, SubmissionRequirement};
 use veredictum::pipeline::bench::{BenchRequest, compare_bench, run_bench};
 use wiremock::matchers::{body_string_contains, method, path, path_regex};
-use wiremock::{Mock, ResponseTemplate};
+use wiremock::{Mock, Request, Respond, ResponseTemplate};
 
 use crate::fake_sut::FakeSut;
+
+/// Answers a composition commit the way a template-validating server does:
+/// the invalid twin (the pack's composition with the mandatory
+/// `COMPOSITION.composer` gone) is refused `422`, everything else is created.
+///
+/// ITS-REST `specifications/responses/422.yaml` defines the refusal as the
+/// case where the template "is not validating the supplied resource", and
+/// `specifications/operations/composition_create.yaml` lists `422` on the
+/// commit, so this is the spec-conformant answer rather than a convenience.
+struct ValidatingCommit;
+
+impl Respond for ValidatingCommit {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        let body = String::from_utf8_lossy(&request.body);
+        if body.contains("\"composer\"") {
+            ResponseTemplate::new(201).insert_header("ETag", "\"c-1::sut::1\"")
+        } else {
+            ResponseTemplate::new(422)
+        }
+    }
+}
+
+/// A profile declaring no commit validation at all, so the same lenient
+/// server that CONTRADICTS `minimal` CONFIRMS this one.
+static UNVALIDATED: PostureProfile = PostureProfile {
+    name: "test-unvalidated",
+    summary: "A profile for this suite: nothing switched on, and commits unvalidated.",
+    audit: AuditSink::Off,
+    signing: SigningScheme::None,
+    validation: ValidationDepth::None,
+    compression: CompressionMode::Off,
+    tenancy: Tenancy::Single,
+};
+
+/// A profile differing from `minimal` in the audit item alone, so a
+/// comparison of the two has exactly one posture disagreement to state.
+static AUDITED: PostureProfile = PostureProfile {
+    name: "test-audited",
+    summary: "A profile for this suite: the minimal surface with an audit trail written.",
+    audit: AuditSink::Internal,
+    signing: SigningScheme::None,
+    validation: ValidationDepth::Template,
+    compression: CompressionMode::Off,
+    tenancy: Tenancy::Single,
+};
+
+/// A commit path that accepts anything, including the invalid twin, which is
+/// what a server below the validation floor does.
+struct AcceptingCommit;
+
+impl Respond for AcceptingCommit {
+    fn respond(&self, _request: &Request) -> ResponseTemplate {
+        ResponseTemplate::new(201).insert_header("ETag", "\"c-1::sut::1\"")
+    }
+}
 
 /// Anything a construction or an engine run can fail with, so a test body
 /// propagates plumbing failures with `?`
@@ -121,7 +180,7 @@ fn mount_healthy(sut: &FakeSut) {
     sut.mount(
         Mock::given(method("POST"))
             .and(path_regex(r"^/ehr/[^/]+/composition$"))
-            .respond_with(ResponseTemplate::new(201).insert_header("ETag", "\"c-1::sut::1\"")),
+            .respond_with(ValidatingCommit),
     );
     mount_composition_reads(sut);
     sut.mount(
@@ -157,6 +216,7 @@ fn drive_pack(
     let outcome = run_bench(
         &BenchRequest {
             pack: deck,
+            profile: &MINIMAL,
             base_url: &sut.base_url(),
             auth: AuthKind::None,
             user: None,
@@ -223,7 +283,11 @@ fn a_bench_run_emits_a_bounded_record() -> Fallible {
     assert_eq!(result.boundary_statement, BOUNDARY_STATEMENT);
     assert!(!result.submittable, "one repetition is not submittable");
     assert_eq!(result.repetitions.len(), 1);
-    assert_eq!(result.pack.fixtures.len(), 2);
+    assert_eq!(
+        result.pack.fixtures.len(),
+        3,
+        "the template, the composition and its pinned invalid twin"
+    );
     for digest in result.pack.fixtures.values() {
         assert_eq!(digest.len(), 64, "a pin is not a sha256: {digest}");
     }
@@ -311,6 +375,7 @@ fn a_failed_preflight_refuses_the_run() {
     let error = run_bench(
         &BenchRequest {
             pack: &deck,
+            profile: &MINIMAL,
             base_url: &sut.base_url(),
             auth: AuthKind::None,
             user: None,
@@ -347,6 +412,7 @@ fn two_results_compare_with_their_mismatches_named() -> Fallible {
         let outcome = run_bench(
             &BenchRequest {
                 pack: &deck,
+                profile: &MINIMAL,
                 base_url: &sut.base_url(),
                 auth: AuthKind::None,
                 user: None,
@@ -454,11 +520,24 @@ fn mount_community(sut: &FakeSut) {
     sut.mount(
         Mock::given(method("POST"))
             .and(path_regex(r"^/ehr/[^/]+/composition$"))
-            .respond_with(
-                ResponseTemplate::new(201).set_body_json(json!({ "uid": "c-1::sut::1" })),
-            ),
+            .respond_with(CommunityCommit),
     );
     mount_composition_reads(sut);
+}
+
+/// The community stack's commit path: the identifier body the reproduction
+/// reads, and the same `422` on the invalid twin a validating server answers.
+struct CommunityCommit;
+
+impl Respond for CommunityCommit {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        let body = String::from_utf8_lossy(&request.body);
+        if body.contains("\"composer\"") {
+            ResponseTemplate::new(201).set_body_json(json!({ "uid": "c-1::sut::1" }))
+        } else {
+            ResponseTemplate::new(422)
+        }
+    }
 }
 
 /// The reproduction end to end: the record carries the closed-loop write
@@ -476,7 +555,11 @@ fn the_community_pack_records_both_disciplines_with_their_labels() -> Fallible {
         drive_pack(&sut, &tiny_community_pack()?, "community", 1, 1.0)?;
 
     assert_eq!(result.pack.id, "community-vitals");
-    assert_eq!(result.pack.fixtures.len(), 2);
+    assert_eq!(
+        result.pack.fixtures.len(),
+        3,
+        "the template, the composition and its pinned invalid twin"
+    );
     assert_eq!(
         result
             .pack
@@ -806,6 +889,7 @@ fn baseline_from(result: &BenchResult, cdr: ReferenceCdr, scale_medians_by: f64)
         seed_phases: result.seed_phases.clone(),
         repetitions: result.repetitions.clone(),
         cross,
+        posture: result.posture.clone(),
     }
 }
 
@@ -1019,6 +1103,7 @@ fn a_missing_container_runtime_refuses_the_baseline_sweep() {
     let error = run_bench(
         &BenchRequest {
             pack: &smoke(),
+            profile: &MINIMAL,
             base_url: "http://127.0.0.1:1/openehr/v1",
             auth: AuthKind::None,
             user: None,
@@ -1053,6 +1138,7 @@ fn a_run_without_the_flag_never_consults_the_container_runtime() -> Fallible {
     let outcome = run_bench(
         &BenchRequest {
             pack: &tiny_pack(),
+            profile: &MINIMAL,
             base_url: &sut.base_url(),
             auth: AuthKind::None,
             user: None,
@@ -1067,5 +1153,279 @@ fn a_run_without_the_flag_never_consults_the_container_runtime() -> Fallible {
     )?;
     assert!(outcome.result.baselines.is_empty());
     assert!(outcome.result.relative.is_empty());
+    Ok(())
+}
+
+/// The declared posture reaches the record with every item labelled by what
+/// the canaries could actually see: the five observable ones verified, and the
+/// two nothing on the wire discloses honestly declared-only.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_posture_block_labels_every_item_verified_or_declared_only() -> Fallible {
+    let sut = FakeSut::start();
+    mount_healthy(&sut);
+    let (result, document, summary) = drive_pack(&sut, &tiny_pack(), "posture", 1, 1.0)?;
+
+    assert_eq!(result.posture.profile, "minimal");
+    assert_eq!(result.posture.items.len(), PostureItem::ALL.len());
+    assert_eq!(
+        result.posture.declared(PostureItem::CommitValidation),
+        Some("template")
+    );
+    assert_eq!(result.posture.declared(PostureItem::Authn), Some("none"));
+    assert_eq!(result.posture.declared(PostureItem::Tls), Some("off"));
+
+    // The five items with a black-box observable are verified against this
+    // system; audit and tenancy have no read surface in released ITS-REST, so
+    // the record says declared-only rather than claiming more than it saw.
+    assert_eq!(
+        result.posture.verified_items(),
+        vec![
+            PostureItem::VersionSigning,
+            PostureItem::CommitValidation,
+            PostureItem::Authn,
+            PostureItem::Tls,
+            PostureItem::Compression,
+        ]
+    );
+    for item in [PostureItem::Audit, PostureItem::Tenancy] {
+        let line = result
+            .posture
+            .items
+            .iter()
+            .find(|line| line.item == item)
+            .ok_or("the posture block dropped an item")?;
+        assert_eq!(line.assurance, Assurance::DeclaredOnly);
+    }
+
+    // Every item is bracketed: one reading before the measured window and one
+    // after it.
+    for line in &result.posture.items {
+        assert_eq!(line.readings.len(), 2, "{} is not bracketed", line.item);
+        assert_eq!(
+            line.readings.first().map(|read| read.bracket.as_str()),
+            Some("before")
+        );
+        assert_eq!(
+            line.readings.get(1).map(|read| read.bracket.as_str()),
+            Some("after")
+        );
+        assert!(
+            !line
+                .readings
+                .iter()
+                .any(|read| read.evidence.trim().is_empty())
+        );
+    }
+
+    let violations = schema_violations(&document)?;
+    assert!(violations.is_empty(), "{}", violations.join("; "));
+    assert!(summary.contains("## Posture `minimal`"), "{summary}");
+    assert!(summary.contains("declared-only"), "{summary}");
+    assert!(
+        summary.contains("| `commit_validation` | `template` | verified |"),
+        "{summary}"
+    );
+    Ok(())
+}
+
+/// A system that accepts the pinned invalid twin contradicts a `minimal`
+/// declaration, and the run is REFUSED with the item named rather than
+/// recorded with a footnote.
+#[test]
+fn a_lenient_server_contradicts_the_declared_validation_depth() {
+    let sut = FakeSut::start();
+    // Mounted FIRST so it wins over the validating stub below: wiremock
+    // matches in registration order.
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/ehr/[^/]+/composition$"))
+            .respond_with(AcceptingCommit),
+    );
+    mount_healthy(&sut);
+    let deck = tiny_pack();
+    let error = run_bench(
+        &BenchRequest {
+            pack: &deck,
+            profile: &MINIMAL,
+            base_url: &sut.base_url(),
+            auth: AuthKind::None,
+            user: None,
+            repetitions: 1,
+            label: None,
+            scale: 1.0,
+            seed_workers: None,
+            with_baselines: false,
+            docker: None,
+        },
+        &|_message| {},
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("posture canary contradicts"), "{error}");
+    assert!(error.contains("commit_validation"), "{error}");
+    assert!(error.contains("accepts-the-invalid-twin"), "{error}");
+}
+
+/// A profile that declares no validation at all is verified against that same
+/// lenient server, which is what makes the label mean something: the canary
+/// reports what it saw rather than what anyone hoped for.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_declared_absence_of_validation_is_verified_the_same_way() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/ehr/[^/]+/composition$"))
+            .respond_with(AcceptingCommit),
+    );
+    mount_healthy(&sut);
+    let deck = tiny_pack();
+    let outcome = run_bench(
+        &BenchRequest {
+            pack: &deck,
+            profile: &UNVALIDATED,
+            base_url: &sut.base_url(),
+            auth: AuthKind::None,
+            user: None,
+            repetitions: 1,
+            label: Some("unvalidated"),
+            scale: 1.0,
+            seed_workers: None,
+            with_baselines: false,
+            docker: None,
+        },
+        &|_message| {},
+    )?;
+    assert_eq!(outcome.result.posture.profile, "test-unvalidated");
+    assert_eq!(
+        outcome
+            .result
+            .posture
+            .declared(PostureItem::CommitValidation),
+        Some("none")
+    );
+    assert!(
+        outcome
+            .result
+            .posture
+            .verified_items()
+            .contains(&PostureItem::CommitValidation)
+    );
+    Ok(())
+}
+
+/// A server that signs the versions this run's OWN traffic committed
+/// contradicts a declaration of `none`, so the sampling reads the measured
+/// population rather than a probe an operator could special-case.
+#[test]
+fn a_signed_population_contradicts_a_declaration_of_no_signing() {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path_regex(
+                r"^/ehr/[^/]+/versioned_composition/[^/]+/version/[^/]+$",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "_type": "ORIGINAL_VERSION",
+                "signature": "sha256:6c1f2f8ac0d6dd1c8f0e2f0a0b1c2d3e4f5061728394a5b6c7d8e9f001122334"
+            }))),
+    );
+    mount_healthy(&sut);
+    let deck = tiny_pack();
+    let error = run_bench(
+        &BenchRequest {
+            pack: &deck,
+            profile: &MINIMAL,
+            base_url: &sut.base_url(),
+            auth: AuthKind::None,
+            user: None,
+            repetitions: 1,
+            label: None,
+            scale: 1.0,
+            seed_workers: None,
+            with_baselines: false,
+            docker: None,
+        },
+        &|_message| {},
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(error.contains("posture canary contradicts"), "{error}");
+    assert!(error.contains("version_signing"), "{error}");
+    assert!(error.contains("digest"), "{error}");
+}
+
+/// Two columns taken under different profiles are two different sports, and
+/// the comparison says so in the header rather than beside the numbers.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_posture_mismatch_is_stated_in_the_comparison_header() -> Fallible {
+    let sut = FakeSut::start();
+    mount_healthy(&sut);
+    let directory = assert_fs::TempDir::new()?;
+    let mut paths: Vec<PathBuf> = Vec::new();
+    for (label, profile) in [("bare", &MINIMAL), ("audited", &AUDITED)] {
+        let deck = tiny_pack();
+        let outcome = run_bench(
+            &BenchRequest {
+                pack: &deck,
+                profile,
+                base_url: &sut.base_url(),
+                auth: AuthKind::None,
+                user: None,
+                repetitions: 1,
+                label: Some(label),
+                scale: 1.0,
+                seed_workers: None,
+                with_baselines: false,
+                docker: None,
+            },
+            &|_message| {},
+        )?;
+        for file in &outcome.documents {
+            let target = directory.join(&file.name);
+            std::fs::write(&target, &file.body)?;
+            if is_json(&file.name) {
+                paths.push(target);
+            }
+        }
+    }
+    let outcome = compare_bench(&paths)?;
+    assert!(
+        outcome
+            .comparison
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("DIFFERENT posture profiles")),
+        "{:?}",
+        outcome.comparison.warnings
+    );
+    assert!(
+        outcome
+            .comparison
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("DIFFERENT postures")),
+        "{:?}",
+        outcome.comparison.warnings
+    );
+    let header_at = outcome.document.body.find("DIFFERENT posture profiles");
+    let table_at = outcome.document.body.find("## Aligned metrics");
+    assert!(header_at < table_at, "{}", outcome.document.body);
+    assert!(
+        outcome.document.body.contains("| `test-audited` |"),
+        "{}",
+        outcome.document.body
+    );
     Ok(())
 }

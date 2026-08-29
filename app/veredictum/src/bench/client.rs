@@ -132,6 +132,11 @@ pub struct BenchReply {
     pub etag: Option<String>,
     /// The `Location` header, when one was sent.
     pub location: Option<String>,
+    /// The `Content-Encoding` header, when one was sent. Read by the
+    /// compression canary, and only meaningful on a client built by
+    /// [`BenchClient::without_decompression`], because a decompressing client
+    /// removes the header as it unwraps the body.
+    pub content_encoding: Option<String>,
     /// The response body, drained so the pooled connection stays reusable.
     pub body: Vec<u8>,
 }
@@ -213,6 +218,47 @@ impl BenchClient {
         })
     }
 
+    /// The same target and credential over a client that never decompresses.
+    ///
+    /// A decompressing client removes `Content-Encoding` from the response as
+    /// it unwraps the body (reqwest 0.13 `ClientBuilder::gzip`, whose contract
+    /// is that a `gzip` value and `Content-Length` "are removed from the
+    /// headers' set"), which is exactly the header the compression canary has
+    /// to read. Turning both decoders off leaves the server's own answer
+    /// visible.
+    ///
+    /// # Errors
+    /// [`BenchError::Client`] when the HTTP client cannot be built.
+    pub fn without_decompression(&self) -> Result<Self, BenchError> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(CLIENT_TIMEOUT)
+            .pool_max_idle_per_host(4)
+            .redirect(reqwest::redirect::Policy::none())
+            .gzip(false)
+            .brotli(false)
+            .build()
+            .map_err(|source| BenchError::Client { source })?;
+        Ok(Self {
+            client,
+            base_url: self.base_url.clone(),
+            authorization: self.authorization.clone(),
+        })
+    }
+
+    /// The same target over a client that presents no credential at all.
+    ///
+    /// The authentication canary needs one request the run's own credential is
+    /// deliberately absent from, because whether a server ENFORCES the mode a
+    /// run declares is only visible when nothing is offered.
+    ///
+    /// # Errors
+    /// [`BenchError::Client`] when the HTTP client cannot be built.
+    pub fn without_credential(&self) -> Result<Self, BenchError> {
+        let mut anonymous = self.without_decompression()?;
+        anonymous.authorization = None;
+        Ok(anonymous)
+    }
+
     /// The base URL this client drives, with any userinfo removed.
     #[must_use]
     pub fn recorded_base_url(&self) -> String {
@@ -234,6 +280,26 @@ impl BenchClient {
         body: Option<(&'static str, Vec<u8>)>,
         prefer: PreferReturn,
     ) -> Result<BenchReply, BenchError> {
+        self.send_with_headers(exchange, method, path, body, prefer, &[])
+    }
+
+    /// Issues one request carrying additional request headers.
+    ///
+    /// The posture canaries are the only caller: they state an explicit
+    /// `Accept-Encoding` so the server's own compression choice is visible,
+    /// which the measured path never has to do.
+    ///
+    /// # Errors
+    /// [`BenchError::Transport`] when the request never reached a response.
+    pub fn send_with_headers(
+        &self,
+        exchange: &str,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<(&'static str, Vec<u8>)>,
+        prefer: PreferReturn,
+        extra: &[(&'static str, &'static str)],
+    ) -> Result<BenchReply, BenchError> {
         let accept = match &body {
             Some((media_type, _)) if media_type.contains("xml") => "application/xml",
             _ => "application/json",
@@ -251,6 +317,9 @@ impl BenchClient {
         if let Some((media_type, bytes)) = body {
             request = request.header("Content-Type", media_type).body(bytes);
         }
+        for (name, value) in extra {
+            request = request.header(*name, *value);
+        }
         let response = request.send().map_err(|source| BenchError::Transport {
             exchange: exchange.to_owned(),
             source,
@@ -265,6 +334,7 @@ impl BenchClient {
         let status = response.status();
         let etag = header("etag");
         let location = header("location");
+        let content_encoding = header("content-encoding");
         let mut sink = Vec::new();
         let mut reader = response;
         let _drained = reader.read_to_end(&mut sink);
@@ -272,6 +342,7 @@ impl BenchClient {
             status,
             etag,
             location,
+            content_encoding,
             body: sink,
         })
     }
@@ -422,6 +493,7 @@ mod tests {
             status: reqwest::StatusCode::CREATED,
             etag: etag.map(str::to_owned),
             location: location.map(str::to_owned),
+            content_encoding: None,
             body: body.as_bytes().to_vec(),
         };
         assert_eq!(

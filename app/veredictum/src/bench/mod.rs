@@ -19,14 +19,20 @@
 //! derives the relative index, a dimensionless ratio that travels between
 //! machines where milliseconds do not.
 //!
+//! Two records are comparable only when the same features were switched on
+//! behind them, so every pack defines named posture profiles, a run declares
+//! exactly one, and black-box canaries bracket the measured window to check the
+//! declaration against the running system. A canary that contradicts the
+//! declaration refuses the run.
+//!
 //! Module map: [`pack`] the embedded packs, their pinned fixtures and the
-//! operation vocabulary · [`client`] targeting and credentials · [`run`] the
-//! preflight, the seed phase and the open-loop dispatcher · [`baselines`] the
-//! pinned reference deployments and their compose orchestration ·
-//! [`relative`] the relative index · [`result`] the emitted artifact ·
-//! [`fingerprint`] the host environment record · [`compare`] the cross-file
-//! alignment and its median/IQR math · [`render`] the console and Markdown
-//! views.
+//! operation vocabulary · [`client`] targeting and credentials · [`posture`]
+//! the profiles, the disclosure block and its canaries · [`run`] the preflight,
+//! the seed phase and the open-loop dispatcher · [`baselines`] the pinned
+//! reference deployments and their compose orchestration · [`relative`] the
+//! relative index · [`result`] the emitted artifact · [`fingerprint`] the host
+//! environment record · [`compare`] the cross-file alignment and its median/IQR
+//! math · [`render`] the console and Markdown views.
 //!
 //! What this engine is NOT is stated in [`BOUNDARY_STATEMENT`], which every
 //! artifact and every rendered view carries verbatim.
@@ -36,6 +42,7 @@ pub mod client;
 pub mod compare;
 pub mod fingerprint;
 pub mod pack;
+pub mod posture;
 pub mod relative;
 pub mod render;
 pub mod result;
@@ -80,6 +87,64 @@ pub enum BenchError {
         token: String,
         /// The accepted tokens, comma-separated.
         accepted: String,
+    },
+    /// The requested posture profile is not one the pack defines.
+    #[error("unknown posture profile {requested:?} for pack {pack} (defined: {known})")]
+    UnknownProfile {
+        /// The pack that was asked.
+        pack: String,
+        /// The token the caller asked for.
+        requested: String,
+        /// The profile names the pack defines, comma-separated.
+        known: String,
+    },
+    /// A pack defines no posture profile at all, so a run has nothing to
+    /// declare.
+    #[error("bench pack {pack} defines no posture profile, so a run has nothing to declare")]
+    NoProfiles {
+        /// The pack with no profile.
+        pack: String,
+    },
+    /// A posture canary observed something other than what the run declared.
+    /// The run is refused: a published speed number never carries a footnote
+    /// saying the disclosure was wrong.
+    #[error(
+        "posture canary contradicts the declaration: `{item}` is declared `{declared}` and the \
+         {bracket} canary observed `{observed}` — {evidence}"
+    )]
+    PostureContradiction {
+        /// The disclosed item that disagrees.
+        item: String,
+        /// What the run declared for it.
+        declared: String,
+        /// Which bracket read it.
+        bracket: String,
+        /// What that bracket observed.
+        observed: String,
+        /// The exchange the reading came from.
+        evidence: String,
+    },
+    /// A posture canary read one thing before the measured window and another
+    /// after it, so the numbers straddle two different systems.
+    #[error(
+        "posture canary flipped across the measured window: `{item}` read `{before}` before and \
+         `{after}` after, so the measured window straddles two configurations"
+    )]
+    PostureFlip {
+        /// The disclosed item that moved.
+        item: String,
+        /// The reading before the measured window.
+        before: String,
+        /// The reading after it.
+        after: String,
+    },
+    /// A bracket did not produce a reading for one disclosed item.
+    #[error("posture canary {bracket} bracket produced no reading for `{item}`")]
+    PostureBracket {
+        /// The item with no reading.
+        item: String,
+        /// The bracket that is short.
+        bracket: String,
     },
     /// An embedded fixture's bytes do not hash to the pin the pack declares.
     #[error(

@@ -200,8 +200,8 @@ Run the universal speed benchmark against any reachable CDR.
 ```bash
 veredictum bench --base-url <URL> --out <OUT> \
     [--auth none|basic|bearer] [--user <USER>] [--pack <PACK>] \
-    [--repetitions <N>] [--scale <F>] [--seed-workers <N>] \
-    [--with-baselines] [--label <LABEL>]
+    [--posture <NAME>] [--repetitions <N>] [--scale <F>] \
+    [--seed-workers <N>] [--with-baselines] [--label <LABEL>]
 ```
 
 | Flag | Meaning |
@@ -211,6 +211,7 @@ veredictum bench --base-url <URL> --out <OUT> \
 | `--auth <MODE>` | How the client presents itself: `none`, `basic` or `bearer`. Default `none` |
 | `--user <USER>` | The user `--auth basic` presents |
 | `--pack <PACK>` | The embedded pack to drive: `smoke`, `community-vitals` or `aql-mix`. Default `smoke` |
+| `--posture <NAME>` | The posture profile to declare, out of the set the pack defines. Default: the pack's first, always `minimal` |
 | `--repetitions <N>` | How many times to repeat the measured phases. Default `3` |
 | `--scale <F>` | Multiply the pack's EHR count by this factor, for a shorter run. Default `1.0` |
 | `--seed-workers <N>` | Override the worker count every seed phase declares. Omit to run the pack's own value |
@@ -294,6 +295,56 @@ The run then seeds its corpus once and repeats the measured phases. Measured
 phases are open-loop: arrivals fire at their planned instants whatever the
 system is doing, and every latency is measured from the planned instant, so a
 stall shows up in every arrival queued behind it.
+
+### Posture profiles
+
+A CDR running without an audit trail and unsigned versions is a different
+system from the same CDR with both switched on, and a speed number that does
+not say which one it measured cannot be compared with anything. Every pack
+therefore defines named posture profiles, and a run declares exactly one.
+
+`minimal` is the bare spec-conformant surface, and every pack defines it:
+no audit trail, unsigned versions, commits validated against the operational
+template, uncompressed responses, one tenant. Validation sits at `template`
+rather than at nothing because the specification puts it there — ITS-REST
+`specifications/responses/422.yaml` defines the commit refusal as the case
+where the template "is not validating the supplied resource" — so a server that
+accepts anything is below the floor rather than lightly configured.
+`community-vitals` also defines `clinical-default`, which is the same surface
+with an audit trail written.
+
+The record's `posture` block carries the profile, its summary, and one line per
+disclosed item: the audit sink, the version-signing scheme, the
+commit-validation depth, the authentication mode, TLS, response compression and
+tenancy. Each item is a closed vocabulary, so an unknown token is refused rather
+than read as a default.
+
+### Posture canaries
+
+A declaration is a promise, so each item is also probed black-box and labelled
+`verified` or `declared-only`, with the exchange behind the label recorded
+beside it.
+
+| Item | How it is checked |
+|---|---|
+| `version_signing` | Versions committed by the run's OWN seed traffic are read back and their `signature` inspected. Sampling the measured population means a scheme switched on around a probe never reaches it. The openPGP armor header separates `pgp` from `digest` |
+| `commit_validation` | The pack's pinned invalid twin — that pack's own composition with the mandatory `COMPOSITION.composer` removed — is committed inside the run window, and the answer read |
+| `authn` | One read with no `Authorization` header at all, which is the only way to see whether the declared mode is enforced |
+| `compression` | One read stating `Accept-Encoding` explicitly, over a client that does not decompress, so `Content-Encoding` survives to be read |
+| `tls` | The recorded base URL's own scheme |
+| `audit`, `tenancy` | Declared-only. Released ITS-REST surfaces no read resource for either, so the record carries the claim and says it is one |
+
+The canaries run before the measured window and again after it. A reading that
+contradicts the declaration refuses the run, naming the item, the declared
+value, the observed one and the exchange. So does a pair of brackets that
+disagree with each other, because a posture that moved mid-run leaves the
+numbers straddling two systems. Neither is recorded as a footnote beside a
+published figure.
+
+Baselines run under the profile the target declared and carry their own
+verified block, so both sides of a ratio disclose what was switched on behind
+them. `bench-compare` states a posture disagreement between columns in the
+header, above the numbers.
 
 ### Same-machine baselines
 

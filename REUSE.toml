@@ -85,9 +85,14 @@ SPDX-License-Identifier = "CC-BY-SA-3.0 AND CC-BY-SA-4.0"
 # The composition instance comes from a public attachment on the openEHR
 # Discourse forum, where the publisher declared no licence. Nothing here
 # asserts a grant on the publisher's behalf; the LicenseRef text records what
-# is known and what is not.
+# is known and what is not. Its invalid twin, which the commit-validation
+# canary offers, is those same bytes with one member deleted, so it is a
+# derivative and carries the same declaration.
 [[annotations]]
-path = "app/veredictum/src/bench/fixtures/vital_signs_composition.json"
+path = [
+  "app/veredictum/src/bench/fixtures/vital_signs_composition.json",
+  "app/veredictum/src/bench/fixtures/vital_signs_composition.missing_composer.json",
+]
 precedence = "override"
 SPDX-FileCopyrightText = "the publisher of the openEHR Discourse benchmark harness attachment"
 SPDX-License-Identifier = "LicenseRef-openEHR-forum-attachment"

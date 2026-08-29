@@ -92,11 +92,47 @@ fn preamble(result: &BenchResult) -> String {
     out
 }
 
+/// What was switched on behind the numbers, and how far each item is stood
+/// behind.
+///
+/// The posture prints before any figure, because a table of speed numbers read
+/// without it compares two different sports.
+fn posture_section(result: &BenchResult) -> String {
+    let mut out = String::new();
+    let _written = writeln!(out, "## Posture `{}`", result.posture.profile);
+    let _written = writeln!(out);
+    let _written = writeln!(out, "{}", result.posture.summary);
+    let _written = writeln!(out);
+    let _written = writeln!(out, "| Item | Declared | Assurance | Canary evidence |");
+    let _written = writeln!(out, "|---|---|---|---|");
+    for line in &result.posture.items {
+        let evidence = line
+            .readings
+            .iter()
+            .map(|reading| format!("{}: {}", reading.bracket, reading.evidence))
+            .collect::<Vec<_>>()
+            .join("; ");
+        let _written = writeln!(
+            out,
+            "| `{}` | `{}` | {} | {evidence} |",
+            line.item, line.declared, line.assurance
+        );
+    }
+    let _written = writeln!(out);
+    let _written = writeln!(
+        out,
+        "A `verified` item was observed black-box at BOTH ends of the measured window; a `declared-only` item is a claim this record carries because nothing on the wire discloses it. A canary that contradicted the declaration would have refused the run rather than reaching this table."
+    );
+    let _written = writeln!(out);
+    out
+}
+
 /// Renders one finished run as a Markdown summary.
 #[must_use]
 pub fn run_summary(result: &BenchResult) -> String {
     let mut out = preamble(result);
     let _written = writeln!(out);
+    out.push_str(&posture_section(result));
     for seed in &result.seed_phases {
         let _written = writeln!(
             out,
@@ -404,17 +440,18 @@ pub fn comparison(comparison: &Comparison) -> String {
     let _written = writeln!(out);
     let _written = writeln!(
         out,
-        "| Column | Machine | Pack | SUT version | Repetitions | Submittable | Scale | Reference config | Source |"
+        "| Column | Machine | Pack | Posture | SUT version | Repetitions | Submittable | Scale | Reference config | Source |"
     );
-    let _written = writeln!(out, "|---|---|---|---|---:|---|---:|---|---|");
+    let _written = writeln!(out, "|---|---|---|---|---|---:|---|---:|---|---|");
     for column in &comparison.columns {
         let _written = writeln!(
             out,
-            "| {} | {} | `{}@{}` | {} | {} | {} | {:.3} | {} | `{}` |",
+            "| {} | {} | `{}@{}` | `{}` | {} | {} | {} | {:.3} | {} | `{}` |",
             column.label,
             label_line(&column.environment),
             column.pack_id,
             column.pack_version,
+            column.posture_profile,
             column.sut_version.as_deref().unwrap_or("(undisclosed)"),
             column.repetitions,
             submittable_cell(column),
@@ -422,6 +459,12 @@ pub fn comparison(comparison: &Comparison) -> String {
             column.reference_configuration,
             column.source.display()
         );
+    }
+    let _written = writeln!(out);
+    let _written = writeln!(out, "Each column's full disclosure:");
+    let _written = writeln!(out);
+    for column in &comparison.columns {
+        let _written = writeln!(out, "- {}: `{}`", column.label, column.posture_signature);
     }
     let _written = writeln!(out);
     out.push_str(&comparison_relative(comparison));
@@ -487,6 +530,8 @@ mod tests {
             environment: BTreeMap::new(),
             submittable_unmet: Vec::new(),
             relative: Vec::new(),
+            posture_profile: "minimal".to_owned(),
+            posture_signature: "audit=off version_signing=none".to_owned(),
         };
         let rendered = comparison(&Comparison {
             columns: vec![column("left"), column("right")],
@@ -528,6 +573,8 @@ mod tests {
             environment: BTreeMap::new(),
             submittable_unmet: Vec::new(),
             relative: Vec::new(),
+            posture_profile: "minimal".to_owned(),
+            posture_signature: "audit=off version_signing=none".to_owned(),
         };
         let right = ComparisonColumn {
             pack_version: "2.0.0".to_owned(),

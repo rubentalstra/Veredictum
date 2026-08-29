@@ -1854,7 +1854,8 @@ fn bench_baseline_def(regimes: &Value, repetitions: &Value, seed_phases: &Value)
         "type": "object",
         "additionalProperties": false,
         "required": ["cdr", "display_name", "images", "recipe", "resources", "base_url",
-                      "started_at", "finished_at", "seed_phases", "repetitions", "cross"],
+                      "started_at", "finished_at", "seed_phases", "repetitions", "cross",
+                      "posture"],
         "properties": {
             "cdr": {
                 "enum": bench_tokens(&crate::bench::baselines::ReferenceCdr::ALL
@@ -1898,7 +1899,8 @@ fn bench_baseline_def(regimes: &Value, repetitions: &Value, seed_phases: &Value)
             "finished_at": { "type": "string", "minLength": 1 },
             "seed_phases": seed_phases,
             "repetitions": repetitions,
-            "cross": bench_cross_phase_def(regimes)
+            "cross": bench_cross_phase_def(regimes),
+            "posture": bench_posture_def()
         }
     })
 }
@@ -2088,7 +2090,7 @@ pub fn bench_result_schema() -> Value {
         "additionalProperties": false,
         "required": ["schema_version", "boundary_statement", "pack", "target", "environment",
                       "started_at", "finished_at", "scale", "seed_phases", "repetitions", "cross",
-                      "methodology", "submittable"],
+                      "methodology", "submittable", "posture"],
         "properties": {
             "schema_version": { "type": "string", "minLength": 1 },
             "boundary_statement": { "const": crate::bench::BOUNDARY_STATEMENT },
@@ -2175,7 +2177,94 @@ pub fn bench_result_schema() -> Value {
                         .iter().map(|requirement| requirement.as_str()).collect::<Vec<_>>())
                 }
             },
-            "posture": { "type": "object" }
+            "posture": bench_posture_def()
+        }
+    })
+}
+
+/// The posture block: the profile a run declared, every disclosed item's
+/// declared value, and the bracketing canary evidence behind its
+/// verified-or-declared-only label.
+#[must_use]
+fn bench_posture_def() -> Value {
+    use crate::bench::posture::{
+        Assurance, AuditSink, AuthnMode, Bracket, CanaryOutcome, CompressionMode, PostureItem,
+        SigningScheme, Tenancy, TlsMode, ValidationDepth,
+    };
+    let tokens = |values: Vec<&'static str>| bench_tokens(&values);
+    // The seven item vocabularies share tokens (`none` and `off` each occur in
+    // three), and a JSON Schema `enum` holds a SET, so their union is sorted
+    // and deduplicated rather than concatenated.
+    let union: std::collections::BTreeSet<&'static str> = [
+        AuditSink::ALL
+            .iter()
+            .map(|value| value.as_str())
+            .collect::<Vec<_>>(),
+        SigningScheme::ALL
+            .iter()
+            .map(|value| value.as_str())
+            .collect(),
+        ValidationDepth::ALL
+            .iter()
+            .map(|value| value.as_str())
+            .collect(),
+        AuthnMode::ALL.iter().map(|value| value.as_str()).collect(),
+        TlsMode::ALL.iter().map(|value| value.as_str()).collect(),
+        CompressionMode::ALL
+            .iter()
+            .map(|value| value.as_str())
+            .collect(),
+        Tenancy::ALL.iter().map(|value| value.as_str()).collect(),
+    ]
+    .concat()
+    .into_iter()
+    .collect();
+    let declared = tokens(union.into_iter().collect());
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "description": "What was switched on behind these numbers. A run declares exactly one named posture profile out of the set its pack defines, and black-box canaries bracket the measured window: every item is labelled `verified` when both brackets observed the declared value first-hand, and `declared-only` when nothing on the wire discloses it. A canary that contradicted the declaration, or a pair of brackets that disagreed, refused the run, so no such record exists.",
+        "required": ["profile", "summary", "items"],
+        "properties": {
+            "profile": { "type": "string", "minLength": 1 },
+            "summary": { "type": "string", "minLength": 1 },
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["item", "declared", "assurance", "readings"],
+                    "properties": {
+                        "item": {
+                            "enum": tokens(PostureItem::ALL.iter().map(|item| item.as_str()).collect())
+                        },
+                        "declared": { "enum": declared },
+                        "assurance": {
+                            "enum": tokens(Assurance::ALL.iter().map(|value| value.as_str()).collect())
+                        },
+                        "readings": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["bracket", "outcome", "observed", "evidence"],
+                                "properties": {
+                                    "bracket": {
+                                        "enum": tokens(Bracket::ALL.iter().map(|value| value.as_str()).collect())
+                                    },
+                                    "outcome": {
+                                        "enum": tokens(CanaryOutcome::ALL.iter().map(|value| value.as_str()).collect())
+                                    },
+                                    "observed": { "type": "string", "minLength": 1 },
+                                    "evidence": { "type": "string", "minLength": 1 }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     })
 }

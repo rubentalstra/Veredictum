@@ -32,6 +32,7 @@ use crate::bench::BenchError;
 use crate::bench::client::{AuthKind, BenchClient, PreferReturn};
 use crate::bench::compare::summarize;
 use crate::bench::pack::BenchPack;
+use crate::bench::posture::PostureProfile;
 use crate::bench::result::{BaselineRecord, BaselineResources, RecipeReference};
 use crate::bench::run::{self, BenchRun};
 
@@ -557,6 +558,10 @@ pub fn compose_down_args(project: &str, compose_file: &Path) -> Vec<String> {
 pub struct BaselineRun<'a> {
     /// The pack to drive against every reference CDR.
     pub pack: &'a BenchPack,
+    /// The posture profile the TARGET declared. Every baseline runs under the
+    /// same one, so the two sides of a ratio describe the same sport, and the
+    /// same canaries check it against the composed stack.
+    pub profile: &'a PostureProfile,
     /// How many times to repeat the measured phases, matching the target.
     pub repetitions: u32,
     /// The scale factor the target ran at.
@@ -654,6 +659,7 @@ fn compose_and_measure(
         &BenchRun {
             pack: run.pack,
             base_url: &pin.base_url(),
+            profile: run.profile,
             auth: AuthKind::Basic,
             user: Some(pin.user),
             credential: Some(pin.password),
@@ -678,6 +684,7 @@ fn compose_and_measure(
         seed_phases: result.seed_phases.clone(),
         repetitions: result.repetitions.clone(),
         cross,
+        posture: result.posture.clone(),
     })
 }
 
