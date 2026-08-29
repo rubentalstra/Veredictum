@@ -223,65 +223,6 @@ pub mod read {
         }))
     }
 
-    // TODO(#129): read the transcript through `veredictum::transcript` and
-    // delete these mirrors; the console's engine pin predates that module, so
-    // the published lib cannot supply the types yet.
-    mod wire {
-        //! The run wire transcript, as the engine writes it.
-
-        #![expect(
-            clippy::disallowed_types,
-            reason = "the wire-bodies family: a recorded request or response body is whatever the SUT sent, which has no typed model here"
-        )]
-
-        use serde::Deserialize;
-
-        /// One recorded request.
-        #[derive(Debug, Deserialize)]
-        pub(super) struct Request {
-            pub(super) method: String,
-            pub(super) url: String,
-            pub(super) headers: std::collections::BTreeMap<String, String>,
-            #[serde(default)]
-            pub(super) body: Option<serde_json::Value>,
-        }
-
-        /// One recorded response.
-        #[derive(Debug, Deserialize)]
-        pub(super) struct Response {
-            pub(super) status: u16,
-            pub(super) headers: std::collections::BTreeMap<String, String>,
-            #[serde(default)]
-            pub(super) body: Option<serde_json::Value>,
-        }
-
-        /// One exchange: what went out, and what came back.
-        #[derive(Debug, Deserialize)]
-        pub(super) struct Exchange {
-            pub(super) seq: u32,
-            pub(super) request: Request,
-            pub(super) response: Response,
-        }
-
-        /// Every exchange one case×format execution drove.
-        #[derive(Debug, Deserialize)]
-        pub(super) struct Entry {
-            pub(super) case: String,
-            #[serde(default)]
-            pub(super) format: Option<veredictum::vocab::FormatName>,
-            pub(super) exchanges: Vec<Exchange>,
-        }
-
-        /// The whole run's transcript.
-        #[derive(Debug, Deserialize)]
-        pub(super) struct Transcript {
-            pub(super) cases: Vec<Entry>,
-        }
-    }
-
-    /// The transcript file name the engine writes beside `results.json`.
-    const TRANSCRIPT_FILE: &str = "transcript.json";
-
     /// One `name: value` line per header, name-sorted by the document's own
     /// `BTreeMap` ordering.
     fn header_lines(headers: &std::collections::BTreeMap<String, String>) -> String {
@@ -315,7 +256,10 @@ pub mod read {
         case: &str,
         format: Option<&str>,
     ) -> TranscriptView {
-        let Some(path) = results_path.parent().map(|dir| dir.join(TRANSCRIPT_FILE)) else {
+        let Some(path) = results_path
+            .parent()
+            .map(|dir| dir.join(veredictum::transcript::TRANSCRIPT_FILE))
+        else {
             return TranscriptView::NotRecorded;
         };
         let body = match std::fs::read_to_string(&path) {
@@ -342,12 +286,13 @@ pub mod read {
         case: &str,
         format: Option<&str>,
     ) -> Result<TranscriptView, serde_json::Error> {
-        let transcript: wire::Transcript = serde_json::from_str(body)?;
+        let transcript: veredictum::transcript::RunTranscript = serde_json::from_str(body)?;
         // The format token can fail to render, so the match is scanned rather
         // than closed over: a `find` predicate has nowhere to put the error.
         let mut matched = None;
         for entry in &transcript.cases {
-            if entry.case == case && opt_token(entry.format.as_ref())?.as_deref() == format {
+            if entry.case.as_str() == case && opt_token(entry.format.as_ref())?.as_deref() == format
+            {
                 matched = Some(entry);
                 break;
             }

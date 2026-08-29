@@ -63,6 +63,20 @@ version on.
   the re-checkable `HdrHistogram` V2 encoding, the cross-repetition median and
   inter-quartile range, and the methodology block. The `posture` object is
   reserved and always absent.
+### Fixed
+
+- **The console image runs the engine it ships against (#172).** The console
+  pinned `veredictum` at `0.1.0-alpha.6` after `0.1.0` published, so the image
+  spawned the pre-release engine and passed it flags that version never
+  carried, `--record-exchanges` among them. The pin now reads `0.1.0` on both
+  halves of the fact, the manifest dependency and the `engine` string the shell
+  footer displays. The results drawer reads the run transcript through the
+  published `veredictum::transcript` types instead of a console-local copy of
+  that document's shape (#129), so the console and the engine cannot disagree
+  about what the wire record holds. The gates that drive a real engine —
+  the two browser journeys, the console-versus-CLI document gate, the export
+  and record gates — skipped themselves for the length of the drift window and
+  execute again.
 
 ### Security
 
