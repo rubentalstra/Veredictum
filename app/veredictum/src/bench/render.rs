@@ -17,9 +17,8 @@ use crate::bench::{BOUNDARY_STATEMENT, METHODOLOGY};
 /// The file name a rendered comparison is written under.
 pub const COMPARISON_FILE: &str = "bench-comparison.md";
 
-/// Renders one finished run as a Markdown summary.
-#[must_use]
-pub fn run_summary(result: &BenchResult) -> String {
+/// The opening block: what was driven, against what, in which configuration.
+fn preamble(result: &BenchResult) -> String {
     let mut out = String::new();
     let _written = writeln!(out, "# Bench result: {}", result.pack.id);
     let _written = writeln!(out);
@@ -38,24 +37,67 @@ pub fn run_summary(result: &BenchResult) -> String {
     if let Some(version) = &result.target.sut_version {
         let _written = writeln!(out, "The system reports its version as `{version}`.");
     }
+    let _written = writeln!(
+        out,
+        "Scale factor {:.3}, seed workers as declared: {}. Reference configuration: {}.",
+        result.scale.factor, result.scale.declared_workers, result.scale.reference_configuration
+    );
+    if !result.scale.reference_configuration {
+        let _written = writeln!(
+            out,
+            "This run is off the pack's pinned configuration, so its numbers are not comparable with the reference figures the pack describes."
+        );
+    }
+    if let Some(instant) = &result.version_at_time {
+        let _written = writeln!(
+            out,
+            "Every `version_at_time` read addressed `{instant}`, captured after the seed phases finished."
+        );
+    }
+    out
+}
+
+/// Renders one finished run as a Markdown summary.
+#[must_use]
+pub fn run_summary(result: &BenchResult) -> String {
+    let mut out = preamble(result);
     let _written = writeln!(out);
     for seed in &result.seed_phases {
         let _written = writeln!(
             out,
-            "Seed phase `{}` ({}): {} EHRs x {} compositions in {:.1}s, {:.1} writes/s.",
+            "Seed phase `{}` ({}): {} EHRs x {} compositions on {} worker(s) in {:.1}s, {:.1} writes/s, {:.2} ms/composition whole-loop ({}).",
             seed.name,
             seed.regime,
             seed.ehrs,
             seed.compositions_per_ehr,
+            seed.workers,
             seed.elapsed_s,
-            seed.bulk_load_writes_per_s
+            seed.bulk_load_writes_per_s,
+            seed.whole_loop_ms_per_composition,
+            seed.regime
         );
+    }
+    for repetition in &result.repetitions {
+        for (name, sweep) in &repetition.sweeps {
+            let _written = writeln!(
+                out,
+                "Sweep `{name}` ({}) repetition {}: {} request(s) over {} composition(s) on {} worker(s) in {:.1}s, {:.1} us/request whole-loop ({}).",
+                sweep.regime,
+                repetition.repetition,
+                sweep.requests,
+                sweep.compositions,
+                sweep.workers,
+                sweep.elapsed_s,
+                sweep.whole_loop_us_per_request,
+                sweep.regime
+            );
+        }
     }
     if !result.seed_phases.is_empty() {
         let _written = writeln!(out);
     }
     for (phase, cross) in &result.cross {
-        let _written = writeln!(out, "## Phase `{phase}`");
+        let _written = writeln!(out, "## Phase `{phase}` ({})", cross.regime);
         let _written = writeln!(out);
         let _written = writeln!(
             out,
@@ -113,8 +155,25 @@ fn error_lines(result: &BenchResult) -> Vec<String> {
                     .collect::<Vec<_>>()
                     .join(" ");
                 lines.push(format!(
-                    "repetition {} phase `{phase}` operation `{operation}`: {} error(s) [{classes}]",
-                    repetition.repetition, stats.errors
+                    "repetition {} phase `{phase}` ({}) operation `{operation}`: {} error(s) [{classes}]",
+                    repetition.repetition, record.regime, stats.errors
+                ));
+            }
+        }
+        for (phase, sweep) in &repetition.sweeps {
+            for (operation, stats) in &sweep.operations {
+                if stats.errors == 0 {
+                    continue;
+                }
+                let classes = stats
+                    .errors_by_class
+                    .iter()
+                    .map(|(class, count)| format!("{class}={count}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                lines.push(format!(
+                    "repetition {} sweep `{phase}` ({}) operation `{operation}`: {} error(s) [{classes}]",
+                    repetition.repetition, sweep.regime, stats.errors
                 ));
             }
         }
@@ -147,19 +206,21 @@ pub fn comparison(comparison: &Comparison) -> String {
     let _written = writeln!(out);
     let _written = writeln!(
         out,
-        "| Column | Pack | SUT version | Repetitions | Submittable | Source |"
+        "| Column | Pack | SUT version | Repetitions | Submittable | Scale | Reference config | Source |"
     );
-    let _written = writeln!(out, "|---|---|---|---:|---|---|");
+    let _written = writeln!(out, "|---|---|---|---:|---|---:|---|---|");
     for column in &comparison.columns {
         let _written = writeln!(
             out,
-            "| {} | `{}@{}` | {} | {} | {} | `{}` |",
+            "| {} | `{}@{}` | {} | {} | {} | {:.3} | {} | `{}` |",
             column.label,
             column.pack_id,
             column.pack_version,
             column.sut_version.as_deref().unwrap_or("(undisclosed)"),
             column.repetitions,
             column.submittable,
+            column.scale_factor,
+            column.reference_configuration,
             column.source.display()
         );
     }
@@ -168,11 +229,11 @@ pub fn comparison(comparison: &Comparison) -> String {
     let _written = writeln!(out);
     let _written = writeln!(
         out,
-        "Each cell is the cross-repetition median with the inter-quartile range in parentheses."
+        "Each cell is the cross-repetition median with the inter-quartile range in parentheses. The discipline column says which regime produced the row: a closed-loop average and an open-loop percentile answer different questions and are never read against one another."
     );
     let _written = writeln!(out);
-    let mut header = String::from("| Phase | Operation | Metric |");
-    let mut divider = String::from("|---|---|---|");
+    let mut header = String::from("| Phase | Discipline | Operation | Metric |");
+    let mut divider = String::from("|---|---|---|---|");
     for column in &comparison.columns {
         let _written = write!(header, " {} |", column.label);
         divider.push_str("---:|");
@@ -181,8 +242,9 @@ pub fn comparison(comparison: &Comparison) -> String {
     let _written = writeln!(out, "{divider}");
     for row in &comparison.rows {
         let mut line = format!(
-            "| `{}` | `{}` | {} |",
+            "| `{}` | {} | `{}` | {} |",
             row.phase,
+            row.regime,
             row.operation,
             row.metric.as_str()
         );
@@ -206,7 +268,7 @@ mod tests {
 
     use super::*;
     use crate::bench::compare::{ComparisonColumn, ComparisonRow, Metric};
-    use crate::bench::result::CrossStat;
+    use crate::bench::result::{CrossStat, LoopRegime};
 
     /// A comparison always carries the boundary statement, whatever else it
     /// says.
@@ -220,6 +282,8 @@ mod tests {
             sut_version: None,
             repetitions: 3,
             submittable: true,
+            scale_factor: 1.0,
+            reference_configuration: true,
             environment: BTreeMap::new(),
         };
         let rendered = comparison(&Comparison {
@@ -227,6 +291,7 @@ mod tests {
             warnings: Vec::new(),
             rows: vec![ComparisonRow {
                 phase: "mixed".to_owned(),
+                regime: LoopRegime::OpenLoop,
                 operation: "get_ehr".to_owned(),
                 metric: Metric::P99Us,
                 cells: vec![
@@ -256,6 +321,8 @@ mod tests {
             sut_version: None,
             repetitions: 1,
             submittable: false,
+            scale_factor: 1.0,
+            reference_configuration: true,
             environment: BTreeMap::new(),
         };
         let right = ComparisonColumn {

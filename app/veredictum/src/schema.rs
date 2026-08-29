@@ -1833,7 +1833,7 @@ pub fn bench_result_schema() -> Value {
         "type": "object",
         "additionalProperties": false,
         "required": ["schema_version", "boundary_statement", "pack", "target", "environment",
-                      "started_at", "finished_at", "seed_phases", "repetitions", "cross",
+                      "started_at", "finished_at", "scale", "seed_phases", "repetitions", "cross",
                       "methodology", "submittable"],
         "properties": {
             "schema_version": { "type": "string", "minLength": 1 },
@@ -1877,13 +1877,25 @@ pub fn bench_result_schema() -> Value {
             },
             "started_at": { "type": "string", "minLength": 1 },
             "finished_at": { "type": "string", "minLength": 1 },
+            "scale": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["factor", "declared_workers", "reference_configuration"],
+                "properties": {
+                    "factor": { "type": "number", "exclusiveMinimum": 0.0 },
+                    "declared_workers": { "type": "boolean" },
+                    "reference_configuration": { "type": "boolean" }
+                }
+            },
+            "version_at_time": { "type": "string", "minLength": 1 },
             "seed_phases": {
                 "type": "array",
                 "items": {
                     "type": "object",
                     "additionalProperties": false,
                     "required": ["name", "regime", "ehrs", "compositions_per_ehr", "workers",
-                                  "elapsed_s", "bulk_load_writes_per_s"],
+                                  "elapsed_s", "bulk_load_writes_per_s",
+                                  "whole_loop_ms_per_composition"],
                     "properties": {
                         "name": { "type": "string", "minLength": 1 },
                         "regime": { "enum": regimes },
@@ -1891,7 +1903,8 @@ pub fn bench_result_schema() -> Value {
                         "compositions_per_ehr": { "type": "integer", "minimum": 0 },
                         "workers": { "type": "integer", "minimum": 1 },
                         "elapsed_s": { "type": "number", "minimum": 0.0 },
-                        "bulk_load_writes_per_s": { "type": "number", "minimum": 0.0 }
+                        "bulk_load_writes_per_s": { "type": "number", "minimum": 0.0 },
+                        "whole_loop_ms_per_composition": { "type": "number", "minimum": 0.0 }
                     }
                 }
             },
@@ -1931,6 +1944,31 @@ pub fn bench_result_schema() -> Value {
                                     }
                                 }
                             }
+                        },
+                        "sweeps": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["name", "regime", "workers", "compositions",
+                                              "requests_per_composition", "requests", "elapsed_s",
+                                              "whole_loop_us_per_request", "operations"],
+                                "properties": {
+                                    "name": { "type": "string", "minLength": 1 },
+                                    "regime": { "enum": regimes },
+                                    "workers": { "type": "integer", "minimum": 1 },
+                                    "compositions": { "type": "integer", "minimum": 0 },
+                                    "requests_per_composition": { "type": "integer", "minimum": 0 },
+                                    "requests": { "type": "integer", "minimum": 0 },
+                                    "elapsed_s": { "type": "number", "minimum": 0.0 },
+                                    "whole_loop_us_per_request": { "type": "number", "minimum": 0.0 },
+                                    "operations": {
+                                        "type": "object",
+                                        "propertyNames": bench_operation_names(),
+                                        "additionalProperties": bench_operation_stats_def()
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1940,8 +1978,9 @@ pub fn bench_result_schema() -> Value {
                 "additionalProperties": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["operations"],
+                    "required": ["regime", "operations"],
                     "properties": {
+                        "regime": { "enum": regimes },
                         "operations": {
                             "type": "object",
                             "propertyNames": bench_operation_names(),

@@ -1,0 +1,20 @@
+openEHR forum attachment — terms not declared by the publisher
+
+This identifier marks a file vendored verbatim from a public attachment on the
+openEHR Discourse forum, where the publisher declared no licence. It states
+what is known and claims nothing further.
+
+  * The file is included byte-identically, with its sha256 recorded in the
+    code that embeds it, so what is distributed here is exactly what was
+    published there.
+  * No copyright is claimed over it by the Veredictum contributors.
+  * No licence grant is asserted on the publisher's behalf. Whatever terms the
+    copyright holder attaches to the material govern it, and a downstream
+    recipient who needs a grant must obtain one from that holder.
+  * The file is present because a benchmark that reproduces a published
+    measurement must offer the same bytes the published measurement offered.
+    Substituting different bytes would produce a number that cannot be
+    compared with the one on the forum.
+
+Anyone with a claim to the material, or with a declaration of its terms, is
+asked to open an issue on this repository so the record can be corrected.

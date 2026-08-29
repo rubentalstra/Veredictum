@@ -29,15 +29,16 @@ use hdrhistogram::Histogram;
 use reqwest::{Method, StatusCode};
 use serde_json::{Value, json};
 
-use crate::bench::client::{AuthKind, BenchClient, location_last_segment, strip_weak_quotes};
+use crate::bench::client::{AuthKind, BenchClient, PreferReturn, created_identifier, query_value};
 use crate::bench::compare::summarize;
 use crate::bench::fingerprint::EnvironmentFingerprint;
 use crate::bench::pack::{
-    BenchOp, BenchPack, BenchPhase, Fixture, FixtureKind, MeasurePhase, SeedPhase,
+    BenchOp, BenchPack, BenchPhase, Fixture, FixtureKind, MeasurePhase, SeedPhase, SweepPhase,
 };
 use crate::bench::result::{
     BenchResult, ErrorClass, LoopRegime, MeasuredPhaseRecord, Methodology, OperationStats,
-    PackRecord, RepetitionRecord, SUBMITTABLE_REPETITIONS, SeedPhaseRecord, TargetRecord,
+    PackRecord, RepetitionRecord, SUBMITTABLE_REPETITIONS, ScaleRecord, SeedPhaseRecord,
+    SweepPhaseRecord, TargetRecord,
 };
 use crate::bench::{BOUNDARY_STATEMENT, BenchError, METHODOLOGY};
 
@@ -86,6 +87,26 @@ pub struct BenchRun<'a> {
     pub repetitions: u32,
     /// The operator's label for this run.
     pub label: Option<&'a str>,
+    /// Multiplies every seed phase's EHR count. `1.0` is the pack's pinned
+    /// population, and any other value takes the run off the pack's reference
+    /// configuration.
+    pub scale: f64,
+    /// Overrides every seed phase's declared worker count. `None` keeps what
+    /// the pack declares.
+    pub seed_workers: Option<usize>,
+}
+
+/// One composition the seed phase committed, and everything a read needs to
+/// address it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct SeededComposition {
+    /// Which seeded EHR it was committed into.
+    ehr_index: usize,
+    /// The versioned-object uid, which the latest-version reads address.
+    object_uid: String,
+    /// The `OBJECT_VERSION_ID` the commit answered with, which the
+    /// version-by-id read addresses.
+    version_uid: String,
 }
 
 /// The corpus one seed phase left behind.
@@ -93,8 +114,11 @@ pub struct BenchRun<'a> {
 struct BenchCorpus {
     /// Every seeded EHR id, in creation order.
     ehr_ids: Vec<String>,
-    /// Every committed composition, as (EHR index, versioned-object uid).
-    compositions: Vec<(usize, String)>,
+    /// Every committed composition, in creation order.
+    compositions: Vec<SeededComposition>,
+    /// The instant every `version_at_time` read addresses, captured once
+    /// after the seed phases finished. Every seeded version predates it.
+    version_at_time: String,
 }
 
 /// Whether a provisioning write landed in the created family.
@@ -105,6 +129,50 @@ struct BenchCorpus {
 /// catalogue is where an exact status is pinned.
 fn created(status: StatusCode) -> bool {
     status == StatusCode::CREATED || status == StatusCode::NO_CONTENT
+}
+
+/// The EHR count a scale factor asks a seed phase for.
+///
+/// The factor multiplies the EHR count only, never the compositions committed
+/// into each one, so a scaled run keeps the per-EHR depth the pack pins and
+/// shrinks the population instead.
+///
+/// # Errors
+/// [`BenchError::Seed`] for a factor that is not a positive finite number.
+fn scaled_ehrs(declared: usize, factor: f64) -> Result<usize, BenchError> {
+    if !factor.is_finite() || factor <= 0.0 {
+        return Err(BenchError::Seed {
+            phase: "(scale)".to_owned(),
+            detail: format!("--scale must be a positive finite number (got {factor})"),
+        });
+    }
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "an operator-scale EHR count times an operator-scale factor, rounded, far below 2^52"
+    )]
+    let scaled = (declared as f64 * factor).round() as usize;
+    Ok(scaled.max(1))
+}
+
+/// Whether any phase in the pack drives a read parameterized by an instant,
+/// which is what makes the captured instant worth recording.
+fn reads_a_version_at_time(pack: &BenchPack) -> bool {
+    let at_time = |op: &BenchOp| {
+        matches!(
+            op,
+            BenchOp::GetCompositionAtTime | BenchOp::GetVersionedCompositionVersionAtTime
+        )
+    };
+    pack.sweep_phases()
+        .iter()
+        .any(|sweep| sweep.per_composition.iter().any(at_time))
+        || pack
+            .measure_phases()
+            .iter()
+            .any(|phase| phase.mix.iter().any(|(op, _)| at_time(op)))
 }
 
 /// The versioned-object part of an `OBJECT_VERSION_ID` (`uid::system::1`
@@ -142,15 +210,21 @@ pub fn execute(
 
     let mut corpus = BenchCorpus::default();
     let mut seed_phases = Vec::new();
+    let mut declared_workers = true;
     for phase in &run.pack.phases {
         let BenchPhase::Seed(seed) = phase else {
             continue;
         };
+        let ehrs = scaled_ehrs(seed.ehrs, run.scale)?;
+        let workers = run.seed_workers.unwrap_or(seed.workers).max(1);
+        if workers != seed.workers {
+            declared_workers = false;
+        }
         progress(format!(
-            "seed phase {}: {} EHRs x {} compositions on {} workers",
-            seed.name, seed.ehrs, seed.compositions_per_ehr, seed.workers
+            "seed phase {}: {} EHRs x {} compositions on {} worker(s)",
+            seed.name, ehrs, seed.compositions_per_ehr, workers
         ));
-        let record = seed_phase(&client, seed, &mut corpus, progress)?;
+        let record = seed_phase(&client, seed, ehrs, workers, &mut corpus, progress)?;
         seed_phases.push(record);
     }
     if corpus.ehr_ids.is_empty() {
@@ -159,27 +233,21 @@ pub fn execute(
             detail: "the pack seeded no EHR, so no measured phase has a target".to_owned(),
         });
     }
+    corpus.version_at_time = jiff::Timestamp::now().to_string();
 
     let measure_phases = run.pack.measure_phases();
+    let sweep_phases = run.pack.sweep_phases();
     let mut repetitions = Vec::with_capacity(usize::try_from(run.repetitions).unwrap_or(1));
     for repetition in 1..=run.repetitions {
-        let mut phases = BTreeMap::new();
-        for (index, phase) in measure_phases.iter().enumerate() {
-            progress(format!(
-                "repetition {repetition}/{}: phase {} at {}/s for {}s warmup + {}s measured",
-                run.repetitions, phase.name, phase.rate_per_s, phase.warmup_s, phase.duration_s
-            ));
-            let record = measure_phase(
-                &client,
-                run.pack,
-                phase,
-                u64::try_from(index).unwrap_or(0),
-                &corpus,
-                progress,
-            )?;
-            let _replaced = phases.insert(phase.name.clone(), record);
-        }
-        repetitions.push(RepetitionRecord { repetition, phases });
+        repetitions.push(one_repetition(
+            &client,
+            run,
+            repetition,
+            &sweep_phases,
+            &measure_phases,
+            &corpus,
+            progress,
+        )?);
     }
 
     let cross = summarize(&repetitions);
@@ -196,6 +264,8 @@ pub fn execute(
         environment: EnvironmentFingerprint::detect(),
         started_at,
         finished_at: jiff::Timestamp::now().to_string(),
+        scale: ScaleRecord::new(run.scale, declared_workers),
+        version_at_time: reads_a_version_at_time(run.pack).then(|| corpus.version_at_time.clone()),
         seed_phases,
         repetitions,
         cross,
@@ -211,6 +281,53 @@ pub fn execute(
     })
 }
 
+/// Executes one repetition: every closed-loop sweep, then every open-loop
+/// measured phase, over the corpus the seed phases left behind.
+fn one_repetition(
+    client: &BenchClient,
+    run: &BenchRun<'_>,
+    repetition: u32,
+    sweep_phases: &[&SweepPhase],
+    measure_phases: &[&MeasurePhase],
+    corpus: &BenchCorpus,
+    progress: &(dyn Fn(String) + Sync),
+) -> Result<RepetitionRecord, BenchError> {
+    let mut sweeps = BTreeMap::new();
+    for phase in sweep_phases {
+        progress(format!(
+            "repetition {repetition}/{}: sweep {} over {} composition(s) x {} request(s) on {} worker(s)",
+            run.repetitions,
+            phase.name,
+            corpus.compositions.len(),
+            phase.per_composition.len(),
+            phase.workers
+        ));
+        let record = sweep_phase(client, phase, corpus, progress)?;
+        let _replaced = sweeps.insert(phase.name.clone(), record);
+    }
+    let mut phases = BTreeMap::new();
+    for (index, phase) in measure_phases.iter().enumerate() {
+        progress(format!(
+            "repetition {repetition}/{}: phase {} at {}/s for {}s warmup + {}s measured",
+            run.repetitions, phase.name, phase.rate_per_s, phase.warmup_s, phase.duration_s
+        ));
+        let record = measure_phase(
+            client,
+            run.pack,
+            phase,
+            u64::try_from(index).unwrap_or(0),
+            corpus,
+            progress,
+        )?;
+        let _replaced = phases.insert(phase.name.clone(), record);
+    }
+    Ok(RepetitionRecord {
+        repetition,
+        phases,
+        sweeps,
+    })
+}
+
 /// Refuses the run unless the whole write-then-read path answers.
 ///
 /// # Errors
@@ -222,7 +339,7 @@ pub fn preflight(client: &BenchClient, pack: &BenchPack) -> Result<(), BenchErro
         Method::GET,
         "/definition/template/adl1.4",
         None,
-        false,
+        PreferReturn::Unstated,
     )?;
     if !templates.status.is_success() {
         return Err(refused(
@@ -275,7 +392,7 @@ fn upload_template(
             Method::POST,
             "/definition/template/adl1.4",
             Some((fixture.kind.media_type(), fixture.bytes.as_bytes().to_vec())),
-            false,
+            PreferReturn::Unstated,
         )
         .map_err(|error| error.to_string())?;
     if created(upload.status) || upload.status == StatusCode::CONFLICT {
@@ -289,23 +406,25 @@ fn upload_template(
 
 /// Proves one scratch EHR, one commit into it, and the read back.
 fn preflight_round_trip(client: &BenchClient, composition: &Fixture) -> Result<(), BenchError> {
-    let ehr = client.send("scratch ehr create", Method::POST, "/ehr", None, true)?;
+    let ehr = client.send(
+        "scratch ehr create",
+        Method::POST,
+        "/ehr",
+        None,
+        PreferReturn::Identifier,
+    )?;
     if ehr.status != StatusCode::CREATED {
         return Err(refused(
             "scratch ehr create",
             format!("POST /ehr answered {} (201 expected)", ehr.status),
         ));
     }
-    let ehr_id = ehr
-        .location
-        .as_deref()
-        .and_then(location_last_segment)
-        .ok_or_else(|| {
-            refused(
-                "scratch ehr create",
-                "the create answered without a Location carrying an ehr_id".to_owned(),
-            )
-        })?;
+    let ehr_id = created_identifier(&ehr).ok_or_else(|| {
+        refused(
+            "scratch ehr create",
+            "the create disclosed no ehr_id: no uid body, no ETag and no Location".to_owned(),
+        )
+    })?;
     let commit = client.send(
         "scratch composition commit",
         Method::POST,
@@ -314,7 +433,7 @@ fn preflight_round_trip(client: &BenchClient, composition: &Fixture) -> Result<(
             composition.kind.media_type(),
             composition.bytes.as_bytes().to_vec(),
         )),
-        true,
+        PreferReturn::Identifier,
     )?;
     if !created(commit.status) {
         return Err(refused(
@@ -325,15 +444,13 @@ fn preflight_round_trip(client: &BenchClient, composition: &Fixture) -> Result<(
             ),
         ));
     }
-    let uid = commit
-        .etag
-        .as_deref()
-        .map(strip_weak_quotes)
+    let uid = created_identifier(&commit)
         .map(|version| object_uid_of(&version))
         .ok_or_else(|| {
             refused(
                 "scratch composition commit",
-                "the commit answered without an ETag carrying a version uid".to_owned(),
+                "the commit disclosed no version uid: no uid body, no ETag and no Location"
+                    .to_owned(),
             )
         })?;
     let read = client.send(
@@ -341,7 +458,7 @@ fn preflight_round_trip(client: &BenchClient, composition: &Fixture) -> Result<(
         Method::GET,
         &format!("/ehr/{ehr_id}/composition/{uid}"),
         None,
-        false,
+        PreferReturn::Unstated,
     )?;
     if read.status != StatusCode::OK {
         return Err(refused(
@@ -364,7 +481,13 @@ fn preflight_round_trip(client: &BenchClient, composition: &Fixture) -> Result<(
 #[must_use]
 pub fn probe_sut_version(client: &BenchClient) -> Option<String> {
     for path in ["/../system/info", "/"] {
-        let Ok(reply) = client.send("version probe", Method::GET, path, None, false) else {
+        let Ok(reply) = client.send(
+            "version probe",
+            Method::GET,
+            path,
+            None,
+            PreferReturn::Unstated,
+        ) else {
             continue;
         };
         if !reply.status.is_success() {
@@ -383,9 +506,14 @@ pub fn probe_sut_version(client: &BenchClient) -> Option<String> {
 }
 
 /// Runs one closed-loop bulk load, extending the corpus in place.
+///
+/// `ehrs` and `workers` are the EFFECTIVE values, after the run's scale factor
+/// and any worker override, so what the record reports is what was executed.
 fn seed_phase(
     client: &BenchClient,
     phase: &SeedPhase,
+    ehrs: usize,
+    workers: usize,
     corpus: &mut BenchCorpus,
     progress: &(dyn Fn(String) + Sync),
 ) -> Result<SeedPhaseRecord, BenchError> {
@@ -406,21 +534,18 @@ fn seed_phase(
         .ok_or_else(|| fail("the phase declares no composition fixture to commit".to_owned()))?;
 
     let started = Instant::now();
-    let workers = phase.workers.max(1);
+    let workers = workers.max(1);
     let base = corpus.ehr_ids.len();
-    let created_ehrs = seed_ehrs(client, phase.ehrs, workers).map_err(fail)?;
+    let created_ehrs = seed_ehrs(client, ehrs, workers).map_err(fail)?;
     corpus.ehr_ids.extend(created_ehrs);
-    progress(format!(
-        "seed phase {}: {} EHRs created",
-        phase.name, phase.ehrs
-    ));
+    progress(format!("seed phase {}: {ehrs} EHRs created", phase.name));
 
-    let total = phase
-        .ehrs
+    let total = ehrs
         .checked_mul(phase.compositions_per_ehr)
         .ok_or_else(|| fail("the seed volume overflows".to_owned()))?;
     let mut compositions =
-        seed_compositions(client, phase, composition, corpus, base, workers).map_err(fail)?;
+        seed_compositions(client, phase, composition, corpus, base, workers, total)
+            .map_err(fail)?;
     if compositions.len() != total {
         return Err(fail(format!(
             "committed {} of {total} compositions",
@@ -431,25 +556,34 @@ fn seed_phase(
     corpus.compositions.append(&mut compositions);
 
     let elapsed_s = started.elapsed().as_secs_f64();
-    let writes = phase.ehrs.saturating_add(total);
+    let writes = ehrs.saturating_add(total);
     #[expect(
         clippy::as_conversions,
         clippy::cast_precision_loss,
         reason = "seed volumes are far below 2^52"
     )]
-    let bulk_load_writes_per_s = if elapsed_s > 0.0 {
-        writes as f64 / elapsed_s
-    } else {
-        0.0
+    let (bulk_load_writes_per_s, whole_loop_ms_per_composition) = {
+        let throughput = if elapsed_s > 0.0 {
+            writes as f64 / elapsed_s
+        } else {
+            0.0
+        };
+        let per_composition = if total > 0 {
+            elapsed_s * 1000.0 / total as f64
+        } else {
+            0.0
+        };
+        (throughput, per_composition)
     };
     Ok(SeedPhaseRecord {
         name: phase.name.clone(),
         regime: LoopRegime::ClosedLoop,
-        ehrs: u64::try_from(phase.ehrs).unwrap_or(u64::MAX),
+        ehrs: u64::try_from(ehrs).unwrap_or(u64::MAX),
         compositions_per_ehr: u64::try_from(phase.compositions_per_ehr).unwrap_or(u64::MAX),
         workers: u64::try_from(workers).unwrap_or(u64::MAX),
         elapsed_s,
         bulk_load_writes_per_s,
+        whole_loop_ms_per_composition,
     })
 }
 
@@ -471,17 +605,20 @@ fn seed_ehrs(client: &BenchClient, count: usize, workers: usize) -> Result<Vec<S
                         break;
                     }
                     let outcome = client
-                        .send("seed ehr create", Method::POST, "/ehr", None, true)
+                        .send(
+                            "seed ehr create",
+                            Method::POST,
+                            "/ehr",
+                            None,
+                            PreferReturn::Identifier,
+                        )
                         .map_err(|error| error.to_string())
                         .and_then(|reply| {
                             if reply.status != StatusCode::CREATED {
                                 return Err(format!("create ehr answered {}", reply.status));
                             }
-                            reply
-                                .location
-                                .as_deref()
-                                .and_then(location_last_segment)
-                                .ok_or_else(|| "create ehr answered without a Location".to_owned())
+                            created_identifier(&reply)
+                                .ok_or_else(|| "create ehr disclosed no ehr_id".to_owned())
                         });
                     match outcome {
                         Ok(id) => {
@@ -517,8 +654,10 @@ fn seed_ehrs(client: &BenchClient, count: usize, workers: usize) -> Result<Vec<S
     Ok(ids)
 }
 
-/// Commits the phase's compositions into the EHRs it just created, as
-/// (EHR index, versioned-object uid) pairs.
+/// Commits the phase's compositions into the EHRs it just created.
+///
+/// `total` is the effective volume the caller computed from the scaled EHR
+/// count, so this walk and the record agree about how much work was offered.
 fn seed_compositions(
     client: &BenchClient,
     phase: &SeedPhase,
@@ -526,13 +665,10 @@ fn seed_compositions(
     corpus: &BenchCorpus,
     base: usize,
     workers: usize,
-) -> Result<Vec<(usize, String)>, String> {
-    let total = phase
-        .ehrs
-        .checked_mul(phase.compositions_per_ehr)
-        .ok_or_else(|| "the seed volume overflows".to_owned())?;
+    total: usize,
+) -> Result<Vec<SeededComposition>, String> {
     let body = composition.bytes.as_bytes().to_vec();
-    let committed: Mutex<Vec<(usize, String)>> = Mutex::new(Vec::with_capacity(total));
+    let committed: Mutex<Vec<SeededComposition>> = Mutex::new(Vec::with_capacity(total));
     let failures: Mutex<Vec<String>> = Mutex::new(Vec::new());
     let next = AtomicUsize::new(0);
     std::thread::scope(|scope| {
@@ -559,21 +695,22 @@ fn seed_compositions(
                             Method::POST,
                             &format!("/ehr/{ehr_id}/composition"),
                             Some((composition.kind.media_type(), body.clone())),
-                            true,
+                            PreferReturn::Identifier,
                         )
                         .map_err(|error| error.to_string())
                         .and_then(|reply| {
                             if !created(reply.status) {
                                 return Err(format!("commit answered {}", reply.status));
                             }
-                            reply
-                                .etag
-                                .as_deref()
-                                .map(strip_weak_quotes)
-                                .ok_or_else(|| "commit answered without an ETag".to_owned())
+                            created_identifier(&reply)
+                                .ok_or_else(|| "commit disclosed no version uid".to_owned())
                         });
                     match outcome {
-                        Ok(version) => local.push((ehr_index, object_uid_of(&version))),
+                        Ok(version) => local.push(SeededComposition {
+                            ehr_index,
+                            object_uid: object_uid_of(&version),
+                            version_uid: version,
+                        }),
                         Err(detail) => {
                             if let Ok(mut recorded) = failures.lock() {
                                 recorded.push(detail);
@@ -691,53 +828,117 @@ fn payload_variants(pack: &BenchPack, fixture: &Fixture) -> Result<Vec<Vec<u8>>,
     Ok(variants)
 }
 
+/// Everything one offered request needs to address the seeded population.
+#[derive(Debug, Clone, Copy)]
+struct ArrivalTarget<'a> {
+    /// The EHR the request is scoped to.
+    ehr_id: &'a str,
+    /// The versioned-object uid a composition read addresses.
+    object_uid: &'a str,
+    /// The `OBJECT_VERSION_ID` a version-by-id read addresses.
+    version_uid: &'a str,
+    /// The instant a `version_at_time` read addresses, already
+    /// percent-encoded for a query parameter.
+    version_at_time: &'a str,
+    /// The composition bytes a write arrival offers.
+    payload: &'a [u8],
+}
+
 /// Offers one arrival and reports whether it landed as the operation
 /// requires, plus the class of any failure.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one dispatch table over the closed operation vocabulary: splitting it would hide which path an operation takes"
+)]
 fn offer(
     client: &BenchClient,
     op: BenchOp,
-    ehr_id: &str,
-    composition_uid: &str,
-    payload: &[u8],
+    target: ArrivalTarget<'_>,
 ) -> (bool, Option<ErrorClass>) {
+    let ehr_id = target.ehr_id;
+    let object_uid = target.object_uid;
+    let versioned = format!("/ehr/{ehr_id}/versioned_composition/{object_uid}");
+    let at_time = target.version_at_time;
     let reply = match op {
         BenchOp::CreateComposition => client.send(
-            "create_composition",
+            op.as_str(),
             Method::POST,
             &format!("/ehr/{ehr_id}/composition"),
-            Some(("application/json", payload.to_vec())),
-            true,
+            Some(("application/json", target.payload.to_vec())),
+            PreferReturn::Identifier,
         ),
         BenchOp::GetCompositionLatest => client.send(
-            "get_composition_latest",
+            op.as_str(),
             Method::GET,
-            &format!("/ehr/{ehr_id}/composition/{composition_uid}"),
+            &format!("/ehr/{ehr_id}/composition/{object_uid}"),
             None,
-            false,
+            PreferReturn::Unstated,
+        ),
+        BenchOp::GetCompositionAtTime => client.send(
+            op.as_str(),
+            Method::GET,
+            &format!("/ehr/{ehr_id}/composition/{object_uid}?version_at_time={at_time}"),
+            None,
+            PreferReturn::Unstated,
+        ),
+        BenchOp::GetVersionedComposition => client.send(
+            op.as_str(),
+            Method::GET,
+            &versioned,
+            None,
+            PreferReturn::Unstated,
+        ),
+        BenchOp::GetVersionedCompositionVersionLatest => client.send(
+            op.as_str(),
+            Method::GET,
+            &format!("{versioned}/version"),
+            None,
+            PreferReturn::Unstated,
+        ),
+        BenchOp::GetVersionedCompositionVersionAtTime => client.send(
+            op.as_str(),
+            Method::GET,
+            &format!("{versioned}/version?version_at_time={at_time}"),
+            None,
+            PreferReturn::Unstated,
+        ),
+        BenchOp::GetVersionedCompositionVersionById => client.send(
+            op.as_str(),
+            Method::GET,
+            &format!("{versioned}/version/{}", query_value(target.version_uid)),
+            None,
+            PreferReturn::Unstated,
+        ),
+        BenchOp::GetVersionedCompositionRevisionHistory => client.send(
+            op.as_str(),
+            Method::GET,
+            &format!("{versioned}/revision_history"),
+            None,
+            PreferReturn::Unstated,
         ),
         BenchOp::GetEhr => client.send(
-            "get_ehr",
+            op.as_str(),
             Method::GET,
             &format!("/ehr/{ehr_id}"),
             None,
-            false,
+            PreferReturn::Unstated,
         ),
         BenchOp::GetEhrStatus => client.send(
-            "get_ehr_status",
+            op.as_str(),
             Method::GET,
             &format!("/ehr/{ehr_id}/ehr_status"),
             None,
-            false,
+            PreferReturn::Unstated,
         ),
         BenchOp::AdhocQueryUid => {
             let body = json!({ "q": ADHOC_UID_AQL, "query_parameters": { "ehr_id": ehr_id } });
             match serde_json::to_vec(&body) {
                 Ok(bytes) => client.send(
-                    "adhoc_query_uid",
+                    op.as_str(),
                     Method::POST,
                     "/query/aql",
                     Some(("application/json", bytes)),
-                    false,
+                    PreferReturn::Unstated,
                 ),
                 Err(_unserializable) => return (false, Some(ErrorClass::Transport)),
             }
@@ -756,9 +957,15 @@ fn offer(
         Ok(reply) => {
             let accepted = match op {
                 BenchOp::CreateComposition => created(reply.status),
-                BenchOp::GetCompositionLatest
+                BenchOp::GetCompositionAtTime
+                | BenchOp::GetCompositionLatest
                 | BenchOp::GetEhr
                 | BenchOp::GetEhrStatus
+                | BenchOp::GetVersionedComposition
+                | BenchOp::GetVersionedCompositionRevisionHistory
+                | BenchOp::GetVersionedCompositionVersionAtTime
+                | BenchOp::GetVersionedCompositionVersionById
+                | BenchOp::GetVersionedCompositionVersionLatest
                 | BenchOp::AdhocQueryUid => reply.status == StatusCode::OK,
             };
             if accepted {
@@ -768,6 +975,156 @@ fn offer(
             }
         }
     }
+}
+
+/// Folds a sweep's observations into one histogram and one failure tally per
+/// operation.
+///
+/// # Errors
+/// [`BenchError::Histogram`] when a histogram cannot be created or encoded.
+fn aggregate(
+    observations: &[(BenchOp, u64, Option<ErrorClass>)],
+    elapsed_s: f64,
+) -> Result<BTreeMap<String, OperationStats>, BenchError> {
+    let mut recorders: BTreeMap<&'static str, (Histogram<u64>, BTreeMap<String, u64>)> =
+        BTreeMap::new();
+    for (op, latency_us, class) in observations {
+        let entry = match recorders.entry(op.as_str()) {
+            std::collections::btree_map::Entry::Occupied(entry) => entry.into_mut(),
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                let histogram = Histogram::new_with_bounds(1, HDR_MAX_US, 3)
+                    .map_err(|error| BenchError::Histogram(error.to_string()))?;
+                entry.insert((histogram, BTreeMap::new()))
+            }
+        };
+        let _saturated = entry.0.record(latency_us.clamp(&1, &HDR_MAX_US).to_owned());
+        if let Some(class) = class {
+            let counter = entry.1.entry(class.as_str().to_owned()).or_insert(0);
+            *counter = counter.saturating_add(1);
+        }
+    }
+    let mut operations = BTreeMap::new();
+    for (op, (histogram, classes)) in recorders {
+        let _replaced = operations.insert(
+            op.to_owned(),
+            OperationStats::from_histogram(&histogram, classes, elapsed_s)?,
+        );
+    }
+    Ok(operations)
+}
+
+/// Executes one closed-loop sweep: every seeded composition, in creation
+/// order, offered the phase's requests one after another.
+///
+/// Creation order is the reproduction: a single-client harness walks the
+/// population it wrote, in the order it wrote it, and the locality that gives
+/// a system is part of what the published figure measures. The open-loop phase
+/// beside it draws its targets from the seeded stream instead.
+///
+/// Latency here is the request's own duration, which is what a closed-loop
+/// client observes and the only honest thing to record when the next request
+/// waits for this one. The headline figure is the whole-loop average.
+fn sweep_phase(
+    client: &BenchClient,
+    phase: &SweepPhase,
+    corpus: &BenchCorpus,
+    progress: &(dyn Fn(String) + Sync),
+) -> Result<SweepPhaseRecord, BenchError> {
+    let fail = |detail: String| BenchError::Measure {
+        phase: phase.name.clone(),
+        detail,
+    };
+    let compositions = corpus.compositions.len();
+    let per_composition = phase.per_composition.len();
+    if compositions == 0 || per_composition == 0 {
+        return Err(fail(
+            "the sweep has no composition to walk or no request to offer".to_owned(),
+        ));
+    }
+    let encoded_at_time = query_value(&corpus.version_at_time);
+    let workers = phase.workers.max(1);
+    let next = AtomicUsize::new(0);
+    let collected: Mutex<Vec<(BenchOp, u64, Option<ErrorClass>)>> =
+        Mutex::new(Vec::with_capacity(phase.requests(compositions)));
+
+    let started = Instant::now();
+    {
+        let cursor = &next;
+        let sink = &collected;
+        let at_time = encoded_at_time.as_str();
+        std::thread::scope(|scope| {
+            for _ in 0..workers {
+                let _handle = scope.spawn(move || {
+                    let mut local = Vec::new();
+                    loop {
+                        let slot = cursor.fetch_add(1, Ordering::Relaxed);
+                        let Some(seeded) = corpus.compositions.get(slot) else {
+                            break;
+                        };
+                        let ehr_id = corpus
+                            .ehr_ids
+                            .get(seeded.ehr_index)
+                            .map_or("", String::as_str);
+                        for op in &phase.per_composition {
+                            let issued = Instant::now();
+                            let (ok, class) = offer(
+                                client,
+                                *op,
+                                ArrivalTarget {
+                                    ehr_id,
+                                    object_uid: seeded.object_uid.as_str(),
+                                    version_uid: seeded.version_uid.as_str(),
+                                    version_at_time: at_time,
+                                    payload: &[],
+                                },
+                            );
+                            let latency_us = u64::try_from(
+                                issued.elapsed().as_micros().min(u128::from(HDR_MAX_US)),
+                            )
+                            .unwrap_or(HDR_MAX_US);
+                            local.push((*op, latency_us, if ok { None } else { class }));
+                        }
+                    }
+                    if let Ok(mut all) = sink.lock() {
+                        all.append(&mut local);
+                    }
+                });
+            }
+        });
+    }
+    let elapsed_s = started.elapsed().as_secs_f64();
+
+    let observations = collected
+        .into_inner()
+        .map_err(|error| fail(format!("sweep lock poisoned: {error}")))?;
+    let requests = observations.len();
+    let operations = aggregate(&observations, elapsed_s)?;
+
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        reason = "request counts are far below 2^52"
+    )]
+    let whole_loop_us_per_request = if requests > 0 {
+        elapsed_s * 1_000_000.0 / requests as f64
+    } else {
+        0.0
+    };
+    progress(format!(
+        "sweep {} finished: {requests} request(s) in {elapsed_s:.1}s, {whole_loop_us_per_request:.1} us/request whole-loop",
+        phase.name
+    ));
+    Ok(SweepPhaseRecord {
+        name: phase.name.clone(),
+        regime: LoopRegime::ClosedLoop,
+        workers: u64::try_from(workers).unwrap_or(u64::MAX),
+        compositions: u64::try_from(compositions).unwrap_or(u64::MAX),
+        requests_per_composition: u64::try_from(per_composition).unwrap_or(u64::MAX),
+        requests: u64::try_from(requests).unwrap_or(u64::MAX),
+        elapsed_s,
+        whole_loop_us_per_request,
+        operations,
+    })
 }
 
 /// Executes one open-loop measured phase.
@@ -793,6 +1150,7 @@ fn measure_phase(
         .find(|fixture| fixture.kind == FixtureKind::Composition)
         .ok_or_else(|| fail("the pack embeds no composition to write".to_owned()))?;
     let payloads = payload_variants(pack, &composition_fixture)?;
+    let encoded_at_time = query_value(&corpus.version_at_time);
     let schedule = build_schedule(pack, phase, phase_index);
     let planned_measured = schedule.iter().filter(|arrival| arrival.recorded).count();
 
@@ -840,6 +1198,7 @@ fn measure_phase(
             }
             let tx = tx.clone();
             let payloads = &payloads;
+            let encoded_at_time = encoded_at_time.as_str();
             let arrival = *arrival;
             let _handle = scope.spawn(move || {
                 let ehr_draw =
@@ -861,18 +1220,30 @@ fn measure_phase(
                 )
                 .unwrap_or(0);
                 let payload_slot = usize::try_from(payload_draw % PAYLOAD_VARIANTS).unwrap_or(0);
-                let (ehr_id, composition_uid) = match corpus.compositions.get(composition_slot) {
-                    // A read addresses the EHR its composition was committed
-                    // into, so a latest-version read can never be a 404 the
-                    // instrument itself manufactured.
-                    Some((owner, uid)) if arrival.op == BenchOp::GetCompositionLatest => (
-                        corpus.ehr_ids.get(*owner).map_or("", String::as_str),
-                        uid.as_str(),
-                    ),
-                    _ => (corpus.ehr_ids.get(ehr_slot).map_or("", String::as_str), ""),
+                let drawn = corpus.compositions.get(composition_slot);
+                // A composition read addresses the EHR its composition was
+                // committed into, so a read can never be a 404 the instrument
+                // itself manufactured.
+                let target = match drawn {
+                    Some(seeded) if arrival.op.addresses_a_composition() => ArrivalTarget {
+                        ehr_id: corpus
+                            .ehr_ids
+                            .get(seeded.ehr_index)
+                            .map_or("", String::as_str),
+                        object_uid: seeded.object_uid.as_str(),
+                        version_uid: seeded.version_uid.as_str(),
+                        version_at_time: encoded_at_time,
+                        payload: payloads.get(payload_slot).map_or(&[][..], Vec::as_slice),
+                    },
+                    _ => ArrivalTarget {
+                        ehr_id: corpus.ehr_ids.get(ehr_slot).map_or("", String::as_str),
+                        object_uid: "",
+                        version_uid: "",
+                        version_at_time: encoded_at_time,
+                        payload: payloads.get(payload_slot).map_or(&[][..], Vec::as_slice),
+                    },
                 };
-                let payload = payloads.get(payload_slot).map_or(&[][..], Vec::as_slice);
-                let (ok, class) = offer(client, arrival.op, ehr_id, composition_uid, payload);
+                let (ok, class) = offer(client, arrival.op, target);
                 let latency = planned.elapsed();
                 let latency_us = u64::try_from(latency.as_micros().min(u128::from(HDR_MAX_US)))
                     .unwrap_or(HDR_MAX_US);
@@ -1064,10 +1435,51 @@ mod tests {
                 user: None,
                 repetitions: 0,
                 label: None,
+                scale: 1.0,
+                seed_workers: None,
             },
             &|_message| {},
         )
         .unwrap_err();
         assert!(matches!(error, BenchError::Repetitions(0)), "{error}");
+    }
+
+    /// The scale factor multiplies the EHR count, never rounds to zero, and
+    /// refuses a value that is not a positive finite number.
+    #[test]
+    fn the_scale_factor_shrinks_the_population_without_emptying_it()
+    -> Result<(), Box<dyn std::error::Error>> {
+        assert_eq!(scaled_ehrs(100, 1.0)?, 100);
+        assert_eq!(scaled_ehrs(100, 0.1)?, 10);
+        assert_eq!(scaled_ehrs(100, 2.5)?, 250);
+        assert_eq!(scaled_ehrs(100, 0.0001)?, 1, "a scaled run still seeds one");
+        for refused in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(scaled_ehrs(100, refused).is_err(), "{refused} was accepted");
+        }
+        Ok(())
+    }
+
+    /// The captured instant is recorded only by a pack that actually drives a
+    /// `version_at_time` read.
+    #[test]
+    fn only_a_pack_that_reads_at_an_instant_records_one() {
+        assert!(!reads_a_version_at_time(&pack::smoke()));
+        assert!(reads_a_version_at_time(&pack::community_vitals()));
+    }
+
+    /// Every operation the community walk offers addresses a composition, so
+    /// no arrival in the walk falls back to an EHR-only target.
+    #[test]
+    fn the_community_walk_addresses_only_compositions() {
+        let deck = pack::community_vitals();
+        let Some(sweep) = deck.sweep_phases().first().copied() else {
+            panic!("the community pack lost its walk");
+        };
+        assert!(
+            sweep
+                .per_composition
+                .iter()
+                .all(|op| op.addresses_a_composition())
+        );
     }
 }

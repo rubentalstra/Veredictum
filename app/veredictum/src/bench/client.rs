@@ -80,6 +80,49 @@ impl fmt::Display for AuthKind {
     }
 }
 
+/// The `Prefer: return=…` preference a write states.
+///
+/// The three tokens are the ones ITS-REST `docs/overview/Requests_and_responses`
+/// §"Prefer minimal, identifier or full representation response" defines. The
+/// same section notes that a client is encouraged to state the preference
+/// explicitly, because a service MAY make its default configurable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreferReturn {
+    /// No `Prefer` header at all, which the same section says the service
+    /// treats as `return=minimal`.
+    Unstated,
+    /// `return=minimal`: identifying headers, and typically no body.
+    Minimal,
+    /// `return=identifier`: a body carrying only the affected resource's
+    /// `uid`, with `201 Created` or `200 OK` and never `204 No Content`.
+    Identifier,
+}
+
+impl PreferReturn {
+    /// Every preference, in the order the specification section lists them.
+    pub const ALL: &[PreferReturn] = &[
+        PreferReturn::Unstated,
+        PreferReturn::Minimal,
+        PreferReturn::Identifier,
+    ];
+
+    /// The header value to send, or `None` when no header is sent.
+    #[must_use]
+    pub const fn header_value(self) -> Option<&'static str> {
+        match self {
+            PreferReturn::Unstated => None,
+            PreferReturn::Minimal => Some("return=minimal"),
+            PreferReturn::Identifier => Some("return=identifier"),
+        }
+    }
+}
+
+impl fmt::Display for PreferReturn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.header_value().unwrap_or("(unstated)"))
+    }
+}
+
 /// One wire response, as much of it as the engine reads.
 #[derive(Debug)]
 pub struct BenchReply {
@@ -173,7 +216,7 @@ impl BenchClient {
         method: reqwest::Method,
         path: &str,
         body: Option<(&'static str, Vec<u8>)>,
-        prefer_minimal: bool,
+        prefer: PreferReturn,
     ) -> Result<BenchReply, BenchError> {
         let accept = match &body {
             Some((media_type, _)) if media_type.contains("xml") => "application/xml",
@@ -186,8 +229,8 @@ impl BenchClient {
         if let Some(authorization) = &self.authorization {
             request = request.header("Authorization", authorization);
         }
-        if prefer_minimal {
-            request = request.header("Prefer", "return=minimal");
+        if let Some(preference) = prefer.header_value() {
+            request = request.header("Prefer", preference);
         }
         if let Some((media_type, bytes)) = body {
             request = request.header("Content-Type", media_type).body(bytes);
@@ -255,6 +298,49 @@ pub fn location_last_segment(location: &str) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// The identifier a create discloses, whichever way it discloses one.
+///
+/// A `return=identifier` reply carries a body of one `uid` attribute
+/// (ITS-REST `docs/overview/Requests_and_responses` §"Prefer only
+/// identifier"), a `return=minimal` reply carries the identifying headers
+/// instead, and the same operation answers differently across the two
+/// preferences. The order below reads the body first, because it is the only
+/// source the identifier preference guarantees, and falls back to the two
+/// headers a create sends. Returns `None` when the reply discloses no
+/// identifier at all, which is the caller's failure to report.
+#[must_use]
+#[expect(
+    clippy::disallowed_types,
+    reason = "the approved wire-body seam: an identifier reply is a JSON document read for one attribute"
+)]
+pub fn created_identifier(reply: &BenchReply) -> Option<String> {
+    let from_body = serde_json::from_slice::<serde_json::Value>(&reply.body)
+        .ok()
+        .and_then(|document| {
+            document.pointer("/uid").and_then(|uid| {
+                uid.as_str().map(str::to_owned).or_else(|| {
+                    uid.pointer("/value")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                })
+            })
+        })
+        .filter(|uid| !uid.is_empty());
+    from_body
+        .or_else(|| reply.etag.as_deref().map(strip_weak_quotes))
+        .or_else(|| reply.location.as_deref().and_then(location_last_segment))
+        .filter(|identifier| !identifier.is_empty())
+}
+
+/// One query-parameter value, percent-encoded for a URL.
+///
+/// An RFC 3339 instant carries `:` and `+`, and `+` in a query means a space
+/// unless it is encoded (<https://url.spec.whatwg.org/#urlencoded-parsing>).
+#[must_use]
+pub fn query_value(value: &str) -> String {
+    urlencoding::encode(value).into_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -297,6 +383,64 @@ mod tests {
         assert_eq!(AuthKind::parse("bearer").ok(), Some(AuthKind::Bearer));
         let error = AuthKind::parse("Bearer").unwrap_err();
         assert!(error.to_string().contains("none, basic, bearer"), "{error}");
+    }
+
+    /// Each preference sends the header value the specification names, and
+    /// the unstated preference sends no header at all.
+    #[test]
+    fn every_preference_sends_its_own_header_value() {
+        assert_eq!(PreferReturn::Unstated.header_value(), None);
+        assert_eq!(PreferReturn::Minimal.header_value(), Some("return=minimal"));
+        assert_eq!(
+            PreferReturn::Identifier.header_value(),
+            Some("return=identifier")
+        );
+        assert_eq!(PreferReturn::ALL.len(), 3);
+    }
+
+    /// A `return=identifier` body wins over the headers, and a reply that
+    /// discloses nothing yields `None` rather than an empty identifier.
+    #[test]
+    fn a_created_identifier_reads_the_body_before_the_headers() {
+        let reply = |body: &str, etag: Option<&str>, location: Option<&str>| BenchReply {
+            status: reqwest::StatusCode::CREATED,
+            etag: etag.map(str::to_owned),
+            location: location.map(str::to_owned),
+            body: body.as_bytes().to_vec(),
+        };
+        assert_eq!(
+            created_identifier(&reply(
+                r#"{"uid":"body::sys::1"}"#,
+                Some("\"etag::sys::1\""),
+                Some("http://sut/ehr/loc")
+            ))
+            .as_deref(),
+            Some("body::sys::1")
+        );
+        assert_eq!(
+            created_identifier(&reply(r#"{"uid":{"value":"nested::sys::1"}}"#, None, None))
+                .as_deref(),
+            Some("nested::sys::1")
+        );
+        assert_eq!(
+            created_identifier(&reply("", Some("W/\"etag::sys::1\""), None)).as_deref(),
+            Some("etag::sys::1")
+        );
+        assert_eq!(
+            created_identifier(&reply("", None, Some("http://sut/ehr/EHR-9"))).as_deref(),
+            Some("EHR-9")
+        );
+        assert_eq!(created_identifier(&reply("", None, None)), None);
+    }
+
+    /// An RFC 3339 instant survives a query parameter intact.
+    #[test]
+    fn a_query_value_is_percent_encoded() {
+        assert_eq!(
+            query_value("2026-08-29T10:11:12.5Z"),
+            "2026-08-29T10%3A11%3A12.5Z"
+        );
+        assert!(!query_value("2026-08-29T10:11:12+02:00").contains('+'));
     }
 
     /// `--auth basic` without `--user` is refused before any request.

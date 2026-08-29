@@ -38,6 +38,26 @@ const BP_COMPOSITION: &str = include_str!("fixtures/bp_composition.json");
 const BP_COMPOSITION_SHA256: &str =
     "9eaea10c5171d1f4648c8e932a21ce624312a2cad98f49115f35efbbb344a3ce";
 
+/// The `Vital signs` operational template the community harness uploads,
+/// embedded byte-identically from the vendored CKM template pack (CKM cid
+/// 1013.26.380; template id `Vital signs`, root
+/// `openEHR-EHR-COMPOSITION.encounter.v1`).
+const VITAL_SIGNS_OPT: &str = include_str!("fixtures/vital_signs.opt");
+
+/// The pinned digest of [`VITAL_SIGNS_OPT`].
+const VITAL_SIGNS_OPT_SHA256: &str =
+    "3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128";
+
+/// The `Vital signs` `COMPOSITION` instance the community harness commits,
+/// byte-identical to the attachment on post 8 of
+/// <https://discourse.openehr.org/t/17224>: eight `OBSERVATION` entries under
+/// `openEHR-EHR-COMPOSITION.encounter.v1`, `rm_version` 1.0.2.
+const VITAL_SIGNS_COMPOSITION: &str = include_str!("fixtures/vital_signs_composition.json");
+
+/// The pinned digest of [`VITAL_SIGNS_COMPOSITION`].
+const VITAL_SIGNS_COMPOSITION_SHA256: &str =
+    "468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947";
+
 /// The id of an embedded pack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PackId(&'static str);
@@ -147,6 +167,9 @@ fn hex(bytes: &[u8]) -> String {
 pub enum BenchOp {
     /// `POST /ehr/{ehr_id}/composition` — commit a new composition.
     CreateComposition,
+    /// `GET /ehr/{ehr_id}/composition/{uid}?version_at_time=…` — read the
+    /// version of a composition that was current at one instant.
+    GetCompositionAtTime,
     /// `GET /ehr/{ehr_id}/composition/{uid}` — read a committed composition
     /// at its latest version.
     GetCompositionLatest,
@@ -154,6 +177,21 @@ pub enum BenchOp {
     GetEhr,
     /// `GET /ehr/{ehr_id}/ehr_status` — read the EHR's status resource.
     GetEhrStatus,
+    /// `GET /ehr/{ehr_id}/versioned_composition/{uid}` — read the
+    /// `VERSIONED_COMPOSITION` container itself.
+    GetVersionedComposition,
+    /// `GET /ehr/{ehr_id}/versioned_composition/{uid}/revision_history` —
+    /// read the versioned object's revision history.
+    GetVersionedCompositionRevisionHistory,
+    /// `GET /ehr/{ehr_id}/versioned_composition/{uid}/version?version_at_time=…`
+    /// — read the version current at one instant.
+    GetVersionedCompositionVersionAtTime,
+    /// `GET /ehr/{ehr_id}/versioned_composition/{uid}/version/{version_uid}` —
+    /// read one version by its own identifier.
+    GetVersionedCompositionVersionById,
+    /// `GET /ehr/{ehr_id}/versioned_composition/{uid}/version` — read the
+    /// latest version of a versioned composition.
+    GetVersionedCompositionVersionLatest,
     /// `POST /query/aql` — an EHR-scoped `SELECT c/uid/value` projection.
     AdhocQueryUid,
 }
@@ -163,9 +201,15 @@ impl BenchOp {
     pub const ALL: &[BenchOp] = &[
         BenchOp::AdhocQueryUid,
         BenchOp::CreateComposition,
+        BenchOp::GetCompositionAtTime,
         BenchOp::GetCompositionLatest,
         BenchOp::GetEhr,
         BenchOp::GetEhrStatus,
+        BenchOp::GetVersionedComposition,
+        BenchOp::GetVersionedCompositionRevisionHistory,
+        BenchOp::GetVersionedCompositionVersionAtTime,
+        BenchOp::GetVersionedCompositionVersionById,
+        BenchOp::GetVersionedCompositionVersionLatest,
     ];
 
     /// The wire token, which is also the key the result records it under.
@@ -173,10 +217,43 @@ impl BenchOp {
     pub const fn as_str(self) -> &'static str {
         match self {
             BenchOp::CreateComposition => "create_composition",
+            BenchOp::GetCompositionAtTime => "get_composition_at_time",
             BenchOp::GetCompositionLatest => "get_composition_latest",
             BenchOp::GetEhr => "get_ehr",
             BenchOp::GetEhrStatus => "get_ehr_status",
+            BenchOp::GetVersionedComposition => "get_versioned_composition",
+            BenchOp::GetVersionedCompositionRevisionHistory => {
+                "get_versioned_composition_revision_history"
+            }
+            BenchOp::GetVersionedCompositionVersionAtTime => {
+                "get_versioned_composition_version_at_time"
+            }
+            BenchOp::GetVersionedCompositionVersionById => {
+                "get_versioned_composition_version_by_id"
+            }
+            BenchOp::GetVersionedCompositionVersionLatest => {
+                "get_versioned_composition_version_latest"
+            }
             BenchOp::AdhocQueryUid => "adhoc_query_uid",
+        }
+    }
+
+    /// Whether the operation addresses one seeded composition rather than an
+    /// EHR, which decides which draw selects its target.
+    #[must_use]
+    pub const fn addresses_a_composition(self) -> bool {
+        match self {
+            BenchOp::CreateComposition
+            | BenchOp::GetEhr
+            | BenchOp::GetEhrStatus
+            | BenchOp::AdhocQueryUid => false,
+            BenchOp::GetCompositionAtTime
+            | BenchOp::GetCompositionLatest
+            | BenchOp::GetVersionedComposition
+            | BenchOp::GetVersionedCompositionRevisionHistory
+            | BenchOp::GetVersionedCompositionVersionAtTime
+            | BenchOp::GetVersionedCompositionVersionById
+            | BenchOp::GetVersionedCompositionVersionLatest => true,
         }
     }
 
@@ -275,11 +352,41 @@ impl MeasurePhase {
     }
 }
 
+/// A closed-loop sequential walk over the whole seeded population.
+///
+/// Where a [`MeasurePhase`] offers arrivals on a schedule and reports
+/// coordinated-omission-free percentiles, a sweep issues each request only
+/// after the previous one answered, exactly as a single-client harness does,
+/// and reports the whole-loop average the closed-loop discipline yields. Both
+/// numbers are labelled with the regime that produced them, because they
+/// answer different questions and are never interchangeable.
+#[derive(Debug, Clone)]
+pub struct SweepPhase {
+    /// The phase name, as it appears in the result.
+    pub name: String,
+    /// The operations offered against every seeded composition, in this
+    /// order.
+    pub per_composition: Vec<BenchOp>,
+    /// The closed worker pool the walk runs on. One worker reproduces a
+    /// sequential single-client harness.
+    pub workers: usize,
+}
+
+impl SweepPhase {
+    /// How many requests the walk issues over `compositions` compositions.
+    #[must_use]
+    pub fn requests(&self, compositions: usize) -> usize {
+        compositions.saturating_mul(self.per_composition.len())
+    }
+}
+
 /// One phase of a pack.
 #[derive(Debug, Clone)]
 pub enum BenchPhase {
     /// A closed-loop bulk load.
     Seed(SeedPhase),
+    /// A closed-loop sequential walk over the seeded population.
+    Sweep(SweepPhase),
     /// An open-loop measured phase.
     Measure(MeasurePhase),
 }
@@ -315,7 +422,7 @@ impl BenchPack {
             .iter()
             .filter_map(|phase| match phase {
                 BenchPhase::Seed(seed) => Some(seed.fixtures.clone()),
-                BenchPhase::Measure(_) => None,
+                BenchPhase::Sweep(_) | BenchPhase::Measure(_) => None,
             })
             .flatten()
             .collect()
@@ -348,7 +455,19 @@ impl BenchPack {
             .iter()
             .filter_map(|phase| match phase {
                 BenchPhase::Measure(measure) => Some(measure),
-                BenchPhase::Seed(_) => None,
+                BenchPhase::Seed(_) | BenchPhase::Sweep(_) => None,
+            })
+            .collect()
+    }
+
+    /// The closed-loop sweep phases, in execution order.
+    #[must_use]
+    pub fn sweep_phases(&self) -> Vec<&SweepPhase> {
+        self.phases
+            .iter()
+            .filter_map(|phase| match phase {
+                BenchPhase::Sweep(sweep) => Some(sweep),
+                BenchPhase::Seed(_) | BenchPhase::Measure(_) => None,
             })
             .collect()
     }
@@ -357,8 +476,23 @@ impl BenchPack {
 /// The id every embedded pack is known by.
 const SMOKE: PackId = PackId("smoke");
 
+/// The id of the community-harness reproduction.
+const COMMUNITY_VITALS: PackId = PackId("community-vitals");
+
+/// The seven composition reads the community harness issues against every
+/// committed composition, in the order it issues them.
+const COMMUNITY_READS: &[BenchOp] = &[
+    BenchOp::GetCompositionLatest,
+    BenchOp::GetCompositionAtTime,
+    BenchOp::GetVersionedComposition,
+    BenchOp::GetVersionedCompositionVersionLatest,
+    BenchOp::GetVersionedCompositionVersionAtTime,
+    BenchOp::GetVersionedCompositionVersionById,
+    BenchOp::GetVersionedCompositionRevisionHistory,
+];
+
 /// The embedded pack ids, in the order `--pack` accepts them.
-pub const EMBEDDED: &[PackId] = &[SMOKE];
+pub const EMBEDDED: &[PackId] = &[COMMUNITY_VITALS, SMOKE];
 
 /// Loads one embedded pack by its id, verifying every fixture pin.
 ///
@@ -368,6 +502,7 @@ pub const EMBEDDED: &[PackId] = &[SMOKE];
 pub fn load(token: &str) -> Result<BenchPack, BenchError> {
     let pack = match token {
         "smoke" => smoke(),
+        "community-vitals" => community_vitals(),
         other => {
             return Err(BenchError::UnknownPack {
                 requested: other.to_owned(),
@@ -430,10 +565,98 @@ pub fn smoke() -> BenchPack {
     }
 }
 
+/// EHRs the community harness creates at scale 1.0.
+const COMMUNITY_EHRS: usize = 100;
+
+/// Compositions the community harness commits into each EHR.
+const COMMUNITY_COMPOSITIONS_PER_EHR: usize = 1_000;
+
+/// The arrival rate the open-loop half of the read phase is pinned at.
+const COMMUNITY_READ_RATE_PER_S: f64 = 200.0;
+
+/// The `community-vitals` pack: the openEHR community's own vital-signs
+/// harness, reproduced closed-loop and measured again open-loop.
+///
+/// The write phase reproduces the harness bulk load: 100 EHRs, 1,000
+/// commits of the same composition bytes into each, one worker. The read
+/// phase runs twice over the population it left behind — once as the
+/// sequential walk the harness performs, once as an open-loop arrival
+/// schedule at the rate this pack version pins, so the figure that compares
+/// with the published one and the figure that survives a stall both appear,
+/// each labelled with the regime that produced it.
+#[must_use]
+pub fn community_vitals() -> BenchPack {
+    let fixtures = vec![
+        Fixture {
+            key: FixtureKey("vital_signs.opt"),
+            kind: FixtureKind::OperationalTemplate,
+            bytes: VITAL_SIGNS_OPT,
+            sha256: VITAL_SIGNS_OPT_SHA256,
+        },
+        Fixture {
+            key: FixtureKey("vital_signs_composition.json"),
+            kind: FixtureKind::Composition,
+            bytes: VITAL_SIGNS_COMPOSITION,
+            sha256: VITAL_SIGNS_COMPOSITION_SHA256,
+        },
+    ];
+    BenchPack {
+        id: COMMUNITY_VITALS,
+        version: "1.0.0".to_owned(),
+        description: COMMUNITY_VITALS_DESCRIPTION.to_owned(),
+        seed: 0x436f_6d6d_5f56_6974,
+        phases: vec![
+            BenchPhase::Seed(SeedPhase {
+                name: "write".to_owned(),
+                fixtures,
+                ehrs: COMMUNITY_EHRS,
+                compositions_per_ehr: COMMUNITY_COMPOSITIONS_PER_EHR,
+                workers: 1,
+            }),
+            BenchPhase::Sweep(SweepPhase {
+                name: "read_walk".to_owned(),
+                per_composition: COMMUNITY_READS.to_vec(),
+                workers: 1,
+            }),
+            BenchPhase::Measure(MeasurePhase {
+                name: "read_open_loop".to_owned(),
+                rate_per_s: COMMUNITY_READ_RATE_PER_S,
+                warmup_s: 15,
+                duration_s: 60,
+                mix: COMMUNITY_READS.iter().map(|op| (*op, 1)).collect(),
+            }),
+        ],
+    }
+}
+
+/// What the `community-vitals` pack exercises, and where its bytes come from.
+const COMMUNITY_VITALS_DESCRIPTION: &str = "\
+Reproduces the openEHR community's vital-signs benchmark harness \
+(<https://discourse.openehr.org/t/17224>) and measures the same work a second \
+way. The write phase creates 100 EHRs and commits the same Vital signs \
+composition 1,000 times into each with Prefer: return=identifier, on one \
+worker, and reports bulk-load throughput plus the whole-loop \
+milliseconds-per-composition average the thread quotes, labelled closed-loop. \
+The read phase then runs twice: read_walk is the sequential walk over every \
+committed composition, seven GETs each (latest, version_at_time, the \
+VERSIONED_COMPOSITION, its latest version, its version at that instant, one \
+version by id, and the revision history), reporting the whole-loop \
+microseconds-per-request average, labelled closed-loop; read_open_loop offers \
+the same seven reads as an arrival schedule pinned at 200/s for 60s after a \
+15s warmup, which is where the coordinated-omission-free percentiles come \
+from. The pinned rate is part of this pack version: changing it changes the \
+work and bumps the version. Every version_at_time read addresses one instant \
+captured after the write phase finished, which every seeded version predates, \
+so it selects the same versions the harness's own start-of-run instant \
+selects. Fixture provenance: the operational template is the vendored CKM \
+export for template id 'Vital signs' (CKM cid 1013.26.380), byte-identical; \
+the composition is the attachment on post 8 of that thread, byte-identical. \
+Both are pinned by sha256 and verified at load.";
+
 #[cfg(test)]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "two Result-returning tests in the Book ch11 shape, each asserting; \
+    reason = "Result-returning tests in the Book ch11 shape, each asserting; \
               clippy offers no allow-in-tests knob for this lint"
 )]
 mod tests {
@@ -526,6 +749,123 @@ mod tests {
                 BenchOp::CreateComposition,
             ]
         );
+    }
+
+    /// The community pack pins both fixtures at the digests the source
+    /// material hashes to, so an edited byte fails the load.
+    #[test]
+    fn the_community_pack_pins_its_source_fixtures() -> Result<(), BenchError> {
+        let deck = load("community-vitals")?;
+        assert_eq!(deck.id, COMMUNITY_VITALS);
+        assert_eq!(deck.version, "1.0.0");
+        let pins = deck.fixture_pins();
+        assert_eq!(
+            pins.get("vital_signs.opt").map(String::as_str),
+            Some("3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128")
+        );
+        assert_eq!(
+            pins.get("vital_signs_composition.json").map(String::as_str),
+            Some("468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947")
+        );
+        assert_eq!(pins.len(), 2);
+        deck.verify_pins()
+    }
+
+    /// The embedded composition declares the template the embedded
+    /// operational template defines, so the write phase commits something the
+    /// upload constrains.
+    #[test]
+    #[expect(
+        clippy::disallowed_types,
+        reason = "the approved wire-body seam: the embedded composition is a JSON document read for two attributes"
+    )]
+    fn the_community_composition_names_the_embedded_template()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let document: serde_json::Value = serde_json::from_str(VITAL_SIGNS_COMPOSITION)?;
+        assert_eq!(
+            document
+                .pointer("/archetype_details/template_id/value")
+                .and_then(serde_json::Value::as_str),
+            Some("Vital signs")
+        );
+        assert_eq!(
+            document
+                .pointer("/archetype_node_id")
+                .and_then(serde_json::Value::as_str),
+            Some("openEHR-EHR-COMPOSITION.encounter.v1")
+        );
+        assert!(
+            VITAL_SIGNS_OPT.contains("<template_id><value>Vital signs</value></template_id>")
+                || VITAL_SIGNS_OPT.contains("Vital signs"),
+            "the embedded template does not carry the template id the composition names"
+        );
+        Ok(())
+    }
+
+    /// The pack carries exactly the three phases the reproduction needs, one
+    /// per discipline the record then labels.
+    #[test]
+    fn the_community_pack_carries_one_phase_per_discipline() {
+        let deck = community_vitals();
+        assert_eq!(deck.phases.len(), 3);
+        let seeds: Vec<&SeedPhase> = deck
+            .phases
+            .iter()
+            .filter_map(|phase| match phase {
+                BenchPhase::Seed(seed) => Some(seed),
+                BenchPhase::Sweep(_) | BenchPhase::Measure(_) => None,
+            })
+            .collect();
+        assert_eq!(seeds.len(), 1);
+        assert_eq!(deck.sweep_phases().len(), 1);
+        assert_eq!(deck.measure_phases().len(), 1);
+        let Some(write) = seeds.first() else {
+            panic!("the write phase is gone");
+        };
+        assert_eq!(write.ehrs, 100);
+        assert_eq!(write.compositions_per_ehr, 1000);
+        assert_eq!(write.workers, 1, "the reproduction is sequential");
+    }
+
+    /// At scale 1.0 the sweep issues exactly the 700,000 requests the
+    /// community harness reports: seven reads over 100,000 compositions.
+    #[test]
+    fn the_seven_variant_walk_sums_to_the_published_request_count() {
+        let deck = community_vitals();
+        let Some(sweep) = deck.sweep_phases().first().copied() else {
+            panic!("the read walk is gone");
+        };
+        assert_eq!(sweep.per_composition.len(), 7);
+        assert_eq!(sweep.workers, 1);
+        let compositions = COMMUNITY_EHRS.saturating_mul(COMMUNITY_COMPOSITIONS_PER_EHR);
+        assert_eq!(compositions, 100_000);
+        assert_eq!(sweep.requests(compositions), 700_000);
+        let distinct: std::collections::BTreeSet<BenchOp> =
+            sweep.per_composition.iter().copied().collect();
+        assert_eq!(distinct.len(), 7, "a variant is repeated");
+        assert!(
+            sweep
+                .per_composition
+                .iter()
+                .all(|op| op.addresses_a_composition()),
+            "the walk offers an operation that does not address a composition"
+        );
+    }
+
+    /// The open-loop half offers the same seven reads at equal share, at the
+    /// rate the pack version pins.
+    #[test]
+    fn the_open_loop_half_mirrors_the_walk_at_a_pinned_rate() {
+        let deck = community_vitals();
+        let Some(measure) = deck.measure_phases().first().copied() else {
+            panic!("the open-loop read phase is gone");
+        };
+        assert!((measure.rate_per_s - 200.0).abs() < f64::EPSILON);
+        assert_eq!(measure.warmup_s, 15);
+        assert_eq!(measure.duration_s, 60);
+        assert_eq!(measure.total_share(), 7);
+        let offered: Vec<BenchOp> = measure.mix.iter().map(|(op, _)| *op).collect();
+        assert_eq!(offered, COMMUNITY_READS.to_vec());
     }
 
     /// An empty mix selects nothing rather than defaulting to an operation.
