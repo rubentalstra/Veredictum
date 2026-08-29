@@ -89,6 +89,13 @@ cnf.composition.minimal_event.v1:
   validity: { verdict: valid }
   template_id: "minimal_evaluation.en.v1"
   provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+cnf.composition.minimal_event.client_uid:
+  source: fixtures/composition/minimal_event.client_uid.json
+  format: canonical-json
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "minimal_evaluation.en.v1"
+  provenance: "derived 2026-08-29 from cnf.composition.minimal_event.v1 (fixtures/composition/minimal_event.v1.json) by adding the LOCATABLE uid member and nothing else — RM UML/classes/locatable.adoc §Attributes types uid 0..1, so the addition keeps the fixture valid; it carries a client-chosen OBJECT_VERSION_ID for the create-side identity question the released text leaves unassigned (register AMB-226)"
 cnf.composition.dv_text_in_content:
   source: fixtures/composition/minimal_event.dv_text_in_content.json
   format: canonical-json
@@ -849,6 +856,12 @@ cnf.directory.root_only:
   rm_versions: [">=1.0.2"]
   validity: { verdict: valid }
   provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+cnf.directory.client_uid:
+  source: fixtures/directory/root_only.client_uid.json
+  format: canonical-json
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  provenance: "derived 2026-08-29 from cnf.directory.root_only (fixtures/directory/root_only.json) by adding the LOCATABLE uid member and nothing else — RM UML/classes/locatable.adoc §Attributes types uid 0..1 and RM UML/classes/folder.adoc recommends it on tree-root FOLDERs, so the addition keeps the fixture valid; it carries a client-chosen OBJECT_VERSION_ID for the create-side identity question the released text leaves unassigned (register AMB-226)"
 cnf.directory.reference_structure:
   source: fixtures/directory/reference_structure.json
   format: canonical-json

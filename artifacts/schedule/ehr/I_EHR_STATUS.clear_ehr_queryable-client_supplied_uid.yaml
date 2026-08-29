@@ -1,0 +1,90 @@
+# An EHR_STATUS commit whose BODY carries a `uid`. The released operation has
+# no branch for it: ehr_status_update declares 200/204/400/404/412, its only
+# identifier rule is the `If-Match` precondition, and its single path parameter
+# is `ehr_id` — so a body uid has nothing in the URL to be matched against, the
+# way the COMPOSITION update's `uid_based_id` gives its own body uid something
+# to match. The CONTRIBUTION create states the rule for the same shape; this
+# operation states nothing. Register AMB-226 carries the adjudication:
+# server-minted identity wins and the body value does not survive.
+#
+# The ground is BASE architecture_overview master09-identification.adoc
+# §Levels of Identification — top-level content structures "are uniquely
+# identified by the association of the identifier of their containing
+# `VERSIONED_OBJECT` and the identifier of their containing `VERSION` within
+# the container" — so a client value names a version that does not exist until
+# this commit mints it. That is the ordinary client shape here: a client that
+# reads an EHR_STATUS and writes it back carries the PRECEDING version's
+# identifier in the body, which is never the identifier of the version the
+# write creates.
+#
+# The uid the request carries is the `client_uid` variant binding's literal,
+# repeated below in the `not_equals` assertion; the two are one value and the
+# binding's header comment says so from the other side.
+#
+# WHAT THIS CASE ASSERTS. Step 2: the commit is accepted. Step 3: the VERSION
+# envelope's own `uid` is the identifier the commit's `ETag` named and is not
+# the client's value — RM common master06 §change_control fixes the VERSION's
+# uid as a mandatory OBJECT_VERSION_ID, so the assertion needs no optional
+# field to be present — and the SM operation's own effect landed. Step 4: the
+# client's own identifier addresses nothing. The CONTAINED EHR_STATUS's `uid`
+# is deliberately not asserted: no released sentence requires it populated at
+# all (LOCATABLE.uid is 0..1; the copy is a recommendation), which is register
+# AMB-67's report-only boundary.
+id: I_EHR_STATUS.clear_ehr_queryable-client_supplied_uid
+kind: functional
+component: EHR
+sm_operation: I_EHR_STATUS.clear_ehr_queryable
+capabilities: [EhrStatus]
+exercises: [Versioning]
+profiles: [CORE]
+ambiguities: [AMB-226]
+test_purpose: >-
+  An EHR_STATUS commit carrying a client-chosen uid succeeds, and the created
+  version's identity is the server-minted OBJECT_VERSION_ID; the client's value
+  does not survive and addresses nothing.
+description: "EHR_STATUS commit with a client-supplied uid (server identity wins)"
+spec_refs:
+  - "BASE architecture_overview master09 §Levels of Identification"
+  - "RM common §change_control (master06 §Version Identification)"
+  - "RM common §locatable (uid 0..1)"
+  - "ITS-REST overview Requests_and_responses §If-Match and accidental overwrites"
+  - "ITS-REST overview Requests_and_responses §HTTP status codes"
+  - "SM openehr_platform §I_EHR_STATUS.clear_ehr_queryable"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  ehr: { commits: none }                 # mints ${ehr_id}; a fresh EHR's is_queryable is true, so the commit is an observable transition
+flow:
+  - step: 1
+    call: get_ehr_status                 # the current version, for the If-Match precondition and the body to patch
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid, status_body: ok.body }
+    assert:
+      - { assert: field, path: "is_queryable", equals: true }
+  - step: 2
+    call: clear_ehr_queryable
+    variant: client_uid                  # the variant binding writes the client-chosen uid into the body
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    expect: updated                      # no released branch refuses a body uid on this commit
+    capture: { version_uid: updated.version_uid }
+  - step: 3                              # the committed version's identity is the server's
+    call: get_versioned_ehr_status
+    variant: version
+    with: { ehr_id: "${ehr_id}", version_uid: "${version_uid}" }
+    expect: ok
+    assert:
+      - { assert: instance_of, rm_type: ORIGINAL_VERSION }
+      - { assert: field, path: "uid/value", equals: "${version_uid}" }
+      # the biting half: the body's own uid, which a honouring server would have kept
+      - { assert: field, path: "uid/value", not_equals: "3b6c9f18-0000-4000-8000-0000000004c3::cnf.client.example.com::1" }
+      - { assert: field, path: "data/is_queryable", equals: false }
+  - step: 4                              # the client's value addresses nothing
+    call: get_ehr_status_at_version
+    with:
+      ehr_id: "${ehr_id}"
+      version_uid: "3b6c9f18-0000-4000-8000-0000000004c3::cnf.client.example.com::1"
+    expect: not_found
+postconditions:
+  - assert: state
+    text: "EHR_STATUS.is_queryable for the EHR with known ehr_id is false, and its latest version is the one the server minted"
