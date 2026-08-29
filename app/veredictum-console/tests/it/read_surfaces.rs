@@ -66,7 +66,13 @@ fn the_landing_counts_are_the_validate_summary_counts() -> Result<(), Box<dyn st
                 expected,
                 "the landing shows numbers the validate summary would not print"
             );
-            assert_eq!(summary.findings, 0, "the committed catalogue is clean");
+            // Catalogue cleanliness is gated by CI's validate job over the
+            // WORKSPACE engine, not here: this crate validates through its
+            // pinned PUBLISHED engine, so a catalogue legitimately using
+            // machinery newer than the newest published crate reads findings
+            // here mid-cycle (the release-cut window scripts/ui-e2e.sh also
+            // models). The landing stays honest either way: it shows exactly
+            // what the pinned engine computes, which the mapping assert pins.
         }
         veredictum_console::catalogue_api::InstrumentView::Missing(missing) => {
             panic!(
