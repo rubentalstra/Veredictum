@@ -1,0 +1,17 @@
+id: CONT-DEFECT-bad_structural_token
+kind: content
+component: CONTENT
+rm_class: COMPOSITION
+capabilities: [ArchetypeValidation]
+profiles: [CORE]
+test_purpose: "seeded defect: a cardinality cell outside the closed token vocabulary"
+description: "seeded defect"
+spec_refs: ["CNF platform_test_schedule master15 §CONT-COMPOSITION-content_cardinality"]
+constraint_context:
+  template: cnf.tpl.ecc_composition_content_cardinality
+  path: "/content"
+  constraint_columns: ["cardinality"]
+decision_table:
+  columns: [cardinality, content_count, expected, violates]
+  rows:
+    - ["3to6", 3, accepted, []]

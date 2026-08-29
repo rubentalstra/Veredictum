@@ -58,6 +58,34 @@ impl Cells<'_> {
             _ => None,
         }
     }
+
+    /// The literal text of a CONSTRAINT-AXIS column, which every structural
+    /// family requires.
+    ///
+    /// # Errors
+    /// [`SynthError::Unsupported`] when the column is absent from the row or
+    /// its cell is not a literal string.
+    fn axis(&self, name: &str) -> Result<&str, SynthError> {
+        self.text(name).ok_or_else(|| {
+            axis_refusal(
+                name,
+                "the constraint axis is absent from the row or is not a literal string",
+            )
+        })
+    }
+}
+
+/// The typed refusal a structural constraint-axis cell earns when it is
+/// absent or outside its closed token vocabulary.
+///
+/// A silently defaulted axis bakes a constraint nobody authored, so a mistyped
+/// cell would judge the SUT against the wrong OPT and manufacture a passing
+/// row out of the typo.
+fn axis_refusal(column: &str, detail: &str) -> SynthError {
+    SynthError::Unsupported(format!(
+        "{column}: {detail}, so the synthesized OPT would carry a constraint the row never \
+         declares"
+    ))
 }
 
 /// AMB-42 realizability gate.
@@ -151,8 +179,10 @@ pub fn unrealizable_row(
 /// `rm_classes` here and value/interval classes to [`opt_synth`].
 ///
 /// # Errors
-/// [`SynthError`] when the `rm_class` / column shape is not covered (an
-/// interpreter defect, never a conformance outcome).
+/// [`SynthError`] when the `rm_class` / column shape is not covered, and when
+/// a structural constraint-axis cell is absent or spells a token outside its
+/// closed vocabulary (an interpreter or catalogue defect, never a conformance
+/// outcome).
 pub fn synthesize_opt(
     case_id: &str,
     rm_class: &str,
@@ -166,33 +196,33 @@ pub fn synthesize_opt(
             if columns.iter().any(|c| c == "cardinality")
                 && columns.iter().any(|c| c == "context_existence") =>
         {
-            Ok(composition_content_cardinality_context(template_id, &row))
+            composition_content_cardinality_context(template_id, &row)
         }
         "COMPOSITION" if columns.iter().any(|c| c == "cardinality") => {
-            Ok(composition_content_cardinality(template_id, &row))
+            composition_content_cardinality(template_id, &row)
         }
-        "COMPOSITION" => Ok(composition_context_existence(template_id, &row)),
+        "COMPOSITION" => composition_context_existence(template_id, &row),
         "EVENT" if columns.iter().any(|c| c == "slot_type") => {
-            Ok(event_type_narrowing(template_id, &row))
+            event_type_narrowing(template_id, &row)
         }
-        "EVENT" => Ok(event_state_existence(template_id, &row)),
+        "EVENT" => event_state_existence(template_id, &row),
         "HISTORY"
             if columns.iter().any(|c| c == "cardinality")
                 && columns.iter().any(|c| c == "summary_existence") =>
         {
-            Ok(history_events_cardinality_summary(template_id, &row))
+            history_events_cardinality_summary(template_id, &row)
         }
         "HISTORY" if columns.iter().any(|c| c == "cardinality") => {
-            Ok(history_events_cardinality(template_id, &row))
+            history_events_cardinality(template_id, &row)
         }
-        "HISTORY" => Ok(history_summary_existence(template_id, &row)),
-        "ITEM_STRUCTURE" => Ok(item_structure_type_narrowing(template_id, &row)),
+        "HISTORY" => history_summary_existence(template_id, &row),
+        "ITEM_STRUCTURE" => item_structure_type_narrowing(template_id, &row),
         "ITEM_TREE" | "ITEM_LIST" | "ITEM_TABLE" | "CLUSTER" => {
-            Ok(item_container_cardinality(rm_class, template_id, &row))
+            item_container_cardinality(rm_class, template_id, &row)
         }
-        "ELEMENT" => Ok(element_value_null_flavour_existence(template_id, &row)),
-        "ITEM" => Ok(item_type_narrowing(template_id, &row)),
-        "OBSERVATION" => Ok(observation_state_protocol_existence(template_id, &row)),
+        "ELEMENT" => element_value_null_flavour_existence(template_id, &row),
+        "ITEM" => item_type_narrowing(template_id, &row),
+        "OBSERVATION" => observation_state_protocol_existence(template_id, &row),
         // Value + interval families.
         _ => opt_synth::synthesize_value_opt(case_id, rm_class, template_id, columns, cells),
     }
@@ -461,42 +491,254 @@ fn observation_history(
 // Structural family builders.
 // ---------------------------------------------------------------------------
 
-/// `any|1plus|3plus|opt|mand|3to5` → a `C_MULTIPLE_ATTRIBUTE.cardinality`
-/// interval (AOM1.4 §`C_MULTIPLE_ATTRIBUTE`).
-fn cardinality_token(token: &str) -> String {
-    match token {
-        "1plus" => cardinality(1, None),
-        "3plus" => cardinality(3, None),
-        "opt" => cardinality(0, Some(1)),
-        "mand" => cardinality(1, Some(1)),
-        "3to5" => cardinality(3, Some(5)),
-        // "any" and any unknown token → unbounded 0..*
-        _ => cardinality(0, None),
+/// The `cardinality` cell vocabulary: the closed set of
+/// `C_MULTIPLE_ATTRIBUTE.cardinality` intervals the structural content cases
+/// author (AOM1.4 §`C_MULTIPLE_ATTRIBUTE`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CardinalityToken {
+    /// `any` — the RM-default unbounded container, 0..*.
+    Any,
+    /// `1plus` — 1..*.
+    OnePlus,
+    /// `3plus` — 3..*.
+    ThreePlus,
+    /// `opt` — 0..1.
+    Opt,
+    /// `mand` — 1..1.
+    Mand,
+    /// `3to5` — 3..5.
+    ThreeToFive,
+}
+
+impl CardinalityToken {
+    /// Reads `column` off the row as a cardinality token.
+    ///
+    /// # Errors
+    /// [`SynthError::Unsupported`] when the cell is absent or spells a token
+    /// outside the vocabulary.
+    fn read(row: &Cells<'_>, column: &str) -> Result<Self, SynthError> {
+        match row.axis(column)? {
+            "any" => Ok(Self::Any),
+            "1plus" => Ok(Self::OnePlus),
+            "3plus" => Ok(Self::ThreePlus),
+            "opt" => Ok(Self::Opt),
+            "mand" => Ok(Self::Mand),
+            "3to5" => Ok(Self::ThreeToFive),
+            other => Err(axis_refusal(
+                column,
+                &format!(
+                    "{other:?} is outside the cardinality vocabulary \
+                     (any|1plus|3plus|opt|mand|3to5)"
+                ),
+            )),
+        }
+    }
+
+    /// The `C_MULTIPLE_ATTRIBUTE.cardinality` interval XML this token names.
+    fn cardinality(self) -> String {
+        match self {
+            Self::Any => cardinality(0, None),
+            Self::OnePlus => cardinality(1, None),
+            Self::ThreePlus => cardinality(3, None),
+            Self::Opt => cardinality(0, Some(1)),
+            Self::Mand => cardinality(1, Some(1)),
+            Self::ThreeToFive => cardinality(3, Some(5)),
+        }
+    }
+
+    /// The container attribute's `C_ATTRIBUTE.existence`, which follows the
+    /// cardinality token: `any`/`opt` leave the attribute optional (0..1) so an
+    /// omitted or zero-count container is admitted and the RM invariant decides
+    /// — e.g. `HISTORY.Events_valid` (`(events /= Void and then not
+    /// events.is_empty) or summary /= Void`, RM `data_structures` §HISTORY
+    /// Invariants) accepts a zero-events HISTORY via its summary disjunct;
+    /// `1plus`/`3plus`/`mand`/`3to5` make the attribute mandatory (1..1). The
+    /// cardinality alone never fires on an omitted container (AOM1.4
+    /// §`C_MULTIPLE_ATTRIBUTE` + §`C_ATTRIBUTE`), and on the canonical wire an
+    /// empty list serializes as absent, so mandating existence 1..1 would
+    /// wrongly reject the zero-count row.
+    fn existence(self) -> (i64, i64) {
+        match self {
+            Self::OnePlus | Self::ThreePlus | Self::Mand | Self::ThreeToFive => (1, 1),
+            Self::Any | Self::Opt => (0, 1),
+        }
     }
 }
 
-/// `optional|mandatory` → a `C_ATTRIBUTE.existence` pair (AOM1.4 §`C_ATTRIBUTE`).
-fn existence_token(token: &str) -> (i64, i64) {
-    match token {
-        "mandatory" => (1, 1),
-        _ => (0, 1),
+/// The `*_existence` cell vocabulary: a `C_ATTRIBUTE.existence` pair
+/// (AOM1.4 §`C_ATTRIBUTE`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExistenceToken {
+    /// `optional` — existence 0..1.
+    Optional,
+    /// `mandatory` — existence 1..1.
+    Mandatory,
+}
+
+impl ExistenceToken {
+    /// Reads `column` off the row as an existence token.
+    ///
+    /// # Errors
+    /// [`SynthError::Unsupported`] when the cell is absent or spells a token
+    /// outside the vocabulary.
+    fn read(row: &Cells<'_>, column: &str) -> Result<Self, SynthError> {
+        match row.axis(column)? {
+            "optional" => Ok(Self::Optional),
+            "mandatory" => Ok(Self::Mandatory),
+            other => Err(axis_refusal(
+                column,
+                &format!("{other:?} is outside the existence vocabulary (optional|mandatory)"),
+            )),
+        }
+    }
+
+    /// The `C_ATTRIBUTE.existence` lower/upper pair this token names.
+    fn pair(self) -> (i64, i64) {
+        match self {
+            Self::Optional => (0, 1),
+            Self::Mandatory => (1, 1),
+        }
     }
 }
 
-/// A container attribute's `C_ATTRIBUTE.existence` must follow its cardinality
-/// token: `any`/`opt` leave the attribute optional (0..1) so an omitted /
-/// zero-count container is admitted and the RM invariant decides — e.g.
-/// `HISTORY.Events_valid` (`(events /= Void and then not events.is_empty) or
-/// summary /= Void`, RM `data_structures` §HISTORY Invariants) accepts a
-/// zero-events HISTORY via its summary disjunct; `1plus`/`3plus`/`mand`/`3to5`
-/// make the attribute mandatory (1..1). The cardinality alone never fires on an
-/// omitted container (AOM1.4 §`C_MULTIPLE_ATTRIBUTE` + §`C_ATTRIBUTE`), and on
-/// the canonical wire an empty list serializes as absent, so mandating
-/// existence 1..1 would wrongly reject the zero-count row.
-fn cardinality_existence(token: &str) -> (i64, i64) {
-    match token {
-        "1plus" | "3plus" | "mand" | "3to5" => (1, 1),
-        _ => (0, 1),
+/// The EVENT `slot_type` vocabulary: the abstract `EVENT<T>` plus its two
+/// concrete descendants, which is the whole set RM `data_structures`
+/// master06-history\_package §Overview defines (`EVENT<T->ITEM_STRUCTURE>`,
+/// `POINT_EVENT<T>`, `INTERVAL_EVENT<T>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EventSlotType {
+    /// `EVENT` — the unnarrowed abstract slot.
+    Event,
+    /// `POINT_EVENT`.
+    PointEvent,
+    /// `INTERVAL_EVENT`.
+    IntervalEvent,
+}
+
+impl EventSlotType {
+    /// Reads `column` off the row as an EVENT slot type.
+    ///
+    /// # Errors
+    /// [`SynthError::Unsupported`] when the cell is absent or names a class
+    /// outside the `EVENT` hierarchy.
+    fn read(row: &Cells<'_>, column: &str) -> Result<Self, SynthError> {
+        match row.axis(column)? {
+            "EVENT" => Ok(Self::Event),
+            "POINT_EVENT" => Ok(Self::PointEvent),
+            "INTERVAL_EVENT" => Ok(Self::IntervalEvent),
+            other => Err(axis_refusal(
+                column,
+                &format!("{other:?} is not an RM EVENT class (EVENT|POINT_EVENT|INTERVAL_EVENT)"),
+            )),
+        }
+    }
+
+    /// The `C_OBJECT.rm_type_name` this slot type narrows to.
+    fn rm_type_name(self) -> &'static str {
+        match self {
+            Self::Event => "EVENT",
+            Self::PointEvent => "POINT_EVENT",
+            Self::IntervalEvent => "INTERVAL_EVENT",
+        }
+    }
+}
+
+/// The ITEM `slot_type` vocabulary: the abstract `ITEM` and its two concrete
+/// descendants. RM `data_structures` UML `item.adoc` §ITEM Class describes it
+/// as "The abstract parent of `CLUSTER` and `ELEMENT` representation classes",
+/// which closes the set at three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ItemSlotType {
+    /// `ITEM` — the unnarrowed abstract slot.
+    Item,
+    /// `CLUSTER`.
+    Cluster,
+    /// `ELEMENT`.
+    Element,
+}
+
+impl ItemSlotType {
+    /// Reads `column` off the row as an `ITEM` slot type.
+    ///
+    /// # Errors
+    /// [`SynthError::Unsupported`] when the cell is absent or names a class
+    /// outside the `ITEM` hierarchy.
+    fn read(row: &Cells<'_>, column: &str) -> Result<Self, SynthError> {
+        match row.axis(column)? {
+            "ITEM" => Ok(Self::Item),
+            "CLUSTER" => Ok(Self::Cluster),
+            "ELEMENT" => Ok(Self::Element),
+            other => Err(axis_refusal(
+                column,
+                &format!("{other:?} is not an RM ITEM class (ITEM|CLUSTER|ELEMENT)"),
+            )),
+        }
+    }
+
+    /// The `C_OBJECT.rm_type_name` this slot type narrows to.
+    fn rm_type_name(self) -> &'static str {
+        match self {
+            Self::Item => "ITEM",
+            Self::Cluster => "CLUSTER",
+            Self::Element => "ELEMENT",
+        }
+    }
+}
+
+/// The ITEM\_STRUCTURE `slot_type` vocabulary: the abstract `ITEM_STRUCTURE`
+/// plus its four concrete descendants, which is the whole set RM
+/// `data_structures` master04-item\_structure\_package §Overview defines
+/// (`ITEM_SINGLE`, `ITEM_LIST`, `ITEM_TREE`, `ITEM_TABLE`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "the variants name RM classes, and every ITEM_STRUCTURE descendant is spelled ITEM_*"
+)]
+enum ItemStructureSlotType {
+    /// `ITEM_STRUCTURE` — the unnarrowed abstract slot.
+    ItemStructure,
+    /// `ITEM_SINGLE`.
+    ItemSingle,
+    /// `ITEM_LIST`.
+    ItemList,
+    /// `ITEM_TABLE`.
+    ItemTable,
+    /// `ITEM_TREE`.
+    ItemTree,
+}
+
+impl ItemStructureSlotType {
+    /// Reads `column` off the row as an `ITEM_STRUCTURE` slot type.
+    ///
+    /// # Errors
+    /// [`SynthError::Unsupported`] when the cell is absent or names a class
+    /// outside the `ITEM_STRUCTURE` hierarchy.
+    fn read(row: &Cells<'_>, column: &str) -> Result<Self, SynthError> {
+        match row.axis(column)? {
+            "ITEM_STRUCTURE" => Ok(Self::ItemStructure),
+            "ITEM_SINGLE" => Ok(Self::ItemSingle),
+            "ITEM_LIST" => Ok(Self::ItemList),
+            "ITEM_TABLE" => Ok(Self::ItemTable),
+            "ITEM_TREE" => Ok(Self::ItemTree),
+            other => Err(axis_refusal(
+                column,
+                &format!(
+                    "{other:?} is not an RM ITEM_STRUCTURE class \
+                     (ITEM_STRUCTURE|ITEM_SINGLE|ITEM_LIST|ITEM_TABLE|ITEM_TREE)"
+                ),
+            )),
+        }
+    }
+
+    /// The `C_OBJECT.rm_type_name` this slot type narrows to.
+    fn rm_type_name(self) -> &'static str {
+        match self {
+            Self::ItemStructure => "ITEM_STRUCTURE",
+            Self::ItemSingle => "ITEM_SINGLE",
+            Self::ItemList => "ITEM_LIST",
+            Self::ItemTable => "ITEM_TABLE",
+            Self::ItemTree => "ITEM_TREE",
+        }
     }
 }
 
@@ -508,29 +750,45 @@ fn cardinality_existence(token: &str) -> (i64, i64) {
     clippy::similar_names,
     reason = "content_exist / context_exist name the two RM attributes precisely"
 )]
-fn composition_content_cardinality_context(template_id: &str, row: &Cells<'_>) -> String {
-    let token = row.text("cardinality").unwrap_or("any");
-    let card = cardinality_token(token);
+fn composition_content_cardinality_context(
+    template_id: &str,
+    row: &Cells<'_>,
+) -> Result<String, SynthError> {
+    let token = CardinalityToken::read(row, "cardinality")?;
     // Same existence-follows-the-token rule as the single-axis family (see
-    // `cardinality_existence`): the cardinality alone never fires on an omitted
-    // container.
-    let content_exist = cardinality_existence(token);
-    let context_exist = existence_token(row.text("context_existence").unwrap_or("optional"));
+    // `CardinalityToken::existence`): the cardinality alone never fires on an
+    // omitted container.
+    let content_exist = token.existence();
+    let context_exist = ExistenceToken::read(row, "context_existence")?.pair();
     let obs = observation_root(&item_tree_data_observation_history(), &[]);
-    composition(template_id, &obs, &card, content_exist, Some(context_exist))
+    Ok(composition(
+        template_id,
+        &obs,
+        &token.cardinality(),
+        content_exist,
+        Some(context_exist),
+    ))
 }
 
-fn composition_content_cardinality(template_id: &str, row: &Cells<'_>) -> String {
-    let token = row.text("cardinality").unwrap_or("any");
-    let card = cardinality_token(token);
+fn composition_content_cardinality(
+    template_id: &str,
+    row: &Cells<'_>,
+) -> Result<String, SynthError> {
+    let token = CardinalityToken::read(row, "cardinality")?;
     // The COMPOSITION.content existence follows the cardinality token so an
     // absent/zero-count content is accepted for `any`/`opt` and rejected by
-    // existence for the mandatory families (`cardinality_existence`); the
-    // instance omits content when the count is 0 (an empty present list is
-    // rejected at the RM level regardless of cardinality).
-    let content_exist = cardinality_existence(token);
+    // existence for the mandatory families; the instance omits content when the
+    // count is 0 (an empty present list is rejected at the RM level regardless
+    // of cardinality).
+    let content_exist = token.existence();
     let obs = observation_root(&item_tree_data_observation_history(), &[]);
-    composition(template_id, &obs, &card, content_exist, None)
+    Ok(composition(
+        template_id,
+        &obs,
+        &token.cardinality(),
+        content_exist,
+        None,
+    ))
 }
 
 /// OBSERVATION with the standard `HISTORY/EVENT/ITEM_TREE` data (default events
@@ -539,20 +797,20 @@ fn item_tree_data_observation_history() -> String {
     observation_history("EVENT", "", &cardinality(1, None), (1, 1))
 }
 
-fn composition_context_existence(template_id: &str, row: &Cells<'_>) -> String {
-    let exist = existence_token(row.text("context_existence").unwrap_or("optional"));
+fn composition_context_existence(template_id: &str, row: &Cells<'_>) -> Result<String, SynthError> {
+    let exist = ExistenceToken::read(row, "context_existence")?.pair();
     let obs = observation_root(&item_tree_data_observation_history(), &[]);
-    composition(
+    Ok(composition(
         template_id,
         &obs,
         &cardinality(0, None),
         (0, 1),
         Some(exist),
-    )
+    ))
 }
 
-fn event_state_existence(template_id: &str, row: &Cells<'_>) -> String {
-    let exist = existence_token(row.text("state_existence").unwrap_or("optional"));
+fn event_state_existence(template_id: &str, row: &Cells<'_>) -> Result<String, SynthError> {
+    let exist = ExistenceToken::read(row, "state_existence")?.pair();
     let state_attr = c_single_attr(
         "state",
         &c_complex("ITEM_TREE", "", "at0005", (1, Some(1))),
@@ -560,32 +818,51 @@ fn event_state_existence(template_id: &str, row: &Cells<'_>) -> String {
     );
     let data = observation_history("EVENT", &state_attr, &cardinality(1, None), (1, 1));
     let obs = observation_root(&data, &[("at0005", "State", "@ internal @")]);
-    composition(template_id, &obs, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &obs,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
-fn event_type_narrowing(template_id: &str, row: &Cells<'_>) -> String {
-    let slot = row.text("slot_type").unwrap_or("EVENT");
-    let data = observation_history(slot, "", &cardinality(1, None), (1, 1));
+fn event_type_narrowing(template_id: &str, row: &Cells<'_>) -> Result<String, SynthError> {
+    let slot = EventSlotType::read(row, "slot_type")?;
+    let data = observation_history(slot.rm_type_name(), "", &cardinality(1, None), (1, 1));
     let obs = observation_root(&data, &[]);
-    composition(template_id, &obs, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &obs,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
-fn history_events_cardinality(template_id: &str, row: &Cells<'_>) -> String {
-    let token = row.text("cardinality").unwrap_or("any");
-    let card = cardinality_token(token);
-    let data = observation_history("EVENT", "", &card, cardinality_existence(token));
+fn history_events_cardinality(template_id: &str, row: &Cells<'_>) -> Result<String, SynthError> {
+    let token = CardinalityToken::read(row, "cardinality")?;
+    let data = observation_history("EVENT", "", &token.cardinality(), token.existence());
     let obs = observation_root(&data, &[]);
-    composition(template_id, &obs, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &obs,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
 /// The master16 combined family: `C_MULTIPLE_ATTRIBUTE.cardinality` on
 /// HISTORY.events AND `C_ATTRIBUTE.existence` on HISTORY.summary in one
 /// template — the events_card_X-summary_ex_mand official cases (and the
 /// summary-present rows of the `summary_ex_opt` cases) constrain both axes.
-fn history_events_cardinality_summary(template_id: &str, row: &Cells<'_>) -> String {
-    let token = row.text("cardinality").unwrap_or("any");
-    let card = cardinality_token(token);
-    let summary_exist = existence_token(row.text("summary_existence").unwrap_or("optional"));
+fn history_events_cardinality_summary(
+    template_id: &str,
+    row: &Cells<'_>,
+) -> Result<String, SynthError> {
+    let token = CardinalityToken::read(row, "cardinality")?;
+    let summary_exist = ExistenceToken::read(row, "summary_existence")?.pair();
     let summary_attr = c_single_attr(
         "summary",
         &c_complex("ITEM_TREE", "", "at0007", (1, Some(1))),
@@ -593,7 +870,7 @@ fn history_events_cardinality_summary(template_id: &str, row: &Cells<'_>) -> Str
     );
     let event_attrs = item_tree_data();
     let event = c_complex("EVENT", &event_attrs, "at0002", (0, Some(1)));
-    let events = c_multiple_attr("events", &event, &card, cardinality_existence(token));
+    let events = c_multiple_attr("events", &event, &token.cardinality(), token.existence());
     let history = c_complex(
         "HISTORY",
         &format!("{events}{summary_attr}"),
@@ -602,11 +879,17 @@ fn history_events_cardinality_summary(template_id: &str, row: &Cells<'_>) -> Str
     );
     let data = c_single_attr("data", &history, (1, 1));
     let obs = observation_root(&data, &[("at0007", "Summary", "@ internal @")]);
-    composition(template_id, &obs, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &obs,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
-fn history_summary_existence(template_id: &str, row: &Cells<'_>) -> String {
-    let exist = existence_token(row.text("summary_existence").unwrap_or("optional"));
+fn history_summary_existence(template_id: &str, row: &Cells<'_>) -> Result<String, SynthError> {
+    let exist = ExistenceToken::read(row, "summary_existence")?.pair();
     let summary_attr = c_single_attr(
         "summary",
         &c_complex("ITEM_TREE", "", "at0007", (1, Some(1))),
@@ -624,7 +907,13 @@ fn history_summary_existence(template_id: &str, row: &Cells<'_>) -> String {
     );
     let data = c_single_attr("data", &history, (1, 1));
     let obs = observation_root(&data, &[("at0007", "Summary", "@ internal @")]);
-    composition(template_id, &obs, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &obs,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
 /// The EVALUATION `C_ARCHETYPE_ROOT` (openEHR-EHR-EVALUATION.minimal.v1) around
@@ -648,12 +937,18 @@ fn evaluation_root(data_attr: &str, extra_terms: &[(&str, &str, &str)]) -> Strin
     )
 }
 
-fn item_structure_type_narrowing(template_id: &str, row: &Cells<'_>) -> String {
-    let slot = row.text("slot_type").unwrap_or("ITEM_STRUCTURE");
-    let data_child = c_complex(slot, "", "at0003", (1, Some(1)));
+fn item_structure_type_narrowing(template_id: &str, row: &Cells<'_>) -> Result<String, SynthError> {
+    let slot = ItemStructureSlotType::read(row, "slot_type")?;
+    let data_child = c_complex(slot.rm_type_name(), "", "at0003", (1, Some(1)));
     let data_attr = c_single_attr("data", &data_child, (1, 1));
     let eval_root = evaluation_root(&data_attr, &[]);
-    composition(template_id, &eval_root, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &eval_root,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
 /// A leaf ELEMENT (at0004) with a `DV_TEXT` value, as a container member.
@@ -696,14 +991,18 @@ fn container_attribute(rm_class: &str) -> &'static str {
 /// NOTE: RM `data_structures` §`CLUSTER` makes `items` 1..1 where the three
 /// `ITEM_STRUCTURE` containers make theirs 0..1, so it keeps existence 1..1 for
 /// every token instead of following it.
-fn item_container_cardinality(rm_class: &str, template_id: &str, row: &Cells<'_>) -> String {
-    let token = row.text("cardinality").unwrap_or("any");
-    let card = cardinality_token(token);
+fn item_container_cardinality(
+    rm_class: &str,
+    template_id: &str,
+    row: &Cells<'_>,
+) -> Result<String, SynthError> {
+    let token = CardinalityToken::read(row, "cardinality")?;
+    let card = token.cardinality();
     let is_cluster = rm_class == "CLUSTER";
     let exist = if is_cluster {
         (1, 1)
     } else {
-        cardinality_existence(token)
+        token.existence()
     };
     let member = if rm_class == "ITEM_TABLE" {
         table_row_cluster()
@@ -734,15 +1033,23 @@ fn item_container_cardinality(rm_class: &str, template_id: &str, row: &Cells<'_>
     };
     let data_attr = c_single_attr("data", &data_child, (1, 1));
     let eval_root = evaluation_root(&data_attr, extra_terms);
-    composition(template_id, &eval_root, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &eval_root,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
 /// `C_ATTRIBUTE.existence` on `ELEMENT.value` AND `ELEMENT.null_flavour` in one
 /// template (AOM1.4 §`C_ATTRIBUTE`; RM `data_structures` §`ELEMENT` — both 0..1).
-fn element_value_null_flavour_existence(template_id: &str, row: &Cells<'_>) -> String {
-    let value_exist = existence_token(row.text("value_existence").unwrap_or("optional"));
-    let null_flavour_exist =
-        existence_token(row.text("null_flavour_existence").unwrap_or("optional"));
+fn element_value_null_flavour_existence(
+    template_id: &str,
+    row: &Cells<'_>,
+) -> Result<String, SynthError> {
+    let value_exist = ExistenceToken::read(row, "value_existence")?.pair();
+    let null_flavour_exist = ExistenceToken::read(row, "null_flavour_existence")?.pair();
     let value_attr = c_single_attr("value", &dv_text_value(), value_exist);
     let null_flavour_attr = c_single_attr(
         "null_flavour",
@@ -757,25 +1064,40 @@ fn element_value_null_flavour_existence(template_id: &str, row: &Cells<'_>) -> S
     let tree = c_complex("ITEM_TREE", &items, "at0003", (1, Some(1)));
     let data_attr = c_single_attr("data", &tree, (1, 1));
     let eval_root = evaluation_root(&data_attr, &[("at0004", "value", "*")]);
-    composition(template_id, &eval_root, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &eval_root,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
 /// `C_OBJECT.rm_type_name` on the `ITEM` member of an `ITEM_TREE` (AOM1.4
 /// §`C_OBJECT`; RM `data_structures` §`ITEM` — the abstract parent of `CLUSTER`
 /// and `ELEMENT`).
-fn item_type_narrowing(template_id: &str, row: &Cells<'_>) -> String {
-    let slot = row.text("slot_type").unwrap_or("ITEM");
-    let member = c_complex(slot, "", "at0004", (0, None));
+fn item_type_narrowing(template_id: &str, row: &Cells<'_>) -> Result<String, SynthError> {
+    let slot = ItemSlotType::read(row, "slot_type")?;
+    let member = c_complex(slot.rm_type_name(), "", "at0004", (0, None));
     let items = c_multiple_attr("items", &member, &cardinality(0, None), (0, 1));
     let tree = c_complex("ITEM_TREE", &items, "at0003", (1, Some(1)));
     let data_attr = c_single_attr("data", &tree, (1, 1));
     let eval_root = evaluation_root(&data_attr, &[("at0004", "item", "*")]);
-    composition(template_id, &eval_root, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &eval_root,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
-fn observation_state_protocol_existence(template_id: &str, row: &Cells<'_>) -> String {
-    let state_exist = existence_token(row.text("state_existence").unwrap_or("optional"));
-    let protocol_exist = existence_token(row.text("protocol_existence").unwrap_or("optional"));
+fn observation_state_protocol_existence(
+    template_id: &str,
+    row: &Cells<'_>,
+) -> Result<String, SynthError> {
+    let state_exist = ExistenceToken::read(row, "state_existence")?.pair();
+    let protocol_exist = ExistenceToken::read(row, "protocol_existence")?.pair();
     let data = item_tree_data_observation_history();
     let state_attr = c_single_attr(
         "state",
@@ -795,7 +1117,13 @@ fn observation_state_protocol_existence(template_id: &str, row: &Cells<'_>) -> S
             ("at0006", "Protocol", "@ internal @"),
         ],
     );
-    composition(template_id, &obs, &cardinality(0, None), (0, 1), None)
+    Ok(composition(
+        template_id,
+        &obs,
+        &cardinality(0, None),
+        (0, 1),
+        None,
+    ))
 }
 
 /// A HISTORY events attribute (1..*) with one EVENT slot (for the state HISTORY).
@@ -1067,5 +1395,227 @@ mod tests {
         )
         .unwrap();
         assert_eq!(a, b);
+    }
+
+    /// One doctored row per structural family: the case id, its `rm_class`,
+    /// the columns, the cells carrying the typo, and the phrase the refusal
+    /// must name.
+    type DoctoredRow = (
+        &'static str,
+        &'static str,
+        Vec<&'static str>,
+        Vec<MatrixCell>,
+        &'static str,
+    );
+
+    /// A doctored cell for every structural family, so a family added later
+    /// without a closed vocabulary has no row here and is visible as such.
+    fn doctored_rows() -> Vec<DoctoredRow> {
+        vec![
+            (
+                "CONT-COMPOSITION-content_cardinality",
+                "COMPOSITION",
+                vec!["cardinality", "content_count"],
+                vec![lit("3to6"), MatrixCell::Literal(json!(3))],
+                "cardinality vocabulary",
+            ),
+            (
+                "CONT-COMPOSITION-context_existence",
+                "COMPOSITION",
+                vec!["context_existence", "context_committed"],
+                vec![lit("required"), lit("absent")],
+                "existence vocabulary",
+            ),
+            (
+                "CONT-COMP-content_card_any-context_mand",
+                "COMPOSITION",
+                vec!["cardinality", "context_existence"],
+                vec![lit("any"), lit("Mandatory")],
+                "existence vocabulary",
+            ),
+            (
+                "CONT-HISTORY-events_cardinality",
+                "HISTORY",
+                vec!["cardinality", "events_count"],
+                vec![lit("1plu"), MatrixCell::Literal(json!(1))],
+                "cardinality vocabulary",
+            ),
+            (
+                "CONT-HIST-events_card_any-summary_ex_mand",
+                "HISTORY",
+                vec!["cardinality", "summary_existence"],
+                vec![lit("any"), lit("optionall")],
+                "existence vocabulary",
+            ),
+            (
+                "CONT-HISTORY-summary_existence",
+                "HISTORY",
+                vec!["summary_existence", "summary_committed"],
+                vec![lit("opt"), lit("absent")],
+                "existence vocabulary",
+            ),
+            (
+                "CONT-EVENT-state_existence",
+                "EVENT",
+                vec!["state_existence", "state_committed"],
+                vec![lit("mand"), lit("absent")],
+                "existence vocabulary",
+            ),
+            (
+                "CONT-EVENT-type_narrowing",
+                "EVENT",
+                vec!["slot_type", "committed_type"],
+                vec![lit("POITN_EVENT"), lit("POINT_EVENT")],
+                "RM EVENT class",
+            ),
+            (
+                "CONT-ITEM_STRUCTURE-type_narrowing",
+                "ITEM_STRUCTURE",
+                vec!["slot_type", "committed_type"],
+                vec![lit("ITEM_CLUSTER"), lit("ITEM_TREE")],
+                "RM ITEM_STRUCTURE class",
+            ),
+            (
+                "CONT-OBSERVATION-state_protocol_existence",
+                "OBSERVATION",
+                vec!["state_existence", "protocol_existence"],
+                vec![lit("mandatory"), lit("MANDATORY")],
+                "existence vocabulary",
+            ),
+            (
+                "CONT-ITEM_TREE-items_cardinality",
+                "ITEM_TREE",
+                vec!["cardinality", "items_count"],
+                vec![lit("0plus"), MatrixCell::Literal(json!(1))],
+                "cardinality vocabulary",
+            ),
+            (
+                "CONT-CLUSTER-items_cardinality",
+                "CLUSTER",
+                vec!["cardinality", "items_count"],
+                vec![lit("anyy"), MatrixCell::Literal(json!(1))],
+                "cardinality vocabulary",
+            ),
+            (
+                "CONT-ELEMENT-value_null_flavour_existence",
+                "ELEMENT",
+                vec!["value_existence", "null_flavour_existence"],
+                vec![lit("optional"), lit("mandatry")],
+                "existence vocabulary",
+            ),
+            (
+                "CONT-ITEM-type_narrowing",
+                "ITEM",
+                vec!["slot_type", "committed_type"],
+                vec![lit("CLUSTERR"), lit("CLUSTER")],
+                "RM ITEM class",
+            ),
+        ]
+    }
+
+    /// A doctored constraint-axis cell REFUSES instead of synthesizing a
+    /// permissive default. A mistyped `3to5` that silently became `0..*` would
+    /// bake a constraint no committed row declares, and the SUT would then be
+    /// graded against it — a passing row manufactured out of the typo.
+    #[test]
+    fn an_unknown_structural_token_refuses() {
+        for (case, rm_class, columns, cells, needle) in doctored_rows() {
+            let refused = synthesize_opt(case, rm_class, "cnf.tpl.x.r0", &cols(&columns), &cells);
+            let Err(SynthError::Unsupported(message)) = refused else {
+                panic!("{case}: a doctored token must not synthesize: {refused:?}");
+            };
+            assert!(message.contains(needle), "{case}: {message}");
+        }
+    }
+
+    /// An axis whose cell is absent or non-textual refuses too: the family
+    /// reads a constraint the row never authored, so there is nothing to bake.
+    #[test]
+    fn an_absent_structural_axis_refuses() {
+        let refused = synthesize_opt(
+            "CONT-COMPOSITION-content_cardinality",
+            "COMPOSITION",
+            "cnf.tpl.x.r0",
+            &cols(&["cardinality", "content_count"]),
+            &[MatrixCell::Null, MatrixCell::Literal(json!(3))],
+        );
+        let Err(SynthError::Unsupported(message)) = refused else {
+            panic!("a null axis cell must not synthesize: {refused:?}");
+        };
+        assert!(message.contains("cardinality"), "{message}");
+        assert!(message.contains("absent"), "{message}");
+    }
+
+    /// Every token the committed catalogue spells still synthesizes, so the
+    /// closed vocabularies match the artifacts they read rather than narrowing
+    /// coverage.
+    #[test]
+    fn every_committed_structural_token_synthesizes() {
+        for token in ["any", "1plus", "3plus", "opt", "mand", "3to5"] {
+            let xml = synthesize_opt(
+                "CONT-COMPOSITION-content_cardinality",
+                "COMPOSITION",
+                "cnf.tpl.x.r0",
+                &cols(&["cardinality", "content_count"]),
+                &[lit(token), MatrixCell::Literal(json!(3))],
+            );
+            assert!(xml.is_ok(), "{token}: {xml:?}");
+        }
+        for token in ["optional", "mandatory"] {
+            let xml = synthesize_opt(
+                "CONT-COMPOSITION-context_existence",
+                "COMPOSITION",
+                "cnf.tpl.x.r0",
+                &cols(&["context_existence", "context_committed"]),
+                &[lit(token), lit("absent")],
+            );
+            assert!(xml.is_ok(), "{token}: {xml:?}");
+        }
+        for token in ["EVENT", "POINT_EVENT", "INTERVAL_EVENT"] {
+            let xml = synthesize_opt(
+                "CONT-EVENT-type_narrowing",
+                "EVENT",
+                "cnf.tpl.x.r0",
+                &cols(&["slot_type", "committed_type"]),
+                &[lit(token), lit("POINT_EVENT")],
+            );
+            assert!(xml.is_ok(), "{token}: {xml:?}");
+        }
+        for token in [
+            "ITEM_STRUCTURE",
+            "ITEM_SINGLE",
+            "ITEM_LIST",
+            "ITEM_TABLE",
+            "ITEM_TREE",
+        ] {
+            let xml = synthesize_opt(
+                "CONT-ITEM_STRUCTURE-type_narrowing",
+                "ITEM_STRUCTURE",
+                "cnf.tpl.x.r0",
+                &cols(&["slot_type", "committed_type"]),
+                &[lit(token), lit("ITEM_TREE")],
+            );
+            assert!(xml.is_ok(), "{token}: {xml:?}");
+        }
+        for token in ["ITEM", "CLUSTER", "ELEMENT"] {
+            let xml = synthesize_opt(
+                "CONT-ITEM-type_narrowing",
+                "ITEM",
+                "cnf.tpl.x.r0",
+                &cols(&["slot_type", "committed_type"]),
+                &[lit(token), lit("CLUSTER")],
+            );
+            assert!(xml.is_ok(), "{token}: {xml:?}");
+        }
+        for token in ["optional", "mandatory"] {
+            let xml = synthesize_opt(
+                "CONT-ELEMENT-value_null_flavour_existence",
+                "ELEMENT",
+                "cnf.tpl.x.r0",
+                &cols(&["value_existence", "null_flavour_existence"]),
+                &[lit(token), lit("optional")],
+            );
+            assert!(xml.is_ok(), "{token}: {xml:?}");
+        }
     }
 }

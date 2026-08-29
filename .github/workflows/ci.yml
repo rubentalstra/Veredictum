@@ -230,6 +230,14 @@ jobs:
       - name: Changelog structure
         run: bash scripts/checks/changelog-structure.sh
 
+      # The corpus OPT generator declares itself the SOURCE of every cnf.tpl.*
+      # template beside it, and both halves of that contract were unenforced: a
+      # hand-patched OPT drifted silently, and a manifest key with no builder
+      # printed a warning nobody read. Re-running the generator here is what
+      # makes the contract real (#241).
+      - name: Corpus OPTs regenerate byte-identically
+        run: bash scripts/checks/corpus-opt-reproducible.sh
+
       # The entry half: a change to a user-visible surface must carry a changelog
       # entry. The path set that decides "user-visible" is declared inside
       # `scripts/checks/changelog-entry.sh`, beside the reasoning for each path,

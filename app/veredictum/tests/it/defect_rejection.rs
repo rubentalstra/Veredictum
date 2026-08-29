@@ -126,6 +126,11 @@ defects! {
     case_undefined_capture_ref =>
         ("case-undefined-capture-ref.yaml", "schedule/zz-defect.yaml", "reference-grammar"),
     case_bad_literal => ("case-bad-literal.yaml", "schedule/zz-defect.yaml", "literal-grammar"),
+    // A constraint-axis cell outside its closed token vocabulary: the row would
+    // otherwise bake a permissive default OPT and grade the SUT against a
+    // constraint nobody authored.
+    case_bad_structural_token =>
+        ("case-bad-structural-token.yaml", "schedule/zz-defect.yaml", "content-synthesis"),
     corpus_missing_source =>
         ("corpus-missing-source.yaml", "corpus/MANIFEST.yaml", "corpus-integrity"),
     outcomes_wrong_class => ("outcomes-wrong-class.yaml", "vocab/outcomes.yaml", "vocab-drift"),

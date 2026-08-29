@@ -55,6 +55,13 @@ the case that consumes the template — never by accepting the diff and never
 by reverting the artifact without asking why it differs. When the artifact
 wins, teach the script; when the script wins, the artifact is regenerated.
 
+The contract is enforced at both ends. A `git diff` after a run catches an
+artifact whose BYTES drifted, and the key-set check at the end of main() exits
+non-zero when a `cnf.tpl.*` manifest key has no builder here (its committed OPT
+is unreachable from this script) or a builder names a key the manifest does not
+carry. Neither is a warning: an unreproducible OPT is exactly the hand-patch
+this file exists to prevent.
+
 Run:  python3 generate_content_opts.py
 It rewrites every cnf.tpl.* OPT in this directory in place, deterministically.
 """
@@ -404,6 +411,54 @@ def dv_coded_text_ref(reference):
     return c_complex("DV_CODED_TEXT", dc)
 
 
+def coded_text_binding_ontology(terminology, query):
+    """The OBSERVATION component ontology a CONSTRAINT_REF template needs, as a
+    ready-indented <component_ontologies> block.
+
+    Three parts, none optional. The mandatory term_definitions (Archetype.xsd
+    ARCHETYPE_ONTOLOGY carries no minOccurs on term_definitions; AOM1.4
+    master07 SS Term and Constraint Definitions requires text+description). The
+    constraint_definitions entry DEFINING ac0001 (ADL1.4 master08-adl SS Coded
+    Term Validity VATDF/VACDF: every ac-code used in the definition must be
+    defined in constraint_definitions; master05-cadl SS Placeholder
+    Constraints). And the constraint_bindings entry (master08 SS
+    Constraint_bindings) binding ac0001 to an external terminology query. It
+    lives under component_ontologies because the constraint sits in a component
+    archetype rather than the root template (OPT2 master03-opt_raw SS
+    Terminology; Template.xsd FLAT_ARCHETYPE_ONTOLOGY)."""
+    terms = [
+        ("at0000", "Minimal", "unknown"),
+        ("at0001", "Event Series", "@ internal @"),
+        ("at0002", "Any event", "*"),
+        ("at0003", "Tree", "@ internal @"),
+        ("at0004", "value", "*"),
+    ]
+    items = "\n".join(
+        f'      <items code="{code}"><items id="text">{xesc(text)}</items>'
+        f'<items id="description">{xesc(desc)}</items></items>'
+        for code, text, desc in terms
+    )
+    ac_desc = (
+        "The external value set the element's defining_code must be a member of "
+        "(resolved through the bound terminology query - ADL1.4 master05 SS "
+        "Placeholder Constraints)"
+    )
+    return (
+        '  <component_ontologies archetype_id="openEHR-EHR-OBSERVATION.minimal.v1">\n'
+        '    <term_definitions language="en">\n'
+        f"{items}\n"
+        "    </term_definitions>\n"
+        '    <constraint_definitions language="en">\n'
+        '      <items code="ac0001"><items id="text">Bound value set</items>'
+        f'<items id="description">{xesc(ac_desc)}</items></items>\n'
+        "    </constraint_definitions>\n"
+        f'    <constraint_bindings terminology="{xesc(terminology)}">\n'
+        f'      <items code="ac0001"><value>{xesc(query)}</value></items>\n'
+        "    </constraint_bindings>\n"
+        "  </component_ontologies>\n"
+    )
+
+
 def dv_ordinal_open():
     return c_complex("DV_ORDINAL")
 
@@ -577,7 +632,9 @@ def blood_pressure_root():
     )
 
 
-def composition(template_id, obs_children, content_card=None, context_exist=None):
+def composition(
+    template_id, obs_children, content_card=None, context_exist=None, component_ontologies=""
+):
     uid = det_uid(template_id)
     card = content_card if content_card is not None else cardinality(0, None)
     content_attr = c_multiple_attr("content", obs_children, card, exist=(0, 1))
@@ -611,13 +668,13 @@ def composition(template_id, obs_children, content_card=None, context_exist=None
     <template_id><value>{xesc(template_id)}</value></template_id>
     <term_definitions code="at0000"><items id="description">unknown</items><items id="text">Minimal</items></term_definitions>
   </definition>
-</template>
+{component_ontologies}</template>
 """
 
 
-def value_template(template_id, value_children, extra_terms=None):
+def value_template(template_id, value_children, extra_terms=None, component_ontologies=""):
     obs = observation_root(value_children, extra_terms)
-    return composition(template_id, obs)
+    return composition(template_id, obs, component_ontologies=component_ontologies)
 
 
 # ---------------------------------------------------------------------------
@@ -963,6 +1020,27 @@ def build_all():
     T["dv_coded_text_c_code_phrase"] = lambda k: value_template(k, dv_coded_text_local(["ABC", "OPQ"]))
     # external terminology via CONSTRAINT_REF (CONT-DV_CODED_TEXT-validate_ext_term) ---
     T["dv_coded_text_constraint_ref"] = lambda k: value_template(k, dv_coded_text_ref("ac0001"))
+    # The BOUND twins: the same CONSTRAINT_REF definition plus a complete
+    # component ontology, so ac0001 is defined AND bound to an external
+    # terminology query. The reachable binding carries the member / non-member
+    # branch pair; the ts-down binding names a namespace a deployment routes to
+    # a terminology server declared unreachable, which is the fail-open /
+    # fail-closed branch pair. Both templates are intrinsically VALID; only the
+    # second one's query cannot be answered.
+    T["dv_coded_text_binding_sct"] = lambda k: value_template(
+        k,
+        dv_coded_text_ref("ac0001"),
+        component_ontologies=coded_text_binding_ontology(
+            "cnf-sct-shaped", "http://cnf.example.test/fhir/ValueSet/sct-shaped-disorders"
+        ),
+    )
+    T["dv_coded_text_binding_tsdown"] = lambda k: value_template(
+        k,
+        dv_coded_text_ref("ac0001"),
+        component_ontologies=coded_text_binding_ontology(
+            "cnf-ts-down", "http://cnf.example.test/fhir/ValueSet/ts-down-set"
+        ),
+    )
 
     # --- DV_DATE (CONT-DV_DATE-validate_{constraint,open,range}) ---
     T["dv_date_c_date"] = lambda k: value_template(k, dv_date(item_c_date("yyyy-mm-??")))
@@ -1197,13 +1275,20 @@ def main():
     print(f"generated {len(written)} OPTs")
     for fname, key in written:
         print(f"  {fname} -> template_id {key}")
-    if missing:
-        print(f"WARNING: {len(missing)} keys in the table have no manifest source:")
-        for k in missing:
-            print(f"  {k}")
+    # The key-set match is the reproducibility contract, so it is FATAL rather
+    # than a warning: a manifest key with no builder names a committed OPT this
+    # script cannot regenerate, and a builder with no manifest key writes bytes
+    # the catalogue never declared. Both were a printed warning nobody read.
     extra = set(f"cnf.tpl.{n}" for n in table) ^ set(sources)
-    if extra:
-        print(f"WARNING: key-set mismatch vs manifest: {sorted(extra)}")
+    if missing or extra:
+        for k in missing:
+            print(f"ERROR: table key {k} has no manifest source")
+        for k in sorted(extra):
+            print(f"ERROR: key-set mismatch vs manifest: {k}")
+        raise SystemExit(
+            "the generator and artifacts/corpus/MANIFEST.yaml disagree about the "
+            "cnf.tpl.* key set, so a committed OPT is not reproducible from this script"
+        )
 
 
 if __name__ == "__main__":

@@ -140,6 +140,13 @@ pub enum CheckId {
     /// or carries an adjudicated `vocab/wire_surface.yaml` exception. Silence
     /// is not coverage.
     SurfaceCoverage,
+    /// Per-row OPT synthesis over every varying-constraint content case (issue
+    /// #241): each row's ground OPT is built from that row's own
+    /// constraint-axis cells, so a cell outside its closed token vocabulary
+    /// bakes a constraint nobody authored and grades the SUT against it. The
+    /// gate is at validate time, before any SUT is composed, because a
+    /// synthesis refusal otherwise surfaces only mid-run as an errored row.
+    ContentSynthesis,
 }
 
 impl CheckId {
@@ -172,6 +179,7 @@ impl CheckId {
             Self::WorkloadCoverage => "workload-coverage",
             Self::RealizationScope => "realization-scope",
             Self::SurfaceCoverage => "surface-coverage",
+            Self::ContentSynthesis => "content-synthesis",
         }
     }
 }
@@ -282,8 +290,62 @@ pub fn validate(ctx: &Context<'_>) -> Vec<Finding> {
     check_workload_coverage(ctx.set, &mut findings);
     check_realization_scope(ctx.set, &mut findings);
     check_surface_coverage(ctx.set, spec.as_ref(), &mut findings);
+    check_content_synthesis(ctx.set, &mut findings);
 
     findings
+}
+
+/// Every row of a varying-constraint content case synthesizes its ground OPT.
+///
+/// The driver builds one OPT per row from that row's own constraint-axis
+/// cells, so a cell outside the closed token vocabulary — a typo — bakes a
+/// constraint the row never declares and the SUT is graded against it. The
+/// refusal is a finding here rather than an errored row mid-run.
+fn check_content_synthesis(set: &ArtifactSet, findings: &mut Vec<Finding>) {
+    for (_path, authored) in &set.cases {
+        if !matches!(authored.kind, CaseKind::Content) {
+            continue;
+        }
+        if authored
+            .constraint_context
+            .as_ref()
+            .is_none_or(|c| c.constraint_columns.is_empty())
+        {
+            continue;
+        }
+        let case = crate::run::synthesize_content_case(authored);
+        let (Some(rm_class), Some(matrix)) = (
+            case.rm_class.as_deref(),
+            case.parameters.as_ref().and_then(|p| p.matrix.as_ref()),
+        ) else {
+            continue;
+        };
+        let who = case.id.to_string();
+        for (row, cells) in matrix.rows.iter().enumerate() {
+            // An AMB-42 row has no expressible ground OPT on this technology
+            // profile, so the driver never synthesizes one for it either.
+            if crate::exec::content_synth::unrealizable_row(rm_class, &matrix.columns, cells)
+                .is_some()
+            {
+                continue;
+            }
+            let template_id = crate::exec::recipes::synth_template_id(&who, row, cells);
+            if let Err(error) = crate::exec::content_synth::synthesize_opt(
+                &who,
+                rm_class,
+                &template_id,
+                &matrix.columns,
+                cells,
+            ) {
+                push(
+                    findings,
+                    CheckId::ContentSynthesis,
+                    &who,
+                    format!("row {row}: {error}"),
+                );
+            }
+        }
+    }
 }
 
 // ── claim completeness, depth floors, workload coverage (issue FerroEHR#622) ────────
