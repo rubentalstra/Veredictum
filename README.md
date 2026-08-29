@@ -344,6 +344,49 @@ The [public roadmap board](https://github.com/users/rubentalstra/projects/5)
 shows what is planned, in progress, and shipped — a view over the issue
 tracker, where milestones are releases.
 
+## Credits
+
+The conformance work here stands on work other people did first. Each entry
+below says what that work contributed to this catalogue.
+
+- **The openEHR SEC and the CNF authors:** the
+  [Conformance component](https://specifications.openehr.org/releases/CNF/development),
+  whose Conformance Guide and Platform Conformance Test Schedule set the SUT
+  model, the profile matrix and the certificate shape, and say which
+  behaviours a platform product has to be tested for. The schedule's
+  amendment record names T Beale, B Naess, I McNicoll, C Chevalley,
+  H Frankel, S Iancu, B Lah and W Wagner across its revisions, beside
+  P Pazos. 349 of the 1119 case cores here cite one of its Test Schedule
+  chapters.
+- **Pablo Pazos (CaboLabs):** the fleshed EHR, COMPOSITION, CONTRIBUTION and
+  DIRECTORY chapters of that schedule, which are its usable core. The
+  amendment record names him as the raiser of Test Schedule revisions 0.8.0
+  (23 Nov 2021) through 0.8.6 (24 Mar 2022), and as co-author of the
+  Conformance Guide's initial writing with T Beale. He wrote the original
+  2019 EHRbase conformance tests at Hannover Medical School, and his
+  [openEHR conformance verification framework](https://github.com/ppazos/openehr-conformance-verification)
+  is the expanded continuation of that work, carrying a conformance testing
+  specification of its own. He has argued the case for openEHR conformance
+  testing on the community forums for years. 127 of the 1119 case cores cite
+  the four chapters those revisions wrote.
+- **The EHRbase and vitasystems team:** the executable battery. The 223 Robot
+  files the CNF component vendored name Wladislaw Wagner (Vitasystems GmbH),
+  Pablo Pazos and Jake Smolka (Hannover Medical School) in their copyright
+  headers, and the team maintains that set as its
+  [integration tests](https://github.com/ehrbase/integration-tests). 135 of
+  the 453 corpus provenance records here name that set as the source of the
+  entry's bytes or of its template skeleton, each one re-adjudicated against
+  the released specifications.
+- **The openEHR Foundation:** the
+  [released specifications](https://specifications.openehr.org/) every
+  expectation in the catalogue cites, and the machine-readable artifacts the
+  bindings resolve against: the ITS-XML and ITS-JSON schema bundles and the
+  ITS-REST OpenAPI documents.
+
+The Test Schedule chapters are cited as the structural guide to which
+behaviours need covering. The correctness authority is always the released
+specification a case cites.
+
 ## License
 
 Apache-2.0. Attribution travels with every copy and derivative through the
