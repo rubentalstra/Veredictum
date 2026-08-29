@@ -3131,7 +3131,12 @@ fn bindings_the_interpreter_would_drive<'a>(
             .any(|(_, b)| b.variant.as_deref() == Some(v.as_str()))
     {
         bindings.retain(|(_, b)| b.variant.as_deref() == Some(v.as_str()));
-    } else if bindings.iter().any(|(_, b)| b.variant.is_none()) {
+    } else {
+        // The driver's fallback is the variant-LESS binding and nothing else
+        // (`exec::driver::binding_for_variant` errors when none exists), so
+        // an operation carrying only variant-ful bindings the step does not
+        // name selects NOTHING here — the gate then reports the same
+        // no-binding gap the interpreter would error with at drive time.
         bindings.retain(|(_, b)| b.variant.is_none());
     }
     bindings
@@ -4339,7 +4344,9 @@ type BranchKey = (SmOperationRef, Option<String>);
 
 /// Mirror the interpreter's binding selection (`exec::driver::binding_for_variant`):
 /// a step's `variant` selects the binding declaring it, else the variant-less
-/// binding for the operation.
+/// binding for the operation — through the ONE shared resolution, so this
+/// coverage view and `check_binding_completeness` cannot disagree about which
+/// binding a step drives.
 fn select_binding_for_step<'a>(
     set: &'a ArtifactSet,
     case: &CaseCore,
@@ -4350,17 +4357,8 @@ fn select_binding_for_step<'a>(
     } else {
         case.sm_operation.as_ref()?.sibling(&step.call)
     };
-    if let Some(v) = &step.variant
-        && let Some((_, b)) = set
-            .bindings
-            .iter()
-            .find(|(_, b)| b.sm_operation == op && b.variant.as_deref() == Some(v.as_str()))
-    {
-        return Some(b);
-    }
-    set.bindings
-        .iter()
-        .find(|(_, b)| b.sm_operation == op && b.variant.is_none())
+    bindings_the_interpreter_would_drive(set, &op, step)
+        .first()
         .map(|(_, b)| b)
 }
 
@@ -6062,5 +6060,95 @@ some prose\n\
             findings.iter().all(|f| f.message.contains("not readable")),
             "{findings:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod binding_selection_tests {
+    use super::*;
+
+    fn set_with_bindings(bindings: &serde_json::Value) -> ArtifactSet {
+        let mut set = ArtifactSet::default();
+        for (index, binding) in bindings
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .enumerate()
+        {
+            set.bindings.push((
+                PathBuf::from(format!("bindings/its-rest/{index}.yaml")),
+                serde_json::from_value(binding).unwrap(),
+            ));
+        }
+        set
+    }
+
+    fn one_step_case(step: &serde_json::Value) -> CaseCore {
+        serde_json::from_value(serde_json::json!({
+            "id": "SEL-variant_mirror", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [step]
+        }))
+        .unwrap()
+    }
+
+    /// The driver errors when an operation carries only variant-ful bindings
+    /// the step does not name (`exec::driver::binding_for_variant` falls back
+    /// to the variant-LESS binding and nothing else), so BOTH validate-side
+    /// mirrors must select nothing there — the divergence issue #173 records.
+    #[test]
+    fn only_variant_ful_bindings_select_nothing_in_both_mirrors() {
+        let set = set_with_bindings(&serde_json::json!([{
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "its": "its-rest",
+            "variant": "xml_body",
+            "request": { "method": "POST", "path": "/ehr" },
+            "outcomes": { "created": { "status": 201 } }
+        }]));
+        let case = one_step_case(&serde_json::json!({
+            "step": 1, "call": "create_ehr", "expect": "created"
+        }));
+        let step = case.flow.first().unwrap();
+        let anchor = case.sm_operation.as_ref().unwrap();
+        let op = anchor.sibling("create_ehr");
+        assert!(bindings_the_interpreter_would_drive(&set, &op, step).is_empty());
+        assert!(step_binding(&set, anchor, step).is_none());
+        assert!(select_binding_for_step(&set, &case, step).is_none());
+    }
+
+    /// A step NAMING the variant selects the exact match through both
+    /// mirrors, and a variant-less binding remains the unnamed fallback.
+    #[test]
+    fn a_named_variant_selects_the_exact_match_and_bare_falls_back() {
+        let set = set_with_bindings(&serde_json::json!([
+            {
+                "sm_operation": "I_EHR_SERVICE.create_ehr",
+                "its": "its-rest",
+                "variant": "xml_body",
+                "request": { "method": "POST", "path": "/ehr-xml" },
+                "outcomes": { "created": { "status": 201 } }
+            },
+            {
+                "sm_operation": "I_EHR_SERVICE.create_ehr",
+                "its": "its-rest",
+                "request": { "method": "POST", "path": "/ehr" },
+                "outcomes": { "created": { "status": 201 } }
+            }
+        ]));
+        let named = one_step_case(&serde_json::json!({
+            "step": 1, "call": "create_ehr", "expect": "created", "variant": "xml_body"
+        }));
+        let step = named.flow.first().unwrap();
+        let selected = select_binding_for_step(&set, &named, step).unwrap();
+        assert_eq!(selected.variant.as_deref(), Some("xml_body"));
+
+        let bare = one_step_case(&serde_json::json!({
+            "step": 1, "call": "create_ehr", "expect": "created"
+        }));
+        let step = bare.flow.first().unwrap();
+        let selected = select_binding_for_step(&set, &bare, step).unwrap();
+        assert_eq!(selected.variant, None);
     }
 }
