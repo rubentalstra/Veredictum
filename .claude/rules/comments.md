@@ -103,7 +103,19 @@ history carries it. A comment describes the code as it IS.
   because `specs/**` is full of `.md` documents that ARE the oracle and a
   string the code emits may legitimately name a markdown file the tool writes.
   `scripts/checks/comment-style.sh --self-test` is its seeded-violation proof
-  and runs in the CI guards job.
+  and runs in the CI guards job. Widened 2026-08-29 (#176) to every path form:
+  the guard builds the suffix set of every committed non-spec markdown file, so
+  an artifact-root-relative citation (`corpus/recipes/bp_series.md`) is refused
+  exactly like the full path, while a suffix naming nothing committed and a URL
+  ending in `.md` both stay legal.
+- **Adjudicated 2026-08-29 (#176): manifest provenance naming a digest-pinned
+  recipe contract is INSIDE the rules.** Each generated set in
+  `artifacts/corpus/MANIFEST.yaml` binds its recipe through a `generated_by`
+  digest, which makes the named contract file load-bearing catalogue data: edit
+  the file and the digest no longer matches, so the reference fails loud instead
+  of rotting silently. Rule 11 governs prose comments, and a pinned data
+  reference is not prose. A comment in a `.rs` file still may not name that same
+  file, because a comment carries no digest and nothing catches it going stale.
 - `clippy::too_long_first_doc_paragraph` (nursery cherry-pick, CI
   `-D warnings`) — the RFC 1574 summary line.
 - Doc lints, all live: `doc_markdown`,

@@ -20,8 +20,8 @@
 #![allow(
     clippy::disallowed_types,
     reason = "the JSON carriers here are cfg(test)-only fixtures over the catalogue \
-              artifacts (dev/verification tooling, FerroEHR#1694), so #[expect] would be \
-              unfulfilled in the non-test build"
+              artifacts (dev/verification tooling), so #[expect] would be unfulfilled in \
+              the non-test build"
 )]
 
 use serde::Serialize;
