@@ -1059,11 +1059,26 @@ mod tests {
         for cdr in ReferenceCdr::ALL {
             let pin = cdr.pin();
             let document = pin.compose_document();
-            assert!(document.contains(pin.server_image), "{document}");
-            assert!(document.contains(pin.database_image), "{document}");
-            assert!(document.contains(SERVER_CPUS), "{document}");
-            assert!(document.contains(SERVER_MEMORY), "{document}");
-            assert!(document.contains(DATABASE_SHM_SIZE), "{document}");
+            assert!(
+                document.contains(pin.server_image),
+                "the compose document does not name the pinned server image"
+            );
+            assert!(
+                document.contains(pin.database_image),
+                "the compose document does not name the pinned database image"
+            );
+            assert!(
+                document.contains(SERVER_CPUS),
+                "the compose document does not state the server CPU ceiling"
+            );
+            assert!(
+                document.contains(SERVER_MEMORY),
+                "the compose document does not state the server memory ceiling"
+            );
+            assert!(
+                document.contains(DATABASE_SHM_SIZE),
+                "the compose document does not state the database shm size"
+            );
             assert!(
                 document.contains(&format!("{BIND_HOST}:{}:8080", pin.host_port)),
                 "{document}"
@@ -1143,7 +1158,10 @@ mod tests {
                 document.contains(&format!("cpus: \"{SERVER_CPUS}\"")),
                 "{document}"
             );
-            assert!(document.contains(DATABASE_MEMORY), "{document}");
+            assert!(
+                document.contains(DATABASE_MEMORY),
+                "the compose document does not state the database memory ceiling"
+            );
         }
     }
 
@@ -1247,13 +1265,17 @@ mod tests {
         let pin = ReferenceCdr::FerroEhr.pin();
         let document = pin.compose_document();
         assert_eq!(pin.posture.signing.value, SigningScheme::Digest);
+        // The failure message names the missing line and never prints the
+        // document: the compose carries the recipe's published credentials,
+        // and a panic that dumps them is a cleartext-logging defect even for
+        // dev values.
         assert!(
             document.contains("FERROEHR__SIGNING__ENABLED: \"true\""),
-            "{document}"
+            "the compose document does not state FERROEHR__SIGNING__ENABLED"
         );
         assert!(
             document.contains("FERROEHR__SIGNING__MODE: digest"),
-            "{document}"
+            "the compose document does not state FERROEHR__SIGNING__MODE: digest"
         );
     }
 
