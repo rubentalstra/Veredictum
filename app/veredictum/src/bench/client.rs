@@ -156,33 +156,49 @@ impl fmt::Debug for BenchClient {
 }
 
 impl BenchClient {
-    /// Builds the client from the command line's targeting arguments.
+    /// Builds the client from the command line's targeting arguments, taking
+    /// the secret from the environment.
     ///
     /// # Errors
     /// [`BenchError::MissingUser`] when `--auth basic` carries no user,
     /// [`BenchError::Credential`] when the credential variable is unset, and
     /// [`BenchError::Client`] when the HTTP client cannot be built.
     pub fn new(base_url: &str, auth: AuthKind, user: Option<&str>) -> Result<Self, BenchError> {
+        Self::with_credential(base_url, auth, user, None)
+    }
+
+    /// Builds the client with a secret supplied in process.
+    ///
+    /// The baseline orchestration composes the stack it then measures, so it
+    /// already holds that stack's credential and must not reach into the
+    /// operator's environment for a different one. `None` falls back to the
+    /// environment variable the mode documents.
+    ///
+    /// # Errors
+    /// [`BenchError::MissingUser`] when `--auth basic` carries no user,
+    /// [`BenchError::Credential`] when no secret was supplied and the
+    /// credential variable is unset, and [`BenchError::Client`] when the HTTP
+    /// client cannot be built.
+    pub fn with_credential(
+        base_url: &str,
+        auth: AuthKind,
+        user: Option<&str>,
+        secret: Option<&str>,
+    ) -> Result<Self, BenchError> {
+        let from_env = |name: &'static str| match secret {
+            Some(secret) => Ok(secret.to_owned()),
+            None => std::env::var(name).map_err(|source| BenchError::Credential { name, source }),
+        };
         let authorization = match auth {
             AuthKind::None => None,
             AuthKind::Basic => {
                 let user = user.ok_or(BenchError::MissingUser)?;
-                let password =
-                    std::env::var(PASSWORD_ENV).map_err(|source| BenchError::Credential {
-                        name: PASSWORD_ENV,
-                        source,
-                    })?;
+                let password = from_env(PASSWORD_ENV)?;
                 let encoded = base64::engine::general_purpose::STANDARD
                     .encode(format!("{user}:{password}").as_bytes());
                 Some(format!("Basic {encoded}"))
             }
-            AuthKind::Bearer => {
-                let token = std::env::var(TOKEN_ENV).map_err(|source| BenchError::Credential {
-                    name: TOKEN_ENV,
-                    source,
-                })?;
-                Some(format!("Bearer {token}"))
-            }
+            AuthKind::Bearer => Some(format!("Bearer {}", from_env(TOKEN_ENV)?)),
         };
         let client = reqwest::blocking::Client::builder()
             .timeout(CLIENT_TIMEOUT)

@@ -51,12 +51,15 @@
 //!                                       both directions on equal footing
 //! veredictum bench --base-url URL [--auth none|basic|bearer] [--user U]
 //!                  [--pack community-vitals|smoke] [--repetitions N]
-//!                  [--scale F] [--seed-workers N] --out DIR [--label L]
+//!                  [--scale F] [--seed-workers N] [--with-baselines]
+//!                  --out DIR [--label L]
 //!                                       the universal speed benchmark: an
 //!                                       embedded pack against any reachable
 //!                                       CDR, seeded once and measured N times
-//!                                       open-loop (comparative speed only —
-//!                                       never a conformance record)
+//!                                       open-loop, optionally anchored by the
+//!                                       pinned reference CDRs on this host
+//!                                       (comparative speed only — never a
+//!                                       conformance record)
 //! veredictum bench-compare --result FILE --result FILE [...] --out DIR
 //!                                       align two or more committed bench
 //!                                       results into one table, flagging every
@@ -295,7 +298,8 @@ enum Command {
         #[arg(long, default_value = "smoke")]
         pack: String,
         /// How many times to repeat the measured phases. A result with fewer
-        /// than three is recorded as not submittable.
+        /// than three is recorded as not submittable, and names that as one of
+        /// its unmet requirements.
         #[arg(long, default_value_t = 3)]
         repetitions: u32,
         /// Multiply the pack's EHR count by this factor, for a shorter run.
@@ -307,6 +311,12 @@ enum Command {
         /// the pack's own value, which is what its reference figures describe.
         #[arg(long)]
         seed_workers: Option<usize>,
+        /// After the target's run, compose each pinned reference CDR on this
+        /// host from its own digest-pinned images, drive the same pack at the
+        /// same seed against it, and record the relative index. Needs the
+        /// docker CLI; a record without a baseline is not submittable.
+        #[arg(long)]
+        with_baselines: bool,
         /// Output directory for the result document and its summary.
         #[arg(long)]
         out: PathBuf,
@@ -578,6 +588,7 @@ fn main() -> ExitCode {
             repetitions,
             scale,
             seed_workers,
+            with_baselines,
             out,
             label,
         } => bench_command(
@@ -589,6 +600,7 @@ fn main() -> ExitCode {
                 repetitions,
                 scale,
                 seed_workers,
+                with_baselines,
                 label: label.as_deref(),
             },
             &out,
@@ -901,6 +913,7 @@ struct BenchInvocation<'a> {
     repetitions: u32,
     scale: f64,
     seed_workers: Option<usize>,
+    with_baselines: bool,
     label: Option<&'a str>,
 }
 
@@ -924,6 +937,8 @@ fn bench_command(invocation: &BenchInvocation<'_>, out: &Path) -> ExitCode {
             label: invocation.label,
             scale: invocation.scale,
             seed_workers: invocation.seed_workers,
+            with_baselines: invocation.with_baselines,
+            docker: None,
         },
         &progress,
     ) {
@@ -935,12 +950,34 @@ fn bench_command(invocation: &BenchInvocation<'_>, out: &Path) -> ExitCode {
     }
     println!("{}", veredictum::bench::BOUNDARY_STATEMENT);
     println!(
+        "machine: {}",
+        veredictum::bench::render::machine_line(&outcome.result.environment)
+    );
+    println!(
         "{} repetition(s) over pack {}@{}; submittable: {}",
         outcome.result.repetitions.len(),
         outcome.result.pack.id,
         outcome.result.pack.version,
         outcome.result.submittable
     );
+    for requirement in &outcome.result.submittable_unmet {
+        println!(
+            "not submittable, unmet `{requirement}`: {}",
+            requirement.statement()
+        );
+    }
+    for index in &outcome.result.relative {
+        println!(
+            "vs {}: {} indexed operation(s), {} gap(s)",
+            index.display_name,
+            index
+                .phases
+                .values()
+                .map(|phase| phase.operations.len())
+                .sum::<usize>(),
+            index.gaps.len()
+        );
+    }
     if !outcome.result.scale.reference_configuration {
         println!(
             "scale factor {:.3}: this run is off the pack's pinned configuration, so its numbers are not comparable with the reference figures the pack describes",

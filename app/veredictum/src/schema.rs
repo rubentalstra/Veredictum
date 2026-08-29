@@ -1812,6 +1812,175 @@ fn bench_operation_names() -> Value {
     })
 }
 
+/// One phase's cross-repetition summary, reused by the target's `cross` block
+/// and by every baseline's.
+fn bench_cross_phase_def(regimes: &Value) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["regime", "operations"],
+            "properties": {
+                "regime": { "enum": regimes },
+                "operations": {
+                    "type": "object",
+                    "propertyNames": bench_operation_names(),
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["repetitions", "p50_us", "p75_us", "p90_us",
+                                      "p99_us", "p999_us", "throughput_ops_s"],
+                        "properties": {
+                            "repetitions": { "type": "integer", "minimum": 1 },
+                            "p50_us": bench_cross_stat_def(),
+                            "p75_us": bench_cross_stat_def(),
+                            "p90_us": bench_cross_stat_def(),
+                            "p99_us": bench_cross_stat_def(),
+                            "p999_us": bench_cross_stat_def(),
+                            "throughput_ops_s": bench_cross_stat_def()
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// One same-machine baseline block: a full per-operation summary beside the
+/// provenance a submitter must disclose for it to be re-composable.
+fn bench_baseline_def(regimes: &Value, repetitions: &Value, seed_phases: &Value) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cdr", "display_name", "images", "recipe", "resources", "base_url",
+                      "started_at", "finished_at", "seed_phases", "repetitions", "cross"],
+        "properties": {
+            "cdr": {
+                "enum": bench_tokens(&crate::bench::baselines::ReferenceCdr::ALL
+                    .iter().map(|cdr| cdr.as_str()).collect::<Vec<_>>())
+            },
+            "display_name": { "type": "string", "minLength": 1 },
+            "images": {
+                "type": "object",
+                "minProperties": 1,
+                "additionalProperties": {
+                    "type": "string",
+                    "pattern": "^[^@]+@sha256:[0-9a-f]{64}$"
+                }
+            },
+            "recipe": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["repository", "git_ref", "file"],
+                "properties": {
+                    "repository": { "type": "string", "minLength": 1 },
+                    "git_ref": { "type": "string", "minLength": 1 },
+                    "file": { "type": "string", "minLength": 1 }
+                }
+            },
+            "resources": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["server_cpus", "server_memory", "database_cpus",
+                              "database_memory", "database_shm_size"],
+                "properties": {
+                    "server_cpus": { "type": "string", "minLength": 1 },
+                    "server_memory": { "type": "string", "minLength": 1 },
+                    "database_cpus": { "type": "string", "minLength": 1 },
+                    "database_memory": { "type": "string", "minLength": 1 },
+                    "database_shm_size": { "type": "string", "minLength": 1 }
+                }
+            },
+            "base_url": { "type": "string", "minLength": 1 },
+            "sut_version": { "type": "string", "minLength": 1 },
+            "started_at": { "type": "string", "minLength": 1 },
+            "finished_at": { "type": "string", "minLength": 1 },
+            "seed_phases": seed_phases,
+            "repetitions": repetitions,
+            "cross": bench_cross_phase_def(regimes)
+        }
+    })
+}
+
+/// The target measured against one baseline: the dimensionless ratio, its two
+/// inputs, and every place no ratio could be formed.
+fn bench_relative_def(regimes: &Value) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["baseline", "display_name", "derivation", "phases", "gaps"],
+        "properties": {
+            "baseline": {
+                "enum": bench_tokens(&crate::bench::baselines::ReferenceCdr::ALL
+                    .iter().map(|cdr| cdr.as_str()).collect::<Vec<_>>())
+            },
+            "display_name": { "type": "string", "minLength": 1 },
+            "derivation": { "const": crate::bench::relative::RELATIVE_DERIVATION },
+            "phases": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["regime", "operations"],
+                    "properties": {
+                        "regime": { "enum": regimes },
+                        "operations": {
+                            "type": "object",
+                            "propertyNames": bench_operation_names(),
+                            "additionalProperties": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["metrics"],
+                                "properties": {
+                                    "metrics": {
+                                        "type": "object",
+                                        "propertyNames": {
+                                            "enum": bench_tokens(&crate::bench::compare::Metric::ALL
+                                                .iter().map(|metric| metric.as_str())
+                                                .collect::<Vec<_>>())
+                                        },
+                                        "additionalProperties": {
+                                            "type": "object",
+                                            "additionalProperties": false,
+                                            "required": ["target_median", "baseline_median", "index"],
+                                            "properties": {
+                                                "target_median": { "type": "number" },
+                                                "baseline_median": { "type": "number", "exclusiveMinimum": 0.0 },
+                                                "index": { "type": "number", "minimum": 0.0 }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "gaps": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["phase", "operation", "reason"],
+                    "properties": {
+                        "phase": { "type": "string", "minLength": 1 },
+                        "operation": { "type": "string", "minLength": 1 },
+                        "metric": {
+                            "enum": bench_tokens(&crate::bench::compare::Metric::ALL
+                                .iter().map(|metric| metric.as_str()).collect::<Vec<_>>())
+                        },
+                        "reason": {
+                            "enum": bench_tokens(&crate::bench::relative::GapReason::ALL
+                                .iter().map(|reason| reason.as_str()).collect::<Vec<_>>())
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
+
 /// `bench-result.json` — one universal-benchmark run's record.
 ///
 /// A comparative SPEED record, and nothing else: [`crate::bench::BOUNDARY_STATEMENT`]
@@ -1825,6 +1994,91 @@ pub fn bench_result_schema() -> Value {
             .map(|regime| regime.as_str())
             .collect::<Vec<_>>(),
     );
+    let seed_phases = json!({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "regime", "ehrs", "compositions_per_ehr", "workers",
+                          "elapsed_s", "bulk_load_writes_per_s",
+                          "whole_loop_ms_per_composition"],
+            "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "regime": { "enum": regimes },
+                "ehrs": { "type": "integer", "minimum": 0 },
+                "compositions_per_ehr": { "type": "integer", "minimum": 0 },
+                "workers": { "type": "integer", "minimum": 1 },
+                "elapsed_s": { "type": "number", "minimum": 0.0 },
+                "bulk_load_writes_per_s": { "type": "number", "minimum": 0.0 },
+                "whole_loop_ms_per_composition": { "type": "number", "minimum": 0.0 }
+            }
+        }
+    });
+    let repetitions = json!({
+        "type": "array",
+        "minItems": 1,
+        "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["repetition", "phases"],
+            "properties": {
+                "repetition": { "type": "integer", "minimum": 1 },
+                "phases": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["regime", "rate_per_s", "warmup_s", "duration_s",
+                                      "planned_measured_arrivals",
+                                      "dispatched_measured_arrivals", "warmup_arrivals",
+                                      "offered_load_sustained_per_s", "generator_bound",
+                                      "operations"],
+                        "properties": {
+                            "regime": { "enum": regimes },
+                            "rate_per_s": { "type": "number", "minimum": 0.0 },
+                            "warmup_s": { "type": "integer", "minimum": 0 },
+                            "duration_s": { "type": "integer", "minimum": 0 },
+                            "planned_measured_arrivals": { "type": "integer", "minimum": 0 },
+                            "dispatched_measured_arrivals": { "type": "integer", "minimum": 0 },
+                            "warmup_arrivals": { "type": "integer", "minimum": 0 },
+                            "offered_load_sustained_per_s": { "type": "number", "minimum": 0.0 },
+                            "generator_bound": { "type": "boolean" },
+                            "operations": {
+                                "type": "object",
+                                "propertyNames": bench_operation_names(),
+                                "additionalProperties": bench_operation_stats_def()
+                            }
+                        }
+                    }
+                },
+                "sweeps": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name", "regime", "workers", "compositions",
+                                      "requests_per_composition", "requests", "elapsed_s",
+                                      "whole_loop_us_per_request", "operations"],
+                        "properties": {
+                            "name": { "type": "string", "minLength": 1 },
+                            "regime": { "enum": regimes },
+                            "workers": { "type": "integer", "minimum": 1 },
+                            "compositions": { "type": "integer", "minimum": 0 },
+                            "requests_per_composition": { "type": "integer", "minimum": 0 },
+                            "requests": { "type": "integer", "minimum": 0 },
+                            "elapsed_s": { "type": "number", "minimum": 0.0 },
+                            "whole_loop_us_per_request": { "type": "number", "minimum": 0.0 },
+                            "operations": {
+                                "type": "object",
+                                "propertyNames": bench_operation_names(),
+                                "additionalProperties": bench_operation_stats_def()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
     json!({
         "$schema": DRAFT,
         "$id": urn("bench-result"),
@@ -1888,120 +2142,16 @@ pub fn bench_result_schema() -> Value {
                 }
             },
             "version_at_time": { "type": "string", "minLength": 1 },
-            "seed_phases": {
+            "seed_phases": seed_phases,
+            "repetitions": repetitions,
+            "cross": bench_cross_phase_def(&regimes),
+            "baselines": {
                 "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["name", "regime", "ehrs", "compositions_per_ehr", "workers",
-                                  "elapsed_s", "bulk_load_writes_per_s",
-                                  "whole_loop_ms_per_composition"],
-                    "properties": {
-                        "name": { "type": "string", "minLength": 1 },
-                        "regime": { "enum": regimes },
-                        "ehrs": { "type": "integer", "minimum": 0 },
-                        "compositions_per_ehr": { "type": "integer", "minimum": 0 },
-                        "workers": { "type": "integer", "minimum": 1 },
-                        "elapsed_s": { "type": "number", "minimum": 0.0 },
-                        "bulk_load_writes_per_s": { "type": "number", "minimum": 0.0 },
-                        "whole_loop_ms_per_composition": { "type": "number", "minimum": 0.0 }
-                    }
-                }
+                "items": bench_baseline_def(&regimes, &repetitions, &seed_phases)
             },
-            "repetitions": {
+            "relative": {
                 "type": "array",
-                "minItems": 1,
-                "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["repetition", "phases"],
-                    "properties": {
-                        "repetition": { "type": "integer", "minimum": 1 },
-                        "phases": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "object",
-                                "additionalProperties": false,
-                                "required": ["regime", "rate_per_s", "warmup_s", "duration_s",
-                                              "planned_measured_arrivals",
-                                              "dispatched_measured_arrivals", "warmup_arrivals",
-                                              "offered_load_sustained_per_s", "generator_bound",
-                                              "operations"],
-                                "properties": {
-                                    "regime": { "enum": regimes },
-                                    "rate_per_s": { "type": "number", "minimum": 0.0 },
-                                    "warmup_s": { "type": "integer", "minimum": 0 },
-                                    "duration_s": { "type": "integer", "minimum": 0 },
-                                    "planned_measured_arrivals": { "type": "integer", "minimum": 0 },
-                                    "dispatched_measured_arrivals": { "type": "integer", "minimum": 0 },
-                                    "warmup_arrivals": { "type": "integer", "minimum": 0 },
-                                    "offered_load_sustained_per_s": { "type": "number", "minimum": 0.0 },
-                                    "generator_bound": { "type": "boolean" },
-                                    "operations": {
-                                        "type": "object",
-                                        "propertyNames": bench_operation_names(),
-                                        "additionalProperties": bench_operation_stats_def()
-                                    }
-                                }
-                            }
-                        },
-                        "sweeps": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "object",
-                                "additionalProperties": false,
-                                "required": ["name", "regime", "workers", "compositions",
-                                              "requests_per_composition", "requests", "elapsed_s",
-                                              "whole_loop_us_per_request", "operations"],
-                                "properties": {
-                                    "name": { "type": "string", "minLength": 1 },
-                                    "regime": { "enum": regimes },
-                                    "workers": { "type": "integer", "minimum": 1 },
-                                    "compositions": { "type": "integer", "minimum": 0 },
-                                    "requests_per_composition": { "type": "integer", "minimum": 0 },
-                                    "requests": { "type": "integer", "minimum": 0 },
-                                    "elapsed_s": { "type": "number", "minimum": 0.0 },
-                                    "whole_loop_us_per_request": { "type": "number", "minimum": 0.0 },
-                                    "operations": {
-                                        "type": "object",
-                                        "propertyNames": bench_operation_names(),
-                                        "additionalProperties": bench_operation_stats_def()
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            "cross": {
-                "type": "object",
-                "additionalProperties": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["regime", "operations"],
-                    "properties": {
-                        "regime": { "enum": regimes },
-                        "operations": {
-                            "type": "object",
-                            "propertyNames": bench_operation_names(),
-                            "additionalProperties": {
-                                "type": "object",
-                                "additionalProperties": false,
-                                "required": ["repetitions", "p50_us", "p75_us", "p90_us",
-                                              "p99_us", "p999_us", "throughput_ops_s"],
-                                "properties": {
-                                    "repetitions": { "type": "integer", "minimum": 1 },
-                                    "p50_us": bench_cross_stat_def(),
-                                    "p75_us": bench_cross_stat_def(),
-                                    "p90_us": bench_cross_stat_def(),
-                                    "p99_us": bench_cross_stat_def(),
-                                    "p999_us": bench_cross_stat_def(),
-                                    "throughput_ops_s": bench_cross_stat_def()
-                                }
-                            }
-                        }
-                    }
-                }
+                "items": bench_relative_def(&regimes)
             },
             "methodology": {
                 "type": "object",
@@ -2017,6 +2167,14 @@ pub fn bench_result_schema() -> Value {
                 }
             },
             "submittable": { "type": "boolean" },
+            "submittable_unmet": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                    "enum": bench_tokens(&crate::bench::result::SubmissionRequirement::ALL
+                        .iter().map(|requirement| requirement.as_str()).collect::<Vec<_>>())
+                }
+            },
             "posture": { "type": "object" }
         }
     })

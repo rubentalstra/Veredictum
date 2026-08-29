@@ -14,11 +14,13 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 use veredictum::bench::BOUNDARY_STATEMENT;
+use veredictum::bench::baselines::{DockerCli, ReferenceCdr, pinned_resources};
 use veredictum::bench::client::AuthKind;
 use veredictum::bench::pack::{
     BenchOp, BenchPack, BenchPhase, MeasurePhase, SeedPhase, community_vitals, smoke,
 };
-use veredictum::bench::result::BenchResult;
+use veredictum::bench::relative::{GapReason, RELATIVE_DERIVATION};
+use veredictum::bench::result::{BaselineRecord, BenchResult, SubmissionRequirement};
 use veredictum::pipeline::bench::{BenchRequest, compare_bench, run_bench};
 use wiremock::matchers::{method, path, path_regex};
 use wiremock::{Mock, ResponseTemplate};
@@ -154,6 +156,8 @@ fn drive_pack(
             label: Some(label),
             scale,
             seed_workers: None,
+            with_baselines: false,
+            docker: None,
         },
         &|_message| {},
     )?;
@@ -306,6 +310,8 @@ fn a_failed_preflight_refuses_the_run() {
             label: None,
             scale: 1.0,
             seed_workers: None,
+            with_baselines: false,
+            docker: None,
         },
         &|_message| {},
     )
@@ -340,6 +346,8 @@ fn two_results_compare_with_their_mismatches_named() -> Fallible {
                 label: Some(label),
                 scale: 1.0,
                 seed_workers: None,
+                with_baselines: false,
+                docker: None,
             },
             &|_message| {},
         )?;
@@ -584,4 +592,304 @@ fn a_single_result_is_not_a_comparison() {
         .unwrap_err()
         .to_string();
     assert!(error.contains("at least two result files"), "{error}");
+}
+/// A baseline block whose measured half is the target's own record, so the
+/// derivation is exercised without composing anything.
+///
+/// Faking the baseline half here is deliberate: the compose orchestration
+/// needs a container runtime, and a suite that needs one is a suite that
+/// stops running. The arguments the orchestration assembles are asserted in
+/// the engine's own unit tests instead.
+fn baseline_from(result: &BenchResult, cdr: ReferenceCdr, scale_medians_by: f64) -> BaselineRecord {
+    let mut cross = result.cross.clone();
+    for phase in cross.values_mut() {
+        for operation in phase.operations.values_mut() {
+            for stat in [
+                &mut operation.p50_us,
+                &mut operation.p75_us,
+                &mut operation.p90_us,
+                &mut operation.p99_us,
+                &mut operation.p999_us,
+                &mut operation.throughput_ops_s,
+            ] {
+                stat.median *= scale_medians_by;
+            }
+        }
+    }
+    let pin = cdr.pin();
+    BaselineRecord {
+        cdr: cdr.as_str().to_owned(),
+        display_name: cdr.display_name().to_owned(),
+        images: pin.images(),
+        recipe: pin.recipe(),
+        resources: pinned_resources(),
+        base_url: pin.base_url(),
+        sut_version: None,
+        started_at: result.started_at.clone(),
+        finished_at: result.finished_at.clone(),
+        seed_phases: result.seed_phases.clone(),
+        repetitions: result.repetitions.clone(),
+        cross,
+    }
+}
+
+/// The whole derivation and rendering path over injected baselines: the
+/// record carries both blocks, the index is the quotient of the two medians,
+/// the document still validates, and the summary names the machine.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn injected_baselines_derive_the_relative_index_and_render_it() -> Fallible {
+    let sut = FakeSut::start();
+    mount_healthy(&sut);
+    let (mut result, _document, _summary) = drive_pack(&sut, &tiny_pack(), "target", 3, 1.0)?;
+
+    assert!(!result.submittable, "a baseline-free record is submittable");
+    assert_eq!(
+        result.submittable_unmet,
+        vec![SubmissionRequirement::Baseline]
+    );
+
+    result.attach_baselines(vec![
+        baseline_from(&result, ReferenceCdr::EhrBase, 2.0),
+        baseline_from(&result, ReferenceCdr::FerroEhr, 0.5),
+    ]);
+
+    assert!(result.submittable, "{:?}", result.submittable_unmet);
+    assert!(result.submittable_unmet.is_empty());
+    assert_eq!(result.baselines.len(), 2);
+    assert_eq!(result.relative.len(), 2);
+
+    let against_ehrbase = result
+        .relative
+        .iter()
+        .find(|index| index.baseline == "ehrbase")
+        .ok_or("no EHRbase index")?;
+    assert!(
+        against_ehrbase.gaps.is_empty(),
+        "{:?}",
+        against_ehrbase.gaps
+    );
+    let mut ratios = 0_usize;
+    for phase in against_ehrbase.phases.values() {
+        for operation in phase.operations.values() {
+            for ratio in operation.metrics.values() {
+                assert!((ratio.index - 0.5).abs() < 1e-9, "{ratio:?}");
+                ratios = ratios.saturating_add(1);
+            }
+        }
+    }
+    assert!(ratios > 0, "the derivation produced no ratio at all");
+
+    let against_ferroehr = result
+        .relative
+        .iter()
+        .find(|index| index.baseline == "ferroehr")
+        .ok_or("no FerroEHR index")?;
+    let doubled = against_ferroehr
+        .phases
+        .values()
+        .flat_map(|phase| phase.operations.values())
+        .flat_map(|operation| operation.metrics.values())
+        .all(|ratio| (ratio.index - 2.0).abs() < 1e-9);
+    assert!(doubled, "{against_ferroehr:?}");
+
+    let document = result.to_document()?;
+    let violations = schema_violations(&document)?;
+    assert!(violations.is_empty(), "{}", violations.join("; "));
+
+    let summary = veredictum::bench::render::run_summary(&result);
+    assert!(summary.contains("Machine: arch="), "{summary}");
+    assert!(summary.contains("## Same-machine baselines"), "{summary}");
+    assert!(summary.contains("## Relative index"), "{summary}");
+    assert!(summary.contains("### vs EHRbase"), "{summary}");
+    assert!(summary.contains("### vs FerroEHR"), "{summary}");
+    assert!(summary.contains("@sha256:"), "{summary}");
+    assert!(summary.contains(RELATIVE_DERIVATION), "{summary}");
+    Ok(())
+}
+
+/// An operation the baseline never measured is recorded as a gap and named in
+/// the rendered summary, so no reader mistakes silence for agreement.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_operation_missing_from_a_baseline_is_named_in_the_summary() -> Fallible {
+    let sut = FakeSut::start();
+    mount_healthy(&sut);
+    let (mut result, _document, _summary) = drive_pack(&sut, &tiny_pack(), "target", 3, 1.0)?;
+
+    let mut baseline = baseline_from(&result, ReferenceCdr::EhrBase, 1.0);
+    let phase = baseline
+        .cross
+        .values_mut()
+        .next()
+        .ok_or("the target measured no phase")?;
+    let dropped = phase
+        .operations
+        .keys()
+        .next()
+        .cloned()
+        .ok_or("the target measured no operation")?;
+    let _removed = phase.operations.remove(&dropped);
+    result.attach_baselines(vec![baseline]);
+
+    let index = result.relative.first().ok_or("no relative index")?;
+    assert!(
+        index
+            .gaps
+            .iter()
+            .any(|gap| gap.operation == dropped
+                && gap.reason == GapReason::OperationAbsentFromBaseline),
+        "{:?}",
+        index.gaps
+    );
+    let summary = veredictum::bench::render::run_summary(&result);
+    assert!(summary.contains("No index exists for:"), "{summary}");
+    assert!(
+        summary.contains("operation-absent-from-baseline"),
+        "{summary}"
+    );
+
+    let document = result.to_document()?;
+    let violations = schema_violations(&document)?;
+    assert!(violations.is_empty(), "{}", violations.join("; "));
+    Ok(())
+}
+
+/// A comparison carries the machine in every column header and the relative
+/// index in its own section, which is what makes two columns from different
+/// hosts readable at all.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_comparison_header_names_the_machine_and_the_relative_index() -> Fallible {
+    let sut = FakeSut::start();
+    mount_healthy(&sut);
+    let directory = assert_fs::TempDir::new()?;
+    let mut paths = Vec::new();
+    for (label, factor) in [("left", 2.0), ("right", 0.5)] {
+        let (mut result, _document, _summary) = drive_pack(&sut, &tiny_pack(), label, 3, 1.0)?;
+        result.attach_baselines(vec![baseline_from(&result, ReferenceCdr::EhrBase, factor)]);
+        let target = directory.join(result.file_name());
+        std::fs::write(&target, result.to_document()?)?;
+        paths.push(target);
+    }
+    let outcome = compare_bench(&paths)?;
+    let rendered = &outcome.document.body;
+    assert!(rendered.contains("| Column | Machine |"), "{rendered}");
+    assert!(rendered.contains("arch="), "{rendered}");
+    assert!(
+        rendered.contains("## Relative index per column"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("| EHRbase |"), "{rendered}");
+    for column in &outcome.comparison.columns {
+        assert!(column.submittable, "{column:?}");
+        assert_eq!(column.relative.len(), 1);
+        assert!(!column.environment.is_empty(), "{column:?}");
+    }
+    Ok(())
+}
+
+/// A record that is not submittable says WHICH requirements it misses, in the
+/// comparison header and in its warnings, rather than one bare `false`.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_non_submittable_column_names_its_unmet_requirements() -> Fallible {
+    let sut = FakeSut::start();
+    mount_healthy(&sut);
+    let directory = assert_fs::TempDir::new()?;
+    let mut paths = Vec::new();
+    for (label, repetitions) in [("thin", 1_u32), ("thick", 3)] {
+        let (result, document, _summary) = drive_pack(&sut, &tiny_pack(), label, repetitions, 1.0)?;
+        let target = directory.join(result.file_name());
+        std::fs::write(&target, &document)?;
+        paths.push(target);
+    }
+    let outcome = compare_bench(&paths)?;
+    let rendered = &outcome.document.body;
+    assert!(
+        rendered.contains("no (repetitions, baseline)"),
+        "{rendered}"
+    );
+    assert!(rendered.contains("no (baseline)"), "{rendered}");
+    assert!(
+        outcome
+            .comparison
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("unmet: repetitions, baseline")),
+        "{:?}",
+        outcome.comparison.warnings
+    );
+    Ok(())
+}
+
+/// `--with-baselines` on a host with no container runtime refuses by name,
+/// before the target is touched, so the flag never yields a half-anchored
+/// record.
+#[test]
+fn a_missing_container_runtime_refuses_the_baseline_sweep() {
+    let error = run_bench(
+        &BenchRequest {
+            pack: &smoke(),
+            base_url: "http://127.0.0.1:1/openehr/v1",
+            auth: AuthKind::None,
+            user: None,
+            repetitions: 3,
+            label: None,
+            scale: 1.0,
+            seed_workers: None,
+            with_baselines: true,
+            docker: Some(DockerCli::at("/nonexistent/veredictum/docker")),
+        },
+        &|_message| {},
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains("--with-baselines needs the docker CLI"),
+        "{error}"
+    );
+    assert!(error.contains("/nonexistent/veredictum/docker"), "{error}");
+}
+
+/// A plain run needs no container runtime at all: the same nonexistent binary
+/// is never consulted without the flag.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_run_without_the_flag_never_consults_the_container_runtime() -> Fallible {
+    let sut = FakeSut::start();
+    mount_healthy(&sut);
+    let outcome = run_bench(
+        &BenchRequest {
+            pack: &tiny_pack(),
+            base_url: &sut.base_url(),
+            auth: AuthKind::None,
+            user: None,
+            repetitions: 1,
+            label: Some("no-docker"),
+            scale: 1.0,
+            seed_workers: None,
+            with_baselines: false,
+            docker: Some(DockerCli::at("/nonexistent/veredictum/docker")),
+        },
+        &|_message| {},
+    )?;
+    assert!(outcome.result.baselines.is_empty());
+    assert!(outcome.result.relative.is_empty());
+    Ok(())
 }

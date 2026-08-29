@@ -13,20 +13,30 @@
 //! phases repeat, and the result carries every repetition plus the
 //! cross-repetition median and inter-quartile range.
 //!
+//! An absolute number is anchored by a same-machine reference run: the same
+//! pack, at the same seed, against a reference CDR composed from pinned image
+//! digests on the host that measured the target. From the two the record
+//! derives the relative index, a dimensionless ratio that travels between
+//! machines where milliseconds do not.
+//!
 //! Module map: [`pack`] the embedded packs, their pinned fixtures and the
 //! operation vocabulary · [`client`] targeting and credentials · [`run`] the
-//! preflight, the seed phase and the open-loop dispatcher · [`result`] the
-//! emitted artifact · [`fingerprint`] the host environment record ·
-//! [`compare`] the cross-file alignment and its median/IQR math ·
-//! [`render`] the console and Markdown views.
+//! preflight, the seed phase and the open-loop dispatcher · [`baselines`] the
+//! pinned reference deployments and their compose orchestration ·
+//! [`relative`] the relative index · [`result`] the emitted artifact ·
+//! [`fingerprint`] the host environment record · [`compare`] the cross-file
+//! alignment and its median/IQR math · [`render`] the console and Markdown
+//! views.
 //!
 //! What this engine is NOT is stated in [`BOUNDARY_STATEMENT`], which every
 //! artifact and every rendered view carries verbatim.
 
+pub mod baselines;
 pub mod client;
 pub mod compare;
 pub mod fingerprint;
 pub mod pack;
+pub mod relative;
 pub mod render;
 pub mod result;
 pub mod run;
@@ -146,6 +156,36 @@ pub enum BenchError {
     /// A comparison was asked for with fewer than two result files.
     #[error("bench-compare needs at least two result files (got {0})")]
     TooFewResults(usize),
+    /// `--with-baselines` was asked for on a host whose container runtime
+    /// does not answer. The flag has one ground, and this names it.
+    #[error(
+        "--with-baselines needs the docker CLI, and {binary} does not answer: {detail}. \
+         A run without the flag measures the target alone and needs no container runtime."
+    )]
+    DockerUnavailable {
+        /// The binary that was invoked.
+        binary: String,
+        /// What the invocation reported.
+        detail: String,
+    },
+    /// One reference baseline could not be composed, made ready, or torn
+    /// down. Never a target failure: the target's own numbers stand.
+    #[error("baseline {cdr}: {detail}")]
+    Baseline {
+        /// The reference CDR token.
+        cdr: String,
+        /// What went wrong.
+        detail: String,
+    },
+    /// A file could not be written.
+    #[error("cannot write {path}: {source}")]
+    Write {
+        /// The file that could not be written.
+        path: PathBuf,
+        /// The underlying filesystem error.
+        #[source]
+        source: std::io::Error,
+    },
     /// A file could not be read.
     #[error("cannot read {path}: {source}")]
     Read {
