@@ -18,8 +18,11 @@
 //! reference `corpus/templates/generate_content_opts.py` (itself built on the
 //! vendored CNF Robot `minimal_observation.opt`).
 //!
-//! Contract: `corpus/recipes/opt_synth.md` (the digest-free per-row synthesis
-//! contract, alongside the digest-pinned corpus-recipe contracts).
+//! The per-row contract: one OPT is synthesized from that row's
+//! constraint-axis cells, uploaded under the deterministic id
+//! `recipes::synth_template_id` mints, and the row's instance is committed
+//! against it. Upload tolerates 409, because a re-run row re-uploads the
+//! byte-identical OPT.
 //!
 //! NOTE: no openEHR spec governs the corpus template packaging — our own
 //! corpus-authoring design; the constraint SHAPES are the AOM1.4 ones cited above.
@@ -27,7 +30,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (FerroEHR#1694)"
+              exchanges), whose shapes belong to the artifacts and the SUT"
 )]
 
 use crate::exec::opt_synth::{self, SynthError};

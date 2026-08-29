@@ -5,14 +5,14 @@
 //!
 //! This is the ONLY hand-written generation glue in the
 //! executor, each entry a committed, seeded, deterministic `row → payload`
-//! function whose contract is the digest-pinned document in
-//! `corpus/recipes/*.md`. Every recipe here is a registered exception to
+//! function whose contract the corpus manifest digest-pins under the
+//! recipe name. Every recipe here is a registered exception to
 //! the data-driven rule and is listed as such in the run report.
 
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (FerroEHR#1694)"
+              exchanges), whose shapes belong to the artifacts and the SUT"
 )]
 
 use serde_json::{Value, json};
@@ -55,8 +55,8 @@ fn err(recipe: &'static str, message: impl Into<String>) -> RecipeError {
     }
 }
 
-/// `ehr_status` — `EHR_STATUS` synthesis from a `create_ehr-main` matrix row
-/// (contract: `corpus/recipes/ehr_status.md`).
+/// `ehr_status` — `EHR_STATUS` synthesis from a `create_ehr-main` matrix row,
+/// under the contract the corpus manifest digest-pins for this recipe name.
 ///
 /// Returns `None` when the row declares `ehr_status: absent` (the class-1.a
 /// rows: no payload at all).
@@ -148,7 +148,7 @@ pub fn ehr_status(
 pub fn deterministic_ehr_id(case: &str, row_index: usize) -> String {
     // UUIDv5 over the recipe namespace and "<case>/<row>" — pure and
     // case-scoped, so two runners mint identical ids while distinct cases
-    // sharing one SUT never collide (contract: corpus/recipes/ehr_status.md).
+    // sharing one SUT never collide.
     let ns = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, b"cnf.create_ehr");
     uuid::Uuid::new_v5(&ns, format!("{case}/{row_index}").as_bytes()).to_string()
 }
@@ -200,8 +200,8 @@ pub fn synth_template_id(case_id: &str, row: usize, cells: &[MatrixCell]) -> Str
     format!("cnf.tpl.{slug}.r{row}.{short}")
 }
 
-/// `bp_series` — the generated blood-pressure corpus (contract:
-/// `corpus/recipes/bp_series.md`): composition k has systolic 100+10k,
+/// `bp_series` — the generated blood-pressure corpus, under the contract the
+/// corpus manifest digest-pins: composition k has systolic 100+10k,
 /// diastolic 60+5k, event time 2026-01-01T00:00:00Z + k hours.
 ///
 /// # Errors
@@ -263,10 +263,9 @@ pub fn bp_series(k: usize) -> Result<Value, RecipeError> {
     }))
 }
 
-/// `query_bp` — the AQL-chapter query corpus (contract:
-/// `corpus/recipes/query_bp.md`): identical series semantics to
+/// `query_bp` — the AQL-chapter query corpus: identical series semantics to
 /// [`bp_series`]; separated so the two corpus keys stay independently
-/// digest-pinned.
+/// digest-pinned by the corpus manifest.
 ///
 /// # Errors
 /// As [`bp_series`].

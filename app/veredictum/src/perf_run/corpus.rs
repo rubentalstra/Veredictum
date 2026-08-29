@@ -4,7 +4,7 @@
 //! The seeded corpus for measured runs.
 //!
 //! It is the `scale_ladder` volume (N EHRs × ~100 committed
-//! blood-pressure versions, `corpus/recipes/scale_ladder.md`) plus the
+//! blood-pressure versions, the recipe the corpus manifest digest-pins) plus the
 //! STANDING WARD — the per-patient state the journey stages address
 //! mid-flight (an episode directory, the GP-data-set chart document, the
 //! medicines list, one committed CONTRIBUTION), seeded strictly through

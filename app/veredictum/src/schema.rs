@@ -15,7 +15,7 @@
 #![expect(
     clippy::disallowed_types,
     reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges) — not the application (FerroEHR#1694)"
+              exchanges), whose shapes belong to the artifacts and the SUT"
 )]
 
 use serde::Serialize;

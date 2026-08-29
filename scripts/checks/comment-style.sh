@@ -27,19 +27,25 @@
 #                          string is read as justification exactly like a
 #                          comment.
 #   7. internal markdown   the same rule for every OTHER in-repo markdown
-#                          document: an `artifacts/`, `party/`, `scripts/`,
-#                          `website/`, `schemas/`, `fuzz/`, `app/` or
-#                          `verification-pack/` path ending in `.md`, and the
-#                          root documents by name (README, CLAUDE,
-#                          ARCHITECTURE, CONTRIBUTING, CHANGELOG). Adjudicated
-#                          2026-08-27 (#125): a corpus-local README is NOT a
-#                          sanctioned exception — it moves and dies like any
-#                          other internal document, so a comment grounds on
-#                          the material itself. COMMENT LINES ONLY, unlike
-#                          rule 6: the vendored spec text is full of `.md`
-#                          documents that ARE legitimate citations, and a
-#                          string the code EMITS may legitimately name a
-#                          markdown file the tool writes.
+#                          document, in ANY path form: a tree-rooted path
+#                          (`artifacts/`, `party/`, `scripts/`, `website/`,
+#                          `schemas/`, `fuzz/`, `app/`, `verification-pack/`)
+#                          ending in `.md`, the root documents by name
+#                          (README, CLAUDE, ARCHITECTURE, CONTRIBUTING,
+#                          CHANGELOG), and any RELATIVE citation whose path
+#                          matches a committed markdown file at a segment
+#                          boundary (`corpus/recipes/bp_series.md`,
+#                          `recipes/bp_series.md`). Adjudicated 2026-08-27
+#                          (#125): a corpus-local README is NOT a sanctioned
+#                          exception — it moves and dies like any other
+#                          internal document, so a comment grounds on the
+#                          material itself. COMMENT LINES ONLY, unlike rule 6:
+#                          the vendored spec text is full of `.md` documents
+#                          that ARE legitimate citations, and a string the code
+#                          EMITS may legitimately name a markdown file the tool
+#                          writes. For the same reason `specs/**` is absent
+#                          from the suffix set and a URL is stripped from the
+#                          line before the lookup.
 #
 # FILE SCOPE: every rule reads hand-written `.rs` files only. YAML in the
 # catalogue and the fixtures is outside this guard by design — the catalogue
@@ -66,6 +72,16 @@ INTERNAL_DOC='(artifacts|party|scripts|website|schemas|fuzz|app|verification-pac
 INTERNAL_DOC="$INTERNAL_DOC"'|(^|[^[:alnum:]_./-])(README|CLAUDE|ARCHITECTURE|CONTRIBUTING|CHANGELOG)[.]md'
 
 cd "$(dirname "$0")/../.."
+
+# The same rule for a RELATIVE citation: every committed non-spec markdown
+# path, plus each of its segment-boundary suffixes, so `corpus/recipes/x.md`
+# and `recipes/x.md` are refused exactly like the full path. Membership is
+# exact, so a suffix naming nothing in the tree passes — which is how the
+# ITS-REST `docs/overview/*.md` citations stay legal.
+INREPO_MD="$(git ls-files '*.md' | awk -F/ '
+  $1 == "specs" { next }
+  { for (i = 1; i < NF; i++) { s = $i; for (j = i + 1; j <= NF; j++) s = s "/" $j; print s } }
+')"
 
 mode="${1:---all}"
 files=()
@@ -104,26 +120,29 @@ case "$mode" in
     echo '// the committed keypair (`artifacts/corpus/keys/README.md` records it)'
     echo '/// the crate CLAUDE.md doctrine'
     echo '//! see website/book/src/commands.md for the surface'
+    echo '/// the recipe contract in `corpus/recipes/bp_series.md`'
+    echo '//! the row contract lives in recipes/ehr_status.md'
     echo '/// ITS-REST `docs/overview/Requests_and_responses.md` §HTTP status codes'
+    echo '/// upstream <https://example.invalid/corpus/recipes/bp_series.md>'
     echo 'const REPORT: &str = "coverage-report.md";'
     echo 'const PROVENANCE: &str = "artifacts/corpus/archetypes/adl2/PROVENANCE.md";'
   } >"$seeded"
   out="$("$0" --files "$seeded" 2>/dev/null || true)"
   fail=0
-  for want in 1 2 3; do
+  for want in 1 2 3 4 5; do
     grep -q "seeded.rs:$want: internal-document citation" <<<"$out" || {
       echo "self-test: line $want was NOT reported — the guard does not fire" >&2
       fail=1
     }
   done
-  for unwanted in 4 5 6; do
+  for unwanted in 6 7 8 9; do
     if grep -q "seeded.rs:$unwanted: internal-document citation" <<<"$out"; then
       echo "self-test: line $unwanted was reported — a legitimate citation is refused" >&2
       fail=1
     fi
   done
   [[ "$fail" -eq 0 ]] || exit 1
-  echo "comment-style: self-test OK (3 seeded violations caught, 3 legitimate lines passed)."
+  echo "comment-style: self-test OK (5 seeded violations caught, 4 legitimate lines passed)."
   exit 0
   ;;
 *)
@@ -143,8 +162,27 @@ for f in "${files[@]}"; do
   # skip anchors there. Matching the marker anywhere would let a hand-written
   # file exempt itself by merely mentioning it in prose.
   head -n 1 "$f" 2>/dev/null | grep -q '^// @generated' && continue
-  out="$(awk -v NOTE_MAX="$NOTE_MAX" -v RUN_MAX="$RUN_MAX" \
+  # The suffix set travels in the ENVIRONMENT, not through `-v`: it is one
+  # newline-separated string, and awk refuses a newline inside a `-v` value.
+  out="$(INREPO_MD="$INREPO_MD" awk -v NOTE_MAX="$NOTE_MAX" -v RUN_MAX="$RUN_MAX" \
     -v INTERNAL_DOC="$INTERNAL_DOC" '
+    BEGIN {
+      n = split(ENVIRON["INREPO_MD"], mds, "\n")
+      for (i = 1; i <= n; i++) if (mds[i] != "") in_repo_md[mds[i]] = 1
+    }
+    # An in-repo markdown citation in any RELATIVE form. A URL is an external
+    # citation and is dropped first; every remaining `<seg>/…/<name>.md` token
+    # is looked up EXACTLY, so a path naming nothing committed passes.
+    function cites_in_repo_md(text,   rest, tok) {
+      rest = text
+      gsub(/[A-Za-z][A-Za-z0-9+.-]*:\/\/[^[:space:]<>)`"]+/, "", rest)
+      while (match(rest, /[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)+[.]md/)) {
+        tok = substr(rest, RSTART, RLENGTH)
+        if (tok in in_repo_md) return 1
+        rest = substr(rest, RSTART + RLENGTH)
+      }
+      return 0
+    }
     function flush_note() {
       if (note_len > NOTE_MAX)
         printf ":%d: NOTE block is %d lines (max %d) — a NOTE is a citation + one sentence; move the essay to the PR/issue\n", note_start, note_len, NOTE_MAX
@@ -189,7 +227,7 @@ for f in "${files[@]}"; do
 
         # 7. in-repo markdown citations, comment lines only. A vendored spec
         # document under `specs/**` is the oracle and never matches.
-        if (line ~ INTERNAL_DOC)
+        if (line ~ INTERNAL_DOC || cites_in_repo_md(line))
           printf ":%d: internal-document citation — cite the vendored openEHR spec text or official external documentation, never an in-repo markdown file (CLAUDE.md rule 11)\n", NR
       }
 
