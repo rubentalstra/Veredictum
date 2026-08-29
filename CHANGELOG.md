@@ -455,6 +455,41 @@ version on.
 
 ### Fixed
 
+- **The structural content families refuse an unknown token instead of baking a
+  permissive default (#241).** `cardinality`, the four `*_existence` axes and
+  the two `slot_type` axes were read with a fallback: an unrecognized
+  `cardinality` cell synthesized an unbounded `0..*` container, an
+  unrecognized existence cell synthesized `0..1`, and an absent cell did the
+  same. A mistyped `3to5` therefore graded the server against a constraint no
+  row declares, and the row passed. Each axis is now a closed vocabulary
+  (`any|1plus|3plus|opt|mand|3to5`; `optional|mandatory`; the RM `EVENT` and
+  `ITEM_STRUCTURE` class hierarchies), an unknown or absent cell is a typed
+  refusal at drive time, and the new `content-synthesis` validate gate
+  synthesizes every row of every varying-constraint content case, so the typo
+  is a finding before any server is composed. Every token the committed
+  catalogue spells is unchanged.
+- **A `default` ordinal cell bakes the mild/severe pair it names (#241).** The
+  reserved token was accepted by the droppable-member pre-flight and then
+  parsed into an EMPTY entry list, so the emitted OPT constrained that interval
+  bound to a value set matching nothing. It now yields the fixed
+  `at0005`/`at0006` pair the corpus template carries, which retires the
+  unreachable fallback that used to hold it.
+- **`CONT-DV_URI-validate_pattern` applies the pattern it declares (#241).**
+  The case's `C_STRING.pattern` column read `https://.*` while the baked
+  template applied `https?://.*`, so the declared cell was documentation. The
+  case now declares `constraint_columns: ["C_STRING.pattern"]` and the runner
+  synthesizes one OPT per row from that cell. Both rows keep their expected
+  outcomes.
+- **The corpus OPT generator's reproducibility contract is enforced (#241).**
+  `generate_content_opts.py` printed a warning for two manifest keys
+  (`cnf.tpl.dv_coded_text_binding_sct`, `cnf.tpl.dv_coded_text_binding_tsdown`)
+  whose committed OPTs no builder could produce, contradicting the script's own
+  header. Both builders exist now, carrying the `component_ontologies` block
+  that defines and binds `ac0001`; the key-set mismatch exits non-zero instead
+  of warning; and `scripts/checks/corpus-opt-reproducible.sh` re-runs the
+  generator in the CI guard tier. The two regenerated templates differ from
+  their committed bytes only in `<uid>`, which now follows the same
+  deterministic namespace every other generated OPT uses.
 - **A measured window fails on an arrival the generator could not fire
   (#233).** The collector counted a generator fault on a `u64::MAX` latency
   sentinel that the only producer of a completion could never emit, so the

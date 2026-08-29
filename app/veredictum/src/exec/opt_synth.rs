@@ -856,23 +856,25 @@ fn dv_interval(inner: &str, lower: Option<&str>, upper: Option<&str>) -> String 
     c_complex(&format!("DV_INTERVAL<{inner}>"), &attrs)
 }
 
-/// The `DV_ORDINAL` / `DV_SCALE` list limit object (mirrors Python
-/// `dv_ordinal_list` — a two-item mild/severe list) and its term extras.
-/// Parse an ordinal/scale list cell — `"[1|[local::at0005], 2.4|[local::at0006]]"`
-/// — into (value, terminology, code) triples. Falls back to the fixed
-/// mild/severe pair when the cell is absent (the fixed-list corpus shape).
-fn parse_ordinal_list_cell(cell: Option<&str>) -> Vec<(String, String, String)> {
-    let Some(text) = cell else {
+/// Parses an ordinal/scale list cell into (value, terminology, code) triples.
+///
+/// The authored form is `"[1|[local::at0005], 2.4|[local::at0006]]"`. The
+/// reserved token `default` names the fixed mild/severe pair the corpus
+/// template bakes (`cnf.tpl.interval_ordinal_list` carries `at0005` mild /
+/// `at0006` severe), which is the whole reason that token is exempt from
+/// [`malformed_ordinal_entry`].
+fn parse_ordinal_list_cell(cell: &str) -> Vec<(String, String, String)> {
+    if cell.trim() == "default" {
         return vec![
             ("1".to_owned(), "local".to_owned(), "at0005".to_owned()),
             ("2".to_owned(), "local".to_owned(), "at0006".to_owned()),
         ];
-    };
-    let inner = text
+    }
+    let inner = cell
         .trim()
         .strip_prefix('[')
         .and_then(|t| t.strip_suffix(']'))
-        .unwrap_or(text);
+        .unwrap_or(cell);
     inner
         .split("], ")
         .filter_map(|entry| {
@@ -888,10 +890,9 @@ fn parse_ordinal_list_cell(cell: Option<&str>) -> Vec<(String, String, String)> 
         .collect()
 }
 
-fn ordinal_list_children(
-    inner: &str,
-    cell: Option<&str>,
-) -> (String, Vec<(String, String, String)>) {
+/// The `DV_ORDINAL` / `DV_SCALE` list limit object (mirrors Python
+/// `dv_ordinal_list`) and its term extras, built from one authored cell.
+fn ordinal_list_children(inner: &str, cell: &str) -> (String, Vec<(String, String, String)>) {
     let entries = parse_ordinal_list_cell(cell);
     if inner == "DV_SCALE" {
         // AOM1.4 has no C_DV_SCALE constrainer (AM masterAppA domain
@@ -1129,12 +1130,12 @@ fn build_interval(case_id: &str, row: &Row<'_>) -> (String, Vec<(String, String,
             let lower_cell = row.text("lower_c_dv_ordinal_list");
             let upper_cell = row.text("upper_c_dv_ordinal_list");
             let l = lower_cell.map(|cell| {
-                let (children, lt) = ordinal_list_children(inner, Some(cell));
+                let (children, lt) = ordinal_list_children(inner, cell);
                 terms.extend(lt);
                 children
             });
             let u = upper_cell.map(|cell| {
-                let (children, ut) = ordinal_list_children(inner, Some(cell));
+                let (children, ut) = ordinal_list_children(inner, cell);
                 terms.extend(ut);
                 children
             });
@@ -1950,7 +1951,10 @@ mod tests {
             "{per_bound}"
         );
 
-        // The reserved `default` token is not a malformed entry.
+        // The reserved `default` token is not a malformed entry, and it bakes
+        // the fixed mild/severe pair rather than an EMPTY value set — an empty
+        // C_DV_ORDINAL.list matches nothing, so it would reject every value the
+        // row expects to be accepted.
         let defaulted = synth(
             "CONT-DV_INTERVAL-ordinal_range",
             "DV_INTERVAL",
@@ -1959,6 +1963,12 @@ mod tests {
         );
         assert!(
             defaulted.contains("DV_INTERVAL&lt;DV_ORDINAL&gt;"),
+            "{defaulted}"
+        );
+        assert!(defaulted.contains("at0005"), "{defaulted}");
+        assert!(defaulted.contains("at0006"), "{defaulted}");
+        assert!(
+            defaulted.contains("<list xsi:type=\"DV_ORDINAL\"><value>1</value>"),
             "{defaulted}"
         );
 

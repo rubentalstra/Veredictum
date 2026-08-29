@@ -2,7 +2,7 @@
 <template xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://schemas.openehr.org/v1">
   <language><terminology_id><value>ISO_639-1</value></terminology_id><code_string>en</code_string></language>
   <description><original_author id="Original Author">CNF corpus</original_author><lifecycle_state>Initial</lifecycle_state><details><language><terminology_id><value>ISO_639-1</value></terminology_id><code_string>en</code_string></language><purpose>CNF content constraint template</purpose></details></description>
-  <uid><value>5b2d6e31-8a5f-5c92-8d13-7e2f5a8b9c42</value></uid>
+  <uid><value>f88c452f-452e-5d7b-bbf2-ec0f0a812d7b</value></uid>
   <template_id><value>cnf.tpl.dv_coded_text_binding_tsdown</value></template_id>
   <concept>CNF content constraint</concept>
   <definition>

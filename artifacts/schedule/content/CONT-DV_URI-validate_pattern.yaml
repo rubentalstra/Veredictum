@@ -13,6 +13,10 @@ spec_refs:
 constraint_context:
   template: cnf.tpl.dv_uri_c_string
   path: "/content[openEHR-EHR-OBSERVATION.minimal.v1]/data/events/data/items[at0001]/value"
+  # The declared C_STRING.pattern DRIVES: the runner synthesizes one OPT per row
+  # from this cell. Without it the baked template's own pattern applied and the
+  # cell stated a constraint the run never used.
+  constraint_columns: ["C_STRING.pattern"]
 decision_table:
   columns: ["value", "C_STRING.pattern", "expected", "violates"]
   rows:
