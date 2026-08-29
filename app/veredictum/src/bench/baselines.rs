@@ -299,7 +299,7 @@ const EHRBASE_POSTURE: PinPosture = PinPosture {
     },
 };
 
-/// FerroEHR 4.0.10 with its companion PostgreSQL image, both resolved from
+/// FerroEHR 4.0.11 with its companion PostgreSQL image, both resolved from
 /// the registry on 2026-08-29.
 ///
 /// The topology, environment keys and the dev Basic-auth user follow the
@@ -308,10 +308,10 @@ const EHRBASE_POSTURE: PinPosture = PinPosture {
 /// because a `[[auth.basic.users]]` array has no flat environment form.
 const FERROEHR_PIN: ReferencePin = ReferencePin {
     cdr: ReferenceCdr::FerroEhr,
-    server_image: "ghcr.io/rubentalstra/ferroehr:4.0.10@sha256:63d9ad3f1328680d0b78a08da345006c285990c82852715fcea7f8234263882b",
-    database_image: "ghcr.io/rubentalstra/ferroehr-postgres:4.0.10@sha256:0309fe2962ba9913a93d679c389c5e852f029761b0e2af3260466679e829d5ad",
+    server_image: "ghcr.io/rubentalstra/ferroehr:4.0.11@sha256:06bb07a4a4788923f7f5005253afb3da989915ba4b5e91c5d483a6393672217d",
+    database_image: "ghcr.io/rubentalstra/ferroehr-postgres:4.0.11@sha256:0ed939f98c37e3dec8e2ad24010778040365b74fe677ce7bce1f7248effeed79",
     recipe_repository: "https://github.com/rubentalstra/FerroEHR",
-    recipe_ref: "v4.0.10",
+    recipe_ref: "v4.0.11",
     recipe_file: "docker/sut-ferroehr.yml",
     host_port: 18080,
     database_port: 15433,
@@ -321,7 +321,7 @@ const FERROEHR_PIN: ReferencePin = ReferencePin {
     posture: FERROEHR_POSTURE,
 };
 
-/// What the FerroEHR v4.0.10 recipe configures, read first-hand at that tag
+/// What the FerroEHR v4.0.11 recipe configures, read first-hand at that tag
 /// out of `docker/sut-ferroehr.yml` and the `docker/ferroehr.dev.toml` it
 /// mounts.
 ///
@@ -1226,7 +1226,7 @@ mod tests {
         assert!(
             divergences
                 .iter()
-                .all(|line| line.source.contains("v4.0.10")),
+                .all(|line| line.source.contains("v4.0.11")),
             "{divergences:?}"
         );
     }

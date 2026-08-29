@@ -87,7 +87,7 @@ version on.
   read first-hand at the pinned tag. EHRbase 2.35.1 configures no audit trail
   and no version signing, validates commits against the operational template,
   switches no response compression on, and enforces Basic authentication.
-  FerroEHR 4.0.10 configures the same, except that its recipe leaves version
+  FerroEHR 4.0.11 configures the same, except that its recipe leaves version
   signing on in digest mode. Where a pin disagrees with the profile the target
   declared, the baseline runs and declares the pin's value, so a canary never
   fails on a declaration the instrument itself manufactured, and the new
@@ -200,7 +200,7 @@ version on.
   measures the target, then composes each pinned reference CDR on the same
   host, drives the same pack at the same seed for the same repetitions against
   it, and tears the stack down with its volumes. EHRbase 2.35.1 and FerroEHR
-  4.0.10 are pinned by image digest, with their upstream deployment recipes
+  4.0.11 are pinned by image digest, with their upstream deployment recipes
   named at an immutable tag and the same container ceilings applied to both.
   Every baseline lands in the record as a full per-operation summary beside its
   digests, its recipe reference and those ceilings. From target and baseline the
