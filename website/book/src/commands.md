@@ -380,11 +380,21 @@ agreement.
 
 ### Submittability
 
-A record is submittable when it carries at least three repetitions and at least
-one same-machine baseline. A record that misses either stays valid for local
-exploration and names the requirements it misses, in the `submittable_unmet`
-list, in the rendered summary and in every `bench-compare` column header. The
-environment fingerprint prints on the summary header and in every comparison
+A record is submittable when it carries at least three repetitions, at least one
+same-machine baseline, and no operation that lost more of its arrivals than the
+pack's ceiling allows. That ceiling is part of the versioned pack definition and
+the record discloses it as `pack.max_failed_share`; every embedded pack pins
+`0.01`. The check reads every repetition, phase and operation, on the target and
+on every baseline block, because an index divides by a baseline median and a
+divisor taken from arrivals that failed describes the failure. A record that
+misses any requirement stays valid for local exploration and names the ones it
+misses, in the `submittable_unmet` list, in the rendered summary and in every
+`bench-compare` column header.
+
+The rendered summary carries a failed-arrival table: one row per side,
+repetition and phase, with the phase's own share and the worst operation inside
+it, followed by a sentence per reading above the ceiling naming where it went.
+The environment fingerprint prints on the summary header and in every comparison
 column, so no number is read without the machine it came from.
 
 A bench result is a benchmark record for comparative speed. It is not a
@@ -409,9 +419,10 @@ One column per file, one row per phase, operation and metric. Each cell carries
 the cross-repetition median with the inter-quartile range beside it, so a reader
 sees the spread as well as the number.
 
-Every column header carries the machine the run was generated on, and a column
-that is not submittable names the requirements it misses rather than printing
-one bare `false`. Where the columns carry a relative index, it gets its own
+Every column header carries the machine the run was generated on, the worst
+failed-arrival share the run recorded beside the ceiling its pack pins, and a
+column that is not submittable names the requirements it misses rather than
+printing one bare `false`. Where the columns carry a relative index, it gets its own
 table below the header, at `p50` and `p99` per baseline: that is the part which
 survives a change of host.
 
@@ -438,7 +449,8 @@ veredictum bench-packs --out <OUT>
 
 A pack is versioned data compiled into the binary, so the binary is the only
 honest source for a description of one. This command writes that description:
-per pack the id, the version, the seed every arrival stream draws from, each
+per pack the id, the version, the seed every arrival stream draws from, the
+failed-arrival ceiling a record is judged against, each
 phase with its load discipline and its counts, each measured phase's operation
 mix with the share and the probe rationale of every entry, each posture profile
 the pack defines with what it declares item by item, and each embedded fixture

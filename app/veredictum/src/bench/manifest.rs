@@ -308,6 +308,9 @@ pub struct PackDescription {
     pub version: String,
     /// What the pack exercises, in the pack's own words.
     pub description: String,
+    /// The largest share of one operation's arrivals that may fail, in one
+    /// repetition of one phase, before a record stops being rankable.
+    pub max_failed_share: f64,
     /// The seed every arrival stream draws from.
     pub seed: u64,
     /// The embedded fixtures, in offer order.
@@ -329,6 +332,7 @@ impl PackDescription {
             id: pack.id.as_str().to_owned(),
             version: pack.version.clone(),
             description: pack.description.clone(),
+            max_failed_share: pack.max_failed_share,
             seed: pack.seed,
             fixtures: pack.fixtures().iter().map(FixtureDescription::of).collect(),
             phases: pack.phases.iter().map(PhaseDescription::of).collect(),

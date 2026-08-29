@@ -189,6 +189,7 @@ pub fn run_summary(result: &BenchResult) -> String {
         }
         let _written = writeln!(out);
     }
+    out.push_str(&failed_share_section(result));
     out.push_str(&baseline_section(result));
     out.push_str(&relative_section(result));
     let errors = error_lines(result);
@@ -203,6 +204,63 @@ pub fn run_summary(result: &BenchResult) -> String {
     let _written = writeln!(out, "## Methodology");
     let _written = writeln!(out);
     let _written = writeln!(out, "{METHODOLOGY}");
+    out
+}
+
+/// How much of every phase failed, on the target and on each baseline block.
+///
+/// A contaminated run is visible here at a glance rather than by adding up an
+/// error list: percentiles taken over failed arrivals measure the failure, so
+/// the share is printed beside the numbers it qualifies.
+fn failed_share_section(result: &BenchResult) -> String {
+    let mut out = String::new();
+    let readings = result.failed_share_readings();
+    if readings.is_empty() {
+        return out;
+    }
+    let ceiling = result.pack.max_failed_share;
+    let _written = writeln!(out, "## Failed-arrival share");
+    let _written = writeln!(out);
+    let _written = writeln!(
+        out,
+        "The pack pins a ceiling of {ceiling:.2} per repetition, phase and operation. A reading above it makes the record non-submittable on both sides of every index, because a baseline median taken from arrivals that failed is a divisor describing the failure."
+    );
+    let _written = writeln!(out);
+    let _written = writeln!(
+        out,
+        "| Side | Repetition | Phase | Arrivals | Failed | Share | Worst operation | Worst share |"
+    );
+    let _written = writeln!(out, "|---|---:|---|---:|---:|---:|---|---:|");
+    for reading in &readings {
+        let operation = reading
+            .worst_operation
+            .as_deref()
+            .map_or_else(|| "(none recorded)".to_owned(), |op| format!("`{op}`"));
+        let _written = writeln!(
+            out,
+            "| {} | {} | `{}` | {} | {} | {:.3} | {operation} | {:.3} |",
+            reading.side,
+            reading.repetition,
+            reading.phase,
+            reading.count,
+            reading.errors,
+            reading.share,
+            reading.worst_share
+        );
+    }
+    let _written = writeln!(out);
+    let breaches: Vec<&crate::bench::result::FailedSharePhase> = readings
+        .iter()
+        .filter(|reading| reading.breaches(ceiling))
+        .collect();
+    if !breaches.is_empty() {
+        let _written = writeln!(out, "Above the ceiling, so this record is not rankable:");
+        let _written = writeln!(out);
+        for breach in breaches {
+            let _written = writeln!(out, "- {}", breach.sentence(ceiling));
+        }
+        let _written = writeln!(out);
+    }
     out
 }
 
@@ -440,13 +498,13 @@ pub fn comparison(comparison: &Comparison) -> String {
     let _written = writeln!(out);
     let _written = writeln!(
         out,
-        "| Column | Machine | Pack | Posture | SUT version | Repetitions | Submittable | Scale | Reference config | Source |"
+        "| Column | Machine | Pack | Posture | SUT version | Repetitions | Submittable | Worst failed share | Scale | Reference config | Source |"
     );
-    let _written = writeln!(out, "|---|---|---|---|---|---:|---|---:|---|---|");
+    let _written = writeln!(out, "|---|---|---|---|---|---:|---|---:|---:|---|---|");
     for column in &comparison.columns {
         let _written = writeln!(
             out,
-            "| {} | {} | `{}@{}` | `{}` | {} | {} | {} | {:.3} | {} | `{}` |",
+            "| {} | {} | `{}@{}` | `{}` | {} | {} | {} | {:.3} of {:.2} | {:.3} | {} | `{}` |",
             column.label,
             label_line(&column.environment),
             column.pack_id,
@@ -455,6 +513,8 @@ pub fn comparison(comparison: &Comparison) -> String {
             column.sut_version.as_deref().unwrap_or("(undisclosed)"),
             column.repetitions,
             submittable_cell(column),
+            column.worst_failed_share,
+            column.max_failed_share,
             column.scale_factor,
             column.reference_configuration,
             column.source.display()
@@ -529,6 +589,8 @@ mod tests {
             reference_configuration: true,
             environment: BTreeMap::new(),
             submittable_unmet: Vec::new(),
+            max_failed_share: 0.01,
+            worst_failed_share: 0.0,
             relative: Vec::new(),
             posture_profile: "minimal".to_owned(),
             posture_signature: "audit=off version_signing=none".to_owned(),
@@ -572,6 +634,8 @@ mod tests {
             reference_configuration: true,
             environment: BTreeMap::new(),
             submittable_unmet: Vec::new(),
+            max_failed_share: 0.01,
+            worst_failed_share: 0.0,
             relative: Vec::new(),
             posture_profile: "minimal".to_owned(),
             posture_signature: "audit=off version_signing=none".to_owned(),

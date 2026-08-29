@@ -43,6 +43,10 @@ pub enum SubmissionRequirement {
     Repetitions,
     /// At least [`SUBMITTABLE_BASELINES`] same-machine baseline block.
     Baseline,
+    /// Every repetition, phase and operation, on the target and on every
+    /// baseline, kept its failed-arrival share at or below the ceiling its
+    /// pack pins.
+    ErrorShare,
 }
 
 impl SubmissionRequirement {
@@ -50,6 +54,7 @@ impl SubmissionRequirement {
     pub const ALL: &[SubmissionRequirement] = &[
         SubmissionRequirement::Repetitions,
         SubmissionRequirement::Baseline,
+        SubmissionRequirement::ErrorShare,
     ];
 
     /// The token the record names the requirement by.
@@ -58,6 +63,7 @@ impl SubmissionRequirement {
         match self {
             SubmissionRequirement::Repetitions => "repetitions",
             SubmissionRequirement::Baseline => "baseline",
+            SubmissionRequirement::ErrorShare => "error_share",
         }
     }
 
@@ -71,6 +77,9 @@ impl SubmissionRequirement {
             }
             SubmissionRequirement::Baseline => {
                 "at least one same-machine baseline, because an absolute number without an anchor describes the machine as much as the system"
+            }
+            SubmissionRequirement::ErrorShare => {
+                "every repetition, phase and operation, on the target and on every baseline, at or below the pack's failed-arrival ceiling, because percentiles taken over failed arrivals measure the failure rather than the system"
             }
         }
     }
@@ -574,7 +583,7 @@ pub struct CrossPhase {
 }
 
 /// The pack a run drove, as the result records it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PackRecord {
     /// The pack id.
@@ -583,6 +592,9 @@ pub struct PackRecord {
     pub version: String,
     /// What the pack exercises.
     pub description: String,
+    /// The failed-arrival ceiling the pack version pins, disclosed here so the
+    /// submittability decision is a pure function of the record.
+    pub max_failed_share: f64,
     /// The seed every arrival stream drew from.
     pub seed: u64,
     /// The fixture pins, keyed by fixture key.
@@ -597,9 +609,163 @@ impl PackRecord {
             id: pack.id.as_str().to_owned(),
             version: pack.version.clone(),
             description: pack.description.clone(),
+            max_failed_share: pack.max_failed_share,
             seed: pack.seed,
             fixtures: pack.fixture_pins(),
         }
+    }
+}
+
+/// The share of one operation's recorded arrivals that failed.
+///
+/// An operation that recorded no arrival at all is fully failed rather than
+/// perfect: nothing answered, so nothing was measured, and a zero divisor would
+/// otherwise settle the question silently.
+#[must_use]
+pub fn failed_share(count: u64, errors: u64) -> f64 {
+    if count == 0 {
+        return 1.0;
+    }
+    #[expect(
+        clippy::as_conversions,
+        clippy::cast_precision_loss,
+        reason = "arrival counts are far below 2^52, so neither side of the ratio loses a digit"
+    )]
+    let share = errors.min(count) as f64 / count as f64;
+    share
+}
+
+/// Which measured side of a record one failed-arrival reading came from.
+///
+/// A baseline's numbers are the divisor of every index the board ranks by, so a
+/// reading is never reported without saying which side produced it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MeasuredSide {
+    /// The system the record is about.
+    Target,
+    /// One same-machine reference, by its CDR token.
+    Baseline(String),
+}
+
+impl fmt::Display for MeasuredSide {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MeasuredSide::Target => f.write_str("the target"),
+            MeasuredSide::Baseline(cdr) => write!(f, "the {cdr} baseline"),
+        }
+    }
+}
+
+/// The failed-arrival reading of one phase, in one repetition, on one side.
+///
+/// The phase totals are what a summary prints; `worst_share` is what the
+/// ceiling is applied to, because one contaminated operation inside an
+/// otherwise healthy phase is exactly the case a phase average hides.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FailedSharePhase {
+    /// Which side the reading came from.
+    pub side: MeasuredSide,
+    /// The one-based repetition ordinal.
+    pub repetition: u32,
+    /// The phase name.
+    pub phase: String,
+    /// Which discipline produced the phase.
+    pub regime: LoopRegime,
+    /// Arrivals the phase recorded, failures included.
+    pub count: u64,
+    /// How many of them failed.
+    pub errors: u64,
+    /// The phase's own failed share, over every operation it recorded.
+    pub share: f64,
+    /// The operation with the largest failed share, and `None` for a phase
+    /// that recorded no operation at all.
+    pub worst_operation: Option<String>,
+    /// That operation's failed share, and `1.0` for a phase that recorded no
+    /// operation, which measured nothing.
+    pub worst_share: f64,
+}
+
+impl FailedSharePhase {
+    /// Whether this phase crossed `ceiling` in any one operation.
+    #[must_use]
+    pub fn breaches(&self, ceiling: f64) -> bool {
+        self.worst_share > ceiling
+    }
+
+    /// The one sentence a refusal prints, naming where the ceiling went.
+    #[must_use]
+    pub fn sentence(&self, ceiling: f64) -> String {
+        let where_it_went = match &self.worst_operation {
+            Some(operation) => format!(
+                "lost {:.3} of the arrivals it recorded for `{operation}`, above the pack ceiling of {ceiling:.2}",
+                self.worst_share
+            ),
+            None => "recorded no operation at all, so it measured nothing".to_owned(),
+        };
+        format!(
+            "on {}, repetition {} of phase `{}` ({}) {where_it_went}",
+            self.side, self.repetition, self.phase, self.regime
+        )
+    }
+}
+
+/// The failed-arrival reading of every phase of one measured side.
+fn side_readings(side: &MeasuredSide, repetitions: &[RepetitionRecord]) -> Vec<FailedSharePhase> {
+    let mut readings = Vec::new();
+    for repetition in repetitions {
+        for (phase, measured) in &repetition.phases {
+            readings.push(one_reading(
+                side,
+                repetition.repetition,
+                phase,
+                measured.regime,
+                &measured.operations,
+            ));
+        }
+        for (phase, sweep) in &repetition.sweeps {
+            readings.push(one_reading(
+                side,
+                repetition.repetition,
+                phase,
+                sweep.regime,
+                &sweep.operations,
+            ));
+        }
+    }
+    readings
+}
+
+/// One phase's reading, over the operations it recorded.
+fn one_reading(
+    side: &MeasuredSide,
+    repetition: u32,
+    phase: &str,
+    regime: LoopRegime,
+    operations: &BTreeMap<String, OperationStats>,
+) -> FailedSharePhase {
+    let mut count = 0_u64;
+    let mut errors = 0_u64;
+    let mut worst_operation: Option<String> = None;
+    let mut worst_share = 1.0_f64;
+    for (operation, stats) in operations {
+        count = count.saturating_add(stats.count);
+        errors = errors.saturating_add(stats.errors);
+        let share = failed_share(stats.count, stats.errors);
+        if worst_operation.is_none() || share > worst_share {
+            worst_operation = Some(operation.clone());
+            worst_share = share;
+        }
+    }
+    FailedSharePhase {
+        side: side.clone(),
+        repetition,
+        phase: phase.to_owned(),
+        regime,
+        count,
+        errors,
+        share: failed_share(count, errors),
+        worst_operation,
+        worst_share,
     }
 }
 
@@ -689,6 +855,44 @@ pub struct BenchResult {
 }
 
 impl BenchResult {
+    /// The failed-arrival reading of every phase this record carries, the
+    /// target's first and then each baseline's, in recorded order.
+    ///
+    /// A pure function of the document, so a reader recomputes exactly what the
+    /// engine decided by.
+    #[must_use]
+    pub fn failed_share_readings(&self) -> Vec<FailedSharePhase> {
+        let mut readings = side_readings(&MeasuredSide::Target, &self.repetitions);
+        for baseline in &self.baselines {
+            readings.extend(side_readings(
+                &MeasuredSide::Baseline(baseline.cdr.clone()),
+                &baseline.repetitions,
+            ));
+        }
+        readings
+    }
+
+    /// Every reading above the pack's ceiling, which is what makes a record
+    /// unrankable and what a refusal names.
+    #[must_use]
+    pub fn failed_share_breaches(&self) -> Vec<FailedSharePhase> {
+        let ceiling = self.pack.max_failed_share;
+        self.failed_share_readings()
+            .into_iter()
+            .filter(|reading| reading.breaches(ceiling))
+            .collect()
+    }
+
+    /// The largest failed share any one operation of any side recorded, and
+    /// `0.0` for a record that measured no phase at all.
+    #[must_use]
+    pub fn worst_failed_share(&self) -> f64 {
+        self.failed_share_readings()
+            .iter()
+            .map(|reading| reading.worst_share)
+            .fold(0.0_f64, f64::max)
+    }
+
     /// The submission requirements this run does not meet, in the order
     /// [`SubmissionRequirement::ALL`] lists them.
     #[must_use]
@@ -701,6 +905,7 @@ impl BenchResult {
                     self.repetitions.len() < SUBMITTABLE_REPETITIONS
                 }
                 SubmissionRequirement::Baseline => self.baselines.len() < SUBMITTABLE_BASELINES,
+                SubmissionRequirement::ErrorShare => !self.failed_share_breaches().is_empty(),
             })
             .collect()
     }
@@ -977,6 +1182,163 @@ mod tests {
         Ok(())
     }
 
+    /// The ceiling every test record is judged by: the conservative default
+    /// each embedded pack pins.
+    const CEILING: f64 = crate::bench::pack::DEFAULT_MAX_FAILED_SHARE;
+
+    /// One operation's recorded arrivals, with every failure in one class.
+    ///
+    /// The latency members carry constants, because what these tests read is
+    /// the arrival arithmetic rather than any percentile.
+    fn stats(count: u64, errors: u64) -> OperationStats {
+        let mut errors_by_class = BTreeMap::new();
+        if errors > 0 {
+            let _replaced = errors_by_class.insert(ErrorClass::Http5xx.as_str().to_owned(), errors);
+        }
+        OperationStats {
+            count,
+            errors,
+            errors_by_class,
+            throughput_ops_s: 1.0,
+            p50_us: 1,
+            p75_us: 1,
+            p90_us: 1,
+            p99_us: 1,
+            p999_us: 1,
+            max_us: 1,
+            hdr_v2_base64: String::new(),
+        }
+    }
+
+    /// One measured phase carrying `operations`.
+    fn measured(operations: BTreeMap<String, OperationStats>) -> MeasuredPhaseRecord {
+        MeasuredPhaseRecord {
+            regime: LoopRegime::OpenLoop,
+            rate_per_s: 1.0,
+            warmup_s: 0,
+            duration_s: 1,
+            planned_measured_arrivals: 0,
+            dispatched_measured_arrivals: 0,
+            warmup_arrivals: 0,
+            offered_load_sustained_per_s: 0.0,
+            generator_bound: false,
+            operations,
+        }
+    }
+
+    /// One phase named `mixed` recording one operation at `count` arrivals of
+    /// which `errors` failed, repeated across every repetition.
+    fn phases_of(count: u64, errors: u64) -> BTreeMap<String, MeasuredPhaseRecord> {
+        let mut operations = BTreeMap::new();
+        let _replaced = operations.insert("get_ehr".to_owned(), stats(count, errors));
+        let mut phases = BTreeMap::new();
+        let _replaced = phases.insert("mixed".to_owned(), measured(operations));
+        phases
+    }
+
+    /// A three-repetition record with one clean baseline, whose target phase
+    /// recorded `count` arrivals of which `errors` failed.
+    fn record_of(count: u64, errors: u64) -> BenchResult {
+        let mut result = minimal_result(3);
+        for repetition in &mut result.repetitions {
+            repetition.phases = phases_of(count, errors);
+        }
+        result.attach_baselines(vec![empty_baseline()]);
+        result
+    }
+
+    /// An operation that recorded no arrival at all is fully failed, and the
+    /// ratio never divides by zero.
+    #[test]
+    fn a_zero_arrival_operation_is_fully_failed() {
+        assert!((failed_share(0, 0) - 1.0).abs() < f64::EPSILON);
+        assert!((failed_share(0, 7) - 1.0).abs() < f64::EPSILON);
+        assert!((failed_share(100, 1) - 0.01).abs() < f64::EPSILON);
+        assert!(failed_share(100, 0).abs() < f64::EPSILON);
+        assert!((failed_share(444, 444) - 1.0).abs() < f64::EPSILON);
+    }
+
+    /// A target exactly at the ceiling stays submittable, and one arrival more
+    /// refuses the record by name.
+    #[test]
+    fn the_target_passes_at_the_ceiling_and_refuses_above_it() {
+        let at = record_of(100, 1);
+        assert!(at.submittable, "{:?}", at.submittable_unmet);
+        assert!(at.failed_share_breaches().is_empty());
+        assert!((at.worst_failed_share() - CEILING).abs() < f64::EPSILON);
+
+        let above = record_of(100, 2);
+        assert!(!above.submittable);
+        assert_eq!(
+            above.submittable_unmet,
+            vec![SubmissionRequirement::ErrorShare]
+        );
+        let breaches = above.failed_share_breaches();
+        assert_eq!(breaches.len(), 3, "one per repetition");
+        let Some(first) = breaches.first() else {
+            panic!("the breach list lost its entries");
+        };
+        assert_eq!(first.side, MeasuredSide::Target);
+        let sentence = first.sentence(CEILING);
+        assert!(sentence.contains("the target"), "{sentence}");
+        assert!(sentence.contains("`mixed`"), "{sentence}");
+        assert!(sentence.contains("`get_ehr`"), "{sentence}");
+        assert!(sentence.contains("0.01"), "{sentence}");
+    }
+
+    /// A baseline above the ceiling refuses the record just as the target
+    /// does: every index on a board divides by one of its medians.
+    #[test]
+    fn a_baseline_above_the_ceiling_refuses_the_record() {
+        let mut result = minimal_result(3);
+        for repetition in &mut result.repetitions {
+            repetition.phases = phases_of(100, 0);
+        }
+        let mut baseline = empty_baseline();
+        baseline.repetitions = vec![RepetitionRecord {
+            repetition: 1,
+            phases: phases_of(100, 1),
+            sweeps: BTreeMap::new(),
+        }];
+        result.attach_baselines(vec![baseline.clone()]);
+        assert!(result.submittable, "{:?}", result.submittable_unmet);
+
+        baseline.repetitions = vec![RepetitionRecord {
+            repetition: 1,
+            phases: phases_of(100, 2),
+            sweeps: BTreeMap::new(),
+        }];
+        result.attach_baselines(vec![baseline]);
+        assert_eq!(
+            result.submittable_unmet,
+            vec![SubmissionRequirement::ErrorShare]
+        );
+        let breaches = result.failed_share_breaches();
+        let Some(breach) = breaches.first() else {
+            panic!("the baseline breach was not recorded");
+        };
+        assert_eq!(breach.side, MeasuredSide::Baseline("ehrbase".to_owned()));
+        assert!(
+            breach.sentence(CEILING).contains("the ehrbase baseline"),
+            "{}",
+            breach.sentence(CEILING)
+        );
+    }
+
+    /// An operation that recorded arrivals and answered none of them refuses
+    /// the record, which is the run this requirement exists for.
+    #[test]
+    fn a_wholly_failed_operation_refuses_the_record() {
+        let result = record_of(444, 444);
+        assert!(!result.submittable);
+        assert!(
+            result
+                .submittable_unmet
+                .contains(&SubmissionRequirement::ErrorShare)
+        );
+        assert!((result.worst_failed_share() - 1.0).abs() < f64::EPSILON);
+    }
+
     /// A record carrying nothing but the fields the submittability decision
     /// reads, at the requested repetition count.
     fn minimal_result(repetitions: usize) -> BenchResult {
@@ -988,6 +1350,7 @@ mod tests {
                 id: "smoke".to_owned(),
                 version: "1.0.0".to_owned(),
                 description: "a pack".to_owned(),
+                max_failed_share: CEILING,
                 seed: 1,
                 fixtures: BTreeMap::new(),
             },

@@ -50,7 +50,8 @@
           "token": {
             "enum": [
               "repetitions",
-              "baseline"
+              "baseline",
+              "error_share"
             ]
           },
           "statement": {
@@ -109,6 +110,7 @@
           "id",
           "version",
           "description",
+          "max_failed_share",
           "seed",
           "fixtures",
           "phases",
@@ -127,6 +129,11 @@
           "description": {
             "type": "string",
             "minLength": 1
+          },
+          "max_failed_share": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
           },
           "seed": {
             "type": "integer",

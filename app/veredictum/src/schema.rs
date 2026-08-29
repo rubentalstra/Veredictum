@@ -2098,11 +2098,13 @@ pub fn bench_result_schema() -> Value {
             "pack": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": ["id", "version", "description", "seed", "fixtures"],
+                "required": ["id", "version", "description", "max_failed_share", "seed",
+                              "fixtures"],
                 "properties": {
                     "id": { "type": "string", "pattern": OPTION_TAG_PATTERN },
                     "version": { "type": "string", "minLength": 1 },
                     "description": { "type": "string", "minLength": 1 },
+                    "max_failed_share": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
                     "seed": { "type": "integer", "minimum": 0 },
                     "fixtures": {
                         "type": "object",
@@ -2419,12 +2421,13 @@ pub fn bench_packs_schema() -> Value {
                 "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["id", "version", "description", "seed", "fixtures", "phases",
-                                  "profiles", "probe_rationales"],
+                    "required": ["id", "version", "description", "max_failed_share", "seed",
+                                  "fixtures", "phases", "profiles", "probe_rationales"],
                     "properties": {
                         "id": { "type": "string", "pattern": OPTION_TAG_PATTERN },
                         "version": { "type": "string", "minLength": 1 },
                         "description": { "type": "string", "minLength": 1 },
+                        "max_failed_share": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
                         "seed": { "type": "integer", "minimum": 0 },
                         "fixtures": fixtures,
                         "phases": {

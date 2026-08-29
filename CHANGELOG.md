@@ -224,6 +224,23 @@ version on.
   reserved and always absent.
 ### Fixed
 
+- **A failed run is never submittable (#197).** Submittability counted
+  repetitions and baseline blocks and read no error count, so a run whose
+  arrivals all failed still stamped `submittable: true` and was rankable on the
+  public board. Every embedded pack now pins a failed-arrival ceiling of `0.01`,
+  disclosed in the result as `pack.max_failed_share` and stated in the pack
+  description, and `submittable_unmet` gains the `error_share` requirement: any
+  repetition, phase and operation above the ceiling, on the target or on any
+  baseline block, refuses the record for ranking. An operation that recorded no
+  arrival at all counts as fully failed rather than dividing by zero. The
+  rendered summary prints the failed-arrival share per phase for both sides and
+  names every reading above the ceiling, and `bench-compare` prints the worst
+  share beside its ceiling per column. The record stays valid for local
+  diagnosis; it is only never rankable. `bench-packs` carries the ceiling per
+  pack, so the published legend states it beside the seed. The submission gate
+  keeps its own never-answered floor as defence in depth and now also asserts
+  that a record claiming `submittable` agrees with the engine's arithmetic.
+
 - The committed party statements declare their AMB-220 branch, verified
   first-hand against each running SUT: FerroEHR refuses an RM-undefined
   containment pair as an invalid query, EHRbase executes it to an empty
