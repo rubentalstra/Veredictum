@@ -888,6 +888,58 @@ fn report_transcript(outcome: &veredictum::pipeline::conformance::RunOutcome) {
     );
 }
 
+/// Builds and writes every document a run emits, paired with the name each
+/// one carries in the record manifest.
+///
+/// The transcript is written before the manifest is built, so a sealed bundle
+/// covers every document the run emitted.
+///
+/// # Errors
+///
+/// Returns the process exit code the failure earns: a rendering failure or an
+/// unwritable path fails through [`fail`], and a path with no file name is a
+/// usage error.
+fn emit_documents(
+    outcome: &veredictum::pipeline::conformance::RunOutcome,
+) -> Result<Vec<(&str, String)>, ExitCode> {
+    let document = match outcome.results_document() {
+        Ok(document) => document,
+        Err(e) => return Err(fail(&e)),
+    };
+    if let Err(e) = write_file(&outcome.results_path, &document) {
+        return Err(fail(&e));
+    }
+    let exceptions = match outcome.exceptions_document() {
+        Ok(document) => document,
+        Err(e) => return Err(fail(&e)),
+    };
+    if let Err(e) = write_file(&outcome.exceptions_path, &exceptions) {
+        return Err(fail(&e));
+    }
+    let transcript = match outcome.transcript_document() {
+        Ok(transcript) => transcript,
+        Err(e) => return Err(fail(&e)),
+    };
+    if let (Some(body), Some(path)) = (transcript.as_ref(), outcome.transcript_path.as_ref())
+        && let Err(e) = write_file(path, body)
+    {
+        return Err(fail(&e));
+    }
+    let names = match (
+        record_name(&outcome.results_path),
+        record_name(&outcome.exceptions_path),
+    ) {
+        (Ok(results), Ok(exceptions)) => [results, exceptions],
+        (Err(code), _) | (_, Err(code)) => return Err(code),
+    };
+    let [results_name, exceptions_name] = names;
+    let mut emitted = vec![(results_name, document), (exceptions_name, exceptions)];
+    if let (Some(body), Some(path)) = (transcript, outcome.transcript_path.as_ref()) {
+        emitted.push((record_name(path)?, body));
+    }
+    Ok(emitted)
+}
+
 fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> ExitCode {
     let warn = |warning: RunWarning<'_>| match warning {
         RunWarning::CarriedMeasurements {
@@ -916,59 +968,17 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> E
         eprintln!("cannot create {}: {e}", request.out_dir.display());
         return ExitCode::from(2);
     }
-    let document = match outcome.results_document() {
-        Ok(document) => document,
-        Err(e) => return fail(&e),
+    let emitted = match emit_documents(&outcome) {
+        Ok(emitted) => emitted,
+        Err(code) => return code,
     };
-    if let Err(e) = write_file(&outcome.results_path, &document) {
-        return fail(&e);
-    }
-    let exceptions = match outcome.exceptions_document() {
-        Ok(document) => document,
-        Err(e) => return fail(&e),
-    };
-    if let Err(e) = write_file(&outcome.exceptions_path, &exceptions) {
-        return fail(&e);
-    }
-    // The transcript is written before the manifest is built, so a sealed
-    // bundle covers every document the run emitted.
-    let transcript = match outcome.transcript_document() {
-        Ok(transcript) => transcript,
-        Err(e) => return fail(&e),
-    };
-    if let (Some(body), Some(path)) = (transcript.as_ref(), outcome.transcript_path.as_ref())
-        && let Err(e) = write_file(path, body)
-    {
-        return fail(&e);
-    }
-    let names = match (
-        record_name(&outcome.results_path),
-        record_name(&outcome.exceptions_path),
-    ) {
-        (Ok(results), Ok(exceptions)) => [results, exceptions],
-        (Err(code), _) | (_, Err(code)) => return code,
-    };
-    let [results_name, exceptions_name] = names;
-    let mut sealed = vec![
-        RecordedFile {
-            name: results_name,
-            body: document.as_bytes(),
-        },
-        RecordedFile {
-            name: exceptions_name,
-            body: exceptions.as_bytes(),
-        },
-    ];
-    if let (Some(body), Some(path)) = (transcript.as_ref(), outcome.transcript_path.as_ref()) {
-        let name = match record_name(path) {
-            Ok(name) => name,
-            Err(code) => return code,
-        };
-        sealed.push(RecordedFile {
+    let sealed: Vec<RecordedFile<'_>> = emitted
+        .iter()
+        .map(|(name, body)| RecordedFile {
             name,
             body: body.as_bytes(),
-        });
-    }
+        })
+        .collect();
     if let Err(code) = seal_emitted(request.out_dir, &sealed, signing) {
         return code;
     }

@@ -102,44 +102,52 @@ fn routed_paths(app_rs: &str) -> BTreeSet<String> {
         let Some(decl) = path_attr.get(..view_end) else {
             continue;
         };
-        // One left-to-right scan keeps the segments in declaration order.
-        let mut segments = Vec::new();
-        let mut rest = decl;
-        loop {
-            let next_static = rest.find("StaticSegment(\"");
-            let next_param = rest.find("ParamSegment(\"");
-            let (at, is_param) = match (next_static, next_param) {
-                (Some(s), Some(q)) if q < s => (q, true),
-                (Some(s), _) => (s, false),
-                (None, Some(q)) => (q, true),
-                (None, None) => break,
-            };
-            let open = at
-                + if is_param {
-                    "ParamSegment(\"".len()
-                } else {
-                    "StaticSegment(\"".len()
-                };
-            let Some(tail) = rest.get(open..) else { break };
-            let Some(end) = tail.find('"') else { break };
-            let Some(literal) = tail.get(..end) else {
-                break;
-            };
-            if !literal.is_empty() {
-                if is_param {
-                    segments.push(format!(":{literal}"));
-                } else {
-                    segments.push(literal.to_owned());
-                }
-            }
-            let Some(next) = rest.get(open + end + 1..) else {
-                break;
-            };
-            rest = next;
-        }
-        routes.insert(segments.join("/"));
+        routes.insert(path_segments(decl).join("/"));
     }
     routes
+}
+
+/// The segment literals of one `path=` declaration, in declaration order.
+///
+/// One left-to-right scan reads the `StaticSegment("…")` and
+/// `ParamSegment("…")` literals; a parameter segment is rendered with the
+/// router's own `:name` spelling, and an empty literal contributes nothing.
+fn path_segments(decl: &str) -> Vec<String> {
+    let mut segments = Vec::new();
+    let mut rest = decl;
+    loop {
+        let next_static = rest.find("StaticSegment(\"");
+        let next_param = rest.find("ParamSegment(\"");
+        let (at, is_param) = match (next_static, next_param) {
+            (Some(s), Some(q)) if q < s => (q, true),
+            (Some(s), _) => (s, false),
+            (None, Some(q)) => (q, true),
+            (None, None) => break,
+        };
+        let open = at
+            + if is_param {
+                "ParamSegment(\"".len()
+            } else {
+                "StaticSegment(\"".len()
+            };
+        let Some(tail) = rest.get(open..) else { break };
+        let Some(end) = tail.find('"') else { break };
+        let Some(literal) = tail.get(..end) else {
+            break;
+        };
+        if !literal.is_empty() {
+            if is_param {
+                segments.push(format!(":{literal}"));
+            } else {
+                segments.push(literal.to_owned());
+            }
+        }
+        let Some(next) = rest.get(open + end + 1..) else {
+            break;
+        };
+        rest = next;
+    }
+    segments
 }
 
 #[expect(

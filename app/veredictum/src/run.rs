@@ -1048,24 +1048,18 @@ fn refused_at_parse(columns: &[String], row: &[serde_json::Value]) -> bool {
         })
 }
 
-/// Synthesizes the functional execution of a content case.
+/// Turns a decision table's rows into parameter-matrix rows with a normalized
+/// `expected` column.
 ///
-/// The decision
-/// table becomes a matrix (rows drive `${row.*}`), the flow is one commit of
-/// the generated instance against the constraint context's template, and the
-/// per-row `expected` column is the outcome expectation: `accepted` →
-/// `created`, and `rejected` → `bad_request` or `validation_failed` by
-/// `refused_at_parse`.
-#[must_use]
-pub fn synthesize_content_case(case: &CaseCore) -> CaseCore {
-    let mut synthesized = case.clone();
-    let Some(table) = &case.decision_table else {
-        return synthesized;
-    };
-    // decision-table rows -> a parameters matrix with a normalized expected
-    // column (accepted/rejected -> outcome kinds).
-    let columns = table.columns.clone();
-    let rows: Vec<Vec<crate::model::case::MatrixCell>> = table
+/// The authored `accepted` token becomes `created`; `rejected` splits into
+/// `bad_request` or `validation_failed` by [`refused_at_parse`]. Every other
+/// cell carries across as written, with JSON null becoming the matrix's own
+/// null cell.
+fn matrix_rows_from_decision_table(
+    table: &crate::model::case::DecisionTable,
+) -> Vec<Vec<crate::model::case::MatrixCell>> {
+    let columns = &table.columns;
+    table
         .rows
         .iter()
         .map(|row| {
@@ -1076,7 +1070,7 @@ pub fn synthesize_content_case(case: &CaseCore) -> CaseCore {
                     if column == "expected" {
                         let kind = match cell.as_str() {
                             Some("accepted") => "created",
-                            _ if refused_at_parse(&columns, row) => "bad_request",
+                            _ if refused_at_parse(columns, row) => "bad_request",
                             _ => "validation_failed",
                         };
                         crate::model::case::MatrixCell::Literal(serde_json::Value::String(
@@ -1091,7 +1085,25 @@ pub fn synthesize_content_case(case: &CaseCore) -> CaseCore {
                 })
                 .collect()
         })
-        .collect();
+        .collect()
+}
+
+/// Synthesizes the functional execution of a content case.
+///
+/// The decision
+/// table becomes a matrix (rows drive `${row.*}`), the flow is one commit of
+/// the generated instance against the constraint context's template, and the
+/// per-row `expected` column is the outcome expectation: `accepted` →
+/// `created`, and `rejected` → `bad_request` or `validation_failed` by
+/// `refused_at_parse`.
+#[must_use]
+pub fn synthesize_content_case(case: &CaseCore) -> CaseCore {
+    let mut synthesized = case.clone();
+    let Some(table) = &case.decision_table else {
+        return synthesized;
+    };
+    let columns = table.columns.clone();
+    let rows = matrix_rows_from_decision_table(table);
     synthesized.parameters = serde_json::from_value(serde_json::json!({
         "iteration": "reset_per_row",
         "matrix": { "columns": columns, "rows": [] }

@@ -169,6 +169,67 @@ pub enum JobError {
     Engine(#[from] crate::engine::Error),
 }
 
+/// Records one streamed engine line on `job`.
+///
+/// A `--progress` line (#81's grammar) moves the counters and the per-case
+/// duration sample instead of landing in the tail; everything else is tail
+/// text, capped at [`TAIL_CAP`] lines.
+#[cfg(feature = "ssr")]
+fn record_line(job: &mut JobState, line: Line) {
+    let text = match line {
+        Line::Out(text) => {
+            if let Some((completed, total, case)) = parse_progress(&text) {
+                let now = Instant::now();
+                if completed > job.completed && job.completed > 0 {
+                    let elapsed = now.duration_since(job.last_case_at).as_millis();
+                    job.durations_ms
+                        .push(u64::try_from(elapsed).unwrap_or(u64::MAX));
+                }
+                job.last_case_at = now;
+                job.completed = completed;
+                job.total = total;
+                job.current_case = case;
+                return;
+            }
+            text
+        }
+        Line::Err(text) => text,
+    };
+    if job.tail.len() == TAIL_CAP {
+        job.tail.pop_front();
+    }
+    job.tail.push_back(text);
+}
+
+/// The status the stream's `outcome` lands the job in, with the summary a
+/// finished run carries.
+///
+/// A failure after a requested cancel is a cancellation, never a run failure:
+/// the killed subprocess leaves no results document by design.
+#[cfg(feature = "ssr")]
+fn finish_status(
+    outcome: Result<crate::engine::Finished, crate::engine::Error>,
+    cancel_requested: bool,
+) -> (JobStatus, Option<FinishedView>) {
+    match outcome {
+        Ok(finished) => {
+            let counts = tally(&finished.results);
+            (
+                JobStatus::Finished,
+                Some(FinishedView {
+                    passed: counts.0,
+                    failed: counts.1,
+                    errored: counts.2,
+                    not_applicable: counts.3,
+                    results_path: finished.results_path.display().to_string(),
+                }),
+            )
+        }
+        Err(_) if cancel_requested => (JobStatus::Cancelled, None),
+        Err(e) => (JobStatus::Failed(e.to_string()), None),
+    }
+}
+
 #[cfg(feature = "ssr")]
 impl JobSlot {
     /// Allocates the next job id — the caller derives the output directory
@@ -236,50 +297,18 @@ impl JobSlot {
             let on_line = |line: Line| {
                 let Ok(mut guard) = slot.lock() else { return };
                 let Some(job) = guard.as_mut() else { return };
-                let text = match line {
-                    Line::Out(text) => {
-                        if let Some((completed, total, case)) = parse_progress(&text) {
-                            let now = Instant::now();
-                            if completed > job.completed && job.completed > 0 {
-                                let elapsed = now.duration_since(job.last_case_at).as_millis();
-                                job.durations_ms
-                                    .push(u64::try_from(elapsed).unwrap_or(u64::MAX));
-                            }
-                            job.last_case_at = now;
-                            job.completed = completed;
-                            job.total = total;
-                            job.current_case = case;
-                            return;
-                        }
-                        text
-                    }
-                    Line::Err(text) => text,
-                };
-                if job.tail.len() == TAIL_CAP {
-                    job.tail.pop_front();
-                }
-                job.tail.push_back(text);
+                record_line(job, line);
             };
             let outcome = running.stream(on_line);
             if let Ok(mut guard) = slot.lock()
                 && let Some(job) = guard.as_mut()
             {
                 job.canceller = None;
-                job.status = match outcome {
-                    Ok(finished) => {
-                        let counts = tally(&finished.results);
-                        job.finished = Some(FinishedView {
-                            passed: counts.0,
-                            failed: counts.1,
-                            errored: counts.2,
-                            not_applicable: counts.3,
-                            results_path: finished.results_path.display().to_string(),
-                        });
-                        JobStatus::Finished
-                    }
-                    Err(_) if job.cancel_requested => JobStatus::Cancelled,
-                    Err(e) => JobStatus::Failed(e.to_string()),
-                };
+                let (status, finished) = finish_status(outcome, job.cancel_requested);
+                if let Some(view) = finished {
+                    job.finished = Some(view);
+                }
+                job.status = status;
             }
         });
         Ok(id)

@@ -351,73 +351,97 @@ impl RunningEngine {
                 .map_err(|poison| Error::Execute(std::io::Error::other(poison.to_string())))?;
             (child.stdout.take(), child.stderr.take())
         };
-        // Both pipes are drained concurrently: a child that fills the
-        // un-read pipe's buffer blocks forever, so stderr drains on its own
-        // thread while this one reads stdout, and the lines merge over a
-        // channel in arrival order.
-        let (sender, receiver) = std::sync::mpsc::channel::<Line>();
-        let stderr_reader = std::thread::spawn({
-            let sender = sender.clone();
-            move || {
-                if let Some(stderr) = stderr {
-                    for line in std::io::BufReader::new(stderr).lines() {
-                        let Ok(line) = line else { break };
-                        if sender.send(Line::Err(line)).is_err() {
-                            break;
-                        }
+        let status = drain_to_completion(&self.child, stdout, stderr, &mut on_line)?;
+        read_finished(&self.out_dir, status.success())
+    }
+}
+
+/// Drains both pipes to the child's exit, delivering every line to `on_line`.
+///
+/// A child that fills an un-read pipe's buffer blocks forever, so stderr
+/// drains on its own thread while this one reads stdout, and the lines merge
+/// over a channel in arrival order.
+///
+/// # Errors
+/// [`Error::Execute`] when the child's lock is poisoned, when a stdout line
+/// cannot be read, or when waiting on the child fails.
+fn drain_to_completion(
+    child: &std::sync::Mutex<std::process::Child>,
+    stdout: Option<std::process::ChildStdout>,
+    stderr: Option<std::process::ChildStderr>,
+    on_line: &mut impl FnMut(Line),
+) -> Result<std::process::ExitStatus, Error> {
+    let (sender, receiver) = std::sync::mpsc::channel::<Line>();
+    let stderr_reader = std::thread::spawn({
+        let sender = sender.clone();
+        move || {
+            if let Some(stderr) = stderr {
+                for line in std::io::BufReader::new(stderr).lines() {
+                    let Ok(line) = line else { break };
+                    if sender.send(Line::Err(line)).is_err() {
+                        break;
                     }
                 }
             }
-        });
-        if let Some(stdout) = stdout {
-            for line in std::io::BufReader::new(stdout).lines() {
-                let line = line.map_err(Error::Execute)?;
-                on_line(Line::Out(line));
-                // Deliver whatever stderr produced meanwhile, keeping the
-                // merged stream close to arrival order.
-                while let Ok(err_line) = receiver.try_recv() {
-                    on_line(err_line);
-                }
+        }
+    });
+    if let Some(stdout) = stdout {
+        for line in std::io::BufReader::new(stdout).lines() {
+            let line = line.map_err(Error::Execute)?;
+            on_line(Line::Out(line));
+            // Deliver whatever stderr produced meanwhile, keeping the
+            // merged stream close to arrival order.
+            while let Ok(err_line) = receiver.try_recv() {
+                on_line(err_line);
             }
         }
-        let status = {
-            let mut child = self
-                .child
-                .lock()
-                .map_err(|poison| Error::Execute(std::io::Error::other(poison.to_string())))?;
-            child.wait().map_err(Error::Execute)?
-        };
-        // The guard is joined, never dropped mid-stream: the remaining
-        // stderr lines are delivered before the run is reported finished.
-        let joined = stderr_reader.join();
-        drop(sender);
-        while let Ok(err_line) = receiver.try_recv() {
-            on_line(err_line);
-        }
-        if joined.is_err() {
-            on_line(Line::Err(String::from(
-                "console: the stderr reader thread panicked; its tail was lost",
-            )));
-        }
+    }
+    let status = {
+        let mut child = child
+            .lock()
+            .map_err(|poison| Error::Execute(std::io::Error::other(poison.to_string())))?;
+        child.wait().map_err(Error::Execute)?
+    };
+    // The guard is joined, never dropped mid-stream: the remaining
+    // stderr lines are delivered before the run is reported finished.
+    let joined = stderr_reader.join();
+    drop(sender);
+    while let Ok(err_line) = receiver.try_recv() {
+        on_line(err_line);
+    }
+    if joined.is_err() {
+        on_line(Line::Err(String::from(
+            "console: the stderr reader thread panicked; its tail was lost",
+        )));
+    }
+    Ok(status)
+}
 
-        let results_path = self.out_dir.join("results.json");
-        let exceptions_path = self.out_dir.join("run-exceptions.json");
-        let body = std::fs::read_to_string(&results_path).map_err(|source| Error::NoResults {
+/// Reads the results record the finished run left in `out_dir`, parsed
+/// through the published lib.
+///
+/// # Errors
+/// [`Error::NoResults`] when the run leaves no results document (a cancelled
+/// run's ordinary shape), and [`Error::Malformed`] when that document does
+/// not parse as the published record.
+fn read_finished(out_dir: &Path, clean_exit: bool) -> Result<Finished, Error> {
+    let results_path = out_dir.join("results.json");
+    let exceptions_path = out_dir.join("run-exceptions.json");
+    let body = std::fs::read_to_string(&results_path).map_err(|source| Error::NoResults {
+        path: results_path.clone(),
+        source,
+    })?;
+    let results: veredictum::party::Results =
+        serde_json::from_str(&body).map_err(|source| Error::Malformed {
             path: results_path.clone(),
             source,
         })?;
-        let results: veredictum::party::Results =
-            serde_json::from_str(&body).map_err(|source| Error::Malformed {
-                path: results_path.clone(),
-                source,
-            })?;
-        Ok(Finished {
-            clean_exit: status.success(),
-            results,
-            results_path,
-            exceptions_path,
-        })
-    }
+    Ok(Finished {
+        clean_exit,
+        results,
+        results_path,
+        exceptions_path,
+    })
 }
 
 /// Locates the engine: the [`ENGINE_ENV`] override when set, otherwise

@@ -239,6 +239,44 @@ fn read_statements(db_container: &str) -> Result<Vec<StatementCost>, String> {
         .collect())
 }
 
+/// Arms statement attribution through the DB container, returning the
+/// container the probe reads `pg_stat_statements` from.
+///
+/// `track_planning` separates planner time from executor time per statement
+/// (PostgreSQL docs §`pg_stat_statements`) — the planning-share attribution the
+/// optimization ladder decides rung admissions on. The GUC is settable at
+/// runtime (`ALTER SYSTEM` plus a reload), and an unavailable extension or
+/// knob degrades to an honest report field rather than an error.
+fn arm_attribution(
+    containers: Option<&Containers>,
+    progress: &(dyn Fn(String) + Sync),
+) -> Option<String> {
+    containers.and_then(|c| {
+        match db_sql(&c.db, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;") {
+            Ok(_) => {
+                // Two separate calls: `ALTER SYSTEM` refuses to run inside a
+                // transaction block, and a multi-statement simple query is one
+                // implicit transaction (PostgreSQL docs §ALTER SYSTEM).
+                let armed = db_sql(
+                    &c.db,
+                    "ALTER SYSTEM SET pg_stat_statements.track_planning = on;",
+                )
+                .and_then(|_| db_sql(&c.db, "SELECT pg_reload_conf();"));
+                if let Err(e) = armed {
+                    progress(format!(
+                        "track_planning unavailable (plan share reads 0): {e}"
+                    ));
+                }
+                Some(c.db.clone())
+            }
+            Err(e) => {
+                progress(format!("statement attribution unavailable: {e}"));
+                None
+            }
+        }
+    })
+}
+
 /// Execute the probe set against a live, seeded SUT.
 ///
 /// # Errors
@@ -279,36 +317,7 @@ pub fn run_probe(
         false
     };
 
-    // Attribution capability: pg_stat_statements through the DB container.
-    // `track_planning` separates planner time from executor time per
-    // statement (PostgreSQL docs §pg_stat_statements) — the planning-share
-    // attribution the optimization ladder decides rung admissions on. The GUC
-    // is settable at runtime (ALTER SYSTEM + reload; no restart needed for a
-    // pg_stat_statements tracking knob).
-    let attribution_db = containers.and_then(|c| {
-        match db_sql(&c.db, "CREATE EXTENSION IF NOT EXISTS pg_stat_statements;") {
-            Ok(_) => {
-                // Two separate calls: `ALTER SYSTEM` refuses to run inside a
-                // transaction block, and a multi-statement simple query is one
-                // implicit transaction (PostgreSQL docs §ALTER SYSTEM).
-                let armed = db_sql(
-                    &c.db,
-                    "ALTER SYSTEM SET pg_stat_statements.track_planning = on;",
-                )
-                .and_then(|_| db_sql(&c.db, "SELECT pg_reload_conf();"));
-                if let Err(e) = armed {
-                    progress(format!(
-                        "track_planning unavailable (plan share reads 0): {e}"
-                    ));
-                }
-                Some(c.db.clone())
-            }
-            Err(e) => {
-                progress(format!("statement attribution unavailable: {e}"));
-                None
-            }
-        }
-    });
+    let attribution_db = arm_attribution(containers, progress);
     let attribution = attribution_db.as_ref().map_or_else(
         || "unavailable (no containers block or pg_stat_statements not loadable)".to_owned(),
         |_| "pg_stat_statements".to_owned(),

@@ -279,57 +279,37 @@ fn journey_instants(curve: ArrivalCurve, rate_peak: f64, span_s: f64) -> Vec<f64
     }
 }
 
-/// Build the planned arrival schedule for one measured window.
-///
-/// `ward_len` is the standing ward size (stage targets stripe across it —
-/// each journey kind gets a disjoint patient stripe so mutating journeys
-/// never interleave on one patient).
+/// One journey stage with its pack index resolved.
+struct ResolvedStage {
+    op: PerfOp,
+    template: Option<usize>,
+    at: StageOffset,
+}
+
+/// One named journey resolved against the loaded pack: its stages, the
+/// ward-doc hint, the fresh-EHR flag, and its span.
+struct ResolvedJourney {
+    stages: Vec<ResolvedStage>,
+    fresh_ehr: bool,
+    /// The instance must start in-window: it creates its own EHR or
+    /// carries a dependent stage with no seeded-ward fallback (a
+    /// delete of the instance's own commit).
+    needs_full_window: bool,
+    doc: WardDoc,
+    max_offset_s: u64,
+}
+
+/// Resolves every journey the workload's schedulable `shares` name, once.
 ///
 /// # Errors
-/// A message on an unknown journey/operation/template or an empty
-/// expansion.
-#[expect(
-    clippy::too_many_lines,
-    reason = "one linear construction: expand → clip → extend → sort"
-)]
-pub(crate) fn build_schedule(
+/// A message naming the unknown journey, the unknown operation, or the
+/// template the loaded pack does not carry.
+fn resolve_journeys(
     workload: &JourneyWorkload<'_>,
-    rate: f64,
-    warmup_s: u64,
-    duration_s: u64,
-    ward_len: usize,
-) -> Result<BuiltSchedule, String> {
-    // Resolve every named journey once: stages with pack indices, the
-    // ward-doc hint, the fresh-EHR flag, and the journey span.
-    struct ResolvedStage {
-        op: PerfOp,
-        template: Option<usize>,
-        at: StageOffset,
-    }
-    struct ResolvedJourney {
-        stages: Vec<ResolvedStage>,
-        fresh_ehr: bool,
-        /// The instance must start in-window: it creates its own EHR or
-        /// carries a dependent stage with no seeded-ward fallback (a
-        /// delete of the instance's own commit).
-        needs_full_window: bool,
-        doc: WardDoc,
-        max_offset_s: u64,
-    }
-
-    if !(rate.is_finite() && rate > 0.0) {
-        return Err("arrival rate must be positive".to_owned());
-    }
-    let (shares, dropped_journeys) = workload.schedulable();
-    if shares.is_empty() {
-        return Err(
-            "no journey of this workload is runnable against the principals the ixit declares"
-                .to_owned(),
-        );
-    }
-    let expansion = workload.catalogue.expansion(&shares)?;
+    shares: &[(String, Percent)],
+) -> Result<Vec<ResolvedJourney>, String> {
     let mut resolved: Vec<ResolvedJourney> = Vec::with_capacity(shares.len());
-    for (name, _) in &shares {
+    for (name, _) in shares {
         let journey = workload
             .catalogue
             .get(name)
@@ -372,6 +352,41 @@ pub(crate) fn build_schedule(
             max_offset_s: journey.max_offset_s(),
         });
     }
+    Ok(resolved)
+}
+
+/// Build the planned arrival schedule for one measured window.
+///
+/// `ward_len` is the standing ward size (stage targets stripe across it —
+/// each journey kind gets a disjoint patient stripe so mutating journeys
+/// never interleave on one patient).
+///
+/// # Errors
+/// A message on an unknown journey/operation/template or an empty
+/// expansion.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one linear construction: expand → clip → extend → sort"
+)]
+pub(crate) fn build_schedule(
+    workload: &JourneyWorkload<'_>,
+    rate: f64,
+    warmup_s: u64,
+    duration_s: u64,
+    ward_len: usize,
+) -> Result<BuiltSchedule, String> {
+    if !(rate.is_finite() && rate > 0.0) {
+        return Err("arrival rate must be positive".to_owned());
+    }
+    let (shares, dropped_journeys) = workload.schedulable();
+    if shares.is_empty() {
+        return Err(
+            "no journey of this workload is runnable against the principals the ixit declares"
+                .to_owned(),
+        );
+    }
+    let expansion = workload.catalogue.expansion(&shares)?;
+    let resolved = resolve_journeys(workload, &shares)?;
     let needs_ward = resolved.iter().any(|j| !j.fresh_ehr);
     if needs_ward && ward_len == 0 {
         return Err(
