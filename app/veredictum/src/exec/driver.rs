@@ -30,7 +30,9 @@ use crate::exec::state::{Captured, VarStore};
 use crate::exec::{Provisioned, StepDriver, StepObservation};
 use crate::ids::{CaptureName, SmOperationRef};
 use crate::ixit::{AuthMode, Instance, Ixit};
-use crate::model::assertion::{Assertion, EquivalentTarget, RowsSpec, SingleRef};
+use crate::model::assertion::{
+    Assertion, EquivalentTarget, PostconditionRole, RowsSpec, SingleRef,
+};
 use crate::model::binding::{
     OperationBinding, RequestBody, RequestSpec, StripRule, WireCapture, WireFrom,
 };
@@ -57,6 +59,20 @@ pub struct Exchange {
     pub body: Option<Value>,
 }
 
+/// The row's last completed flow step: the ground the postcondition seam
+/// judges against.
+///
+/// A postcondition is the step-assertion dispatch applied to this exchange,
+/// so it carries everything that dispatch reads — the binding whose
+/// `server_assigned` set the `equivalent` comparison excludes, and the
+/// signing posture of the instance the step ran on.
+#[derive(Debug, Clone)]
+struct LastStep<'a> {
+    binding: &'a OperationBinding,
+    exchange: Exchange,
+    signing: Option<&'a crate::exec::signature::SigningMode>,
+}
+
 /// The live driver.
 pub struct HttpDriver<'a> {
     set: &'a ArtifactSet,
@@ -70,8 +86,8 @@ pub struct HttpDriver<'a> {
     /// The payloads committed this row (the `equivalent to: committed`
     /// comparison source), newest last.
     committed: Vec<Value>,
-    /// The last response body per row (postcondition target).
-    last_body: Option<Value>,
+    /// The last flow step completed this row (the postcondition target).
+    last_step: Option<LastStep<'a>>,
     /// The latest `version_uid` a SUCCESS outcome's binding capture yielded
     /// this row — the comparison source of the `latest-version-uid` header
     /// matcher (overview §"If-Match and accidental overwrites": the 412
@@ -135,7 +151,7 @@ impl<'a> HttpDriver<'a> {
             client,
             resolver: Resolver::new(manifest, corpus_dir, Some(ixit)),
             committed: Vec::new(),
-            last_body: None,
+            last_step: None,
             last_version_uid: None,
             observed_restapi_specs_version: None,
             wire_reads: BTreeMap::new(),
@@ -689,16 +705,20 @@ impl<'a> HttpDriver<'a> {
         }
     }
 
-    /// Evaluate the pure-side assertions for a step against the exchange.
+    /// Evaluate the pure-side assertions against one exchange.
+    ///
+    /// The single dispatch both assertion seams run: a step's own `assert:`
+    /// block against that step's exchange, and the row's `postconditions:`
+    /// against the row's last completed step.
     #[expect(
         clippy::too_many_lines,
         reason = "one match arm per Assertion variant — a dispatch, each arm delegates"
     )]
-    fn eval_assertions(
+    fn eval_assertions<'i>(
         &mut self,
         case: &CaseCore,
         binding: &OperationBinding,
-        assertions_list: &[Assertion],
+        assertions_list: impl IntoIterator<Item = &'i Assertion>,
         exchange: &Exchange,
         signing: Option<&crate::exec::signature::SigningMode>,
         vars: &VarStore,
@@ -3073,7 +3093,7 @@ fn pace_commit_capture(step: &FlowStep, vars: &VarStore) {
     }
 }
 
-impl HttpDriver<'_> {
+impl<'a> HttpDriver<'a> {
     /// Per-row synthesized OPT (issue FerroEHR#228): a content case whose
     /// `constraint_context` declares constraint-axis columns commits each row
     /// against a freshly synthesized OPT baking THAT row's constraint. Build it
@@ -3188,24 +3208,29 @@ impl HttpDriver<'_> {
     }
 
     /// Post-send bookkeeping shared state: the committed-payload trail for
-    /// the equivalent comparison, the last response body, and the System
+    /// the equivalent comparison, the last completed step, and the System
     /// OPTIONS manifest's `restapi_specs_version`, when served (released OAS
     /// `system.openapi.yaml` `Options` — every member optional): observed as
     /// an independent confirmation of the party's declared `its_rest`
     /// version, never as the truth (see the field NOTE).
     fn record_exchange_bookkeeping(
         &mut self,
-        binding: &OperationBinding,
+        binding: &'a OperationBinding,
         request_spec: &RequestSpec,
         body: Option<&Value>,
         exchange: &Exchange,
+        signing: Option<&'a crate::exec::signature::SigningMode>,
     ) {
         if matches!(request_spec.method, HttpMethod::Post | HttpMethod::Put)
             && let Some(b) = body
         {
             self.committed.push(b.clone());
         }
-        self.last_body.clone_from(&exchange.body);
+        self.last_step = Some(LastStep {
+            binding,
+            exchange: exchange.clone(),
+            signing,
+        });
         if binding.sm_operation.interface() == "I_ITS_REST_SYSTEM"
             && binding.sm_operation.operation() == "options"
             && let Some(version) = exchange
@@ -3327,7 +3352,12 @@ impl StepDriver for HttpDriver<'_> {
             Err(fault) => return Ok(StepObservation::transport(fault)),
         };
 
-        self.record_exchange_bookkeeping(binding, request_spec, body.as_ref(), &exchange);
+        // The signature assertions verify against the posture of the instance
+        // THIS step ran on (RM common master06 §Digital Signature: the mode is
+        // a deployment fact), so a party running two postures as two instances
+        // is judged per instance, never against one party-wide default.
+        let signing = self.ixit.signing_of(instance);
+        self.record_exchange_bookkeeping(binding, request_spec, body.as_ref(), &exchange, signing);
 
         // Classify (law c) and bind captures.
         let selectors = self.set.selectors.as_ref().map(|(_, s)| s);
@@ -3338,11 +3368,6 @@ impl StepDriver for HttpDriver<'_> {
 
         // Post-step assertions only when the expectation held (the caller
         // aborts otherwise, law b) — evaluate optimistically here.
-        // The signature assertions verify against the posture of the instance
-        // THIS step ran on (RM common master06 §Digital Signature: the mode is
-        // a deployment fact), so a party running two postures as two instances
-        // is judged per instance, never against one party-wide default.
-        let signing = self.ixit.signing_of(instance);
         let mut assertion_failures =
             self.eval_assertions(case, binding, &step.assertions, &exchange, signing, vars);
         // The expected outcome's declared header matchers and body selector
@@ -3381,7 +3406,7 @@ impl StepDriver for HttpDriver<'_> {
         self.resolver.bind_row(case, row);
         self.row = u32::try_from(row).unwrap_or(u32::MAX);
         self.committed.clear();
-        self.last_body = None;
+        self.last_step = None;
         self.last_version_uid = None;
         // server: empty — isolation is the runner's tenancy concern; against
         // a shared SUT the run is recorded as scoped (never destructive).
@@ -3501,79 +3526,40 @@ impl StepDriver for HttpDriver<'_> {
         row: usize,
         vars: &mut VarStore,
     ) -> Result<Vec<AssertionOutcome>, String> {
+        let judged: Vec<&Assertion> = case
+            .postconditions
+            .iter()
+            .filter(|a| matches!(a.postcondition_role(), PostconditionRole::Judged))
+            .collect();
+        if judged.is_empty() {
+            return Ok(Vec::new());
+        }
         self.resolver.bind_row(case, row);
         self.row = u32::try_from(row).unwrap_or(u32::MAX);
-        let body = self.last_body.clone().unwrap_or(Value::Null);
-        let mut failures = Vec::new();
-        for assertion in &case.postconditions {
-            if assertion.is_aggregate() {
-                continue; // law e
-            }
-            match assertion {
-                Assertion::Field {
-                    path,
-                    equals,
-                    not_equals,
-                    exists,
-                    absent,
-                    matches,
-                } => {
-                    if let Err(failure) = self.eval_field_assertion(
-                        &body,
-                        path,
-                        equals.as_ref(),
-                        not_equals.as_ref(),
-                        *exists,
-                        *absent,
-                        matches.as_deref(),
-                        vars,
-                    ) {
-                        failures.push(AssertionOutcome::from(failure));
-                    }
-                }
-                // A version postcondition reads the versioned object back:
-                // the flow's last body is only its envelope when the flow
-                // ended on a version read.
-                Assertion::Version {
-                    of,
-                    for_each,
-                    change_type,
-                    lifecycle_state,
-                    count,
-                    uid_pattern,
-                } => {
-                    if let Err(outcome) = self.eval_version_assertion(
-                        case,
-                        Some(&body),
-                        VersionFacts {
-                            of: of.as_ref(),
-                            for_each: for_each.as_ref(),
-                            change_type: *change_type,
-                            lifecycle_state: lifecycle_state.as_deref(),
-                            count: *count,
-                            uid_pattern: uid_pattern.as_ref(),
-                        },
-                        vars,
-                    ) {
-                        failures.push(outcome);
-                    }
-                }
-                // Equivalent/returns/result_set/instance_of postconditions
-                // ride the flow's read step (the verification carrier);
-                // signature needs the version-envelope read step; unique is
-                // aggregate (law e); message_exemplar/state are informative.
-                Assertion::Equivalent { .. }
-                | Assertion::Returns { .. }
-                | Assertion::ResultSet { .. }
-                | Assertion::InstanceOf { .. }
-                | Assertion::XmlRoot { .. }
-                | Assertion::Signature { .. }
-                | Assertion::Unique { .. }
-                | Assertion::MessageExemplar { .. }
-                | Assertion::State { .. } => {}
-            }
-        }
-        Ok(failures)
+        // The row's postconditions are the step-assertion dispatch applied to
+        // the last completed step, so no family is judged one way inside the
+        // flow and another way after it. A row that completed no step served
+        // nothing to judge against, which is inconclusive, never a pass.
+        let Some(last) = self.last_step.clone() else {
+            return Ok(judged
+                .iter()
+                .map(|_| {
+                    AssertionOutcome::Unjudgeable(
+                        "postcondition: the row completed no flow step, so nothing was served to \
+                         judge it against"
+                            .to_owned(),
+                    )
+                })
+                .collect());
+        };
+        Ok(self.eval_assertions(
+            case,
+            last.binding,
+            judged,
+            &last.exchange,
+            last.signing,
+            vars,
+        ))
     }
 
     fn aggregates(

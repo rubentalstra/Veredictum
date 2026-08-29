@@ -24,6 +24,7 @@ use serde_json::Value;
 use crate::exec::state::{Captured, VarStore};
 use crate::exec::{StepDriver, StepObservation, outcome};
 use crate::ids::{CaptureName, CaseId, SmOperationRef};
+use crate::model::assertion::PostconditionRole;
 use crate::model::binding::WireFrom;
 use crate::model::case::{CaseCore, FlowStep};
 use crate::vocab::{FormatName, OutcomeKind};
@@ -264,13 +265,38 @@ impl StepDriver for TranscriptPlayer<'_> {
         Ok(crate::exec::Provisioned::Ready)
     }
 
+    /// Refuses any judged postcondition instead of reproducing a verdict it
+    /// never checked.
+    ///
+    /// A transcript records the flow's own exchanges and nothing else: the
+    /// player issues no versioned read, resolves no corpus reference and
+    /// knows no instance posture, so every [`PostconditionRole::Judged`]
+    /// family is unevaluable here. Answering an empty list would let a pack
+    /// entry claim a reproduced verdict over assertions no one ran, so the
+    /// entry is refused by name. The aggregate family is law e (see
+    /// [`TranscriptPlayer::aggregates`]) and the informative families are
+    /// never pass/fail, so neither blocks a replay.
     fn postconditions(
         &mut self,
-        _case: &CaseCore,
+        case: &CaseCore,
         _row: usize,
         _vars: &mut VarStore,
     ) -> Result<Vec<crate::exec::assertions::AssertionOutcome>, String> {
-        Ok(Vec::new())
+        let unjudgeable: Vec<&str> = case
+            .postconditions
+            .iter()
+            .filter(|a| matches!(a.postcondition_role(), PostconditionRole::Judged))
+            .map(crate::model::assertion::Assertion::family)
+            .collect();
+        if unjudgeable.is_empty() {
+            return Ok(Vec::new());
+        }
+        Err(format!(
+            "case {} carries postconditions the transcript replay cannot judge ({}); a pack entry \
+             may not claim a verdict over assertions the replay never evaluated",
+            case.id,
+            unjudgeable.join(", ")
+        ))
     }
 
     fn aggregates(

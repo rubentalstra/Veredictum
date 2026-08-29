@@ -62,6 +62,65 @@ fn the_pack_rejects_a_broken_runner() {
     );
 }
 
+/// A replay never claims a verdict over an assertion it did not evaluate
+/// (#239). The player answers from recorded exchanges alone: it issues no
+/// versioned read, resolves no corpus reference and knows no instance
+/// posture, so a judged postcondition is unevaluable there and the entry is
+/// REFUSED by name. An empty answer would have reproduced the adjudicated
+/// verdict while silently skipping the assertion.
+#[test]
+fn a_pack_entry_carrying_a_judged_postcondition_is_refused() {
+    let (mut set, transcript) = load();
+    let entry = transcript
+        .entries
+        .first()
+        .expect("the pack carries entries");
+    let case = set
+        .cases
+        .iter_mut()
+        .map(|(_, c)| c)
+        .find(|c| c.id == entry.case)
+        .expect("the entry's case is in the catalogue");
+    let judged: veredictum::model::assertion::Assertion = serde_json::from_value(
+        serde_json::json!({ "assert": "field", "path": "is_queryable", "exists": true }),
+    )
+    .expect("a field assertion parses");
+    case.postconditions.push(judged);
+
+    let refusal = replay_entry(&set, entry).expect_err("the replay must refuse, never answer");
+    assert!(
+        refusal.contains("field") && refusal.contains(entry.case.as_str()),
+        "the refusal names neither the family nor the case: {refusal}"
+    );
+}
+
+/// The families a replay does not have to judge leave it running: `unique`
+/// is aggregate (law e, evaluated over the collected rows) and `state` is
+/// informative, so the committed pack — whose passing case carries a `state`
+/// postcondition — still reproduces its verdicts above.
+#[test]
+fn the_aggregate_and_informative_families_do_not_block_a_replay() {
+    let (mut set, transcript) = load();
+    let entry = transcript
+        .entries
+        .first()
+        .expect("the pack carries entries");
+    let case = set
+        .cases
+        .iter_mut()
+        .map(|(_, c)| c)
+        .find(|c| c.id == entry.case)
+        .expect("the entry's case is in the catalogue");
+    let informative: veredictum::model::assertion::Assertion = serde_json::from_value(
+        serde_json::json!({ "assert": "message_exemplar", "text": "recorded for readers" }),
+    )
+    .expect("a message_exemplar assertion parses");
+    case.postconditions.push(informative);
+
+    let (expected, produced) = replay_entry(&set, entry).expect("replay");
+    assert!(verdict_matches(expected, &produced));
+}
+
 #[test]
 fn transcript_verdict_vocabulary_is_exercised() {
     let (_, transcript) = load();

@@ -334,6 +334,25 @@ version on.
   against the server. `perf` and `stress` runs are unaffected while every
   arrival fires; a run that loses arrivals to the instrument now says so
   instead of publishing a measurement over the arrivals that survived.
+- **Row postconditions run the same dispatch a step's assertions do, and the
+  transcript replay refuses what it cannot judge (#239).** The live driver's
+  postcondition arm judged `field` and `version` and silently dropped
+  `equivalent`, `returns`, `result_set`, `instance_of`, `xml_root` and
+  `signature`, on the claim that those ride a flow read step; one catalogue
+  case asserts `equivalent` as a postcondition over a flow with no read step,
+  so that assertion passed without being evaluated. The seam now judges the
+  row's postconditions through the one assertion dispatch the flow steps use,
+  against the row's last completed step — its exchange, the binding whose
+  `server_assigned` set an `equivalent` comparison excludes, and the signing
+  posture of the instance that step ran on — so a family cannot be judged
+  inside the flow and skipped after it. A row that completed no step records
+  its postconditions inconclusive instead of passing them. The transcript
+  player answered every postcondition with an empty list, which would have let
+  a verification-pack entry claim a reproduced verdict over assertions nobody
+  ran; it now refuses such an entry by name, since a transcript carries the
+  flow's own exchanges and no versioned read, corpus reference or instance
+  posture. Aggregate `unique` (law e) and the informative `message_exemplar`
+  and `state` families are unaffected in both drivers.
 - **`assert: version` judges the envelope it names (#225).** The driver's
   version arm evaluated to `Ok(())` unconditionally, so every one of the
   catalogue's authored version assertions reported a pass it never earned. The

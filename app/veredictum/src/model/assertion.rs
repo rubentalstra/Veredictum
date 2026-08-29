@@ -551,8 +551,64 @@ impl Assertion {
     /// Whether this assertion is evaluated once after all rows.
     #[must_use]
     pub fn is_aggregate(&self) -> bool {
-        matches!(self, Self::Unique { .. })
+        matches!(self.postcondition_role(), PostconditionRole::Aggregate)
     }
+
+    /// The authored `assert:` token naming this assertion's family.
+    #[must_use]
+    pub fn family(&self) -> &'static str {
+        match self {
+            Self::InstanceOf { .. } => "instance_of",
+            Self::Field { .. } => "field",
+            Self::Equivalent { .. } => "equivalent",
+            Self::Signature { .. } => "signature",
+            Self::Version { .. } => "version",
+            Self::ResultSet { .. } => "result_set",
+            Self::Unique { .. } => "unique",
+            Self::Returns { .. } => "returns",
+            Self::XmlRoot { .. } => "xml_root",
+            Self::MessageExemplar { .. } => "message_exemplar",
+            Self::State { .. } => "state",
+        }
+    }
+
+    /// The part this assertion plays as a `postconditions:` entry.
+    ///
+    /// The live driver and the transcript player both dispatch on this, so
+    /// neither can skip a verdict-bearing family the other judges.
+    #[must_use]
+    pub fn postcondition_role(&self) -> PostconditionRole {
+        match self {
+            Self::Unique { .. } => PostconditionRole::Aggregate,
+            // `message_exemplar` is the schedule's prose (AMB-1) and `state`
+            // carries its own `verified_by` case, so neither is pass/fail.
+            Self::MessageExemplar { .. } | Self::State { .. } => PostconditionRole::Informative,
+            Self::InstanceOf { .. }
+            | Self::Field { .. }
+            | Self::Equivalent { .. }
+            | Self::Signature { .. }
+            | Self::Version { .. }
+            | Self::ResultSet { .. }
+            | Self::Returns { .. }
+            | Self::XmlRoot { .. } => PostconditionRole::Judged,
+        }
+    }
+}
+
+/// How a `postconditions:` entry participates in the row verdict.
+///
+/// Closed by construction: a family is judged, aggregated, or informative,
+/// and a runner that can judge none of them refuses the case instead of
+/// producing a verdict over assertions it never evaluated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PostconditionRole {
+    /// Judged per row against the row's last completed exchange; the row
+    /// verdict depends on the result.
+    Judged,
+    /// Evaluated once after the last row (law e).
+    Aggregate,
+    /// Recorded for readers of the schedule; never a pass/fail criterion.
+    Informative,
 }
 
 /// The structural invariants of an `xml_root` assertion: both names it carries
