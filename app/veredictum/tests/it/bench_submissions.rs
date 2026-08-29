@@ -586,8 +586,12 @@ fn assert_every_arrival_had_a_chance(
 /// `benchmarks/submissions` under it, so a copy in a temporary tree renders a
 /// temporary board: the committed page and the committed records are never
 /// touched.
+///
+/// Each record is written with the registry entry that publishes it, because
+/// the board takes its numbers from the record and its tier from the entry. A
+/// record with no entry stops the render, which is its own test below.
 fn board_workspace(
-    records: &[(&str, serde_json::Value)],
+    records: &[(&str, &str, serde_json::Value)],
 ) -> Result<assert_fs::TempDir, Box<dyn std::error::Error>> {
     let root = assert_fs::TempDir::new()?;
     let script_dir = root.path().join("scripts").join("render");
@@ -597,14 +601,64 @@ fn board_workspace(
         repo_root().join("scripts/render/bench-board.sh"),
         script_dir.join("bench-board.sh"),
     )?;
-    for (name, document) in records {
+    for (name, tier, document) in records {
         let path = root.path().join(SUBMISSIONS).join(name);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(&path, serde_json::to_string_pretty(document)?)?;
+        write_registry_entry(root.path(), name, tier)?;
     }
     Ok(root)
+}
+
+/// The registry entry that publishes one record, as the renderer reads it:
+/// the record it points at, and the tier its provenance establishes.
+fn write_registry_entry(
+    root: &Path,
+    record: &str,
+    tier: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let (system, file) = record.split_once('/').ok_or("a record names its system")?;
+    let id = file
+        .strip_suffix(".json")
+        .ok_or("a record is a .json file")?;
+    let path = root
+        .join("registry/entries/bench")
+        .join(system)
+        .join(format!("{id}.json"));
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let provenance = if tier == "reproduced" {
+        json!({
+            "tier": "reproduced",
+            "workflow_ref": "rubentalstra/Veredictum/.github/workflows/registry-reproduce.yml@refs/heads/main",
+            "run_id": "7",
+            "run_attempt": 1,
+            "predicate_type": "https://slsa.dev/provenance/v1",
+            "verify_command": "gh attestation verify"
+        })
+    } else {
+        json!({
+            "tier": "self-reported",
+            "scheme": "openpgp-detached",
+            "signature": format!("registry/records/{system}/{id}/bench-result.json.asc"),
+            "signs": format!("{SUBMISSIONS}/{record}"),
+            "identity": "0123456789ABCDEF",
+            "verify_command": "gpg --verify bench-result.json.asc"
+        })
+    };
+    let entry = json!({
+        "entry_id": id,
+        "artifacts": [
+            {"role": "bench-result", "path": format!("{SUBMISSIONS}/{record}"),
+             "sha256": "0".repeat(64)}
+        ],
+        "provenance": provenance
+    });
+    std::fs::write(&path, serde_json::to_string_pretty(&entry)?)?;
+    Ok(())
 }
 
 /// One posture block as a record carries it: every observable item verified,
@@ -731,14 +785,17 @@ fn the_board_groups_its_rows_by_declared_posture() -> Result<(), Box<dyn std::er
     let root = board_workspace(&[
         (
             "alpha/2026-01-02-aaaaaaaa.json",
+            "reproduced",
             board_record("Alpha CDR", "minimal", "off", 0.5),
         ),
         (
             "beta/2026-01-02-bbbbbbbb.json",
+            "self-reported",
             board_record("Beta CDR", "clinical-default", "internal", 2.0),
         ),
         (
             "gamma/2026-01-02-cccccccc.json",
+            "self-reported",
             board_record("Gamma CDR", "minimal", "off", 1.5),
         ),
     ])?;
@@ -787,12 +844,61 @@ fn the_board_groups_its_rows_by_declared_posture() -> Result<(), Box<dyn std::er
         "{page}"
     );
     assert!(page.contains("declared-only audit, tenancy"), "{page}");
+    assert_eq!(
+        occurrences(
+            &page,
+            "class=\"board-meta\"><span class=\"tier tier-reproduced\">reproduced</span>"
+        ),
+        1,
+        "the tier badge comes from the registry entry, never from a default: {page}"
+    );
+    assert_eq!(
+        occurrences(
+            &page,
+            "class=\"board-meta\"><span class=\"tier tier-self-reported\">self-reported</span>"
+        ),
+        2,
+        "the tier badge comes from the registry entry, never from a default: {page}"
+    );
     assert!(
         page.contains(
             "Reference deployments that ran a different posture: FerroEHR: version_signing \
              declared digest"
         ),
         "{page}"
+    );
+    Ok(())
+}
+
+/// A record the registry does not carry has nobody standing behind it, so the
+/// board stops rather than printing a tier badge it invented.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_record_without_a_registry_entry_stops_the_render() -> Result<(), Box<dyn std::error::Error>> {
+    if Command::new("jq").arg("--version").output().is_err() {
+        eprintln!("SKIP a_record_without_a_registry_entry_stops_the_render: no `jq` on PATH");
+        return Ok(());
+    }
+    let root = board_workspace(&[(
+        "alpha/2026-01-02-aaaaaaaa.json",
+        "self-reported",
+        board_record("Alpha CDR", "minimal", "off", 0.5),
+    )])?;
+    std::fs::remove_dir_all(root.path().join("registry"))?;
+    let rendered = Command::new("bash")
+        .arg(root.path().join("scripts/render/bench-board.sh"))
+        .output()?;
+    assert!(
+        !rendered.status.success(),
+        "a board row with no registry entry must stop the render"
+    );
+    assert!(
+        String::from_utf8_lossy(&rendered.stderr).contains("has no registry entry"),
+        "{}",
+        String::from_utf8_lossy(&rendered.stderr)
     );
     Ok(())
 }

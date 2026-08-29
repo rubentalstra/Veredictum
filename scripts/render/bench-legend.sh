@@ -458,6 +458,7 @@ render_page() {
     </a>
     <nav aria-label="Primary">
       <a href="./docs/">Docs</a>
+      <a href="./conformance-board.html">Conformance</a>
       <a href="./benchmarks.html">Benchmarks</a>
       <a href="./benchmark-methodology.html" aria-current="page">Methodology</a>
       <a href="https://github.com/rubentalstra/Veredictum" rel="noopener">GitHub</a>

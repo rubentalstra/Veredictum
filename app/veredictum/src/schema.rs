@@ -25,6 +25,10 @@ use crate::model::capability::Realization;
 use crate::model::vocab_files::{BODY_SELECTOR_TOKENS, HEADER_MATCHER_FORMS};
 use crate::model::wire_surface::SurfaceReason;
 use crate::party::{OutcomeStatus, VerificationPackStatus};
+use crate::registry::{
+    ArtifactRole, DeploymentKind, EntryKind, REGISTRY_SCHEMA_VERSION, Relationship,
+    SignatureScheme, Tier as RegistryTier,
+};
 use crate::vocab::{
     CaseKind, CaseStatus, Component, CorpusFormat, Disposition, FormatName, HttpMethod, Iteration,
     ItsName, OutcomeKind, PlaceholderPolicy, ServerState, SpecComponent, Tier,
@@ -72,6 +76,12 @@ const IDENT_PATTERN: &str = "^[A-Za-z_][A-Za-z0-9_]*$";
 const CORPUS_KEY_PATTERN: &str = "^[a-z0-9_-]+(\\.[a-z0-9_-]+)*$";
 const AMBIGUITY_ID_PATTERN: &str = "^AMB-[0-9]+$";
 const OPTION_TAG_PATTERN: &str = "^[a-z0-9_-]+$";
+const REGISTRY_ENTRY_ID_PATTERN: &str =
+    "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9]([a-z0-9-]*[a-z0-9])?$";
+const REGISTRY_SYSTEM_PATTERN: &str = "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$";
+const REGISTRY_DIGEST_PATTERN: &str = "^[0-9a-f]{64}$";
+const REGISTRY_UTC_TIMESTAMP_PATTERN: &str =
+    "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$";
 
 fn string_array(item_pattern: Option<&str>) -> Value {
     match item_pattern {
@@ -2488,6 +2498,234 @@ pub fn bench_packs_schema() -> Value {
     })
 }
 
+/// Every token of one registry vocabulary, in its declared order.
+fn registry_tokens<T: Copy>(all: &'static [T], render: fn(T) -> &'static str) -> Value {
+    Value::Array(
+        all.iter()
+            .copied()
+            .map(|item| Value::String(render(item).to_owned()))
+            .collect(),
+    )
+}
+
+/// The disclosure block every registry entry carries, whatever it measured.
+fn registry_disclosure_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["instrument_version", "run_started_at", "environment", "sut_configuration", "conflict_of_interest"],
+        "properties": {
+            "instrument_version": { "type": "string", "minLength": 1 },
+            "run_started_at": { "type": "string", "pattern": REGISTRY_UTC_TIMESTAMP_PATTERN },
+            "environment": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["os", "arch", "host_class"],
+                "properties": {
+                    "os": { "type": "string", "minLength": 1 },
+                    "arch": { "type": "string", "minLength": 1 },
+                    "host_class": { "type": "string", "minLength": 1 },
+                    "cpu_model": { "type": "string", "minLength": 1 },
+                    "cores": { "type": "integer", "minimum": 1 },
+                    "memory_bytes": { "type": "integer", "minimum": 1 }
+                }
+            },
+            "sut_configuration": { "type": "string", "minLength": 1 },
+            "conflict_of_interest": { "type": "string", "minLength": 1 }
+        }
+    })
+}
+
+/// The two result blocks, each internally tagged by the board it belongs on.
+fn registry_result_schema() -> Value {
+    json!({
+        "oneOf": [
+            {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "catalogue_revision", "statement"],
+                "properties": {
+                    "kind": { "const": EntryKind::Conformance.as_str() },
+                    "catalogue_revision": { "type": "string", "minLength": 1 },
+                    "statement": { "type": "string", "minLength": 1 }
+                }
+            },
+            {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "pack_id", "pack_version", "repetitions", "posture_profile"],
+                "properties": {
+                    "kind": { "const": EntryKind::Bench.as_str() },
+                    "pack_id": { "type": "string", "minLength": 1 },
+                    "pack_version": { "type": "string", "minLength": 1 },
+                    "repetitions": { "type": "integer", "minimum": 1 },
+                    "posture_profile": { "type": "string", "minLength": 1 }
+                }
+            }
+        ]
+    })
+}
+
+/// The two provenance blocks, each internally tagged by the tier it
+/// establishes.
+fn registry_provenance_schema() -> Value {
+    json!({
+        "oneOf": [
+            {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["tier", "workflow_ref", "run_id", "run_attempt", "predicate_type", "verify_command"],
+                "properties": {
+                    "tier": { "const": RegistryTier::Reproduced.as_str() },
+                    "workflow_ref": { "type": "string", "minLength": 1 },
+                    "run_id": { "type": "string", "pattern": "^[0-9]+$" },
+                    "run_attempt": { "type": "integer", "minimum": 1 },
+                    "predicate_type": { "type": "string", "minLength": 1 },
+                    "verify_command": { "type": "string", "minLength": 1 }
+                }
+            },
+            {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["tier", "scheme", "signature", "signs", "identity", "verify_command"],
+                "properties": {
+                    "tier": { "const": RegistryTier::SelfReported.as_str() },
+                    "scheme": { "enum": registry_tokens(SignatureScheme::ALL, SignatureScheme::as_str) },
+                    "signature": { "type": "string", "minLength": 1 },
+                    "signs": { "type": "string", "minLength": 1 },
+                    "identity": { "type": "string", "minLength": 1 },
+                    "verify_command": { "type": "string", "minLength": 1 }
+                }
+            }
+        ]
+    })
+}
+
+/// `registry/entries/<kind>/<system>/<entry-id>.json` — one published result,
+/// its mandatory disclosure, the artifacts it stands on, and the tier anybody
+/// here can honestly claim for it.
+#[must_use]
+pub fn registry_entry_schema() -> Value {
+    json!({
+        "$schema": DRAFT,
+        "$id": urn("registry-entry"),
+        "title": "Veredictum public results registry entry",
+        "description": "One append-only registry entry. Every figure a board prints comes out of the artifacts this entry pins by digest, never out of a number restated here. The tier is the discriminant of `provenance`: `reproduced` carries the identity of the workflow that performed the run, `self-reported` carries the submitter's own signature. No long-lived signing key exists on either side. An entry is a REPORT, never a certificate.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["registry_schema_version", "entry_id", "rules_version", "submitter", "subject", "disclosure", "result", "artifacts", "provenance"],
+        "properties": {
+            "registry_schema_version": { "const": REGISTRY_SCHEMA_VERSION },
+            "entry_id": { "type": "string", "pattern": REGISTRY_ENTRY_ID_PATTERN },
+            "rules_version": { "type": "string", "minLength": 1 },
+            "submitter": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "contact", "relationship"],
+                "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "contact": { "type": "string", "minLength": 1 },
+                    "relationship": { "enum": registry_tokens(Relationship::ALL, Relationship::as_str) }
+                }
+            },
+            "subject": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["system", "display_name", "version", "deployment"],
+                "properties": {
+                    "system": { "type": "string", "pattern": REGISTRY_SYSTEM_PATTERN },
+                    "display_name": { "type": "string", "minLength": 1 },
+                    "version": { "type": "string", "minLength": 1 },
+                    "deployment": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["kind", "reproduction_authorized"],
+                        "properties": {
+                            "kind": { "enum": registry_tokens(DeploymentKind::ALL, DeploymentKind::as_str) },
+                            "topology": { "type": "string", "pattern": REGISTRY_SYSTEM_PATTERN },
+                            "images": {
+                                "type": "object",
+                                "additionalProperties": { "type": "string", "minLength": 1 }
+                            },
+                            "endpoint": { "type": "string", "minLength": 1 },
+                            "reproduction_authorized": { "type": "boolean" }
+                        }
+                    }
+                }
+            },
+            "disclosure": registry_disclosure_schema(),
+            "result": registry_result_schema(),
+            "artifacts": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["role", "path", "sha256"],
+                    "properties": {
+                        "role": { "enum": registry_tokens(ArtifactRole::ALL, ArtifactRole::as_str) },
+                        "path": { "type": "string", "minLength": 1 },
+                        "sha256": { "type": "string", "pattern": REGISTRY_DIGEST_PATTERN }
+                    }
+                }
+            },
+            "provenance": registry_provenance_schema(),
+            "supersedes": {
+                "type": "array",
+                "items": { "type": "string", "pattern": REGISTRY_ENTRY_ID_PATTERN }
+            },
+            "supersede_reason": { "type": "string", "minLength": 1 },
+            "notes": { "type": "string", "minLength": 1 }
+        }
+    })
+}
+
+/// `registry/topologies/<id>.json` — a deployment this repository composes
+/// itself, which is the only thing the reproduction lane will drive.
+#[must_use]
+pub fn registry_topology_schema() -> Value {
+    json!({
+        "$schema": DRAFT,
+        "$id": urn("registry-topology"),
+        "title": "Veredictum reproducible topology",
+        "description": "A deployment recipe this repository controls end to end, so a reproduction run executes nothing a submitter wrote. The reproduction lane composes `compose_file` (or the upstream document `compose_from` names), waits for `ready_url`, exports `credentials` into the environment the ixit's auth modes reference, and drives the catalogue over `ixit`.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "display_name", "ixit", "base_url", "ready_url", "credentials"],
+        "properties": {
+            "id": { "type": "string", "pattern": REGISTRY_SYSTEM_PATTERN },
+            "display_name": { "type": "string", "minLength": 1 },
+            "compose_file": { "type": "string", "minLength": 1 },
+            "compose_from": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["repository", "path"],
+                "properties": {
+                    "repository": { "type": "string", "minLength": 1 },
+                    "path": { "type": "string", "minLength": 1 }
+                }
+            },
+            "compose_env": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+            },
+            "ixit": { "type": "string", "minLength": 1 },
+            "statement": { "type": "string", "minLength": 1 },
+            "base_url": { "type": "string", "minLength": 1 },
+            "ready_url": { "type": "string", "minLength": 1 },
+            "credentials": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+            },
+            "provenance": { "type": "string", "minLength": 1 }
+        },
+        "oneOf": [
+            { "required": ["compose_file"] },
+            { "required": ["compose_from"] }
+        ]
+    })
+}
+
 /// The full published set: (file name, schema document).
 #[must_use]
 pub fn emit_all() -> Vec<(&'static str, Value)> {
@@ -2514,6 +2752,8 @@ pub fn emit_all() -> Vec<(&'static str, Value)> {
         ("run-transcript.schema.json", run_transcript_schema()),
         ("bench-result.schema.json", bench_result_schema()),
         ("bench-packs.schema.json", bench_packs_schema()),
+        ("registry-entry.schema.json", registry_entry_schema()),
+        ("registry-topology.schema.json", registry_topology_schema()),
     ]
 }
 

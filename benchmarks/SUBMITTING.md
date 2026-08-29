@@ -98,10 +98,24 @@ benchmarks/submissions/<system>/<YYYY-MM-DD>-<host>.json
 jq -cS '.environment' bench-result-your-cdr-1-2-3.json | shasum -a 256 | cut -c1-8
 ```
 
-## 3. Open the pull request
+## 3. Write the registry entry
 
-One record per pull request. Say in the body what the deployment was: the
-hardware, the container limits, the database, and anything about the
+The record is what the engine measured. Who submitted it, what they disclose
+and how it is signed live beside it, in a registry entry:
+
+```text
+registry/entries/bench/<system>/<YYYY-MM-DD>-<slug>.json
+```
+
+`registry/RULES.md` is the contract for that file, and
+`schemas/registry-entry.schema.json` is the schema CI applies. The entry points
+at the record by path and SHA-256, so the two travel together: a record with no
+entry has nobody standing behind it, and the board refuses to render one.
+
+## 4. Open the pull request
+
+One record and its entry per pull request. Say in the body what the deployment
+was: the hardware, the container limits, the database, and anything about the
 configuration a reader would need to make sense of the numbers. The record
 carries the machine that offered the load, which is not always the machine that
 served the requests.
@@ -126,16 +140,21 @@ request on any of these:
 | Append-only | the pull request modifies, deletes or renames a record that is already merged |
 | Board freshness | `website/landing/benchmarks.html` no longer matches the committed records |
 
+`scripts/checks/registry-submission.sh` adds the entry's own half: the schema,
+the mandatory disclosure, the digest of the record the entry pins, the pairing
+between the two trees, and the tier.
+
 The board page is generated, so regenerate it in the same pull request:
 
 ```bash
 bash scripts/render/bench-board.sh
 ```
 
-Run the whole gate locally before pushing:
+Run both gates locally before pushing:
 
 ```bash
 bash scripts/checks/bench-submission.sh
+bash scripts/checks/registry-submission.sh
 ```
 
 ## The append-only rule
@@ -149,22 +168,24 @@ Deleted or Renamed path under `submissions/` fails the check.
 ## Tiers
 
 Every row on the board carries a tier badge saying how much of it anyone here
-has verified.
+has verified. The badge is read from the registry entry, never assumed.
 
-- **self-reported.** The submitter ran the benchmark, the record passed every
-  check above, and nobody here re-ran it. This is the tier every submission
-  starts at, and today it is the only one in use. Read a self-reported row as a
+- **self-reported.** The submitter ran the benchmark, signed the record, and it
+  passed every check above; nobody here re-ran it. Read a self-reported row as a
   claim its author put their name to in a public git history.
-- **reproduced.** A maintainer re-ran the same pack against the same deployment
-  and got a consistent record. The submission channel does not change: the
-  attestation machinery is being designed, and it will upgrade tiers on records
-  that already sit in this tree.
+- **reproduced.** The workflow in this repository composed the deployment from
+  a recipe committed here, drove the pack, and attested the record from that
+  workflow identity through Sigstore. No signing key exists in this repository,
+  so there is none to steal.
 
 A tier says who stood behind the measurement. It says nothing about
-conformance, which is a separate instrument with a separate record.
+conformance, which is a separate instrument with a separate board.
+`registry/RULES.md` carries both tiers in full, along with the dispute path and
+the reproduction lane.
 
 ## Records under `submissions/examples/`
 
 That sub-tree holds records that demonstrate the submission pipe rather than
 claim a place on the board. They are held to every check above except the
-submittability requirement, and the board does not rank them.
+submittability requirement, the board does not rank them, and they carry no
+registry entry, because they are not published claims.

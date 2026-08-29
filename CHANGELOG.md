@@ -19,6 +19,43 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **A public results registry with signed submissions and two labelled tiers
+  (#158).** Published results now live in one append-only tree, conformance and
+  benchmark alike, and every entry carries who submitted it, what they
+  disclosed, the artifacts it stands on by digest, and how far anyone here
+  verified it.
+  - `schemas/registry-entry.schema.json` is the versioned entry format, emitted
+    from the code like every other published schema. The disclosure is
+    mandatory: the submitter and their relationship to the system, the
+    deployment with its image digests, the instrument version, the machine, what
+    was switched on behind the result, and the interest the submitter holds in
+    the outcome. `schemas/registry-topology.schema.json` is the second new
+    schema, for the deployments the reproduction lane may compose.
+  - The tier is the discriminant of the entry's provenance block, so it cannot
+    be claimed without the evidence its variant requires. `reproduced` names a
+    workflow of this repository, its run, and the attestation predicate;
+    `self-reported` names the scheme, the signature, the artifact it covers and
+    the command that checks it. **No signing key exists in this repository or in
+    its Actions**, and the gate refuses one committed under the registry.
+  - `.github/workflows/registry-reproduce.yml` is the tier-1 lane: it composes a
+    topology declared under `registry/topologies/`, drives the catalogue, and
+    attests the run, the judgement and the images that actually answered from
+    the workflow's own OIDC identity through Sigstore. It composes nothing a
+    submitter wrote, and it does not gate a merge.
+  - `scripts/checks/registry-submission.sh` is the submission gate, wired into
+    CI as its own tier: append-only over the entries and their evidence, the
+    schema and the rules, id uniqueness, every artifact digest recomputed, the
+    supersede edges resolved, the pairing with the benchmark board's records,
+    and both boards held to what is committed.
+  - Two rendered boards, kept separate on purpose. `conformance-board.html` is
+    new and reads its numbers out of each entry's own `verdicts.json`;
+    `benchmarks.html` now takes its tier badge from the registry instead of
+    printing one constant. Both carry the standing boundary: an entry is a
+    report, never a certificate.
+  - `registry/RULES.md` is the published submission contract, covering the two
+    tiers, the mandatory disclosure, append-only with supersede-by-reference,
+    the dispute path, and the standing authorization a hosted-endpoint
+    reproduction needs.
 - **The Robot-battery coverage gaps close on released ground (#220).** Eleven
   cases and one binding variant, each derived from the released text rather
   than from the foreign suite's expectation.

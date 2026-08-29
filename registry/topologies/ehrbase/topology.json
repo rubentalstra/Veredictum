@@ -1,0 +1,17 @@
+{
+  "id": "ehrbase",
+  "display_name": "EHRbase",
+  "compose_file": "docker/e2e-ehrbase.yml",
+  "compose_env": {
+    "EHRBASE_PORT": "8090"
+  },
+  "ixit": "registry/topologies/ehrbase/ixit.json",
+  "statement": "party/ehrbase/statement.json",
+  "base_url": "http://127.0.0.1:8090/ehrbase/rest/openehr/v1",
+  "ready_url": "http://127.0.0.1:8090/ehrbase/rest/openehr/v1/definition/template/adl1.4",
+  "credentials": {
+    "SUT_USER": "ehrbase-user",
+    "SUT_PASS": "SuperSecretPassword"
+  },
+  "provenance": "The compose document is committed in this repository and pairs the official EHRbase image with its own PostgreSQL image, the upstream quickstart pairing. The Basic-auth pair is the image's own default, which this repository's browser journeys drive first-hand. The topology declares one clinical principal and the unauthenticated one, so every case addressing an admin or read-only principal is recorded not-applicable at selection time rather than driven under the wrong identity."
+}

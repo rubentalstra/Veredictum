@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- GitHub Pages serves static files and sets no response headers, so the
+       policy travels as a <meta> element. A meta CSP is weaker than the header
+       by specification: `frame-ancestors`, `report-uri` and `sandbox` are
+       ignored in meta form (W3C CSP3 §3.3). It still blocks an injected
+       external script and an exfiltrating connection, which is the realistic
+       risk for a static page.
+       This page carries no <script> at all: the per-row disclosure is a
+       <details> element, which needs none. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Conformance board — Veredictum</title>
+  <meta name="description" content="Published conformance results for openEHR clinical data repositories, each entry carrying its own evidence and its verification tier. An entry is a report, never a certificate.">
+  <link rel="canonical" href="https://veredictum.eu/conformance-board.html">
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+  <link rel="stylesheet" href="./style.css">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Conformance board — Veredictum">
+  <meta property="og:description" content="Published conformance results for openEHR clinical data repositories, each entry carrying its own evidence and its verification tier.">
+  <meta property="og:url" content="https://veredictum.eu/conformance-board.html">
+  <meta property="og:site_name" content="Veredictum">
+  <meta property="og:image" content="https://veredictum.eu/assets/veredictum-seal.svg">
+  <meta property="og:image:alt" content="The Veredictum conformance seal">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Conformance board — Veredictum">
+  <meta name="twitter:description" content="Published conformance results for openEHR clinical data repositories, each entry carrying its own evidence and its verification tier.">
+  <meta name="twitter:image" content="https://veredictum.eu/assets/veredictum-seal.svg">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <img src="./assets/veredictum-icon.svg" alt="" aria-hidden="true">
+      <span>Veredictum</span>
+    </a>
+    <nav aria-label="Primary">
+      <a href="./docs/">Docs</a>
+      <a href="./conformance-board.html" aria-current="page">Conformance</a>
+      <a href="./benchmarks.html">Benchmarks</a>
+      <a href="./benchmark-methodology.html">Methodology</a>
+      <a href="https://github.com/rubentalstra/Veredictum" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="board-intro">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Public conformance board</span>
+        <h1>What each openEHR CDR did when the catalogue was driven against it</h1>
+        <p>Every row below is a registry entry somebody added by pull request. The entry
+          carries the catalogue revision that ran, the statement the claim was judged
+          against, the machine, what was switched on, and the artifacts the numbers come
+          out of. CI validates all of that before a maintainer looks at it, and the merge
+          is the publication.</p>
+        <p><a href="https://github.com/rubentalstra/Veredictum/blob/main/registry/RULES.md">The submission rules, in full →</a></p>
+      </div>
+      <div class="boundary">
+        <p><b>An entry is a report, never a certificate.</b> It says what happened when one
+          version of one system was driven by one version of this instrument. It is not a
+          certification, not a mark, and not a statement of fitness for any purpose.
+          Certification belongs to openEHR governance, and this registry is shaped to hand
+          over: public rules, self-carrying evidence, no proprietary step.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="board">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">The board</span>
+        <h2>Two tiers, labelled on every row</h2>
+        <p>A <span class="tier tier-reproduced">reproduced</span> row was produced by the
+          workflow in this repository. It composed the deployment from a recipe committed
+          here, drove the catalogue, and attested the artifacts from that workflow identity
+          through Sigstore. No signing key exists anywhere in this repository, so there is
+          none to steal. A <span class="tier tier-self-reported">self-reported</span> row was
+          produced by the submitter and signed with their own key or identity, and the row
+          prints the command that checks it.</p>
+        <p>Percentages are taken over cases that were actually driven. A case the claim did
+          not select, or that the deployment could not offer, is neither a pass nor a
+          failure, so the row prints driven against selected beside the share.</p>
+      </div>
+      <p class="after-code">No conformance entry has been merged yet. The first one to
+        arrive will be the first row.</p>
+    </div>
+  </section>
+
+  <section id="how-to-read">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">How to read this board</span>
+        <h2>Written for someone who has never seen the instrument</h2>
+      </div>
+      <div class="prose">
+        <p><b>What a verdict is.</b> The catalogue is a set of small cases, each citing the
+          released openEHR section that assigns its expected answer. A run drives them
+          against a live deployment and records the exchanges; the verdicts are pure
+          functions over those recordings. A failed case names one behaviour, which is what
+          makes a red row worth reading.</p>
+        <p><b>Inconclusive is not failure.</b> An exchange that errored in transport, or a
+          step that could not be resolved, proves nothing about the behaviour under test.
+          Those rows are counted separately and never folded into the failure count.</p>
+        <p><b>What a profile verdict means.</b> CORE, STANDARD and OPTIONS are capability
+          tiers. A tier passes when every capability it requires passed. A tier the party
+          never claimed reads <code>not_claimed</code> rather than failing.</p>
+        <p><b>Why the disclosure matters.</b> Two runs of the same catalogue against the
+          same product can differ because the deployments differ. Every row states what was
+          switched on, which statement the claim was judged against, and which interest the
+          submitter holds in the outcome.</p>
+        <p><b>Superseded rows stay.</b> Entries are append-only. A correction is a new entry
+          naming the one it replaces, and the replaced row keeps its place with a pointer
+          forward, so the record of what was published never quietly changes.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="quickstart" id="submit">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Submit your CDR</span>
+        <h2>Run the catalogue, open a pull request</h2>
+        <p>Point the instrument at your deployment through an IXIT that describes its
+          topology, judge the results against your statement, and commit the entry beside
+          the artifacts it stands on.</p>
+      </div>
+      <figure class="code">
+        <figcaption>One run, one judgement, one entry</figcaption>
+        <pre><code><span class="p">$</span> veredictum run --root artifacts --ixit ./my-ixit.json \
+      --sut-name my-cdr --sut-version 1.2.3 \
+      --statement party/my-cdr/statement.json --out ./run
+<span class="p">$</span> veredictum verdicts --statement party/my-cdr/statement.json \
+      --results ./run/results.json --root artifacts --out ./judgement</code></pre>
+      </figure>
+      <p class="after-code">Then copy <code>results.json</code> and <code>verdicts.json</code>
+        into <code>registry/records/&lt;system&gt;/&lt;entry-id&gt;/</code>, sign one of them, write
+        the entry under <code>registry/entries/conformance/&lt;system&gt;/</code> and open a pull
+        request. <a href="https://github.com/rubentalstra/Veredictum/blob/main/registry/RULES.md">The submission rules, in full →</a></p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <img src="./assets/veredictum-icon.svg" alt="" aria-hidden="true">
+      <span>Veredictum</span>
+    </a>
+    <p>This page is generated from the entries committed under
+      <a href="https://github.com/rubentalstra/Veredictum/tree/main/registry/entries" rel="noopener">registry/entries</a> and is regenerated
+      whenever one is merged. Nothing on it is typed by hand.</p>
+    <div class="fine">
+      <p>openEHR® is the registered trademark of the openEHR Foundation.
+        Veredictum is an independent, community-driven conformance instrument:
+        it names openEHR descriptively, to say what is being tested, and it is
+        not an official openEHR Foundation product, not the Foundation's CNF
+        program, and not endorsed by or affiliated with the Foundation.</p>
+      <p>© Veredictum contributors.</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

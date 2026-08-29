@@ -1,0 +1,231 @@
+<!--
+SPDX-FileCopyrightText: Veredictum contributors
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# The public results registry — submission rules
+
+Rules version **1.0.0**. Every merged entry records the rules version it was
+accepted under, and rules change prospectively: a published entry is never
+re-scored against a later version of this document.
+
+The registry is the committed set of published results about openEHR clinical
+data repositories: conformance runs on one board, benchmark runs on another.
+A submission is a pull request that adds one entry. CI validates it before
+anybody reads the numbers, and the merge is the publication.
+
+## An entry is a report
+
+**A test report is not a certificate.** An entry says what happened when a
+named version of a named system was driven by a named version of this
+instrument on a named machine. It is not a certification, not a mark, and not
+a statement that the system is fit for any purpose. Certification is the
+openEHR Foundation's to grant, and this registry is deliberately shaped to
+hand over: the rules are public, the entries carry their own evidence, and no
+step of the pipeline is proprietary.
+
+Two things follow, and both are printed on every rendered surface. A
+conformance entry is a verdict about the catalogue's cases against one
+deployment, and a benchmark entry is comparative speed. Neither one substitutes
+for the other. A fast server that fails the catalogue is a fast server that
+fails the catalogue.
+
+## Two tiers, and what separates them
+
+A signature proves who submitted a file and that the bytes have not moved
+since. It never proves the run happened as described. So every entry carries
+one of two tiers, and the tier is a property of who performed the run.
+
+**Reproduced.** This repository's own workflow composed a deployment from a
+recipe committed here, drove the catalogue against it, and attested the
+artifacts from the workflow's OIDC identity through Sigstore. The identity is
+the signature. Anybody can check it:
+
+```bash
+gh attestation verify <artifact> --repo rubentalstra/Veredictum
+```
+
+No signing key exists in this repository or in its Actions, and none will. A
+stored key in a public repository's CI is one compromised workflow away from
+forging every entry on the board, and the release lanes here already refuse
+long-lived credentials for the same reason.
+
+**Self-reported.** The submitter performed the run and signed the artifact,
+with OpenPGP or with a Sigstore bundle carrying their own identity. The entry
+carries the verification command, so a reader checks the signature rather than
+trusting the board. Read a self-reported entry as a claim its author put their
+name to in a public git history.
+
+Nothing about a tier is written by hand into a `tier` field. The tier is the
+discriminant of the entry's `provenance` block, so claiming `reproduced` means
+carrying the workflow reference, the run id and the attestation predicate that
+only this repository's lane produces. CI refuses an entry that names a
+workflow outside this repository.
+
+## Where an entry lives
+
+```text
+registry/entries/<kind>/<system>/<entry-id>.json      the entry
+registry/records/<system>/<entry-id>/…                a conformance entry's evidence
+benchmarks/submissions/<system>/<date>-<host>.json    a benchmark entry's record
+```
+
+`<kind>` is `conformance` or `bench`. `<system>` is a lowercase id naming the
+CDR, reused across that system's entries. `<entry-id>` is
+`<YYYY-MM-DD>-<slug>`: the date the run started, then a lowercase slug you
+choose. Ids are unique across the whole registry, which is what makes
+supersede-by-reference resolvable.
+
+A benchmark record stays in the benchmark submissions tree, because that is
+where the board reads its numbers. The registry entry points at it by path and
+digest and adds what the engine-written record cannot carry: who submitted it,
+what they disclose, and how it is signed.
+
+## The mandatory disclosure
+
+`schemas/registry-entry.schema.json` is the contract, and CI applies it before
+anything else. Every entry states, and an empty value is refused:
+
+| Field | What it must say |
+|---|---|
+| `submitter.name`, `submitter.contact` | who is publishing, and where the entry can be discussed |
+| `submitter.relationship` | `vendor`, `integrator`, `independent` or `maintainer` |
+| `subject.system`, `subject.display_name`, `subject.version` | what was measured, at which version |
+| `subject.deployment` | how it was deployed, with image digests where there are any |
+| `subject.deployment.reproduction_authorized` | whether this repository may drive that deployment |
+| `disclosure.instrument_version` | the Veredictum version that produced the artifacts |
+| `disclosure.run_started_at` | when the run started, RFC 3339 in UTC, matching the date in the entry id |
+| `disclosure.environment` | the machine: operating system, architecture, how you describe the host, and the cores and memory where the platform discloses them |
+| `disclosure.sut_configuration` | what was switched on behind the result: authentication, validation depth, signing, audit, tenancy |
+| `disclosure.conflict_of_interest` | any interest you hold in the outcome, in words |
+
+`conflict_of_interest` has no "not applicable". Write the sentence that is
+true. FerroEHR's own entries go through this pipeline with the same field
+filled in, tier-labelled the same way as everybody else's.
+
+A conformance entry also carries the catalogue revision it ran and the party
+statement its claim was judged against. A benchmark entry carries the pack, its
+version, the repetition count and the posture profile the run declared.
+
+## The artifacts
+
+Every entry lists the files it stands on, each with its SHA-256. Nothing on a
+board is a number typed into the entry: the boards read the artifacts. So the
+list is complete by role.
+
+- A **conformance** entry carries `results` and `verdicts`, and may carry a
+  `transcript`, a `record-manifest` and rendered `report` documents.
+- A **benchmark** entry carries one `bench-result`.
+- A **self-reported** entry carries the `signature` file too, and the artifact
+  it signs must be one of the entry's own.
+
+## Submitting a conformance entry
+
+```bash
+veredictum run --root artifacts --ixit <your-ixit>.json \
+  --sut-name <system> --sut-version <version> \
+  --statement party/<system>/statement.json --out ./run
+
+veredictum verdicts --statement party/<system>/statement.json \
+  --results ./run/results.json --root artifacts --out ./judgement
+```
+
+Copy `results.json` and `verdicts.json` into
+`registry/records/<system>/<entry-id>/`, sign one of them, write the entry, and
+open the pull request.
+
+## Submitting a benchmark entry
+
+Run the benchmark and place the record exactly as `benchmarks/SUBMITTING.md`
+describes. That guide's checks all still apply: the pack pins, three
+repetitions, the same-machine baselines, the failed-arrival ceiling, the
+posture canaries and the file name that digests to the environment block. Then
+add the registry entry beside it.
+
+## The reproduction lane
+
+A `reproduced` entry is produced here, never submitted. The lane composes a
+**reproducible topology**: a deployment recipe this repository controls end to
+end, declared under `registry/topologies/<id>/topology.json`. Nothing a
+submitter wrote is executed in a job that holds an OIDC token, which is why the
+lane will not compose an image or a compose file that arrived in a pull
+request.
+
+The lane runs on a pull request that touches the registry, and on demand. It
+selects entries whose deployment names a committed topology, composes it,
+drives the catalogue, attests the artifacts, and uploads them. A maintainer
+commits the resulting tier-1 entry. When a pull request comes from a fork the
+lane reports what it would have done and performs no run, because a fork's
+workflow cannot hold the identity that makes the attestation worth anything.
+
+**Driving a hosted endpoint needs the operator's standing authorization, and
+the submission pull request is that authorization.** Set
+`subject.deployment.reproduction_authorized` to `true` to give it, and expect
+the run to create and delete data. A topology for a system whose deployment
+recipe this repository does not carry is a change to this repository, reviewed
+like any other.
+
+## What CI checks before a human reads it
+
+`scripts/checks/registry-submission.sh` is the whole gate, and it fails the
+pull request on any of these.
+
+| Check | What fails it |
+|---|---|
+| Schema | the entry does not validate against `schemas/registry-entry.schema.json`, or does not parse |
+| Disclosure | any mandatory field empty, or a run timestamp that is not UTC |
+| Naming | the file is not at `registry/entries/<kind>/<system>/<entry-id>.json`, or the id's date and the run's date disagree |
+| Uniqueness | an entry id already used anywhere in the registry |
+| Artifacts | a required role missing, a path outside the tree it belongs in, or a digest that does not match the committed bytes |
+| Signature | a self-reported entry whose signature covers something it does not carry, or whose signature file it does not pin |
+| Tier | a `reproduced` entry naming a workflow outside this repository, or a deployment the lane cannot compose |
+| Topology | a deployment naming a topology no committed file declares |
+| Supersede | a superseded id nothing in the registry carries, an entry superseding itself, or a supersede with no reason |
+| Bench pairing | a committed benchmark record with no entry pointing at it, or an entry pointing at a record that is not committed |
+| Append-only | the pull request modifies, deletes or renames anything already merged under the registry |
+| Board freshness | a rendered board no longer matches the entries it was generated from |
+
+Run it locally before pushing:
+
+```bash
+bash scripts/checks/registry-submission.sh
+bash scripts/render/conformance-board.sh
+bash scripts/render/bench-board.sh
+```
+
+The boards are generated and committed, so regenerate them in the same pull
+request.
+
+## Append-only, and supersede by reference
+
+A merged entry is a published claim with a signed commit and a date behind it.
+Entries are added. They are never edited and never removed, and the gate
+enforces that mechanically.
+
+A correction is a **new** entry that names the old one in `supersedes` and says
+why in `supersede_reason`. The superseded entry stays visible, marked as
+superseded, with a link to what replaced it. The pointer travels forward only,
+because writing a `superseded_by` field into the old entry would be an edit to
+a published claim.
+
+## Disputes
+
+If you disagree with an entry about your product, open a pull request. Two
+remedies exist, and both add rather than remove.
+
+- Ask for a fresh reproduction run. If your deployment has a committed
+  topology, the lane produces a tier-1 entry that supersedes the disputed one.
+- Submit a superseding entry of your own, with the disclosure this document
+  requires.
+
+Disagreements about the rules themselves — what a pack measures, what a tier
+means, what the gate should refuse — belong in a pull request against this
+document. Rule changes apply from the version that carries them. Published
+entries are never re-scored.
+
+## What this registry does not do
+
+It does not rank a conformance entry against a benchmark entry, and it never
+mixes the two boards. It does not compare benchmark rows taken under different
+posture profiles. It does not grade a system on anything it did not measure.
+And it never claims that a passing run is a certificate.

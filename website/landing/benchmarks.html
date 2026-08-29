@@ -44,6 +44,7 @@
     </a>
     <nav aria-label="Primary">
       <a href="./docs/">Docs</a>
+      <a href="./conformance-board.html">Conformance</a>
       <a href="./benchmarks.html" aria-current="page">Benchmarks</a>
       <a href="./benchmark-methodology.html">Methodology</a>
       <a href="https://github.com/rubentalstra/Veredictum" rel="noopener">GitHub</a>
@@ -147,12 +148,14 @@
           discloses them. A deployment that contradicted its own declaration had the run
           refused, so no such row exists. Rows in different profile groups are not
           comparable with each other.</p>
-        <p><b>Self-reported.</b> Every row today carries the
-          <span class="tier tier-self">self-reported</span> tier: the submitter ran the
-          benchmark and the record passed CI, and nobody here re-ran it. A record a
-          maintainer reproduces will carry a reproduced tier, on the same submission
-          channel. Read a self-reported row as a claim its author put their name to in a
-          public git history, and nothing more.</p>
+        <p><b>The tier badge.</b> Every row carries the tier its registry entry states.
+          <span class="tier tier-self-reported">self-reported</span> means the submitter ran
+          the benchmark, signed the record and it passed CI, and nobody here re-ran it: read
+          it as a claim its author put their name to in a public git history.
+          <span class="tier tier-reproduced">reproduced</span> means the workflow in this
+          repository composed the deployment from a recipe committed here, drove the pack,
+          and attested the record from that workflow identity. No signing key exists in this
+          repository, so there is none to steal.</p>
         <p><b>Repetitions.</b> Three is the floor. One repetition measures a moment, so a
           record with fewer is rejected before it can be ranked, and each figure on the
           board is the median across repetitions.</p>

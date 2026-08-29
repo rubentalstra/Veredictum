@@ -42,6 +42,7 @@ cd "$(dirname "$0")/../.."
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 
 readonly SUBMISSIONS='benchmarks/submissions'
+readonly REGISTRY='registry/entries/bench'
 readonly PAGE='website/landing/benchmarks.html'
 readonly GUIDE_URL='https://github.com/rubentalstra/Veredictum/blob/main/benchmarks/SUBMITTING.md'
 readonly TREE_URL='https://github.com/rubentalstra/Veredictum/tree/main/benchmarks/submissions'
@@ -80,12 +81,46 @@ model_of() {
     echo "::error::listing $SUBMISSIONS failed" >&2
     return 1
   fi
-  local file model=''
+  local index
+  index="$(tier_index)" || return 1
+  local file tier model=''
   while IFS= read -r file; do
     [[ -n "$file" ]] || continue
-    model+="$(jq -c --arg path "${file#"$SUBMISSIONS"/}" '{path: $path, doc: .}' "$file")"$'\n'
+    tier="$(jq -r --arg path "$file" '.[$path] // ""' <<<"$index")"
+    if [[ -z "$tier" ]]; then
+      echo "::error::$file has no registry entry, so nothing states how far anyone verified it" >&2
+      return 1
+    fi
+    model+="$(jq -c --arg path "${file#"$SUBMISSIONS"/}" --arg tier "$tier" \
+      '{path: $path, tier: $tier, doc: .}' "$file")"$'\n'
   done <<<"$listing"
   printf '%s' "$model" | jq -s '.'
+}
+
+# Which tier each committed record carries, keyed by the record's own path.
+#
+# The tier lives in the registry entry rather than on the record, because a
+# record is what the engine measured and a tier is a statement about who
+# verified it. A record the registry does not carry has nobody standing behind
+# it, so the render stops rather than printing a badge it made up.
+tier_index() {
+  if [[ ! -d "$REGISTRY" ]]; then
+    printf '{}'
+    return 0
+  fi
+  local listing
+  if ! listing="$(find "$REGISTRY" -type f -name '*.json' | sort)"; then
+    echo "::error::listing $REGISTRY failed" >&2
+    return 1
+  fi
+  local file lines=''
+  while IFS= read -r file; do
+    [[ -n "$file" ]] || continue
+    lines+="$(jq -c '{path: ([.artifacts[] | select(.role == "bench-result") | .path] | first),
+                      tier: .provenance.tier}' "$file")"$'\n'
+  done <<<"$listing"
+  printf '%s' "$lines" \
+    | jq -s 'map(select(.path != null)) | reduce .[] as $e ({}; .[$e.path] = $e.tier)'
 }
 
 # The body: every section between <main> and </main>. jq owns it because every
@@ -167,6 +202,7 @@ render_body() {
         | {
             system: ($d.label // (.path | split("/") | .[0])),
             path: .path,
+            tier: .tier,
             version: ($d.target.sut_version // "version not disclosed"),
             pack: ($d.pack.id + "@" + $d.pack.version),
             repetitions: ($d.repetitions | length),
@@ -258,7 +294,7 @@ render_body() {
       "          <div class=\"board-rank\" aria-hidden=\"true\">" + ($rank | tostring) + "</div>\n" +
       "          <div class=\"board-head\">\n" +
       "            <h4>" + ($row.system | @html) + " <span class=\"board-version\">" + ($row.version | @html) + "</span></h4>\n" +
-      "            <p class=\"board-meta\"><span class=\"tier tier-self\">self-reported</span> " +
+      "            <p class=\"board-meta\"><span class=\"tier tier-" + ($row.tier | @html) + "\">" + ($row.tier | @html) + "</span> " +
       "<code>" + ($row.pack | @html) + "</code> · " + ($row.repetitions | tostring) + " repetitions · measured " + ($row.measured_on | @html) +
       (if $row.reference_configuration then "" else " · scaled to " + ($row.scale | tostring) + " of the pinned population" end) + "</p>\n" +
       posture_line($row) +
@@ -415,12 +451,14 @@ render_body() {
     "          discloses them. A deployment that contradicted its own declaration had the run\n" +
     "          refused, so no such row exists. Rows in different profile groups are not\n" +
     "          comparable with each other.</p>\n" +
-    "        <p><b>Self-reported.</b> Every row today carries the\n" +
-    "          <span class=\"tier tier-self\">self-reported</span> tier: the submitter ran the\n" +
-    "          benchmark and the record passed CI, and nobody here re-ran it. A record a\n" +
-    "          maintainer reproduces will carry a reproduced tier, on the same submission\n" +
-    "          channel. Read a self-reported row as a claim its author put their name to in a\n" +
-    "          public git history, and nothing more.</p>\n" +
+    "        <p><b>The tier badge.</b> Every row carries the tier its registry entry states.\n" +
+    "          <span class=\"tier tier-self-reported\">self-reported</span> means the submitter ran\n" +
+    "          the benchmark, signed the record and it passed CI, and nobody here re-ran it: read\n" +
+    "          it as a claim its author put their name to in a public git history.\n" +
+    "          <span class=\"tier tier-reproduced\">reproduced</span> means the workflow in this\n" +
+    "          repository composed the deployment from a recipe committed here, drove the pack,\n" +
+    "          and attested the record from that workflow identity. No signing key exists in this\n" +
+    "          repository, so there is none to steal.</p>\n" +
     "        <p><b>Repetitions.</b> Three is the floor. One repetition measures a moment, so a\n" +
     "          record with fewer is rejected before it can be ranked, and each figure on the\n" +
     "          board is the median across repetitions.</p>\n" +
@@ -458,8 +496,13 @@ render_body() {
 }
 
 render_page() {
-  local body
-  body="$(render_body "$(model_of)")"
+  # The model is taken in its own step, because bash does not propagate the
+  # failure of a command substitution NESTED inside another one: an entry whose
+  # evidence is missing would otherwise render an empty board instead of
+  # stopping.
+  local model body
+  model="$(model_of)"
+  body="$(render_body "$model")"
   cat <<PAGE
 <!DOCTYPE html>
 <html lang="en">
@@ -507,6 +550,7 @@ render_page() {
     </a>
     <nav aria-label="Primary">
       <a href="./docs/">Docs</a>
+      <a href="./conformance-board.html">Conformance</a>
       <a href="./benchmarks.html" aria-current="page">Benchmarks</a>
       <a href="./benchmark-methodology.html">Methodology</a>
       <a href="https://github.com/rubentalstra/Veredictum" rel="noopener">GitHub</a>

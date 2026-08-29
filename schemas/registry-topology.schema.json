@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:openehr:cnf:schema:registry-topology:0.1.0",
+  "title": "Veredictum reproducible topology",
+  "description": "A deployment recipe this repository controls end to end, so a reproduction run executes nothing a submitter wrote. The reproduction lane composes `compose_file` (or the upstream document `compose_from` names), waits for `ready_url`, exports `credentials` into the environment the ixit's auth modes reference, and drives the catalogue over `ixit`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "display_name",
+    "ixit",
+    "base_url",
+    "ready_url",
+    "credentials"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "compose_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "compose_from": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "path"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "compose_env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "ixit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ready_url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "provenance": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "compose_file"
+      ]
+    },
+    {
+      "required": [
+        "compose_from"
+      ]
+    }
+  ]
+}
