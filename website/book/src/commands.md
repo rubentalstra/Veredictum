@@ -193,6 +193,72 @@ probe, and attributes the database-side cost through `pg_stat_statements`. This
 is evidence for someone optimizing a server, and it is never a conformance
 record.
 
+## bench
+
+Run the universal speed benchmark against any reachable CDR.
+
+```bash
+veredictum bench --base-url <URL> --out <OUT> \
+    [--auth none|basic|bearer] [--user <USER>] [--pack <PACK>] \
+    [--repetitions <N>] [--label <LABEL>]
+```
+
+| Flag | Meaning |
+|---|---|
+| `--base-url <URL>` | The system's base URL, up to and including the openEHR REST base. Required |
+| `--out <OUT>` | Output directory for the result document and its summary. Required |
+| `--auth <MODE>` | How the client presents itself: `none`, `basic` or `bearer`. Default `none` |
+| `--user <USER>` | The user `--auth basic` presents |
+| `--pack <PACK>` | The embedded pack to drive. Default `smoke` |
+| `--repetitions <N>` | How many times to repeat the measured phases. Default `3` |
+| `--label <LABEL>` | A label for this run, which names its column in a comparison |
+
+A bench run needs no artifact root, no IXIT and no party statement. The pack is
+compiled into the binary with a sha256 pin on every fixture, and the pins are
+recorded in the result.
+
+Credentials never ride the command line: `--auth basic` reads its password from
+`VEREDICTUM_BENCH_PASSWORD` and `--auth bearer` reads its token from
+`VEREDICTUM_BENCH_TOKEN`.
+
+Before anything is measured, a preflight reads the template list, uploads the
+pack's template, then creates one scratch EHR, commits a composition into it and
+reads that composition back. A failure at any of those refuses the run and names
+the exchange, so a half-measured document never exists.
+
+The run then seeds its corpus once and repeats the measured phases. Measured
+phases are open-loop: arrivals fire at their planned instants whatever the
+system is doing, and every latency is measured from the planned instant, so a
+stall shows up in every arrival queued behind it. A result with fewer than three
+repetitions is recorded as not submittable.
+
+A bench result is a benchmark record for comparative speed. It is not a
+conformance record, not a certificate, and not a performance-class rating; a
+bench result may motivate a class run, never substitute for one.
+
+## bench-compare
+
+Align two or more committed bench results into one table.
+
+```bash
+veredictum bench-compare --result <FILE> --result <FILE> [--result <FILE>] \
+    --out <OUT>
+```
+
+| Flag | Meaning |
+|---|---|
+| `--result <FILE>` | A committed bench result. Repeat the flag once per file; at least two are needed. Required |
+| `--out <OUT>` | Output directory for the rendered comparison. Required |
+
+One column per file, one row per phase, operation and metric. Each cell carries
+the cross-repetition median with the inter-quartile range beside it, so a reader
+sees the spread as well as the number.
+
+A mismatch is stated above the table, never under it: columns that ran different
+pack versions, columns generated from different hosts, and columns whose runs
+carry too few repetitions to be submittable are all named in the header, and the
+command exits `1` when any of them applies.
+
 ## stress-compare
 
 Render the cross-SUT stress overlay from two committed stress reports.

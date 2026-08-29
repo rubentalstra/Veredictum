@@ -49,6 +49,17 @@
 //!                                       render the cross-SUT stress overlay
 //!                                       FROM two committed stress reports,
 //!                                       both directions on equal footing
+//! veredictum bench --base-url URL [--auth none|basic|bearer] [--user U]
+//!                  [--pack smoke] [--repetitions N] --out DIR [--label L]
+//!                                       the universal speed benchmark: an
+//!                                       embedded pack against any reachable
+//!                                       CDR, seeded once and measured N times
+//!                                       open-loop (comparative speed only —
+//!                                       never a conformance record)
+//! veredictum bench-compare --result FILE --result FILE [...] --out DIR
+//!                                       align two or more committed bench
+//!                                       results into one table, flagging every
+//!                                       pack or host mismatch in the header
 //! veredictum aql-probe --root DIR --ixit FILE --out FILE
 //!                      [--corpus-class POC|S|L|R] [--requests N]
 //!                                       the seeded-corpus AQL optimization
@@ -89,9 +100,11 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 
+use veredictum::bench::client::AuthKind;
 use veredictum::pipeline::assets::{
     conformance_assets, performance_assets, schema_files, stress_overlay,
 };
+use veredictum::pipeline::bench::{BenchRequest, compare_bench, run_bench};
 use veredictum::pipeline::catalogue::{coverage_report_path, validate_tree, write_coverage_report};
 use veredictum::pipeline::conformance::{RunRequest, RunWarning, execute_run};
 use veredictum::pipeline::judgement::{JudgementRequest, judge};
@@ -257,6 +270,51 @@ enum Command {
         /// The climb cap (arrivals/s).
         #[arg(long, default_value_t = 4096.0)]
         max_rate: f64,
+    },
+    /// Run the universal SPEED benchmark: an embedded pack against any
+    /// reachable CDR over its base URL, seeded once and measured N times
+    /// open-loop (comparative speed only; never a conformance record, a
+    /// certificate, or a performance-class rating).
+    Bench {
+        /// The system's base URL, up to and including the openEHR REST base
+        /// (for example `https://cdr.example/openehr/v1`).
+        #[arg(long)]
+        base_url: String,
+        /// How the client presents itself: `none`, `basic` or `bearer`.
+        ///
+        /// The secret never rides argv: `basic` reads
+        /// `VEREDICTUM_BENCH_PASSWORD` and `bearer` reads
+        /// `VEREDICTUM_BENCH_TOKEN`.
+        #[arg(long, default_value = "none")]
+        auth: String,
+        /// The user `--auth basic` presents.
+        #[arg(long)]
+        user: Option<String>,
+        /// The embedded pack to drive.
+        #[arg(long, default_value = "smoke")]
+        pack: String,
+        /// How many times to repeat the measured phases. A result with fewer
+        /// than three is recorded as not submittable.
+        #[arg(long, default_value_t = 3)]
+        repetitions: u32,
+        /// Output directory for the result document and its summary.
+        #[arg(long)]
+        out: PathBuf,
+        /// A label for this run, which names its column in a comparison and
+        /// distinguishes its file name in a shared output directory.
+        #[arg(long)]
+        label: Option<String>,
+    },
+    /// Align two or more committed bench results into one table, one column
+    /// per file, with every pack or host mismatch stated in the header.
+    BenchCompare {
+        /// A committed bench result. Repeat the flag once per file; at least
+        /// two are needed.
+        #[arg(long = "result", required = true)]
+        results: Vec<PathBuf>,
+        /// Output directory for the rendered comparison.
+        #[arg(long)]
+        out: PathBuf,
     },
     /// Run the AQL optimization probe: fire the measurement machinery's
     /// AQL vocabulary against a live, freshly seeded SUT, record wire
@@ -502,6 +560,24 @@ fn main() -> ExitCode {
             },
             &out,
         ),
+        Command::Bench {
+            base_url,
+            auth,
+            user,
+            pack,
+            repetitions,
+            out,
+            label,
+        } => bench_command(
+            &base_url,
+            &auth,
+            user.as_deref(),
+            &pack,
+            repetitions,
+            &out,
+            label.as_deref(),
+        ),
+        Command::BenchCompare { results, out } => bench_compare_command(&results, &out),
         Command::AqlProbe {
             root,
             ixit,
@@ -797,6 +873,71 @@ fn stress_command(request: &StressRequest<'_>, out: &Path) -> ExitCode {
         report.max_sustainable_throughput_per_s
     );
     ExitCode::SUCCESS
+}
+
+fn bench_command(
+    base_url: &str,
+    auth_token: &str,
+    user: Option<&str>,
+    pack_token: &str,
+    repetitions: u32,
+    out: &Path,
+    label: Option<&str>,
+) -> ExitCode {
+    let auth = match AuthKind::parse(auth_token) {
+        Ok(auth) => auth,
+        Err(e) => return fail(&e),
+    };
+    let pack = match veredictum::bench::pack::load(pack_token) {
+        Ok(pack) => pack,
+        Err(e) => return fail(&e),
+    };
+    let progress = |message: String| eprintln!("[bench] {message}");
+    let outcome = match run_bench(
+        &BenchRequest {
+            pack: &pack,
+            base_url,
+            auth,
+            user,
+            repetitions,
+            label,
+        },
+        &progress,
+    ) {
+        Ok(outcome) => outcome,
+        Err(e) => return fail(&e),
+    };
+    if let Err(code) = emit(out, &outcome.documents) {
+        return code;
+    }
+    println!("{}", veredictum::bench::BOUNDARY_STATEMENT);
+    println!(
+        "{} repetition(s) over pack {}@{}; submittable: {}",
+        outcome.result.repetitions.len(),
+        outcome.result.pack.id,
+        outcome.result.pack.version,
+        outcome.result.submittable
+    );
+    ExitCode::SUCCESS
+}
+
+fn bench_compare_command(results: &[PathBuf], out: &Path) -> ExitCode {
+    let outcome = match compare_bench(results) {
+        Ok(outcome) => outcome,
+        Err(e) => return fail(&e),
+    };
+    println!("{}", outcome.document.body);
+    if let Err(code) = emit(out, std::slice::from_ref(&outcome.document)) {
+        return code;
+    }
+    if outcome.comparison.warnings.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        for warning in &outcome.comparison.warnings {
+            eprintln!("bench-compare: {warning}");
+        }
+        ExitCode::from(1)
+    }
 }
 
 fn probe_command(request: &ProbeRequest<'_>, out: &Path) -> ExitCode {

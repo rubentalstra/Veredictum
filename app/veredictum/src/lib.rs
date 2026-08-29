@@ -24,6 +24,7 @@
 #![doc(test(attr(deny(warnings))))]
 pub mod artifacts;
 pub mod badges;
+pub mod bench;
 pub mod conf_assets;
 pub mod exec;
 pub mod ids;

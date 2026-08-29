@@ -1754,6 +1754,235 @@ pub fn run_transcript_schema() -> Value {
     })
 }
 
+/// The tokens of a closed bench vocabulary, as a JSON array.
+fn bench_tokens(tokens: &[&'static str]) -> Value {
+    Value::Array(tokens.iter().map(|token| json!(token)).collect())
+}
+
+/// One operation's per-repetition statistics inside a bench result.
+fn bench_operation_stats_def() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["count", "errors", "errors_by_class", "throughput_ops_s",
+                      "p50_us", "p75_us", "p90_us", "p99_us", "p999_us", "max_us",
+                      "hdr_v2_base64"],
+        "properties": {
+            "count": { "type": "integer", "minimum": 0 },
+            "errors": { "type": "integer", "minimum": 0 },
+            "errors_by_class": {
+                "type": "object",
+                "propertyNames": {
+                    "enum": bench_tokens(&crate::bench::result::ErrorClass::ALL
+                        .iter().map(|class| class.as_str()).collect::<Vec<_>>())
+                },
+                "additionalProperties": { "type": "integer", "minimum": 0 }
+            },
+            "throughput_ops_s": { "type": "number", "minimum": 0.0 },
+            "p50_us": { "type": "integer", "minimum": 0 },
+            "p75_us": { "type": "integer", "minimum": 0 },
+            "p90_us": { "type": "integer", "minimum": 0 },
+            "p99_us": { "type": "integer", "minimum": 0 },
+            "p999_us": { "type": "integer", "minimum": 0 },
+            "max_us": { "type": "integer", "minimum": 0 },
+            "hdr_v2_base64": { "type": "string", "minLength": 1 }
+        }
+    })
+}
+
+/// A cross-repetition median plus inter-quartile range.
+fn bench_cross_stat_def() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["median", "iqr"],
+        "properties": {
+            "median": { "type": "number" },
+            "iqr": { "type": "number", "minimum": 0.0 }
+        }
+    })
+}
+
+/// The bench operation vocabulary, as the property names every per-operation
+/// map is keyed by.
+fn bench_operation_names() -> Value {
+    json!({
+        "enum": bench_tokens(&crate::bench::pack::BenchOp::ALL
+            .iter().map(|op| op.as_str()).collect::<Vec<_>>())
+    })
+}
+
+/// `bench-result.json` — one universal-benchmark run's record.
+///
+/// A comparative SPEED record, and nothing else: [`crate::bench::BOUNDARY_STATEMENT`]
+/// is a schema-required constant, so a document that drops it is invalid.
+#[must_use]
+#[expect(clippy::too_many_lines, reason = "one literal JSON-Schema document")]
+pub fn bench_result_schema() -> Value {
+    let regimes = bench_tokens(
+        &crate::bench::result::LoopRegime::ALL
+            .iter()
+            .map(|regime| regime.as_str())
+            .collect::<Vec<_>>(),
+    );
+    json!({
+        "$schema": DRAFT,
+        "$id": urn("bench-result"),
+        "title": "Veredictum bench result",
+        "description": "One universal-benchmark run: an embedded pack with pinned fixtures, driven against a base URL, seeded once and measured N times open-loop with latency taken from the planned arrival instant. Comparative speed only — never a conformance record, a certificate, or a performance-class rating.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "boundary_statement", "pack", "target", "environment",
+                      "started_at", "finished_at", "seed_phases", "repetitions", "cross",
+                      "methodology", "submittable"],
+        "properties": {
+            "schema_version": { "type": "string", "minLength": 1 },
+            "boundary_statement": { "const": crate::bench::BOUNDARY_STATEMENT },
+            "label": { "type": "string", "minLength": 1 },
+            "pack": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "version", "description", "seed", "fixtures"],
+                "properties": {
+                    "id": { "type": "string", "pattern": OPTION_TAG_PATTERN },
+                    "version": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string", "minLength": 1 },
+                    "seed": { "type": "integer", "minimum": 0 },
+                    "fixtures": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+                    }
+                }
+            },
+            "target": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["base_url"],
+                "properties": {
+                    "base_url": { "type": "string", "minLength": 1 },
+                    "sut_version": { "type": "string", "minLength": 1 }
+                }
+            },
+            "environment": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["arch", "os"],
+                "properties": {
+                    "arch": { "type": "string", "minLength": 1 },
+                    "os": { "type": "string", "minLength": 1 },
+                    "available_parallelism": { "type": "integer", "minimum": 1 },
+                    "cpu_model": { "type": "string", "minLength": 1 },
+                    "total_memory_bytes": { "type": "integer", "minimum": 1 }
+                }
+            },
+            "started_at": { "type": "string", "minLength": 1 },
+            "finished_at": { "type": "string", "minLength": 1 },
+            "seed_phases": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["name", "regime", "ehrs", "compositions_per_ehr", "workers",
+                                  "elapsed_s", "bulk_load_writes_per_s"],
+                    "properties": {
+                        "name": { "type": "string", "minLength": 1 },
+                        "regime": { "enum": regimes },
+                        "ehrs": { "type": "integer", "minimum": 0 },
+                        "compositions_per_ehr": { "type": "integer", "minimum": 0 },
+                        "workers": { "type": "integer", "minimum": 1 },
+                        "elapsed_s": { "type": "number", "minimum": 0.0 },
+                        "bulk_load_writes_per_s": { "type": "number", "minimum": 0.0 }
+                    }
+                }
+            },
+            "repetitions": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["repetition", "phases"],
+                    "properties": {
+                        "repetition": { "type": "integer", "minimum": 1 },
+                        "phases": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["regime", "rate_per_s", "warmup_s", "duration_s",
+                                              "planned_measured_arrivals",
+                                              "dispatched_measured_arrivals", "warmup_arrivals",
+                                              "offered_load_sustained_per_s", "generator_bound",
+                                              "operations"],
+                                "properties": {
+                                    "regime": { "enum": regimes },
+                                    "rate_per_s": { "type": "number", "minimum": 0.0 },
+                                    "warmup_s": { "type": "integer", "minimum": 0 },
+                                    "duration_s": { "type": "integer", "minimum": 0 },
+                                    "planned_measured_arrivals": { "type": "integer", "minimum": 0 },
+                                    "dispatched_measured_arrivals": { "type": "integer", "minimum": 0 },
+                                    "warmup_arrivals": { "type": "integer", "minimum": 0 },
+                                    "offered_load_sustained_per_s": { "type": "number", "minimum": 0.0 },
+                                    "generator_bound": { "type": "boolean" },
+                                    "operations": {
+                                        "type": "object",
+                                        "propertyNames": bench_operation_names(),
+                                        "additionalProperties": bench_operation_stats_def()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "cross": {
+                "type": "object",
+                "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["operations"],
+                    "properties": {
+                        "operations": {
+                            "type": "object",
+                            "propertyNames": bench_operation_names(),
+                            "additionalProperties": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["repetitions", "p50_us", "p75_us", "p90_us",
+                                              "p99_us", "p999_us", "throughput_ops_s"],
+                                "properties": {
+                                    "repetitions": { "type": "integer", "minimum": 1 },
+                                    "p50_us": bench_cross_stat_def(),
+                                    "p75_us": bench_cross_stat_def(),
+                                    "p90_us": bench_cross_stat_def(),
+                                    "p99_us": bench_cross_stat_def(),
+                                    "p999_us": bench_cross_stat_def(),
+                                    "throughput_ops_s": bench_cross_stat_def()
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "methodology": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["statement", "open_loop", "coordinated_omission_free",
+                              "seed_once_measure_n", "repetitions"],
+                "properties": {
+                    "statement": { "const": crate::bench::METHODOLOGY },
+                    "open_loop": { "const": true },
+                    "coordinated_omission_free": { "const": true },
+                    "seed_once_measure_n": { "const": true },
+                    "repetitions": { "type": "integer", "minimum": 1 }
+                }
+            },
+            "submittable": { "type": "boolean" },
+            "posture": { "type": "object" }
+        }
+    })
+}
+
 /// The full published set: (file name, schema document).
 #[must_use]
 pub fn emit_all() -> Vec<(&'static str, Value)> {
@@ -1778,6 +2007,7 @@ pub fn emit_all() -> Vec<(&'static str, Value)> {
         ("aql-probe.schema.json", aql_probe_schema()),
         ("transcript.schema.json", transcript_schema()),
         ("run-transcript.schema.json", run_transcript_schema()),
+        ("bench-result.schema.json", bench_result_schema()),
     ]
 }
 
