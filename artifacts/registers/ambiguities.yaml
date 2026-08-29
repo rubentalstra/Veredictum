@@ -10023,3 +10023,84 @@ AMB-225:
     (-ehr_status_only_deactivated_ehr).
   disposition: fixed_handling
   upstream_issue: 215
+
+AMB-226:
+  ambiguity: >-
+    A content-object commit whose BODY carries a `uid` has no released branch
+    on the three operations whose URL holds no identifier to measure it
+    against: `composition_create`, `directory_create` and `ehr_status_update`.
+    `LOCATABLE.uid` is 0..1, so the body is schema-valid on the way in, and
+    none of the three says whether a supplied value is honoured, ignored or
+    refused; none declares a conflict response either. The two neighbours are
+    explicit about the same shape — the CONTRIBUTION create states an
+    accept-or-error rule and declares the 409 to carry it, and the COMPOSITION
+    update states a match rule against the URL's `uid_based_id` (the rule
+    AMB-78 carries). This entry is the CREATE-side twin of AMB-132, which
+    registers the identical silence on the party create, and it sits between
+    that entry and AMB-78's update-side rule: the party create and these three
+    content commits both lack the URL identifier an update rule is measured
+    against.
+    The identifier a client could supply is also not one it can legitimately
+    choose: BASE architecture_overview master09 §Levels of Identification
+    makes the stored copy the containing VERSION's OBJECT_VERSION_ID, and that
+    version does not exist until the commit this very request performs.
+  source: >-
+    ITS-REST specifications/operations/composition_create.yaml (description
+    covers the first version and the ITEM_TAG headers only; responses
+    201/400/404/422 — no 409, no body-uid sentence),
+    operations/directory_create.yaml (description is one line, "Creates a new
+    directory FOLDER associated with the EHR identified by `ehr_id`.";
+    responses 201/400/404) and operations/ehr_status_update.yaml (its only
+    identifier rule is "The existing latest `version_uid` of EHR_STATUS
+    resource (i.e. the `preceding_version_uid`) must be specified in the
+    `If-Match` header"; its single path parameter is `ehr_id`, so a body uid
+    has nothing in the URL to match; responses 200/204/400/404/412)
+    CONTRASTED with operations/contribution_create.yaml ("`uid`: when
+    provided, it will be accepted in case is not in-use, otherwise error will
+    be returned", with 409 declared) and operations/composition_update.yaml
+    ("If the request body already contains a COMPOSITION.uid.value, it must
+    match the `uid_based_id` in the URL") + RM UML/classes/locatable.adoc
+    §Attributes (uid 0..1, "Optional globally unique object identifier for
+    root points of archetyped structures") + BASE
+    docs/architecture_overview/master09-identification.adoc §Levels of
+    Identification (top-level content structures "such as `COMPOSITION`,
+    `EHR_STATUS`, `EHR_ACCESS`, `PARTY` etc. are uniquely identified by the
+    association of the identifier of their containing `VERSIONED_OBJECT` and
+    the identifier of their containing `VERSION` within the container"; "The
+    contained top-level content item (i.e. a `COMPOSITION` etc) also has a
+    `_uid_` attribute (inherited from `LOCATABLE`), and it is strongly
+    recommended that this be populated with a copy of the `OBJECT_VERSION_ID`
+    from the containing `VERSION<X>` object") — the silence and every quote
+    CONFIRMED first-hand 2026-08-29. The ITS-REST docs text is silent as well:
+    a sweep of specifications/docs/** turns up no sentence governing a
+    client-supplied body uid on a commit; §Identifier types speaks only to the
+    SERVED value, and at recommendation strength.
+    The RM COMPOSITION class NOTE is deliberately NOT the ground here: its
+    text says to copy "the UID copied from the `_object_id()_` of the `_uid_`
+    field of the enclosing `VERSION` object" while its own worked example
+    copies the full three-part value, so BASE master09 carries the citation
+    instead.
+  handling: >-
+    Fixed handling: SERVER-MINTED IDENTITY WINS and the body value does not
+    survive. The commit is NOT refused — no released response of these three
+    operations is a conflict branch, and manufacturing one would put a status
+    on the wire that no released response defines — and the committed content
+    belongs to the version container the server minted for it. A client-chosen
+    value cannot be honoured for the reason §Levels of Identification gives:
+    the value IS the containing VERSION's identifier, and that version does
+    not exist until this request creates it, so there is nothing for a client
+    value to be the identifier OF. The contrast with the CONTRIBUTION envelope
+    is principled: a CONTRIBUTION uid is a HIER_OBJECT_ID naming the change
+    set itself, which a client can choose, while a content object's uid is
+    derived from a version the server creates.
+    Gated by I_EHR_COMPOSITION.create_composition-client_supplied_uid,
+    I_EHR_STATUS.clear_ehr_queryable-client_supplied_uid and
+    I_EHR_DIRECTORY.create_directory-client_supplied_uid: the commit succeeds,
+    the version identity the response names is not the client's value, and the
+    client's own identifier addresses nothing afterwards. Whether the SERVED
+    content object carries a populated `uid` at all is a separate question no
+    released sentence answers (AMB-67), so no case here asserts its presence.
+    Reported upstream (#221): say what a content-object commit does with a
+    body uid, as the CONTRIBUTION create already does.
+  disposition: fixed_handling
+  upstream_issue: 221

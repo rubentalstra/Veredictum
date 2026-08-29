@@ -1,0 +1,58 @@
+# Wire realization of I_EHR_STATUS.clear_ehr_queryable, variant `client_uid`:
+# the read-modify-write PUT of the variant-less realization with one extra
+# field written into the body — a client-chosen `uid`. The variant exists
+# because the EHR_STATUS commit seam has no other way to carry one: the
+# variant-less realization builds its body from the EHR_STATUS it just read,
+# and the `invalid_body` variant that takes a case-supplied payload declares
+# only refusal outcomes.
+#
+# The uid literal lives HERE rather than in the case for the same reason the
+# `update_other_details` payload does: a patched body's `set` takes a literal
+# value. The case that reads it back —
+# I_EHR_STATUS.clear_ehr_queryable-client_supplied_uid — repeats the same
+# literal in its `not_equals` assertion, and its own header comment says so.
+#
+# The body is schema-valid on the way in: RM UML/classes/locatable.adoc
+# §Attributes types `uid` `0..1` ("Optional globally unique object identifier
+# for root points of archetyped structures"). What a service then does with it
+# is assigned by no released sentence on this operation — specifications/
+# operations/ehr_status_update.yaml states only the `If-Match` precondition and
+# takes `ehr_id` as its single path parameter, so a body uid has nothing in the
+# URL to be matched against — and register AMB-226 carries the adjudication.
+sm_operation: I_EHR_STATUS.clear_ehr_queryable
+its: its-rest
+variant: client_uid
+request:
+  method: PUT
+  path: /ehr/{ehr_id}/ehr_status
+  body:
+    from_capture: status_body               # read-modify-write, as the variant-less realization
+    set:
+      is_queryable: false                   # the SM operation's own effect, unchanged
+      uid:                                  # the client's chosen version identifier (AMB-226)
+        _type: OBJECT_VERSION_ID
+        value: "3b6c9f18-0000-4000-8000-0000000004c3::cnf.client.example.com::1"
+  headers:
+    If-Match: '"${preceding_version_uid}"'  # REQUIRED (If-Match.yaml); realizes SM preceding_version_uid (ITS-REST overview §If-Match)
+    Prefer: "return=representation"
+formats: [canonical-json]
+# The `ETag` weakness indicator is a MUST, not a style note — ITS-REST overview
+# `Requests_and_responses.md` §Deprecated headers: "The `ETag` response header
+# was used without a weakness indicator `W/`. This is now deprecated, all
+# `ETag` headers that hold a resource identifier MUST include a weakness
+# indicator `W/`". The matcher asserts the weak entity-tag envelope only; the
+# identifier INSIDE it is left unconstrained because the same section makes the
+# source a choice ("usually taken from e.g. VERSIONED_OBJECT.uid.value,
+# VERSION.uid.value, EHR.ehr_id.value, etc.").
+outcomes:
+  updated:
+    status: 200                             # 200_EHR_STATUS_updated.yaml (204 when Prefer minimal)
+    headers: { ETag: { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } } }
+    body: prefer_conditional
+captures:
+  status_version_uid:
+    from: header ETag
+    strip: weak-quotes
+  version_uid:
+    from: header ETag
+    strip: weak-quotes

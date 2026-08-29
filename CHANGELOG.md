@@ -19,6 +19,20 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **A client body `uid` never survives a content-object commit (#202).**
+  Register entry AMB-226 (fixed_handling, upstream #221) records the silence
+  the released text leaves on `composition_create`, `directory_create` and
+  `ehr_status_update`: none of the three says what a service does with a
+  client-supplied body `uid`, and none declares a conflict response to refuse
+  with, where the CONTRIBUTION create states the rule and the COMPOSITION
+  update states a match rule against the URL identifier. The commit succeeds
+  and the served identity is the server-minted `OBJECT_VERSION_ID`. Three
+  cases pin it — `I_EHR_COMPOSITION.create_composition-client_supplied_uid`,
+  `I_EHR_STATUS.clear_ehr_queryable-client_supplied_uid` and
+  `I_EHR_DIRECTORY.create_directory-client_supplied_uid` — each asserting the
+  commit is accepted, that the version identity the response names is not the
+  client's value, and that the client's own identifier addresses nothing
+  afterwards.
 - **`is_modifiable` judges the whole CONTRIBUTION, in any member order
   (#201).** No released text says when `EHR_STATUS.is_modifiable` is evaluated
   relative to a commit, so register entry AMB-225 records the atomic-set

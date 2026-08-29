@@ -4,7 +4,7 @@ Veredictum is a conformance instrument for openEHR clinical data repositories.
 You point it at a running CDR and it tells you, with citations, which parts of
 the openEHR specification that server implements.
 
-It executes a machine-readable catalogue of 1116 spec-cited test cases against
+It executes a machine-readable catalogue of 1119 spec-cited test cases against
 the server's own wire, records every exchange, and computes verdicts as pure
 functions over what it recorded. Functional conformance, measured performance
 and step-load stress come from the one tool.
@@ -31,8 +31,8 @@ it can be refuted by a better reading of the specification and by nothing else.
 
 | | |
 |---|---|
-| **1116 case cores** | One small isolated case per behaviour, so a red row names one defect. Grouped by chapter: EHR, composition, content, contribution, directory, query, definition, demographic, admin, messaging, security, SMART, simplified formats, system. A separate family holds the four measured-workload journey definitions |
-| **247 operation bindings** | A case says what the operation is, in the openEHR Service Model's own vocabulary; a binding says how it reaches the wire. A case core carries no status code, header or media type |
+| **1119 case cores** | One small isolated case per behaviour, so a red row names one defect. Grouped by chapter: EHR, composition, content, contribution, directory, query, definition, demographic, admin, messaging, security, SMART, simplified formats, system. A separate family holds the four measured-workload journey definitions |
+| **248 operation bindings** | A case says what the operation is, in the openEHR Service Model's own vocabulary; a binding says how it reaches the wire. A case core carries no status code, header or media type |
 | **The vocabularies** | The capability matrix, the wire surface the coverage gate enumerates, and the outcome and selector grammars |
 | **The corpora** | Payload fixtures with their adjudicated verdicts, plus breadth packs vendored verbatim from upstream libraries. Every invalid shape is kept as a negative case, so a lenient server fails it |
 | **The ambiguity register** | Where the specification is silent or contradicts itself, with a typed disposition and a link to the upstream report |
