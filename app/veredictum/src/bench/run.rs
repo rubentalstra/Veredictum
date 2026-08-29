@@ -14,6 +14,12 @@
 //! every arrival queued behind it. Warmup arrivals are dispatched and then
 //! discarded, and the schedule is a pure function of the pack's seed, so two
 //! repetitions offer the same work in the same order.
+//!
+//! The measured window is bracketed by the posture canaries
+//! ([`crate::bench::posture`]): the declared profile is checked against the
+//! running system after the seed phases and again after the last repetition,
+//! and a reading that contradicts the declaration, or a pair that disagree,
+//! refuses the run before any record exists.
 
 #![expect(
     clippy::disallowed_types,
@@ -35,6 +41,7 @@ use crate::bench::fingerprint::EnvironmentFingerprint;
 use crate::bench::pack::{
     BenchOp, BenchPack, BenchPhase, Fixture, FixtureKind, MeasurePhase, SeedPhase, SweepPhase,
 };
+use crate::bench::posture::{AuthnMode, Bracket, CanaryTarget, PostureProfile, VersionSample};
 use crate::bench::result::{
     BenchResult, ErrorClass, LoopRegime, MeasuredPhaseRecord, Methodology, OperationStats,
     PackRecord, RepetitionRecord, ScaleRecord, SeedPhaseRecord, SweepPhaseRecord, TargetRecord,
@@ -161,6 +168,10 @@ pub struct BenchRun<'a> {
     pub pack: &'a BenchPack,
     /// The system's base URL.
     pub base_url: &'a str,
+    /// The posture profile this run declares. Exactly one, and the canaries
+    /// check it against the running system before and after the measured
+    /// window.
+    pub profile: &'a PostureProfile,
     /// How the client presents itself.
     pub auth: AuthKind,
     /// The user `--auth basic` needs.
@@ -206,6 +217,53 @@ struct BenchCorpus {
     /// The instant every `version_at_time` read addresses, captured once
     /// after the seed phases finished. Every seeded version predates it.
     version_at_time: String,
+}
+
+/// How many committed versions the signing canary is handed to sample.
+const POSTURE_SAMPLES: usize = 3;
+
+impl BenchCorpus {
+    /// Versions the signing canary reads back, spread across the population.
+    ///
+    /// The samples come from the run's OWN seed traffic rather than from a
+    /// commit made for the probe, so a signing scheme switched on around a
+    /// dedicated write would not reach them.
+    fn version_samples(&self) -> Vec<VersionSample> {
+        let total = self.compositions.len();
+        if total == 0 {
+            return Vec::new();
+        }
+        let wanted = POSTURE_SAMPLES.min(total);
+        let mut samples = Vec::with_capacity(wanted);
+        for slot in 0..wanted {
+            #[expect(
+                clippy::integer_division,
+                reason = "an even spread across the population: exact integer bucketing"
+            )]
+            let index = slot.saturating_mul(total) / wanted;
+            let Some(composition) = self.compositions.get(index) else {
+                continue;
+            };
+            let Some(ehr_id) = self.ehr_ids.get(composition.ehr_index) else {
+                continue;
+            };
+            samples.push(VersionSample {
+                ehr_id: ehr_id.clone(),
+                object_uid: composition.object_uid.clone(),
+                version_uid: composition.version_uid.clone(),
+            });
+        }
+        samples
+    }
+}
+
+/// The disclosure mode the run's own `--auth` choice declares.
+const fn authn_of(auth: AuthKind) -> AuthnMode {
+    match auth {
+        AuthKind::None => AuthnMode::None,
+        AuthKind::Basic => AuthnMode::Basic,
+        AuthKind::Bearer => AuthnMode::Bearer,
+    }
 }
 
 /// Whether a provisioning write landed in the created family.
@@ -278,8 +336,10 @@ fn object_uid_of(version_uid: &str) -> String {
 /// [`BenchError::Repetitions`] for a repetition count below one,
 /// [`BenchError::FixturePin`] when an embedded fixture moved,
 /// [`BenchError::Preflight`] when the target does not answer the write-then-read
-/// path, [`BenchError::Seed`] when the bulk load could not complete, and
-/// [`BenchError::Measure`] when a measured phase could not be aggregated.
+/// path, [`BenchError::Seed`] when the bulk load could not complete,
+/// [`BenchError::Measure`] when a measured phase could not be aggregated, and
+/// [`BenchError::PostureContradiction`] or [`BenchError::PostureFlip`] when a
+/// canary disagrees with the declared profile or with its own other bracket.
 pub fn execute(
     run: &BenchRun<'_>,
     progress: &(dyn Fn(String) + Sync),
@@ -296,31 +356,27 @@ pub fn execute(
     let sut_version = probe_sut_version(&client);
 
     let mut corpus = BenchCorpus::default();
-    let mut seed_phases = Vec::new();
-    let mut declared_workers = true;
-    for phase in &run.pack.phases {
-        let BenchPhase::Seed(seed) = phase else {
-            continue;
-        };
-        let ehrs = scaled_ehrs(seed.ehrs, run.scale)?;
-        let workers = run.seed_workers.unwrap_or(seed.workers).max(1);
-        if workers != seed.workers {
-            declared_workers = false;
-        }
-        progress(format!(
-            "seed phase {}: {} EHRs x {} compositions on {} worker(s)",
-            seed.name, ehrs, seed.compositions_per_ehr, workers
-        ));
-        let record = seed_phase(&client, seed, ehrs, workers, &mut corpus, progress)?;
-        seed_phases.push(record);
-    }
-    if corpus.ehr_ids.is_empty() {
-        return Err(BenchError::Seed {
-            phase: "(none)".to_owned(),
-            detail: "the pack seeded no EHR, so no measured phase has a target".to_owned(),
-        });
-    }
+    let (seed_phases, declared_workers) = seed_all(&client, run, &mut corpus, progress)?;
     corpus.version_at_time = jiff::Timestamp::now().to_string();
+
+    let raw = client.without_decompression()?;
+    let anonymous = client.without_credential()?;
+    let samples = corpus.version_samples();
+    let canary = CanaryTarget {
+        client: &client,
+        raw: &raw,
+        anonymous: &anonymous,
+        profile: run.profile,
+        authn: authn_of(run.auth),
+        tls: crate::bench::posture::tls_of(&client.recorded_base_url()),
+        invalid_twin: run.pack.invalid_twin(),
+        samples: &samples,
+    };
+    progress(format!(
+        "posture canaries: reading the `{}` declaration before the measured window",
+        run.profile.name
+    ));
+    let before = crate::bench::posture::bracket(&canary, Bracket::Before);
 
     let measure_phases = run.pack.measure_phases();
     let sweep_phases = run.pack.sweep_phases();
@@ -336,6 +392,11 @@ pub fn execute(
             progress,
         )?);
     }
+
+    progress("posture canaries: re-reading the declaration after the measured window".to_owned());
+    let after = crate::bench::posture::bracket(&canary, Bracket::After);
+    let posture =
+        crate::bench::posture::settle(run.profile, canary.authn, canary.tls, &before, &after)?;
 
     let cross = summarize(&repetitions);
     let mut result = BenchResult {
@@ -366,10 +427,48 @@ pub fn execute(
         },
         submittable: false,
         submittable_unmet: Vec::new(),
-        posture: None,
+        posture,
     };
     result.settle_submittability();
     Ok(result)
+}
+
+/// Runs every seed phase the pack declares, extending the corpus in place.
+///
+/// Returns the phase records and whether every phase ran at the worker count
+/// its pack declares, which is half of what puts a run on the pack's reference
+/// configuration.
+fn seed_all(
+    client: &BenchClient,
+    run: &BenchRun<'_>,
+    corpus: &mut BenchCorpus,
+    progress: &(dyn Fn(String) + Sync),
+) -> Result<(Vec<SeedPhaseRecord>, bool), BenchError> {
+    let mut seed_phases = Vec::new();
+    let mut declared_workers = true;
+    for phase in &run.pack.phases {
+        let BenchPhase::Seed(seed) = phase else {
+            continue;
+        };
+        let ehrs = scaled_ehrs(seed.ehrs, run.scale)?;
+        let workers = run.seed_workers.unwrap_or(seed.workers).max(1);
+        if workers != seed.workers {
+            declared_workers = false;
+        }
+        progress(format!(
+            "seed phase {}: {} EHRs x {} compositions on {} worker(s)",
+            seed.name, ehrs, seed.compositions_per_ehr, workers
+        ));
+        let record = seed_phase(client, seed, ehrs, workers, corpus, progress)?;
+        seed_phases.push(record);
+    }
+    if corpus.ehr_ids.is_empty() {
+        return Err(BenchError::Seed {
+            phase: "(none)".to_owned(),
+            detail: "the pack seeded no EHR, so no measured phase has a target".to_owned(),
+        });
+    }
+    Ok((seed_phases, declared_workers))
 }
 
 /// Executes one repetition: every closed-loop sweep, then every open-loop
@@ -1604,6 +1703,7 @@ mod tests {
             &BenchRun {
                 pack: &deck,
                 base_url: "http://stub",
+                profile: &crate::bench::posture::MINIMAL,
                 auth: AuthKind::None,
                 user: None,
                 credential: None,

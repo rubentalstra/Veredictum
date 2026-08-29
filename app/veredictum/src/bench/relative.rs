@@ -340,6 +340,11 @@ mod tests {
                 git_ref: "v1.0.0".to_owned(),
                 file: "docker-compose.yml".to_owned(),
             },
+            posture: crate::bench::posture::PostureRecord {
+                profile: crate::bench::posture::MINIMAL.name.to_owned(),
+                summary: crate::bench::posture::MINIMAL.summary.to_owned(),
+                items: Vec::new(),
+            },
             resources: pinned_resources(),
             base_url: "http://127.0.0.1:18091/ehrbase/rest/openehr/v1".to_owned(),
             sut_version: None,

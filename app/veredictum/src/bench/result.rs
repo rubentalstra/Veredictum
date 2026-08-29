@@ -9,11 +9,6 @@
 //! percentiles a reader wants, and as the standard `HdrHistogram` V2 encoding
 //! a reader can recompute every one of them from.
 
-#![expect(
-    clippy::disallowed_types,
-    reason = "the one untyped carrier here is the reserved `posture` extension point, whose shape a posture profile declares; typing it now would pin a contract that is not settled"
-)]
-
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -23,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::bench::BenchError;
 use crate::bench::fingerprint::EnvironmentFingerprint;
 use crate::bench::pack::BenchPack;
+use crate::bench::posture::PostureRecord;
 use crate::bench::relative::RelativeIndex;
 
 /// The file stem a bench run writes its result under.
@@ -188,6 +184,11 @@ pub struct BaselineRecord {
     pub repetitions: Vec<RepetitionRecord>,
     /// The cross-repetition summary, keyed by phase name.
     pub cross: BTreeMap<String, CrossPhase>,
+    /// The baseline's own posture block, taken under the profile the target
+    /// declared and verified by the same canaries. A ratio between two
+    /// different postures compares two different sports, so both sides carry
+    /// their own block.
+    pub posture: PostureRecord,
 }
 
 /// Which load regime produced a phase's numbers.
@@ -681,9 +682,10 @@ pub struct BenchResult {
     /// when `submittable` is true.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub submittable_unmet: Vec<SubmissionRequirement>,
-    /// Reserved for the posture profile a run declares. Always absent here.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub posture: Option<serde_json::Value>,
+    /// The posture profile this run declared, its full disclosure, and the
+    /// bracketing canary evidence behind each item's verified or declared-only
+    /// label.
+    pub posture: PostureRecord,
 }
 
 impl BenchResult {
@@ -781,6 +783,34 @@ fn slug(label: &str) -> String {
 )]
 mod tests {
     use super::*;
+    use crate::bench::posture::{
+        Assurance, Bracket, CanaryOutcome, CanaryReading, MINIMAL, PostureDisclosure, PostureItem,
+    };
+
+    /// A posture block whose every item is declared and none verified, which
+    /// is the shape a record carries when no canary could observe anything.
+    fn declared_only_posture() -> PostureRecord {
+        let reading = |bracket: Bracket| CanaryReading {
+            bracket,
+            outcome: CanaryOutcome::NotObservable,
+            observed: "(not observable)".to_owned(),
+            evidence: "a record built for this test observes nothing".to_owned(),
+        };
+        PostureRecord {
+            profile: MINIMAL.name.to_owned(),
+            summary: MINIMAL.summary.to_owned(),
+            items: PostureItem::ALL
+                .iter()
+                .copied()
+                .map(|item| PostureDisclosure {
+                    item,
+                    declared: MINIMAL.declared(item).unwrap_or("none").to_owned(),
+                    assurance: Assurance::DeclaredOnly,
+                    readings: vec![reading(Bracket::Before), reading(Bracket::After)],
+                })
+                .collect(),
+        }
+    }
 
     /// Status classing follows the wire ranges, never a numeric literal
     /// comparison that a one-character typo would silently change.
@@ -990,7 +1020,7 @@ mod tests {
             },
             submittable: false,
             submittable_unmet: Vec::new(),
-            posture: None,
+            posture: declared_only_posture(),
         }
     }
 
@@ -1013,6 +1043,7 @@ mod tests {
             seed_phases: Vec::new(),
             repetitions: Vec::new(),
             cross: BTreeMap::new(),
+            posture: declared_only_posture(),
         }
     }
 }

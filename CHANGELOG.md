@@ -19,6 +19,37 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **Bench posture profiles, with bracketed canaries (#165).** Two speed numbers
+  are comparable only when the same features were switched on behind them, so
+  every embedded pack now defines named posture profiles and a run declares
+  exactly one with `bench --posture <NAME>`. Every pack defines `minimal`, the
+  bare spec-conformant surface, which is also the default; `community-vitals`
+  also defines `clinical-default`. The result document's `posture` block, until
+  now a reserved null, carries the profile, its summary, and one line per
+  disclosed item: audit sink, version-signing scheme, commit-validation depth,
+  authentication mode, TLS, response compression and tenancy, each a closed
+  vocabulary whose unknown token is a loud error.
+
+  Each item is then checked black-box and labelled `verified` or
+  `declared-only`, with the canary evidence recorded beside it. Signing samples
+  versions committed by the run's OWN seed traffic and inspects their
+  `signature`, so a scheme switched on for a probe alone never reaches them.
+  Validation commits the pack's pinned invalid twin — that pack's own
+  composition with the mandatory `COMPOSITION.composer` removed — and reads the
+  answer. Authentication offers one uncredentialed read, compression reads
+  `Content-Encoding` back over a client that does not decompress, and TLS comes
+  from the recorded base URL's scheme. Audit and tenancy stay honestly
+  declared-only, because released ITS-REST surfaces no read resource for
+  either.
+
+  The canaries run BEFORE and AFTER the measured window. A reading that
+  contradicts the declaration, and a pair of brackets that disagree with each
+  other, both refuse the whole run with a typed error naming the item; neither
+  is ever a footnote on a published figure. Same-machine baselines run under
+  the profile the target declared and carry their own verified block, and
+  `bench-compare` states a posture disagreement in the header, above the
+  numbers, beside the pack and host mismatches it already reported.
+
 - Multi-valued-predicate coverage (#178): register entry AMB-222 pins the
   any-element reading of a WHERE predicate over a multi-valued path (upstream
   report #195), and three QUERY cases commit compositions whose SECOND link or

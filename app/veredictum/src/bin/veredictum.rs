@@ -50,15 +50,18 @@
 //!                                       FROM two committed stress reports,
 //!                                       both directions on equal footing
 //! veredictum bench --base-url URL [--auth none|basic|bearer] [--user U]
-//!                  [--pack aql-mix|community-vitals|smoke] [--repetitions N]
+//!                  [--pack aql-mix|community-vitals|smoke] [--posture NAME]
+//!                  [--repetitions N]
 //!                  [--scale F] [--seed-workers N] [--with-baselines]
 //!                  --out DIR [--label L]
 //!                                       the universal speed benchmark: an
 //!                                       embedded pack against any reachable
 //!                                       CDR, seeded once and measured N times
-//!                                       open-loop, optionally anchored by the
-//!                                       pinned reference CDRs on this host
-//!                                       (comparative speed only — never a
+//!                                       open-loop, under one declared posture
+//!                                       profile whose canaries bracket the
+//!                                       measured window, optionally anchored
+//!                                       by the pinned reference CDRs on this
+//!                                       host (comparative speed only — never a
 //!                                       conformance record)
 //! veredictum bench-compare --result FILE --result FILE [...] --out DIR
 //!                                       align two or more committed bench
@@ -297,6 +300,14 @@ enum Command {
         /// The embedded pack to drive.
         #[arg(long, default_value = "smoke")]
         pack: String,
+        /// The posture profile to declare, out of the set the pack defines.
+        /// Omit to take the pack's first, which is always `minimal`.
+        ///
+        /// The run's canaries check the declaration against the running system
+        /// before and after the measured window, and a contradiction refuses
+        /// the run.
+        #[arg(long)]
+        posture: Option<String>,
         /// How many times to repeat the measured phases. A result with fewer
         /// than three is recorded as not submittable, and names that as one of
         /// its unmet requirements.
@@ -585,6 +596,7 @@ fn main() -> ExitCode {
             auth,
             user,
             pack,
+            posture,
             repetitions,
             scale,
             seed_workers,
@@ -597,6 +609,7 @@ fn main() -> ExitCode {
                 auth_token: &auth,
                 user: user.as_deref(),
                 pack_token: &pack,
+                posture_token: posture.as_deref(),
                 repetitions,
                 scale,
                 seed_workers,
@@ -910,6 +923,7 @@ struct BenchInvocation<'a> {
     auth_token: &'a str,
     user: Option<&'a str>,
     pack_token: &'a str,
+    posture_token: Option<&'a str>,
     repetitions: u32,
     scale: f64,
     seed_workers: Option<usize>,
@@ -926,10 +940,15 @@ fn bench_command(invocation: &BenchInvocation<'_>, out: &Path) -> ExitCode {
         Ok(pack) => pack,
         Err(e) => return fail(&e),
     };
+    let profile = match pack.resolve_profile(invocation.posture_token) {
+        Ok(profile) => profile,
+        Err(e) => return fail(&e),
+    };
     let progress = |message: String| eprintln!("[bench] {message}");
     let outcome = match run_bench(
         &BenchRequest {
             pack: &pack,
+            profile,
             base_url: invocation.base_url,
             auth,
             user: invocation.user,
@@ -960,6 +979,10 @@ fn bench_command(invocation: &BenchInvocation<'_>, out: &Path) -> ExitCode {
         outcome.result.pack.version,
         outcome.result.submittable
     );
+    println!("posture `{}`:", outcome.result.posture.profile);
+    for line in &outcome.result.posture.items {
+        println!("  {} = {} ({})", line.item, line.declared, line.assurance);
+    }
     for requirement in &outcome.result.submittable_unmet {
         println!(
             "not submittable, unmet `{requirement}`: {}",

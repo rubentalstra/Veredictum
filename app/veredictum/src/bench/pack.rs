@@ -15,6 +15,7 @@ use std::fmt;
 use sha2::{Digest as _, Sha256};
 
 use crate::bench::BenchError;
+use crate::bench::posture::{CLINICAL_DEFAULT, MINIMAL, PostureProfile};
 
 /// The blood-pressure operational template every embedded pack seeds with.
 ///
@@ -38,6 +39,20 @@ const BP_COMPOSITION: &str = include_str!("fixtures/bp_composition.json");
 const BP_COMPOSITION_SHA256: &str =
     "9eaea10c5171d1f4648c8e932a21ce624312a2cad98f49115f35efbbb344a3ce";
 
+/// The invalid twin of [`BP_COMPOSITION`]: the same bytes with the mandatory
+/// `COMPOSITION.composer` member deleted and nothing else changed.
+///
+/// `composer` is `1..1` (openEHR RM `UML/classes/composition.adoc`
+/// §Attributes), so a server validating a commit against the reference model
+/// and the operational template refuses it (ITS-REST
+/// `specifications/responses/422.yaml`, and `422` on
+/// `specifications/operations/composition_create.yaml`).
+const BP_COMPOSITION_TWIN: &str = include_str!("fixtures/bp_composition.missing_composer.json");
+
+/// The pinned digest of [`BP_COMPOSITION_TWIN`].
+const BP_COMPOSITION_TWIN_SHA256: &str =
+    "602039bed3f3daf060152af6034baf6d7ce74fde6ec77e8ff1cc89eda2b3e0b3";
+
 /// The `Vital signs` operational template the community harness uploads,
 /// embedded byte-identically from the vendored CKM template pack (CKM cid
 /// 1013.26.380; template id `Vital signs`, root
@@ -57,6 +72,16 @@ const VITAL_SIGNS_COMPOSITION: &str = include_str!("fixtures/vital_signs_composi
 /// The pinned digest of [`VITAL_SIGNS_COMPOSITION`].
 const VITAL_SIGNS_COMPOSITION_SHA256: &str =
     "468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947";
+
+/// The invalid twin of [`VITAL_SIGNS_COMPOSITION`], derived the same way
+/// [`BP_COMPOSITION_TWIN`] is: the mandatory `COMPOSITION.composer` member
+/// deleted and nothing else changed.
+const VITAL_SIGNS_COMPOSITION_TWIN: &str =
+    include_str!("fixtures/vital_signs_composition.missing_composer.json");
+
+/// The pinned digest of [`VITAL_SIGNS_COMPOSITION_TWIN`].
+const VITAL_SIGNS_COMPOSITION_TWIN_SHA256: &str =
+    "f0598db5ab447b371ead28cba0f841f72370dbbf93db98d5b8e477910a42688d";
 
 /// The id of an embedded pack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -101,6 +126,9 @@ pub enum FixtureKind {
     OperationalTemplate,
     /// A canonical-JSON `COMPOSITION`, committed into every seeded EHR.
     Composition,
+    /// The invalid twin of that composition, which no phase commits and the
+    /// commit-validation canary offers once per bracket.
+    InvalidComposition,
 }
 
 impl FixtureKind {
@@ -109,7 +137,7 @@ impl FixtureKind {
     pub const fn media_type(self) -> &'static str {
         match self {
             FixtureKind::OperationalTemplate => "application/xml",
-            FixtureKind::Composition => "application/json",
+            FixtureKind::Composition | FixtureKind::InvalidComposition => "application/json",
         }
     }
 }
@@ -506,6 +534,12 @@ pub struct BenchPack {
     pub description: String,
     /// The seed the arrival streams draw from, disclosed in the result.
     pub seed: u64,
+    /// The posture profiles this pack version defines, in declaration order.
+    ///
+    /// A run declares exactly one, and the first is what `--posture` defaults
+    /// to. Two results are the same sport only when the same profile stands
+    /// behind both, so the set is part of the versioned pack definition.
+    pub profiles: Vec<&'static PostureProfile>,
     /// The phases, in execution order.
     pub phases: Vec<BenchPhase>,
 }
@@ -516,6 +550,51 @@ impl BenchPack {
     pub fn with_phases(mut self, phases: Vec<BenchPhase>) -> Self {
         self.phases = phases;
         self
+    }
+
+    /// The profile a run declares: the named one, or the pack's first.
+    ///
+    /// # Errors
+    /// [`BenchError::UnknownProfile`] for a token this pack does not define,
+    /// listing what it does, and [`BenchError::NoProfiles`] for a pack that
+    /// defines none.
+    pub fn resolve_profile(
+        &self,
+        token: Option<&str>,
+    ) -> Result<&'static PostureProfile, BenchError> {
+        let Some(token) = token else {
+            return self
+                .profiles
+                .first()
+                .copied()
+                .ok_or_else(|| BenchError::NoProfiles {
+                    pack: self.id.as_str().to_owned(),
+                });
+        };
+        self.profiles
+            .iter()
+            .copied()
+            .find(|profile| profile.name == token)
+            .ok_or_else(|| BenchError::UnknownProfile {
+                pack: self.id.as_str().to_owned(),
+                requested: token.to_owned(),
+                known: self.profile_names().join(", "),
+            })
+    }
+
+    /// The names of every profile this pack defines, in declaration order.
+    #[must_use]
+    pub fn profile_names(&self) -> Vec<&'static str> {
+        self.profiles.iter().map(|profile| profile.name).collect()
+    }
+
+    /// The invalid twin the commit-validation canary offers, when the pack
+    /// embeds one.
+    #[must_use]
+    pub fn invalid_twin(&self) -> Option<Fixture> {
+        self.fixtures()
+            .into_iter()
+            .find(|fixture| fixture.kind == FixtureKind::InvalidComposition)
     }
 
     /// Every fixture the pack's seed phases offer, in phase order.
@@ -670,6 +749,7 @@ pub fn smoke() -> BenchPack {
         version: "1.0.0".to_owned(),
         description: "One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface.".to_owned(),
         seed: 0x5645_5245_4449_4354,
+        profiles: vec![&MINIMAL],
         phases: vec![
             BenchPhase::Seed(SeedPhase {
                 name: "seed".to_owned(),
@@ -685,6 +765,12 @@ pub fn smoke() -> BenchPack {
                         kind: FixtureKind::Composition,
                         bytes: BP_COMPOSITION,
                         sha256: BP_COMPOSITION_SHA256,
+                    },
+                    Fixture {
+                        key: FixtureKey("bp_composition.missing_composer.json"),
+                        kind: FixtureKind::InvalidComposition,
+                        bytes: BP_COMPOSITION_TWIN,
+                        sha256: BP_COMPOSITION_TWIN_SHA256,
                     },
                 ],
                 ehrs: 200,
@@ -728,9 +814,9 @@ pub fn smoke() -> BenchPack {
     }
 }
 
-/// The two pinned fixtures every pack that seeds the Vital signs population
+/// The three pinned fixtures every pack that seeds the Vital signs population
 /// offers, in offer order: the template first, then the composition it
-/// constrains.
+/// constrains, then that composition's invalid twin.
 fn vital_signs_fixtures() -> Vec<Fixture> {
     vec![
         Fixture {
@@ -744,6 +830,12 @@ fn vital_signs_fixtures() -> Vec<Fixture> {
             kind: FixtureKind::Composition,
             bytes: VITAL_SIGNS_COMPOSITION,
             sha256: VITAL_SIGNS_COMPOSITION_SHA256,
+        },
+        Fixture {
+            key: FixtureKey("vital_signs_composition.missing_composer.json"),
+            kind: FixtureKind::InvalidComposition,
+            bytes: VITAL_SIGNS_COMPOSITION_TWIN,
+            sha256: VITAL_SIGNS_COMPOSITION_TWIN_SHA256,
         },
     ]
 }
@@ -775,6 +867,7 @@ pub fn community_vitals() -> BenchPack {
         version: "1.0.0".to_owned(),
         description: COMMUNITY_VITALS_DESCRIPTION.to_owned(),
         seed: 0x436f_6d6d_5f56_6974,
+        profiles: vec![&MINIMAL, &CLINICAL_DEFAULT],
         phases: vec![
             BenchPhase::Seed(SeedPhase {
                 name: "write".to_owned(),
@@ -891,6 +984,7 @@ pub fn aql_mix() -> BenchPack {
         version: "1.0.0".to_owned(),
         description: aql_mix_description(),
         seed: 0x4151_4c5f_4d69_7800,
+        profiles: vec![&MINIMAL],
         phases: vec![
             BenchPhase::Seed(SeedPhase {
                 name: "seed".to_owned(),
@@ -1067,8 +1161,79 @@ mod tests {
             pins.get("vital_signs_composition.json").map(String::as_str),
             Some("468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947")
         );
-        assert_eq!(pins.len(), 2);
+        assert_eq!(
+            pins.get("vital_signs_composition.missing_composer.json")
+                .map(String::as_str),
+            Some("f0598db5ab447b371ead28cba0f841f72370dbbf93db98d5b8e477910a42688d")
+        );
+        assert_eq!(pins.len(), 3);
         deck.verify_pins()
+    }
+
+    /// Every pack defines at least one posture profile, names `minimal` first,
+    /// and refuses a profile token it does not define.
+    #[test]
+    fn every_pack_declares_its_posture_profiles() -> Result<(), BenchError> {
+        for id in EMBEDDED {
+            let deck = load(id.as_str())?;
+            assert!(!deck.profiles.is_empty(), "{id} defines no posture profile");
+            assert_eq!(
+                deck.resolve_profile(None)?.name,
+                "minimal",
+                "{id} does not default to the bare spec-conformant surface"
+            );
+            assert_eq!(deck.resolve_profile(Some("minimal"))?.name, "minimal");
+            let error = deck.resolve_profile(Some("hardened")).unwrap_err();
+            assert!(
+                matches!(error, BenchError::UnknownProfile { .. }),
+                "{error}"
+            );
+            assert!(error.to_string().contains("minimal"), "{error}");
+        }
+        assert_eq!(
+            community_vitals().profile_names(),
+            vec!["minimal", "clinical-default"]
+        );
+        Ok(())
+    }
+
+    /// Every pack that seeds a composition also embeds its invalid twin, and
+    /// the twin is that composition with the mandatory
+    /// `COMPOSITION.composer` [1..1] member gone and nothing else changed
+    /// (openEHR RM `UML/classes/composition.adoc` §Attributes).
+    #[test]
+    #[expect(
+        clippy::disallowed_types,
+        reason = "the approved wire-body seam: both fixtures are JSON documents compared member by member"
+    )]
+    fn every_seeded_composition_carries_its_invalid_twin() -> Result<(), Box<dyn std::error::Error>>
+    {
+        for id in EMBEDDED {
+            let deck = load(id.as_str())?;
+            let fixtures = deck.fixtures();
+            let Some(valid) = fixtures
+                .iter()
+                .find(|fixture| fixture.kind == FixtureKind::Composition)
+            else {
+                panic!("{id} seeds no composition");
+            };
+            let Some(twin) = deck.invalid_twin() else {
+                panic!("{id} embeds no invalid twin");
+            };
+            let mut parent: serde_json::Value = serde_json::from_str(valid.bytes)?;
+            let twin_document: serde_json::Value = serde_json::from_str(twin.bytes)?;
+            let removed = parent
+                .as_object_mut()
+                .and_then(|root| root.remove("composer"));
+            assert!(removed.is_some(), "{id}: the valid twin has no composer");
+            assert_eq!(
+                parent, twin_document,
+                "{id}: the twin differs by more than the composer"
+            );
+            assert_eq!(twin.kind.media_type(), "application/json");
+            twin.verify(deck.id)?;
+        }
+        Ok(())
     }
 
     /// The embedded composition declares the template the embedded
