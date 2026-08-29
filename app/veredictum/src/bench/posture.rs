@@ -37,6 +37,11 @@
 //! - **TLS** — the recorded base URL's scheme, which is first-hand.
 //! - **Audit and tenancy** — released ITS-REST surfaces no read resource for
 //!   either, so both are honestly declared-only.
+//!
+//! [`PostureItem::is_observable`] is that list as a table, and
+//! [`submission_defects`] is what a publication gate reads it through: an item
+//! a canary observes carries [`Assurance::Verified`] or the block is refused,
+//! and an item nothing discloses may never claim first-hand verification.
 
 #![expect(
     clippy::disallowed_types,
@@ -147,6 +152,29 @@ posture_vocabulary! {
     }
 }
 
+impl PostureItem {
+    /// Whether a canary observes this item first-hand.
+    ///
+    /// An observable item has a wire surface that discloses it: committed
+    /// versions carry `signature`, a commit of the pack's invalid twin is
+    /// accepted or refused, an uncredentialed read is refused or answered, the
+    /// base URL names its scheme, and a response is encoded or plain. Audit and
+    /// tenancy have none, because released ITS-REST defines no read operation
+    /// for either (`specifications/operations/`), so they are carried as claims
+    /// and labelled as claims.
+    #[must_use]
+    pub const fn is_observable(self) -> bool {
+        match self {
+            PostureItem::Audit | PostureItem::Tenancy => false,
+            PostureItem::VersionSigning
+            | PostureItem::CommitValidation
+            | PostureItem::Authn
+            | PostureItem::Tls
+            | PostureItem::Compression => true,
+        }
+    }
+}
+
 posture_vocabulary! {
     /// The audit sink a deployment declares.
     AuditSink, "audit sink", {
@@ -253,6 +281,20 @@ posture_vocabulary! {
         /// The observation disagrees with the declaration, which refuses the
         /// run.
         Contradicted => "contradicted",
+    }
+}
+
+posture_vocabulary! {
+    /// Why one posture block may not be published beside a ranked number.
+    PostureDefectKind, "posture defect", {
+        /// The block carries no line for a disclosed item.
+        Missing => "missing-item",
+        /// A canary observes this item, and the block does not stand behind
+        /// it first-hand.
+        Unverified => "unverified-observable",
+        /// Nothing on the wire discloses this item, and the block claims it
+        /// was verified anyway.
+        Unverifiable => "unverifiable-claim",
     }
 }
 
@@ -422,6 +464,29 @@ pub struct PostureDisclosure {
     pub readings: Vec<CanaryReading>,
 }
 
+/// One item on which the deployment that was measured departs from the
+/// profile named in the same block.
+///
+/// A run declares the profile it is being read against, and a deployment
+/// composed from somebody else's pinned recipe configures what that recipe
+/// configures. Where the two disagree the run declares, and the canaries then
+/// check, what the deployment actually does; this line is how the record says
+/// so, rather than carrying a declaration the canaries would refuse.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PostureDivergence {
+    /// Which item the two disagree on.
+    pub item: PostureItem,
+    /// The token the named profile assigns the item.
+    pub profile_declares: String,
+    /// The token the measured deployment's own configuration assigns it,
+    /// which is what this block declared and the canaries checked.
+    pub deployment_configures: String,
+    /// Where that was read first-hand: the repository, the immutable tag, the
+    /// file, and the element inside it.
+    pub source: String,
+}
+
 /// The posture block one run's record carries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -432,6 +497,11 @@ pub struct PostureRecord {
     pub summary: String,
     /// One line per item, in [`PostureItem::ALL`] order.
     pub items: Vec<PostureDisclosure>,
+    /// Every item on which the measured deployment's own configuration
+    /// departs from the named profile. Empty for a run that declared the
+    /// profile as the pack defines it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comparability: Vec<PostureDivergence>,
 }
 
 impl PostureRecord {
@@ -466,6 +536,96 @@ impl PostureRecord {
             .map(|line| line.item)
             .collect()
     }
+
+    /// The items the block carries as a claim, because nothing on the wire
+    /// discloses them.
+    #[must_use]
+    pub fn declared_only_items(&self) -> Vec<PostureItem> {
+        self.items
+            .iter()
+            .filter(|line| line.assurance == Assurance::DeclaredOnly)
+            .map(|line| line.item)
+            .collect()
+    }
+}
+
+/// One reason a posture block may not be published beside a ranked number.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PostureDefect {
+    /// Which disclosed item the defect is about.
+    pub item: PostureItem,
+    /// What kind of defect it is.
+    pub kind: PostureDefectKind,
+    /// What the block says about the item, in one sentence.
+    pub detail: String,
+}
+
+impl fmt::Display for PostureDefect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "`{}` ({}): {}", self.item, self.kind, self.detail)
+    }
+}
+
+/// Every reason this posture block falls short of the verification the
+/// canaries can give.
+///
+/// A submission carries a number somebody will read as comparable, so the
+/// posture behind it is held to what the machinery can actually establish:
+/// every item [`PostureItem::is_observable`] names is [`Assurance::Verified`]
+/// or the block is refused, an item nothing discloses may not claim
+/// verification it cannot have, and a missing line is a defect rather than a
+/// silently shorter block. An empty result is the only publishable one.
+#[must_use]
+pub fn submission_defects(record: &PostureRecord) -> Vec<PostureDefect> {
+    let mut defects = Vec::new();
+    for item in PostureItem::ALL.iter().copied() {
+        let Some(line) = record.items.iter().find(|line| line.item == item) else {
+            defects.push(PostureDefect {
+                item,
+                kind: PostureDefectKind::Missing,
+                detail: "the block carries no line for this item".to_owned(),
+            });
+            continue;
+        };
+        match (item.is_observable(), line.assurance) {
+            (true, Assurance::DeclaredOnly) => defects.push(PostureDefect {
+                item,
+                kind: PostureDefectKind::Unverified,
+                detail: format!(
+                    "a canary observes this item, and the block declares `{}` without standing behind it: {}",
+                    line.declared,
+                    unverified_evidence(line)
+                ),
+            }),
+            (false, Assurance::Verified) => defects.push(PostureDefect {
+                item,
+                kind: PostureDefectKind::Unverifiable,
+                detail: format!(
+                    "nothing on the wire discloses this item, and the block claims `{}` was verified",
+                    line.declared
+                ),
+            }),
+            (true, Assurance::Verified) | (false, Assurance::DeclaredOnly) => {}
+        }
+    }
+    defects
+}
+
+/// What the readings behind an unverified observable item actually said.
+fn unverified_evidence(line: &PostureDisclosure) -> String {
+    if line.readings.is_empty() {
+        return "the block carries no reading at all".to_owned();
+    }
+    line.readings
+        .iter()
+        .map(|reading| {
+            format!(
+                "{} read {} ({})",
+                reading.bracket, reading.outcome, reading.evidence
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 /// Takes one bracket of readings, one per [`PostureItem`], in that order.
@@ -868,6 +1028,7 @@ pub fn settle(
         profile: profile.name.to_owned(),
         summary: profile.summary.to_owned(),
         items,
+        comparability: Vec::new(),
     })
 }
 
@@ -991,9 +1152,50 @@ mod tests {
         for tenancy in Tenancy::ALL {
             assert_eq!(Tenancy::parse(tenancy.as_str())?, *tenancy);
         }
+        for kind in PostureDefectKind::ALL {
+            assert_eq!(PostureDefectKind::parse(kind.as_str())?, *kind);
+        }
         assert!(SigningScheme::parse("PGP").is_err());
         assert!(ValidationDepth::parse("strict").is_err());
         assert!(AuditSink::parse("on").is_err());
+        Ok(())
+    }
+
+    /// Exactly the two items released ITS-REST surfaces no read resource for
+    /// are the ones no canary observes.
+    #[test]
+    fn only_audit_and_tenancy_are_unobservable() {
+        let unobservable: Vec<PostureItem> = PostureItem::ALL
+            .iter()
+            .copied()
+            .filter(|item| !item.is_observable())
+            .collect();
+        assert_eq!(unobservable, vec![PostureItem::Audit, PostureItem::Tenancy]);
+    }
+
+    /// A block settled from two confirming brackets is publishable, and every
+    /// item it stands behind is one a canary actually observes.
+    #[test]
+    fn a_settled_block_carries_the_verification_the_canaries_can_give()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let record = settle(
+            &MINIMAL,
+            AuthnMode::None,
+            TlsMode::Off,
+            &confirming(&MINIMAL, Bracket::Before),
+            &confirming(&MINIMAL, Bracket::After),
+        )?;
+        assert_eq!(submission_defects(&record), Vec::new());
+        assert!(
+            record
+                .verified_items()
+                .iter()
+                .all(|item| item.is_observable())
+        );
+        assert_eq!(
+            record.declared_only_items(),
+            vec![PostureItem::Audit, PostureItem::Tenancy]
+        );
         Ok(())
     }
 

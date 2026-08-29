@@ -2230,6 +2230,24 @@ fn bench_posture_def() -> Value {
         "properties": {
             "profile": { "type": "string", "minLength": 1 },
             "summary": { "type": "string", "minLength": 1 },
+            "comparability": {
+                "description": "Every item on which the measured deployment's own configuration departs from the profile named above. A same-machine baseline is composed from somebody else's pinned recipe, so where that recipe configures an item differently the run declares, and the canaries check, what the deployment actually does; this block is how the record says so. Absent for a run that declared its profile as the pack defines it.",
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["item", "profile_declares", "deployment_configures", "source"],
+                    "properties": {
+                        "item": {
+                            "enum": tokens(PostureItem::ALL.iter().map(|item| item.as_str()).collect())
+                        },
+                        "profile_declares": { "enum": declared.clone() },
+                        "deployment_configures": { "enum": declared.clone() },
+                        "source": { "type": "string", "minLength": 1 }
+                    }
+                }
+            },
             "items": {
                 "type": "array",
                 "minItems": 1,

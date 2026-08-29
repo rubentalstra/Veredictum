@@ -13,7 +13,9 @@
 #      path under the submissions tree fails, and only additions pass.
 #   2. Record content. The published bench-result schema, the embedded pack and
 #      its fixture pins, the submittability arithmetic (three repetitions and at
-#      least one same-machine baseline), the environment fingerprint, and the
+#      least one same-machine baseline), the posture block, whose every item a
+#      canary observes must read `verified` on the target and on every baseline,
+#      the environment fingerprint, and the
 #      file name that must digest to that fingerprint. That half is a Rust
 #      integration test, because it reads the same pack definitions and the same
 #      result model the engine wrote the record with; a second reimplementation

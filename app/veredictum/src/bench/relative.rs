@@ -344,6 +344,7 @@ mod tests {
                 profile: crate::bench::posture::MINIMAL.name.to_owned(),
                 summary: crate::bench::posture::MINIMAL.summary.to_owned(),
                 items: Vec::new(),
+                comparability: Vec::new(),
             },
             resources: pinned_resources(),
             base_url: "http://127.0.0.1:18091/ehrbase/rest/openehr/v1".to_owned(),

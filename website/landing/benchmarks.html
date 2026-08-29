@@ -90,6 +90,11 @@
           slower. Ordering a list needs a single ruler, so the rows are sorted by the
           FerroEHR index; the EHRbase index sits beside it on every row and is the same
           measurement against the other reference.</p>
+        <p>Rows are grouped by the posture profile they declared, and ranked only inside
+          their group. A number measured with an audit trail on and a number measured with
+          it off describe two different systems, so they are never placed in one ranking.
+          Each row states its profile and which of its items the canaries checked against
+          the running deployment, before and after the measured window.</p>
       </div>
       <p class="after-code">No submission has been merged yet. The first one to arrive
         will be the first row.</p>
@@ -132,7 +137,17 @@
           in its percentiles instead of quietly issuing fewer requests. Phases that are
           closed-loop by construction, such as the bulk load, are labelled as such and are
           reported as throughput, never as a latency claim.</p>
-        <p><b>Verified and declared-only.</b> Every row today carries the
+        <p><b>What was switched on.</b> Every row states the posture profile its run
+          declared: which features were on behind the numbers. The instrument checks each
+          item against the running deployment before and after the measured window, by
+          reading back versions the run itself committed, offering a known-invalid
+          composition, and asking for a compressed response without credentials. An item
+          checked that way is marked verified; audit and tenancy are marked
+          declared-only, because released openEHR REST defines no operation that
+          discloses them. A deployment that contradicted its own declaration had the run
+          refused, so no such row exists. Rows in different profile groups are not
+          comparable with each other.</p>
+        <p><b>Self-reported.</b> Every row today carries the
           <span class="tier tier-self">self-reported</span> tier: the submitter ran the
           benchmark and the record passed CI, and nobody here re-ran it. A record a
           maintainer reproduces will carry a reproduced tier, on the same submission

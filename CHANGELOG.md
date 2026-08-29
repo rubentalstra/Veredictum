@@ -24,6 +24,31 @@ version on.
   upstream #211) and ADL 1.4's stated {1..1} existence default that the
   published corpus contradicts (fixed_handling — an unstated existence defers
   to the RM's effective existence; upstream #212).
+- **The board and the gate speak posture (#204).** The public board groups its
+  rows by the posture profile each run declared and ranks only inside a group,
+  so a `minimal` row and a `clinical-default` row never share a ranking, and the
+  page states that rule in plain words. Every row prints its profile with the
+  items the canaries verified and the items that stay declared-only, and its
+  disclosure carries the full posture table plus any reference deployment that
+  ran a different posture.
+
+  The submission gate refuses a record whose observable canaries did not verify.
+  Version signing, commit validation, authentication, TLS and compression each
+  have an observable that always exists, so each is `verified` on the target and
+  on every baseline or the submission is refused with the item named; a block
+  claiming audit or tenancy was verified is refused the same way, because
+  released ITS-REST discloses neither.
+
+  Each baseline pin records the posture its upstream recipe actually configures,
+  read first-hand at the pinned tag. EHRbase 2.35.1 configures no audit trail
+  and no version signing, validates commits against the operational template,
+  switches no response compression on, and enforces Basic authentication.
+  FerroEHR 4.0.10 configures the same, except that its recipe leaves version
+  signing on in digest mode. Where a pin disagrees with the profile the target
+  declared, the baseline runs and declares the pin's value, so a canary never
+  fails on a declaration the instrument itself manufactured, and the new
+  `posture.comparability` block in the published bench-result schema names each
+  such item with the recipe element it was read from.
 - **Bench posture profiles, with bracketed canaries (#165).** Two speed numbers
   are comparable only when the same features were switched on behind them, so
   every embedded pack now defines named posture profiles and a run declares

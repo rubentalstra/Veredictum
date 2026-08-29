@@ -24,6 +24,14 @@
 # The ratios are what travel between machines; the absolute milliseconds render
 # second, and never without the fingerprint of the machine that produced them.
 #
+# Rows are GROUPED BY THE POSTURE PROFILE they declared, and ranked only inside
+# their group. Two speed numbers are comparable when the same features were
+# switched on behind them, so a `minimal` row and a `clinical-default` row
+# ranked against each other in one list would republish exactly the
+# incomparability the posture block exists to close. Each row prints its own
+# profile and which of its items the canaries verified, so the reader never has
+# to open the record to learn what was on.
+#
 # Usage:
 #   scripts/render/bench-board.sh            # write the page
 #   scripts/render/bench-board.sh --check    # fail if the committed page is stale
@@ -113,6 +121,28 @@ render_body() {
       [ ($d.repetitions // [])[] | (.phases // {}) | to_entries[] | (.value.operations // {}) | to_entries[] | .value ]
       | { errors: (map(.errors) | add // 0), count: (map(.count) | add // 0) };
 
+    # What was switched on behind the numbers, as the row prints it: the
+    # profile the run declared, and which items the canaries stood behind
+    # first-hand against which are carried as a claim.
+    def posture($d):
+      ($d.posture // {}) as $p
+      | {
+          profile: ($p.profile // "not declared"),
+          summary: ($p.summary // ""),
+          verified: [ ($p.items // [])[] | select(.assurance == "verified") | .item ],
+          declared_only: [ ($p.items // [])[] | select(.assurance == "declared-only") | .item ],
+          items: [ ($p.items // [])[] | {item: .item, declared: .declared, assurance: .assurance} ]
+        };
+
+    # Every item on which the pinned recipe behind a baseline departs from the
+    # profile the row declared. A ratio whose denominator ran a different
+    # posture is still a ratio, and the reader is told which.
+    def departures($d):
+      [ ($d.baselines // [])[] as $b
+        | ($b.posture.comparability // [])[]
+        | $b.display_name + ": " + .item + " declared " + .deployment_configures
+          + " where the profile declares " + .profile_declares + " (" + .source + ")" ];
+
     def rows($refs):
       [ .[]
         | .doc as $d
@@ -134,11 +164,18 @@ render_body() {
             baselines: ($d.baselines // []),
             blocks: [ $refs[] | { cdr: .cdr, name: .name, block: block($d; .cdr) } ],
             cross: ($d.cross // {}),
+            posture: posture($d),
+            departures: departures($d),
             reference_configuration: $d.scale.reference_configuration,
             scale: $d.scale.factor
           }
-      ]
-      | sort_by(if .anchor_index == null then 1 else 0 end, .anchor_index // 0, .system);
+      ];
+
+    # One ruler for the order, applied INSIDE a posture group and never across
+    # two: an index taken under one profile does not rank against an index
+    # taken under another.
+    def ranked:
+      sort_by(if .anchor_index == null then 1 else 0 end, .anchor_index // 0, .system);
 
     # The load generator host, printing an absence as an absence. The engine
     # reads no host beyond the standard library and /proc and never spawns a
@@ -175,14 +212,39 @@ render_body() {
       [ $row.blocks[] | .name as $name | (.block.gaps // [])[]
         | $name + ": " + .phase + " / " + .operation + " (" + .metric + "): " + .reason ];
 
+    # The one-line posture the row head prints: the declared profile, then what
+    # the canaries stood behind against what the record carries as a claim.
+    def posture_line($row):
+      "            <p class=\"board-posture\">Posture <code>" + ($row.posture.profile | @html) + "</code>" +
+      (if ($row.posture.verified | length) > 0 then
+        " · verified " + ($row.posture.verified | join(", ") | @html) else "" end) +
+      (if ($row.posture.declared_only | length) > 0 then
+        " · declared-only " + ($row.posture.declared_only | join(", ") | @html) else "" end) +
+      "</p>\n";
+
+    # The full disclosure, inside the per-row <details>: every item, what was
+    # declared for it, and how far the record stands behind that.
+    def posture_table($row):
+      "            <div class=\"table-scroll\">\n" +
+      "              <table>\n" +
+      "                <thead><tr><th scope=\"col\">Posture item</th><th scope=\"col\">Declared</th><th scope=\"col\">Assurance</th></tr></thead>\n" +
+      "                <tbody>\n" +
+      ([ $row.posture.items[]
+         | "                  <tr><td><code>" + (.item | @html) + "</code></td><td><code>" + (.declared | @html) + "</code></td><td>" + (.assurance | @html) + "</td></tr>"
+       ] | join("\n")) + "\n" +
+      "                </tbody>\n" +
+      "              </table>\n" +
+      "            </div>\n";
+
     def row_html($rank; $row):
       "        <article class=\"board-row\">\n" +
       "          <div class=\"board-rank\" aria-hidden=\"true\">" + ($rank | tostring) + "</div>\n" +
       "          <div class=\"board-head\">\n" +
-      "            <h3>" + ($row.system | @html) + " <span class=\"board-version\">" + ($row.version | @html) + "</span></h3>\n" +
+      "            <h4>" + ($row.system | @html) + " <span class=\"board-version\">" + ($row.version | @html) + "</span></h4>\n" +
       "            <p class=\"board-meta\"><span class=\"tier tier-self\">self-reported</span> " +
       "<code>" + ($row.pack | @html) + "</code> · " + ($row.repetitions | tostring) + " repetitions · measured " + ($row.measured_on | @html) +
       (if $row.reference_configuration then "" else " · scaled to " + ($row.scale | tostring) + " of the pinned population" end) + "</p>\n" +
+      posture_line($row) +
       "          </div>\n" +
       "          <div class=\"board-indices\">\n" +
       ([ $row.indices[]
@@ -208,6 +270,10 @@ render_body() {
       "                </tbody>\n" +
       "              </table>\n" +
       "            </div>\n" +
+      posture_table($row) +
+      (if ($row.departures | length) > 0 then
+        "            <p class=\"board-provenance\">Reference deployments that ran a different posture: " + ($row.departures | join("; ") | @html) + ".</p>\n"
+      else "" end) +
       "            <p class=\"board-provenance\">Reference deployments composed on the same host: " +
       ([ $row.baselines[] | (.display_name | @html) + " (" + (.images | to_entries | map(.value | split("@") | .[0]) | join(", ") | @html) + ")" ] | join("; ")) +
       ". Record: <a href=\"" + $tree + "/" + ($row.path | @html) + "\">" + ($row.path | @html) + "</a>.</p>\n" +
@@ -217,8 +283,19 @@ render_body() {
       "          </details>\n" +
       "        </article>";
 
+    # One section per posture profile present, its rows ranked inside it.
+    def group_html($group):
+      "      <div class=\"board-group\">\n" +
+      "        <h3 class=\"board-group-head\">Posture <code>" + (($group | first | .posture.profile) | @html) + "</code></h3>\n" +
+      "        <p class=\"board-group-note\">" + (($group | first | .posture.summary) | @html) + "</p>\n" +
+      "        <div class=\"board-rows\">\n" +
+      ([ $group | to_entries[] | row_html((.key + 1); .value) ] | join("\n")) + "\n" +
+      "        </div>\n" +
+      "      </div>";
+
     references as $refs |
     rows($refs) as $rows |
+    ($rows | group_by(.posture.profile) | map(ranked)) as $groups |
     # With nothing committed yet there is no record to read the reference names
     # out of, and naming them here would be a second copy of the engine list.
     (if ($refs | length) == 0 then "the pinned reference CDRs"
@@ -260,14 +337,17 @@ render_body() {
     "          slower. Ordering a list needs a single ruler, so the rows are sorted by the\n" +
     "          FerroEHR index; the EHRbase index sits beside it on every row and is the same\n" +
     "          measurement against the other reference.</p>\n" +
+    "        <p>Rows are grouped by the posture profile they declared, and ranked only inside\n" +
+    "          their group. A number measured with an audit trail on and a number measured with\n" +
+    "          it off describe two different systems, so they are never placed in one ranking.\n" +
+    "          Each row states its profile and which of its items the canaries checked against\n" +
+    "          the running deployment, before and after the measured window.</p>\n" +
     "      </div>\n" +
     (if ($rows | length) == 0 then
       "      <p class=\"after-code\">No submission has been merged yet. The first one to arrive\n" +
       "        will be the first row.</p>\n"
     else
-      "      <div class=\"board-rows\">\n" +
-      ([ $rows | to_entries[] | row_html((.key + 1); .value) ] | join("\n")) + "\n" +
-      "      </div>\n"
+      ([ $groups[] | group_html(.) ] | join("\n")) + "\n"
     end) +
     "    </div>\n" +
     "  </section>\n" +
@@ -308,7 +388,17 @@ render_body() {
     "          in its percentiles instead of quietly issuing fewer requests. Phases that are\n" +
     "          closed-loop by construction, such as the bulk load, are labelled as such and are\n" +
     "          reported as throughput, never as a latency claim.</p>\n" +
-    "        <p><b>Verified and declared-only.</b> Every row today carries the\n" +
+    "        <p><b>What was switched on.</b> Every row states the posture profile its run\n" +
+    "          declared: which features were on behind the numbers. The instrument checks each\n" +
+    "          item against the running deployment before and after the measured window, by\n" +
+    "          reading back versions the run itself committed, offering a known-invalid\n" +
+    "          composition, and asking for a compressed response without credentials. An item\n" +
+    "          checked that way is marked verified; audit and tenancy are marked\n" +
+    "          declared-only, because released openEHR REST defines no operation that\n" +
+    "          discloses them. A deployment that contradicted its own declaration had the run\n" +
+    "          refused, so no such row exists. Rows in different profile groups are not\n" +
+    "          comparable with each other.</p>\n" +
+    "        <p><b>Self-reported.</b> Every row today carries the\n" +
     "          <span class=\"tier tier-self\">self-reported</span> tier: the submitter ran the\n" +
     "          benchmark and the record passed CI, and nobody here re-ran it. A record a\n" +
     "          maintainer reproduces will carry a reproduced tier, on the same submission\n" +
