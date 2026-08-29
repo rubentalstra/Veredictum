@@ -1274,4 +1274,636 @@ mod tests {
         assert_ne!(deterministic_ehr_id("a", 1), deterministic_ehr_id("a", 2));
         assert_ne!(deterministic_ehr_id("a", 1), deterministic_ehr_id("b", 1));
     }
+
+    /// A recipe must be TOTAL over its declared rows, so a row outside the
+    /// declared shape is a typed error naming the offending column — never a
+    /// silently defaulted payload, which would manufacture a passing row out
+    /// of an authoring typo.
+    #[test]
+    fn ehr_status_refuses_a_row_outside_its_declared_shape() {
+        let columns = cols(&["ehr_status", "is_queryable", "is_modifiable"]);
+        let bad_sentinel = ehr_status(
+            "case-a",
+            &row(
+                &columns,
+                &[
+                    MatrixCell::Null,
+                    MatrixCell::Literal(json!(true)),
+                    MatrixCell::Literal(json!(true)),
+                ],
+            ),
+            0,
+        );
+        let message = bad_sentinel
+            .expect_err("a null ehr_status cell is outside absent|provided")
+            .to_string();
+        assert!(
+            message.contains("ehr_status column must be absent|provided"),
+            "{message}"
+        );
+
+        let non_boolean_flag = ehr_status(
+            "case-a",
+            &row(
+                &columns,
+                &[
+                    MatrixCell::Provided,
+                    MatrixCell::Literal(json!("yes")),
+                    MatrixCell::Literal(json!(true)),
+                ],
+            ),
+            0,
+        );
+        let message = non_boolean_flag
+            .expect_err("a non-boolean is_queryable cell is outside the shape")
+            .to_string();
+        assert!(
+            message.contains("is_queryable must be a boolean literal"),
+            "{message}"
+        );
+
+        // A column the row does not carry at all fails the same way, so a
+        // truncated matrix cannot silently produce a half-built EHR_STATUS.
+        let missing_flag = ehr_status(
+            "case-a",
+            &row(&cols(&["ehr_status"]), &[MatrixCell::Provided]),
+            0,
+        );
+        assert!(
+            missing_flag
+                .expect_err("a missing is_queryable column is outside the shape")
+                .to_string()
+                .contains("is_queryable")
+        );
+    }
+
+    /// A `subject: provided` row carries the row-scoped external reference the
+    /// case commits against; every other cell state falls back to the bare
+    /// `PARTY_SELF` (RM ehr `ehr_status.adoc` §Attributes subject).
+    #[test]
+    fn ehr_status_subject_is_row_scoped_only_when_provided() {
+        let columns = cols(&["ehr_status", "is_queryable", "is_modifiable", "subject"]);
+        let with = |subject: MatrixCell| {
+            ehr_status(
+                "case-s",
+                &row(
+                    &columns,
+                    &[
+                        MatrixCell::Provided,
+                        MatrixCell::Literal(json!(true)),
+                        MatrixCell::Literal(json!(true)),
+                        subject,
+                    ],
+                ),
+                7,
+            )
+        };
+        let provided = with(MatrixCell::Provided)
+            .expect("the row is inside the declared shape")
+            .expect("a provided ehr_status yields a payload");
+        assert_eq!(provided["subject"]["_type"], json!("PARTY_SELF"));
+        assert_eq!(
+            provided["subject"]["external_ref"]["id"]["value"],
+            json!("subject-case-s-7"),
+            "the external reference is scoped to the case and the row"
+        );
+        // An EHR_STATUS is unconditionally an archetype root, so the payload
+        // always carries ARCHETYPED (RM common `locatable.adoc`
+        // §Archetyped_valid).
+        assert_eq!(
+            provided["archetype_details"]["archetype_id"]["value"],
+            json!("openEHR-EHR-EHR_STATUS.generic.v1")
+        );
+
+        let bare = with(MatrixCell::Absent)
+            .expect("the row is inside the declared shape")
+            .expect("a provided ehr_status yields a payload");
+        assert_eq!(bare["subject"], json!({ "_type": "PARTY_SELF" }));
+        assert!(
+            bare.get("other_details").is_none(),
+            "other_details rides only its own provided cell"
+        );
+    }
+
+    /// The per-row constraint-template id is a pure function of the case id,
+    /// the row index and the row's cells: two runners mint the same id, and a
+    /// re-adjudicated row mints a NEW one, so a 409-tolerant re-upload can
+    /// never silently reuse a stale OPT carrying different constraints.
+    #[test]
+    fn synth_template_ids_are_pure_and_change_with_the_row() {
+        let cells = [MatrixCell::Literal(json!("ABC")), MatrixCell::Provided];
+        let id = synth_template_id("CONT-DV_TEXT.pattern", 3, &cells);
+        assert_eq!(id, synth_template_id("CONT-DV_TEXT.pattern", 3, &cells));
+        assert!(
+            id.starts_with("cnf.tpl.cont_dv_text_pattern.r3."),
+            "the id carries the slugged case id and the row: {id}"
+        );
+
+        let readjudicated = [MatrixCell::Literal(json!("XYZ")), MatrixCell::Provided];
+        assert_ne!(
+            id,
+            synth_template_id("CONT-DV_TEXT.pattern", 3, &readjudicated)
+        );
+        assert_ne!(id, synth_template_id("CONT-DV_TEXT.pattern", 4, &cells));
+        assert_ne!(id, synth_template_id("CONT-DV_TEXT.other", 3, &cells));
+
+        // Every cell sentinel is encoded distinctly, so two rows differing
+        // only in null-versus-absent do not collide onto one OPT.
+        let digest_of = |cell: MatrixCell| synth_template_id("c", 0, &[cell]);
+        let mut digests = vec![
+            digest_of(MatrixCell::Absent),
+            digest_of(MatrixCell::Provided),
+            digest_of(MatrixCell::Null),
+            digest_of(MatrixCell::Literal(json!("x"))),
+        ];
+        digests.sort();
+        digests.dedup();
+        assert_eq!(digests.len(), 4, "the four cell states encode distinctly");
+    }
+
+    /// Each simple leaf class projects exactly its own genuine RM instance
+    /// attributes (RM `data_types`); a decision-table column that is not one of
+    /// them is constraint axis and never reaches the committed value.
+    #[test]
+    fn simple_leaf_classes_project_only_their_rm_attributes() {
+        let count = value_of(&content_instance(
+            "DV_COUNT",
+            "t",
+            &cols(&["magnitude", "range.lower", "expected"]),
+            &[
+                MatrixCell::Literal(json!(3)),
+                MatrixCell::Literal(json!(0)),
+                MatrixCell::Literal(json!("created")),
+            ],
+        ))
+        .clone();
+        assert_eq!(count, json!({ "_type": "DV_COUNT", "magnitude": 3 }));
+
+        let quantity = value_of(&content_instance(
+            "DV_QUANTITY",
+            "t",
+            &cols(&["magnitude", "units", "precision"]),
+            &[
+                MatrixCell::Literal(json!(72.5)),
+                MatrixCell::Literal(json!("mm[Hg]")),
+                MatrixCell::Literal(json!(2)),
+            ],
+        ))
+        .clone();
+        assert_eq!(
+            quantity,
+            json!({ "_type": "DV_QUANTITY", "magnitude": 72.5, "units": "mm[Hg]" }),
+            "precision is not a DV_QUANTITY instance column in `simple_attrs`"
+        );
+
+        let proportion = value_of(&content_instance(
+            "DV_PROPORTION",
+            "t",
+            &cols(&["type", "numerator", "denominator", "precision"]),
+            &[
+                MatrixCell::Literal(json!(0)),
+                MatrixCell::Literal(json!(1)),
+                MatrixCell::Literal(json!(2)),
+                MatrixCell::Literal(json!(0)),
+            ],
+        ))
+        .clone();
+        assert_eq!(proportion["numerator"], json!(1));
+        assert_eq!(proportion["denominator"], json!(2));
+        assert_eq!(proportion["precision"], json!(0));
+
+        let parsable = value_of(&content_instance(
+            "DV_PARSABLE",
+            "t",
+            &cols(&["value", "formalism"]),
+            &[
+                MatrixCell::Literal(json!("a,b")),
+                MatrixCell::Literal(json!("csv")),
+            ],
+        ))
+        .clone();
+        assert_eq!(
+            parsable,
+            json!({ "_type": "DV_PARSABLE", "value": "a,b", "formalism": "csv" })
+        );
+
+        // A mandatory-attribute row omits the attribute entirely, which is what
+        // makes the SUT's RM mandatory check the thing under test.
+        let missing = value_of(&content_instance(
+            "DV_TEXT",
+            "t",
+            &cols(&["value"]),
+            &[MatrixCell::Null],
+        ))
+        .clone();
+        assert_eq!(missing, json!({ "_type": "DV_TEXT" }));
+    }
+
+    /// RM `data_types` §`DV_MULTIMEDIA` — `media_type` is a `CODE_PHRASE` against
+    /// the IANA set, and a `uri` is always attached so the `Not_empty`
+    /// invariant (data or uri present) holds while `media_type` is under test.
+    #[test]
+    fn multimedia_codes_its_media_type_and_stays_not_empty() {
+        let dv = value_of(&content_instance(
+            "DV_MULTIMEDIA",
+            "t",
+            &cols(&["media_type", "size", "expected"]),
+            &[
+                MatrixCell::Literal(json!("image/png")),
+                MatrixCell::Literal(json!(1024)),
+                MatrixCell::Literal(json!("created")),
+            ],
+        ))
+        .clone();
+        assert_eq!(dv["media_type"]["_type"], json!("CODE_PHRASE"));
+        assert_eq!(
+            dv["media_type"]["terminology_id"]["value"],
+            json!("IANA_media-types")
+        );
+        assert_eq!(dv["media_type"]["code_string"], json!("image/png"));
+        assert_eq!(dv["size"], json!(1024));
+        assert_eq!(dv["uri"]["_type"], json!("DV_URI"));
+
+        // A row testing the mandatory media_type omits it, and the uri stays:
+        // the Not_empty invariant must not be what fails such a row.
+        let without = value_of(&content_instance(
+            "DV_MULTIMEDIA",
+            "t",
+            &cols(&["media_type", "size"]),
+            &[MatrixCell::Null, MatrixCell::Null],
+        ))
+        .clone();
+        assert!(without.get("media_type").is_none());
+        assert!(without.get("size").is_none());
+        assert!(without.get("uri").is_some());
+    }
+
+    /// RM `data_types` §`DV_IDENTIFIER` — the row's `attribute` column names
+    /// which field carries the value under test, and the mandatory `id` stays
+    /// valid whenever the test targets another field, so the mandatory check
+    /// cannot mask the field test.
+    #[test]
+    fn identifier_targets_the_named_attribute_and_keeps_id_valid() {
+        let build = |attribute: MatrixCell, value: MatrixCell| {
+            value_of(&content_instance(
+                "DV_IDENTIFIER",
+                "t",
+                &cols(&["attribute", "value"]),
+                &[attribute, value],
+            ))
+            .clone()
+        };
+
+        let issuer = build(
+            MatrixCell::Literal(json!("issuer")),
+            MatrixCell::Literal(json!("NHS")),
+        );
+        assert_eq!(issuer["issuer"], json!("NHS"));
+        assert_eq!(issuer["id"], json!("cnf-id"), "the mandatory id stays");
+
+        // Absent the attribute column the value drives `id` itself, and no
+        // filler id is added on top of it.
+        let identity = build(MatrixCell::Null, MatrixCell::Literal(json!("A1")));
+        assert_eq!(identity, json!({ "_type": "DV_IDENTIFIER", "id": "A1" }));
+    }
+
+    /// The `DV_INTERVAL<T>` limit type is read off the template id, and
+    /// `date_time` is matched before `date`/`time` so the composite name never
+    /// resolves to one of its own substrings.
+    #[test]
+    fn the_interval_limit_type_follows_the_template_id() {
+        let limit_type = |template: &str, lower: Value, upper: Value| {
+            value_of(&content_instance(
+                "DV_INTERVAL",
+                template,
+                &cols(&["lower", "upper"]),
+                &[MatrixCell::Literal(lower), MatrixCell::Literal(upper)],
+            ))
+            .clone()
+        };
+
+        let date_time = limit_type(
+            "cnf.tpl.interval_date_time_range",
+            json!("2026-01-01T00:00:00Z"),
+            json!("2026-01-02T00:00:00Z"),
+        );
+        assert_eq!(date_time["lower"]["_type"], json!("DV_DATE_TIME"));
+        assert_eq!(date_time["lower"]["value"], json!("2026-01-01T00:00:00Z"));
+
+        assert_eq!(
+            limit_type(
+                "cnf.tpl.interval_date_range",
+                json!("2026-01-01"),
+                json!("2026-01-02")
+            )["upper"]["_type"],
+            json!("DV_DATE")
+        );
+        assert_eq!(
+            limit_type(
+                "cnf.tpl.interval_time_range",
+                json!("09:00:00"),
+                json!("17:00:00")
+            )["lower"]["_type"],
+            json!("DV_TIME")
+        );
+        assert_eq!(
+            limit_type(
+                "cnf.tpl.interval_duration_range",
+                json!("PT1H"),
+                json!("PT2H")
+            )["lower"]["_type"],
+            json!("DV_DURATION")
+        );
+        // The fallback: a template naming no inner type is a count interval.
+        assert_eq!(
+            limit_type("cnf.tpl.interval_plain", json!(1), json!(2))["lower"]["_type"],
+            json!("DV_COUNT")
+        );
+    }
+
+    /// An ordinal-limited interval builds each limit as a full `DV_ORDINAL`
+    /// (coded symbol plus value), never a bare scalar, and a side with neither
+    /// column is omitted as unbounded.
+    #[test]
+    fn ordinal_interval_limits_are_full_data_values() {
+        let dv = value_of(&content_instance(
+            "DV_INTERVAL",
+            "cnf.tpl.interval_ordinal_range",
+            &cols(&["lower_symbol", "lower_value", "upper_symbol", "upper_value"]),
+            &[
+                MatrixCell::Literal(json!("local::at0004")),
+                MatrixCell::Literal(json!(1)),
+                MatrixCell::Null,
+                MatrixCell::Null,
+            ],
+        ))
+        .clone();
+        assert_eq!(dv["lower"]["_type"], json!("DV_ORDINAL"));
+        assert_eq!(dv["lower"]["value"], json!(1));
+        assert_eq!(
+            dv["lower"]["symbol"]["defining_code"]["code_string"],
+            json!("at0004")
+        );
+        assert!(dv.get("upper").is_none(), "a column-less side is unbounded");
+
+        // A symbol with no `terminology::code` separator falls back to the
+        // local terminology rather than losing the code.
+        let scale = value_of(&content_instance(
+            "DV_INTERVAL",
+            "cnf.tpl.interval_scale_range",
+            &cols(&["lower_symbol"]),
+            &[MatrixCell::Literal(json!("at0009"))],
+        ))
+        .clone();
+        assert_eq!(scale["lower"]["_type"], json!("DV_SCALE"));
+        assert_eq!(
+            scale["lower"]["symbol"]["defining_code"]["terminology_id"]["value"],
+            json!("local")
+        );
+    }
+
+    /// A proportion-limited interval reads each limit's four attributes from
+    /// its own `<side>_<attr>` columns, and a side declaring none is omitted.
+    #[test]
+    fn proportion_interval_limits_read_their_side_columns() {
+        let dv = value_of(&content_instance(
+            "DV_INTERVAL",
+            "cnf.tpl.interval_proportion_range",
+            &cols(&[
+                "lower_type",
+                "lower_numerator",
+                "lower_denominator",
+                "lower_precision",
+            ]),
+            &[
+                MatrixCell::Literal(json!(0)),
+                MatrixCell::Literal(json!(1)),
+                MatrixCell::Literal(json!(4)),
+                MatrixCell::Literal(json!(0)),
+            ],
+        ))
+        .clone();
+        assert_eq!(
+            dv["lower"],
+            json!({ "_type": "DV_PROPORTION", "type": 0, "numerator": 1, "denominator": 4, "precision": 0 })
+        );
+        assert!(dv.get("upper").is_none());
+    }
+
+    /// The three-state `context_committed` axis drives the carrier's
+    /// `EVENT_CONTEXT`: `absent` omits it, `present_with_other` adds
+    /// `other_context`, and a missing column keeps the context present.
+    #[test]
+    fn the_composition_context_axis_shapes_the_carrier() {
+        let carrier = |token: MatrixCell| {
+            content_instance(
+                "COMPOSITION",
+                "cnf.tpl.comp_context",
+                &cols(&["context_committed"]),
+                &[token],
+            )
+        };
+
+        let absent = carrier(MatrixCell::Literal(json!("absent")));
+        assert!(absent.get("context").is_none());
+
+        let present = carrier(MatrixCell::Literal(json!("present")));
+        assert_eq!(present["context"]["_type"], json!("EVENT_CONTEXT"));
+        assert!(present["context"].get("other_context").is_none());
+
+        let with_other = carrier(MatrixCell::Literal(json!("present_with_other")));
+        assert_eq!(
+            with_other["context"]["other_context"]["_type"],
+            json!("ITEM_TREE")
+        );
+
+        let no_column = content_instance("COMPOSITION", "cnf.tpl.comp_plain", &cols(&[]), &[]);
+        assert_eq!(no_column["context"]["_type"], json!("EVENT_CONTEXT"));
+        assert_eq!(
+            no_column["content"].as_array().map(Vec::len),
+            Some(1),
+            "a COMPOSITION carrier without a cardinality axis holds one observation"
+        );
+        assert_eq!(
+            no_column["archetype_details"]["template_id"]["value"],
+            json!("cnf.tpl.comp_plain"),
+            "the carrier stamps the case's constraint template"
+        );
+    }
+
+    /// The EVENT family commits a per-row event: the slot-type axis commits the
+    /// row's named subtype (an `INTERVAL_EVENT` carrying its mandatory `width`
+    /// and `math_function`, RM `data_structures` §`INTERVAL_EVENT`), while the
+    /// existence axis gates the optional `data`/`state` attributes.
+    #[test]
+    fn the_event_family_commits_its_row_shape() {
+        let slot = content_instance(
+            "EVENT",
+            "cnf.tpl.event_slot",
+            &cols(&["slot_type", "committed_type"]),
+            &[
+                MatrixCell::Literal(json!("EVENT")),
+                MatrixCell::Literal(json!("INTERVAL_EVENT")),
+            ],
+        );
+        let event = &slot["content"][0]["data"]["events"][0];
+        assert_eq!(event["_type"], json!("INTERVAL_EVENT"));
+        assert_eq!(event["width"]["value"], json!("PT1H"));
+        assert_eq!(
+            event["math_function"]["defining_code"]["code_string"],
+            json!("146")
+        );
+
+        // Absent a committed_type the slot commits the POINT_EVENT default.
+        let defaulted = content_instance(
+            "EVENT",
+            "cnf.tpl.event_slot",
+            &cols(&["slot_type"]),
+            &[MatrixCell::Literal(json!("EVENT"))],
+        );
+        assert_eq!(
+            defaulted["content"][0]["data"]["events"][0]["_type"],
+            json!("POINT_EVENT")
+        );
+
+        let existence = content_instance(
+            "EVENT",
+            "cnf.tpl.event_existence",
+            &cols(&["data_committed", "state_committed"]),
+            &[
+                MatrixCell::Literal(json!("present")),
+                MatrixCell::Literal(json!("present")),
+            ],
+        );
+        let both = &existence["content"][0]["data"]["events"][0];
+        assert_eq!(both["_type"], json!("POINT_EVENT"));
+        assert!(both.get("data").is_some());
+        assert_eq!(both["state"]["archetype_node_id"], json!("at0005"));
+
+        let neither = content_instance(
+            "EVENT",
+            "cnf.tpl.event_existence",
+            &cols(&["data_committed", "state_committed"]),
+            &[
+                MatrixCell::Literal(json!("absent")),
+                MatrixCell::Literal(json!("absent")),
+            ],
+        );
+        let bare = &neither["content"][0]["data"]["events"][0];
+        assert!(bare.get("data").is_none());
+        assert!(bare.get("state").is_none());
+    }
+
+    /// The HISTORY family commits `events_count` events, and the combined
+    /// family's `summary_committed` axis adds `HISTORY.summary`; the
+    /// cardinality-axis and single-axis rows build the same shape.
+    #[test]
+    fn the_history_family_commits_its_event_count_and_summary() {
+        let with_cardinality = content_instance(
+            "HISTORY",
+            "cnf.tpl.history_card",
+            &cols(&["cardinality", "events_count", "summary_committed"]),
+            &[
+                MatrixCell::Literal(json!("1to3")),
+                MatrixCell::Literal(json!(2)),
+                MatrixCell::Literal(json!("present")),
+            ],
+        );
+        let history = &with_cardinality["content"][0]["data"];
+        assert_eq!(history["events"].as_array().map(Vec::len), Some(2));
+        assert_eq!(history["summary"]["archetype_node_id"], json!("at0007"));
+
+        let single_axis = content_instance(
+            "HISTORY",
+            "cnf.tpl.history_events",
+            &cols(&["events_count"]),
+            &[MatrixCell::Literal(json!(3))],
+        );
+        let history = &single_axis["content"][0]["data"];
+        assert_eq!(history["events"].as_array().map(Vec::len), Some(3));
+        assert!(
+            history.get("summary").is_none(),
+            "the single-axis family carries no summary column"
+        );
+
+        // The summary axis rides its own column, with or without a cardinality
+        // column beside it.
+        let summary_only = content_instance(
+            "HISTORY",
+            "cnf.tpl.history_summary",
+            &cols(&["events_count", "summary_committed"]),
+            &[
+                MatrixCell::Literal(json!(1)),
+                MatrixCell::Literal(json!("present")),
+            ],
+        );
+        let history = &summary_only["content"][0]["data"];
+        assert_eq!(history["events"].as_array().map(Vec::len), Some(1));
+        assert_eq!(history["summary"]["archetype_node_id"], json!("at0007"));
+    }
+
+    /// The `ITEM_STRUCTURE` family commits an EVALUATION whose data is the row's
+    /// named subtype; `ITEM_SINGLE.item` is 1..1 so it carries its element,
+    /// while the list-shaped subtypes stay minimal (their lists are 0..1).
+    #[test]
+    fn the_item_structure_family_narrows_the_committed_subtype() {
+        let committed = |subtype: MatrixCell| {
+            content_instance(
+                "ITEM_STRUCTURE",
+                "cnf.tpl.item_structure",
+                &cols(&["committed_type"]),
+                &[subtype],
+            )
+        };
+
+        let single = committed(MatrixCell::Literal(json!("ITEM_SINGLE")));
+        let data = &single["content"][0]["data"];
+        assert_eq!(data["_type"], json!("ITEM_SINGLE"));
+        assert_eq!(data["item"]["_type"], json!("ELEMENT"));
+        assert_eq!(single["content"][0]["_type"], json!("EVALUATION"));
+
+        let table = committed(MatrixCell::Literal(json!("ITEM_TABLE")));
+        let data = &table["content"][0]["data"];
+        assert_eq!(data["_type"], json!("ITEM_TABLE"));
+        assert!(
+            data.get("rows").is_none(),
+            "ITEM_TABLE.rows is existence 0..1, so a minimal valid structure omits it"
+        );
+
+        // Absent the column the default subtype is ITEM_TREE.
+        assert_eq!(
+            committed(MatrixCell::Null)["content"][0]["data"]["_type"],
+            json!("ITEM_TREE")
+        );
+    }
+
+    /// The OBSERVATION family gates the three optional attributes off their own
+    /// existence columns: `EVENT.data`, `OBSERVATION.state` (a HISTORY) and
+    /// `OBSERVATION.protocol`.
+    #[test]
+    fn the_observation_family_gates_its_optional_attributes() {
+        let observation = |data: &str, state: &str, protocol: &str| {
+            content_instance(
+                "OBSERVATION",
+                "cnf.tpl.observation",
+                &cols(&["data_committed", "state_committed", "protocol_committed"]),
+                &[
+                    MatrixCell::Literal(json!(data)),
+                    MatrixCell::Literal(json!(state)),
+                    MatrixCell::Literal(json!(protocol)),
+                ],
+            )["content"][0]
+                .clone()
+        };
+
+        let full = observation("present", "present", "present");
+        assert!(full["data"]["events"][0].get("data").is_some());
+        assert_eq!(full["state"]["_type"], json!("HISTORY"));
+        assert_eq!(full["protocol"]["archetype_node_id"], json!("at0006"));
+
+        let bare = observation("absent", "absent", "absent");
+        assert!(bare["data"]["events"][0].get("data").is_none());
+        assert!(bare.get("state").is_none());
+        assert!(bare.get("protocol").is_none());
+    }
 }

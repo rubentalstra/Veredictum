@@ -168,4 +168,115 @@ mod tests {
                 .is_err()
         );
     }
+
+    /// A LIVE commit is known only to an interval, so `before` resolves from
+    /// the earliest the commit can have happened and `after` from the latest:
+    /// both stay sound against a server whose clock sits anywhere inside the
+    /// window the runner observed.
+    #[test]
+    fn a_commit_window_resolves_from_the_sound_end_of_the_interval() {
+        let mut store = VarStore::default();
+        let t = CaptureName::parse("t").unwrap();
+        store.set(
+            t.clone(),
+            Captured::InstantMs {
+                lo: 1_000,
+                hi: 1_400,
+            },
+        );
+
+        assert_eq!(
+            store.resolve_time(&TimeExpr::Before(t.clone())).unwrap(),
+            999,
+            "before is strictly before the earliest possible commit"
+        );
+        assert_eq!(
+            store.resolve_time(&TimeExpr::After(t.clone())).unwrap(),
+            1_401,
+            "after is strictly after the latest possible commit"
+        );
+
+        // The pacing channel reads the newest upper bound across every window.
+        assert_eq!(store.latest_instant_hi(), Some(1_400));
+        let u = CaptureName::parse("u").unwrap();
+        store.set(
+            u,
+            Captured::InstantMs {
+                lo: 9_000,
+                hi: 9_100,
+            },
+        );
+        assert_eq!(store.latest_instant_hi(), Some(9_100));
+    }
+
+    /// A capture bound to something that is not a commit instant is a typed
+    /// failure naming the capture, never a silent zero: a temporal case
+    /// resolved against a uid would query an arbitrary instant and pass.
+    #[test]
+    fn a_non_instant_capture_is_refused_by_name() {
+        let mut store = VarStore::default();
+        let uid = CaptureName::parse("uid").unwrap();
+        store.set(uid.clone(), Captured::Scalar("abc::sys::1".to_owned()));
+        let body = CaptureName::parse("body").unwrap();
+        store.set(body.clone(), Captured::Body(serde_json::json!({ "a": 1 })));
+
+        let message = store
+            .resolve_time(&TimeExpr::After(uid.clone()))
+            .expect_err("a scalar capture is not an instant");
+        assert_eq!(message, "capture uid is not a commit instant");
+        assert!(
+            store
+                .resolve_time(&TimeExpr::Between(body, uid.clone()))
+                .is_err()
+        );
+
+        // A store holding no instant at all has no pacing bound to report.
+        assert_eq!(store.latest_instant_hi(), None);
+        // The scalar view refuses every non-scalar capture, so a list or a
+        // body can never be substituted where a scalar is required.
+        assert_eq!(store.scalar(&uid), Some("abc::sys::1"));
+        let list = CaptureName::parse("uids").unwrap();
+        store.set(list.clone(), Captured::List(vec!["a".to_owned()]));
+        assert_eq!(store.scalar(&list), None);
+        assert_eq!(
+            store.get(&list),
+            Some(&Captured::List(vec!["a".to_owned()]))
+        );
+    }
+
+    /// The arithmetic fails loud at the representable edges rather than
+    /// wrapping into an instant on the wrong side of the commit.
+    #[test]
+    fn instant_arithmetic_reports_its_own_overflow() {
+        let mut store = VarStore::default();
+        let low = CaptureName::parse("low").unwrap();
+        store.set(
+            low.clone(),
+            Captured::InstantMs {
+                lo: i64::MIN,
+                hi: i64::MIN,
+            },
+        );
+        let high = CaptureName::parse("high").unwrap();
+        store.set(
+            high.clone(),
+            Captured::InstantMs {
+                lo: i64::MAX,
+                hi: i64::MAX,
+            },
+        );
+
+        assert_eq!(
+            store.resolve_time(&TimeExpr::Before(low.clone())),
+            Err("instant arithmetic underflow".to_owned())
+        );
+        assert_eq!(
+            store.resolve_time(&TimeExpr::After(high.clone())),
+            Err("instant arithmetic overflow".to_owned())
+        );
+        assert_eq!(
+            store.resolve_time(&TimeExpr::Between(low, high)),
+            Err("instant arithmetic overflow".to_owned())
+        );
+    }
 }

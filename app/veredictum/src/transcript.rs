@@ -303,6 +303,52 @@ mod tests {
         Ok(())
     }
 
+    /// One case can drive several format axes, so the case id alone is not a
+    /// total order: the format and then the exchange count break the tie, so
+    /// two runs of the same campaign emit the same bytes whatever order the
+    /// runner happened to append the entries in.
+    #[test]
+    fn the_canonical_order_is_total_within_one_case_id() {
+        let entry = |format: Option<crate::vocab::FormatName>, exchanges: usize| CaseTranscript {
+            case: case_id("I_EHR_SERVICE.create_ehr-main"),
+            format,
+            exchanges: (0..exchanges)
+                .map(|i| exchange(u32::try_from(i).unwrap_or(0)))
+                .collect(),
+        };
+        let ordered = |entries: Vec<CaseTranscript>| {
+            let mut document = transcript(entries);
+            document.canonicalize();
+            document
+                .cases
+                .iter()
+                .map(|c| (c.format, c.exchanges.len()))
+                .collect::<Vec<_>>()
+        };
+
+        // The format breaks the tie, in the vocabulary's own order.
+        let by_format = ordered(vec![
+            entry(Some(crate::vocab::FormatName::CanonicalXml), 1),
+            entry(Some(crate::vocab::FormatName::CanonicalJson), 1),
+            entry(None, 1),
+        ]);
+        assert_eq!(
+            by_format,
+            vec![
+                (None, 1),
+                (Some(crate::vocab::FormatName::CanonicalJson), 1),
+                (Some(crate::vocab::FormatName::CanonicalXml), 1),
+            ]
+        );
+
+        // Same case, same format: the exchange count is the last tie-break, so
+        // the order never depends on the order the entries arrived in.
+        let by_count = ordered(vec![entry(None, 3), entry(None, 1), entry(None, 2)]);
+        assert_eq!(by_count, vec![(None, 1), (None, 2), (None, 3)]);
+        let reversed = ordered(vec![entry(None, 1), entry(None, 2), entry(None, 3)]);
+        assert_eq!(by_count, reversed);
+    }
+
     #[test]
     fn recording_is_off_by_default() {
         assert_eq!(Recording::default(), Recording::Off);

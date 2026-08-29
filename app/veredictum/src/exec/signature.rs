@@ -237,6 +237,22 @@ mod tests {
         // The negative direction: a different payload must still fail, so the
         // subkey fallback cannot pass by accepting everything.
         assert!(!verify_pgp(b"tampered", &sig, &public_armored)?);
+
+        // The ordinary direction the subkey fallback sits behind: a signature
+        // by the PRIMARY key verifies against the certificate directly.
+        let primary = DetachedSignature::sign_binary_data(
+            OsRng,
+            &secret.primary_key,
+            &Password::empty(),
+            HashAlgorithm::Sha256,
+            &data[..],
+        )?
+        .to_armored_string(ArmorOptions::default())?;
+        assert!(
+            verify_pgp(data, &primary, &public_armored)?,
+            "a signature by the certificate's primary key must verify"
+        );
+        assert!(!verify_pgp(b"tampered", &primary, &public_armored)?);
         Ok(())
     }
 
@@ -251,5 +267,140 @@ mod tests {
                 .is_some_and(|s| !s.is_empty())
         );
         assert!(canonical_form(&env).unwrap().contains("data"));
+    }
+
+    /// The digest posture is the SUT's own declaration, so an algorithm or an
+    /// encoding this verifier does not implement is a LOUD interpreter error
+    /// naming the token — never a `false` that would publish a conformant
+    /// server as failing its signature case.
+    #[test]
+    fn an_undeclarable_digest_posture_is_an_error_not_a_verdict() {
+        let env = json!({ "_type": "ORIGINAL_VERSION", "data": { "a": 1 } });
+
+        let unknown_algorithm = SigningMode::Digest {
+            algorithm: "sha3-512".to_owned(),
+            encoding: "base64".to_owned(),
+            prefix: String::new(),
+        };
+        assert_eq!(
+            verify(&env, "anything", &unknown_algorithm),
+            Err(r#"unknown digest algorithm "sha3-512""#.to_owned())
+        );
+
+        let unknown_encoding = SigningMode::Digest {
+            algorithm: "sha256".to_owned(),
+            encoding: "hex".to_owned(),
+            prefix: String::new(),
+        };
+        assert_eq!(
+            verify(&env, "anything", &unknown_encoding),
+            Err(r#"unknown digest encoding "hex""#.to_owned())
+        );
+    }
+
+    /// The declared prefix is stripped before the body is compared, and a
+    /// signature that omits it is compared as written — both directions of the
+    /// self-describing wire form the SUT declares.
+    #[test]
+    fn the_declared_prefix_and_the_declared_encoding_both_drive_the_comparison() {
+        let env = json!({ "_type": "ORIGINAL_VERSION", "data": { "a": 1 } });
+        let canonical = canonical_form(&env).unwrap();
+        let digest = Sha256::digest(canonical.as_bytes());
+
+        // base64url is the second declared encoding; its body differs from the
+        // standard alphabet's, so a mode mix-up cannot pass unnoticed.
+        let url_safe = SigningMode::Digest {
+            algorithm: "sha256".to_owned(),
+            encoding: "base64url".to_owned(),
+            prefix: String::new(),
+        };
+        let body = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest);
+        assert!(verify(&env, &body, &url_safe).unwrap());
+        let standard = base64::engine::general_purpose::STANDARD.encode(digest);
+        assert_ne!(
+            standard, body,
+            "the padded standard alphabet and base64url encode the same digest differently"
+        );
+        assert!(
+            !verify(&env, &standard, &url_safe).unwrap(),
+            "a standard-alphabet body must not satisfy a base64url declaration"
+        );
+
+        // The declared prefix is stripped when the signature carries it, and a
+        // signature without it is compared as written — so the digest body,
+        // not the prefix, is what the comparison turns on.
+        let prefixed = SigningMode::Digest {
+            algorithm: "sha256".to_owned(),
+            encoding: "base64".to_owned(),
+            prefix: "sha256:".to_owned(),
+        };
+        assert!(verify(&env, &format!("sha256:{standard}"), &prefixed).unwrap());
+        assert!(verify(&env, &standard, &prefixed).unwrap());
+        assert!(!verify(&env, &format!("sha256:{standard}x"), &prefixed).unwrap());
+    }
+
+    /// A malformed key or a malformed detached signature is an interpreter or
+    /// artefact defect and reports as an error, so a broken IXIT declaration
+    /// can never read as "the server's signature did not verify".
+    #[test]
+    fn malformed_pgp_material_is_an_error_not_a_failed_verification() {
+        let key_failure = verify_pgp(
+            b"payload",
+            "-----BEGIN PGP SIGNATURE-----\nx\n",
+            "not a key",
+        )
+        .expect_err("a non-armored key cannot be read");
+        assert!(key_failure.starts_with("pgp public key:"), "{key_failure}");
+
+        let keys = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("artifacts/corpus/keys");
+        let public_armored =
+            std::fs::read_to_string(keys.join("cnf-signing.pub.asc")).expect("the committed key");
+        let signature_failure = verify_pgp(b"payload", "not a signature", &public_armored)
+            .expect_err("a non-armored signature cannot be read");
+        assert!(
+            signature_failure.starts_with("pgp signature:"),
+            "{signature_failure}"
+        );
+
+        // The same key reached through the public `verify` entry point.
+        let mode = SigningMode::Pgp {
+            public_key: public_armored,
+        };
+        assert!(verify(&json!({ "data": {} }), "not a signature", &mode).is_err());
+    }
+
+    /// The signing posture is deserialized straight from the IXIT, so the
+    /// tagged shape a deployment declares is what the framework tests.
+    #[test]
+    fn the_signing_posture_is_read_from_the_ixit_declaration() {
+        let digest: SigningMode = serde_json::from_value(json!({
+            "mode": "digest", "algorithm": "sha256", "encoding": "base64"
+        }))
+        .expect("the digest posture, with the prefix defaulted");
+        assert_eq!(
+            digest,
+            SigningMode::Digest {
+                algorithm: "sha256".to_owned(),
+                encoding: "base64".to_owned(),
+                prefix: String::new(),
+            }
+        );
+
+        let pgp: SigningMode =
+            serde_json::from_value(json!({ "mode": "pgp", "public_key": "-----BEGIN-----" }))
+                .expect("the openPGP posture");
+        assert_eq!(
+            pgp,
+            SigningMode::Pgp {
+                public_key: "-----BEGIN-----".to_owned()
+            }
+        );
+
+        // An unknown mode is refused rather than silently defaulted: a typo in
+        // the declaration must not choose a posture for the deployment.
+        assert!(
+            serde_json::from_value::<SigningMode>(json!({ "mode": "hmac", "key": "k" })).is_err()
+        );
     }
 }

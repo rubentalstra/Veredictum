@@ -470,8 +470,10 @@ fn documents_are_pretty_json_written_under_a_created_parent() -> Fallible {
     veredictum::pipeline::write_file(&path, &body)?;
     assert_eq!(std::fs::read_to_string(&path)?, body);
 
-    // A path with no parent to create is not a failure.
+    // A path with no parent to create is not a failure, whether the parent is
+    // the working directory or the path names nothing at all.
     veredictum::pipeline::ensure_parent_dir(Path::new("bare.json"))?;
+    veredictum::pipeline::ensure_parent_dir(Path::new(""))?;
 
     let error = veredictum::pipeline::write_file(&dir.path().join("no/such/dir.json"), &body)
         .expect_err("writing into an absent directory fails");
@@ -612,5 +614,366 @@ fn the_measured_preamble_reads_its_inputs_from_the_committed_corpus() -> Fallibl
         error.to_string().contains("journey_catalogue.yaml"),
         "{error}"
     );
+    Ok(())
+}
+
+// ── the seams' typed refusals ──────────────────────────────────────────────
+
+/// A catalogue tree whose files failed their OWN load stages is reported one
+/// diagnostic per file, kept apart from a root that cannot be opened at all:
+/// the first is a defect in the tree, the second a defect in the runner.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_tree_whose_files_did_not_load_reports_one_diagnostic_per_file() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let root = dir.path().join("artifacts");
+    std::fs::create_dir_all(root.join("schedule"))?;
+    std::fs::write(root.join("schedule/broken.yaml"), "id: [unclosed\n")?;
+    std::fs::write(root.join("schedule/also-broken.yaml"), "kind: 7\n")?;
+
+    let error = veredictum::pipeline::load_clean_root(&root)
+        .expect_err("a tree with unloadable files is not a clean root");
+    let Error::Artifacts(diagnostics) = &error else {
+        panic!("expected per-file diagnostics, got {error}");
+    };
+    assert_eq!(diagnostics.len(), 2, "{diagnostics:?}");
+
+    // The rendering carries every diagnostic, so a caller that only prints
+    // the error still sees every file that failed and why.
+    let rendered = error.to_string();
+    for diagnostic in diagnostics {
+        assert!(
+            rendered.contains(&diagnostic.to_string()),
+            "the rendering dropped a diagnostic: {rendered}"
+        );
+    }
+    assert!(rendered.contains("also-broken.yaml"), "{rendered}");
+    assert!(rendered.contains("unclosed bracket"), "{rendered}");
+
+    // The validation seam does NOT refuse the same tree: a file that failed
+    // its load stages is a FINDING there, so one pass reports the whole tree.
+    let validation = catalogue::validate_tree(&root, None)?;
+    assert!(!validation.is_clean());
+    assert!(!validation.loaded.errors.is_empty());
+    Ok(())
+}
+
+/// An excused row with no citation would claim a case was out of scope
+/// without saying on what ground. Two gates refuse it, and the ORDER matters
+/// to whoever reads the diagnostic: the published schema stage runs first and
+/// names the document member, so the typed invariant behind it is the second
+/// gate — the one a consumer building results in memory still faces.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_uncited_excused_row_is_refused_by_the_schema_and_by_the_invariant() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let mut results: veredictum::party::Results = read_json(&results_path(), "results")?;
+    let mut uncited = results
+        .outcomes
+        .first()
+        .cloned()
+        .ok_or("the example records at least one outcome")?;
+    uncited.status = veredictum::party::OutcomeStatus::NotApplicable;
+    uncited.citation = None;
+    let mut blank = uncited.clone();
+    blank.status = veredictum::party::OutcomeStatus::Skipped;
+    blank.citation = Some(String::new());
+    results.outcomes.push(uncited);
+    results.outcomes.push(blank);
+
+    // The typed invariant names one violation per uncited row.
+    let violations = results
+        .check_invariants()
+        .expect_err("an uncited excused row breaks the record's own invariant");
+    assert_eq!(violations.len(), 2, "{violations:?}");
+
+    // Rendered as the seam's refusal, every violation is on its own prefixed
+    // line, so a caller that only prints the error still sees all of them.
+    let rendered = Error::ResultsInvariants(violations).to_string();
+    assert_eq!(rendered.lines().count(), 2, "{rendered}");
+    for line in rendered.lines() {
+        assert!(line.starts_with("results invariant: "), "{line}");
+    }
+
+    // Read from disk, the published schema refuses the same document first,
+    // naming the member rather than the invariant.
+    let path = dir.path().join("results.json");
+    std::fs::write(&path, to_json_document(&results, "results")?)?;
+    let statement = statement_path();
+    let root = artifacts();
+    let error = judgement::judge(&judgement::JudgementRequest {
+        statement: &statement,
+        results: &path,
+        root: &root,
+    })
+    .expect_err("a record that breaks its own invariants is not judgeable");
+    assert!(matches!(error, Error::Party(_)), "{error}");
+    assert!(error.to_string().contains("citation"), "{error}");
+    Ok(())
+}
+
+/// A tree missing the artifact a seam judges against says WHICH piece it
+/// needs: the judging seam needs the capability matrix and the ambiguity
+/// register, and the conformance visuals need the matrix.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_seam_names_the_artifact_family_its_tree_is_missing() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let root = dir.path().join("artifacts");
+    std::fs::create_dir_all(root.join("vocab"))?;
+    let statement = statement_path();
+    let results = results_path();
+    let request = judgement::JudgementRequest {
+        statement: &statement,
+        results: &results,
+        root: &root,
+    };
+
+    let error = judgement::judge(&request).expect_err("no capability matrix, no verdicts");
+    assert!(matches!(error, Error::Missing(_)), "{error}");
+    assert!(error.to_string().contains("capability matrix"), "{error}");
+
+    // With the committed matrix in place, the register is what is missing.
+    std::fs::copy(
+        artifacts().join("vocab/capability_matrix.yaml"),
+        root.join("vocab/capability_matrix.yaml"),
+    )?;
+    let error = judgement::judge(&request).expect_err("no ambiguity register, no verdicts");
+    assert!(error.to_string().contains("ambiguity register"), "{error}");
+
+    // With both in place the tree judges, even though it declares no wire
+    // surface: `served_extensions` is a DECLARATION rendered into the
+    // statement, never an input to a verdict, so its absence is empty rather
+    // than a refusal.
+    std::fs::create_dir_all(root.join("registers"))?;
+    std::fs::copy(
+        artifacts().join("registers/ambiguities.yaml"),
+        root.join("registers/ambiguities.yaml"),
+    )?;
+    let judgement = judgement::judge(&request)?;
+    let names: Vec<&str> = judgement
+        .documents
+        .iter()
+        .map(|d| d.name.as_str())
+        .collect();
+    assert!(names.contains(&"verdicts.json"), "{names:?}");
+    assert!(names.contains(&"CONFORMANCE_STATEMENT.md"), "{names:?}");
+    assert!(
+        names.contains(&"badge.json"),
+        "the submission set carries its badge endpoints: {names:?}"
+    );
+
+    // The conformance visuals rest on the same matrix.
+    let bare = dir.path().join("bare");
+    std::fs::create_dir_all(&bare)?;
+    let error = assets::conformance_assets(&bare, &results, &results, "")
+        .expect_err("no capability matrix, no heat grid");
+    assert!(matches!(error, Error::Missing(_)), "{error}");
+    assert!(error.to_string().contains("capability matrix"), "{error}");
+    Ok(())
+}
+
+/// The performance visuals draw a resource series and a disk-growth chart
+/// only from a record that CARRIES those samples, and the stress curve only
+/// when a report is supplied — nothing is fabricated from an absent input.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_performance_visuals_draw_the_samples_a_record_carries() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let mut results: veredictum::party::Results = read_json(&results_path(), "results")?;
+    let measurement = results
+        .measurements
+        .first_mut()
+        .ok_or("the example carries a measurement")?;
+    measurement.resources = Some(serde_json::from_value(serde_json::json!({
+        "sample_interval_s": 5,
+        "containers": [{
+            "role": "sut", "name": "cdr",
+            "samples": [
+                { "offset_s": 0, "phase": "warmup", "cpu_pct": 12.5, "rss_bytes": 100,
+                  "blk_read_bytes": 0, "blk_write_bytes": 0,
+                  "net_rx_bytes": 0, "net_tx_bytes": 0 },
+                { "offset_s": 5, "phase": "measured", "cpu_pct": 80.0, "rss_bytes": 200,
+                  "blk_read_bytes": 10, "blk_write_bytes": 20,
+                  "net_rx_bytes": 30, "net_tx_bytes": 40 }
+            ]
+        }],
+        "disk": {
+            "before_scale_seed_bytes": 1_000,
+            "after_scale_seed_bytes": 5_000,
+            "after_window_bytes": 6_000,
+            "seed_compositions": 100
+        }
+    }))?);
+    let sampled = dir.path().join("results-sampled.json");
+    std::fs::write(&sampled, to_json_document(&results, "results")?)?;
+
+    let root = artifacts();
+    let rendered = assets::performance_assets(&root, &sampled, None)?;
+    let names: Vec<&str> = rendered.files.iter().map(|f| f.name.as_str()).collect();
+    assert!(
+        names.iter().any(|n| n.starts_with("perf-resources-class-")),
+        "a sampled record draws its resource series: {names:?}"
+    );
+    assert!(
+        names.contains(&"perf-disk-growth.svg"),
+        "anchored disk bytes draw the growth chart: {names:?}"
+    );
+    for file in &rendered.files {
+        assert!(file.body.starts_with("<svg"), "{} is not SVG", file.name);
+    }
+    Ok(())
+}
+
+/// A committed stress report renders its curve beside the performance
+/// visuals, and the same two reports render the cross-SUT overlay — both are
+/// exploration records, never conformance evidence.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_committed_stress_report_renders_its_curve_and_its_overlay() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let results: veredictum::party::Results = read_json(&results_path(), "results")?;
+    let operations = results
+        .measurements
+        .first()
+        .map(|m| m.operations.clone())
+        .ok_or("the example carries a measured operation")?;
+    let environment = results
+        .measurements
+        .first()
+        .map(|m| m.environment.clone())
+        .ok_or("the example carries an environment")?;
+
+    let step = |rate: f64, stable: bool| veredictum::stress::LoadStep {
+        rate,
+        offered_load_sustained: rate,
+        operations: operations.clone(),
+        stable,
+        breaches: if stable {
+            Vec::new()
+        } else {
+            vec!["p99 3000ms > budget 1000ms".to_owned()]
+        },
+        generator_bound: false,
+        resources: None,
+    };
+    let report = |max: f64| veredictum::stress::StressReport {
+        corpus: "cnf.scale.10k".to_owned(),
+        environment: environment.clone(),
+        step_warmup_s: 10,
+        step_hold_s: 30,
+        p99_budget_ms: 1_000.0,
+        error_budget: 0.0,
+        steps: vec![step(10.0, true), step(200.0, false)],
+        max_sustainable_throughput_per_s: max,
+        ladder_capped: false,
+        generator_bound: false,
+        remark: "exploration only".to_owned(),
+    };
+
+    let left = dir.path().join("stress-left.json");
+    let right = dir.path().join("stress-right.json");
+    std::fs::write(&left, to_json_document(&report(10.0), "stress")?)?;
+    std::fs::write(&right, to_json_document(&report(200.0), "stress")?)?;
+
+    let rendered = assets::performance_assets(&artifacts(), &results_path(), Some(&left))?;
+    let names: Vec<&str> = rendered.files.iter().map(|f| f.name.as_str()).collect();
+    assert!(
+        names.contains(&"perf-stress-curve.svg"),
+        "a supplied report draws the curve: {names:?}"
+    );
+
+    let overlay = assets::stress_overlay(("left", &left), ("right", &right))?;
+    assert!(overlay.starts_with("<svg"), "{overlay}");
+    assert!(
+        overlay.contains("left") && overlay.contains("right"),
+        "{overlay}"
+    );
+
+    // A report neither seam can read is a typed failure naming the file.
+    let absent = dir.path().join("absent.json");
+    let error = assets::stress_overlay(("left", &absent), ("right", &right))
+        .expect_err("an absent report is not renderable");
+    assert!(matches!(error, Error::Read { .. }), "{error}");
+    let error = assets::performance_assets(&artifacts(), &results_path(), Some(&absent))
+        .expect_err("an absent report is not renderable");
+    assert!(matches!(error, Error::Read { .. }), "{error}");
+    Ok(())
+}
+
+/// A value that cannot be serialized is a typed failure naming what was being
+/// written, and a directory that cannot be created is named too — neither
+/// silently produces an empty artifact.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_unwritable_document_names_what_it_was_writing() -> Fallible {
+    use std::collections::BTreeMap;
+
+    // A map keyed by anything but a string is not a JSON object.
+    let unserializable: BTreeMap<(u8, u8), u8> = BTreeMap::from([((1, 2), 3)]);
+    let error = to_json_document(&unserializable, "the verdict record")
+        .expect_err("a non-string map key is not JSON");
+    assert!(matches!(error, Error::Serialize { .. }), "{error}");
+    assert!(
+        error.to_string().starts_with("the verdict record:"),
+        "{error}"
+    );
+
+    // A parent directory that cannot exist, because a FILE occupies its path.
+    let dir = assert_fs::TempDir::new()?;
+    let occupied = dir.path().join("occupied");
+    std::fs::write(&occupied, "not a directory")?;
+    let error = veredictum::pipeline::ensure_parent_dir(&occupied.join("under/out.json"))
+        .expect_err("a file cannot hold a directory");
+    let Error::CreateDir { path, .. } = &error else {
+        panic!("expected the directory failure, got {error}");
+    };
+    assert!(path.ends_with("under"), "{}", path.display());
+
+    // The coverage-report writer reports the same way.
+    let loaded = veredictum::pipeline::load_clean_root(&artifacts())?;
+    let error = catalogue::write_coverage_report(
+        &loaded.set,
+        &specs(),
+        &occupied.join("under/coverage-report.md"),
+    )
+    .expect_err("a file cannot hold the report's directory");
+    assert!(matches!(error, Error::Write { .. }), "{error}");
+    Ok(())
+}
+
+/// An ixit path that cannot be read at all is a typed READ failure naming the
+/// file, kept apart from a document that reads but does not parse.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_unreadable_ixit_is_a_read_failure_not_a_parse_failure() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let absent = dir.path().join("absent-ixit.json");
+    let error = veredictum::pipeline::load_ixit(&absent).expect_err("an absent ixit is unreadable");
+    let Error::Read { path, .. } = &error else {
+        panic!("expected the read failure, got {error}");
+    };
+    assert_eq!(path, &absent);
     Ok(())
 }
