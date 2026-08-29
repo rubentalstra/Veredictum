@@ -10,8 +10,8 @@
 use leptos::prelude::{
     Action, AddAnyAttr, ClassAttribute, CollectView, Effect, ElementChild, Get, GlobalAttributes,
     IntoAny, IntoView, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal,
-    ServerAction, Set, StyleAttribute, Suspend, Suspense, Transition, Update, With, component,
-    view,
+    ServerAction, ServerFnError, Set, StyleAttribute, Suspend, Suspense, Transition, Update, With,
+    component, view,
 };
 use leptos_meta::Title;
 use leptos_router::components::{A, Redirect};
@@ -25,7 +25,9 @@ use crate::run_api::fns::{
     ProbeAndSave, cancel_run, compose_claim, fetch_draft, fetch_job, fetch_scope_preview,
     fetch_statement_body, fetch_statements, fetch_tier_counts, save_scope, start_run,
 };
-use crate::run_api::{AuthChoice, ClaimSummary, ProbeAnswer, ScopePreview, ScopeTier};
+use crate::run_api::{
+    AuthChoice, ClaimSummary, ProbeAnswer, ScopePreview, ScopeTier, StatementRow, TierRow,
+};
 use crate::run_job::{JobStatus, JobView};
 
 /// `/run` — the wizard's entry: always the first step.
@@ -313,26 +315,6 @@ pub fn Scope() -> impl IntoView {
     });
     let tier_counts = Resource::new(|| (), |()| fetch_tier_counts());
     let checked_tiers = RwSignal::new(Vec::<ScopeTier>::new());
-    let toggle_tier = move |tier: ScopeTier, on: bool| {
-        checked_tiers.update(|selection| {
-            selection.retain(|held| *held != tier);
-            if on {
-                selection.push(tier);
-            }
-            // NOTE: no openEHR spec governs this — our own design: the
-            // published judgement refuses a STANDARD claim that does not also
-            // claim CORE, so the row keeps the two paired.
-            match (tier, on) {
-                (ScopeTier::Standard, true) => {
-                    if !selection.contains(&ScopeTier::Core) {
-                        selection.push(ScopeTier::Core);
-                    }
-                }
-                (ScopeTier::Core, false) => selection.retain(|held| *held != ScopeTier::Standard),
-                _ => {}
-            }
-        });
-    };
     let composed_note = RwSignal::new(None::<Result<String, String>>);
     let compose = Action::new(move |selection: &Vec<ScopeTier>| {
         let selection = selection.clone();
@@ -479,142 +461,8 @@ pub fn Scope() -> impl IntoView {
         <section class=format!("{CARD_PAD} mt-4 max-w-2xl")>
             <h2 class=CARD_TITLE>"Selection"</h2>
             <div class="space-y-4">
-                <div>
-                    <span class=LABEL>"Build the claim from tiers"</span>
-                    <p class="mt-1 text-sm text-ink-muted">
-                        "Checking a tier claims the capabilities the matrix requires for it; the counts say how many catalogue cases those capabilities gate. Composing writes the claim into the box below, where you read it before anything runs. Option branches stay undeclared, because only the party running the server knows which branch it realizes."
-                    </p>
-                    <Suspense fallback=|| {
-                        view! { <p class="text-sm text-ink-muted">"Counting the tiers…"</p> }
-                    }>
-                        {move || Suspend::new(async move {
-                            match tier_counts.await {
-                                Ok(rows) => {
-                                    let boxes = rows
-                                        .into_iter()
-                                        .map(|row| {
-                                            let tier = row.tier;
-                                            let label = format!(
-                                                "{} · {} capabilities · {} cases",
-                                                tier.token(),
-                                                row.capabilities,
-                                                row.cases,
-                                            );
-                                            view! {
-                                                <label
-                                                    class="flex items-center gap-2 text-sm text-ink"
-                                                    for=tier.control_id()
-                                                >
-                                                    <input
-                                                        id=tier.control_id()
-                                                        type="checkbox"
-                                                        class="size-4 accent-accent"
-                                                        prop:checked=move || {
-                                                            checked_tiers.with(|held| held.contains(&tier))
-                                                        }
-                                                        on:change:target=move |ev| {
-                                                            toggle_tier(tier, ev.target().checked());
-                                                        }
-                                                    />
-                                                    {label}
-                                                </label>
-                                            }
-                                        })
-                                        .collect_view();
-                                    view! {
-                                        <div class="mt-2 grid gap-2 sm:grid-cols-2">{boxes}</div>
-                                    }
-                                        .into_any()
-                                }
-                                Err(e) => inline_error(&e.to_string()).into_any(),
-                            }
-                        })}
-                    </Suspense>
-                    <div class="mt-3 flex items-center gap-2">
-                        <button
-                            type="button"
-                            class=BTN_SECONDARY
-                            on:click=move |_| {
-                                compose.dispatch(checked_tiers.get());
-                            }
-                        >
-                            "Compose the claim"
-                        </button>
-                    </div>
-                    {move || {
-                        composed_note
-                            .get()
-                            .map(|note| match note {
-                                Ok(line) => {
-                                    view! { <p class="mt-2 text-sm text-ink-muted">{line}</p> }
-                                        .into_any()
-                                }
-                                Err(e) => inline_error(&e).into_any(),
-                            })
-                    }}
-                </div>
-                <div>
-                    <label class=LABEL for="statement-json">
-                        "Party statement (ICS) — the claim this run grades"
-                    </label>
-                    <p class="mt-1 text-sm text-ink-muted">
-                        "Paste the vendor's own statement.json, or load a committed example. Leave the box empty for an honest no-claim run: everything applicable drives, nothing is certified."
-                    </p>
-                    <Suspense fallback=|| {
-                        view! { <p class="text-sm text-ink-muted">"Reading party/…"</p> }
-                    }>
-                        {move || Suspend::new(async move {
-                            match statements.await {
-                                Ok(rows) => {
-                                    let buttons = rows
-                                        .into_iter()
-                                        .map(|row| {
-                                            let label = format!("Load {}", row.product);
-                                            let path = row.path;
-                                            view! {
-                                                <button
-                                                    type="button"
-                                                    class=BTN_SECONDARY
-                                                    on:click=move |_| {
-                                                        load_example.dispatch(path.clone());
-                                                    }
-                                                >
-                                                    {label}
-                                                </button>
-                                            }
-                                        })
-                                        .collect_view();
-                                    view! {
-                                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                                            {buttons}
-                                        </div>
-                                    }
-                                        .into_any()
-                                }
-                                Err(e) => inline_error(&e.to_string()).into_any(),
-                            }
-                        })}
-                    </Suspense>
-                    <textarea
-                        id="statement-json"
-                        class=format!("{TEXTAREA} mt-2 h-48")
-                        placeholder="{ \"product\": { \"name\": …, \"version\": … }, \"claims\": { \"profiles\": [\"CORE\"], \"capabilities\": [s] }, … }"
-                        prop:value=move || statement_json.get()
-                        on:input:target=move |ev| statement_json.set(ev.target().value())
-                    ></textarea>
-                    {move || {
-                        example_note
-                            .get()
-                            .map(|note| match note {
-                                Ok(line) => {
-                                    view! { <p class="mt-1 text-sm text-ink-muted">{line}</p> }
-                                        .into_any()
-                                }
-                                Err(e) => inline_error(&e).into_any(),
-                            })
-                    }}
-                </div>
-                <div>
+                {tier_picker(tier_counts, checked_tiers, compose, composed_note)}
+                {statement_picker(statements, statement_json, load_example, example_note)} <div>
                     <label class=LABEL for="filter">
                         "Case-id filter (optional)"
                     </label>
@@ -626,8 +474,7 @@ pub fn Scope() -> impl IntoView {
                         prop:value=move || filter.get()
                         on:input:target=move |ev| filter.set(ev.target().value())
                     />
-                </div>
-                <div>
+                </div> <div>
                     <label class="flex items-center gap-2 text-sm text-ink" for="record-exchanges">
                         <input
                             id="record-exchanges"
@@ -641,8 +488,7 @@ pub fn Scope() -> impl IntoView {
                     <p class="mt-1 text-sm text-ink-muted">
                         "Off by default. The transcript keeps every request and response the run drove, so it can carry real patient data from the server you are grading. It lands beside results.json in the run's output directory, and the sealed record covers it."
                     </p>
-                </div>
-                <div class="flex items-center gap-2">
+                </div> <div class="flex items-center gap-2">
                     <button
                         type="button"
                         class=BTN_SECONDARY
@@ -741,6 +587,179 @@ pub fn Scope() -> impl IntoView {
                 }}
             </div>
         </section>
+    }
+}
+
+/// The tier picker: the per-tier counts, the checkboxes that build the claim,
+/// and the compose button with its note.
+fn tier_picker(
+    tier_counts: Resource<Result<Vec<TierRow>, ServerFnError>>,
+    checked_tiers: RwSignal<Vec<ScopeTier>>,
+    compose: Action<Vec<ScopeTier>, ()>,
+    composed_note: RwSignal<Option<Result<String, String>>>,
+) -> impl IntoView + use<> {
+    let toggle_tier = move |tier: ScopeTier, on: bool| {
+        checked_tiers.update(|selection| {
+            selection.retain(|held| *held != tier);
+            if on {
+                selection.push(tier);
+            }
+            // NOTE: no openEHR spec governs this — our own design: the
+            // published judgement refuses a STANDARD claim that does not also
+            // claim CORE, so the row keeps the two paired.
+            match (tier, on) {
+                (ScopeTier::Standard, true) => {
+                    if !selection.contains(&ScopeTier::Core) {
+                        selection.push(ScopeTier::Core);
+                    }
+                }
+                (ScopeTier::Core, false) => selection.retain(|held| *held != ScopeTier::Standard),
+                _ => {}
+            }
+        });
+    };
+    view! {
+        <div>
+            <span class=LABEL>"Build the claim from tiers"</span>
+            <p class="mt-1 text-sm text-ink-muted">
+                "Checking a tier claims the capabilities the matrix requires for it; the counts say how many catalogue cases those capabilities gate. Composing writes the claim into the box below, where you read it before anything runs. Option branches stay undeclared, because only the party running the server knows which branch it realizes."
+            </p>
+            <Suspense fallback=|| {
+                view! { <p class="text-sm text-ink-muted">"Counting the tiers…"</p> }
+            }>
+                {move || Suspend::new(async move {
+                    match tier_counts.await {
+                        Ok(rows) => {
+                            let boxes = rows
+                                .into_iter()
+                                .map(|row| {
+                                    let tier = row.tier;
+                                    let label = format!(
+                                        "{} · {} capabilities · {} cases",
+                                        tier.token(),
+                                        row.capabilities,
+                                        row.cases,
+                                    );
+                                    view! {
+                                        <label
+                                            class="flex items-center gap-2 text-sm text-ink"
+                                            for=tier.control_id()
+                                        >
+                                            <input
+                                                id=tier.control_id()
+                                                type="checkbox"
+                                                class="size-4 accent-accent"
+                                                prop:checked=move || {
+                                                    checked_tiers.with(|held| held.contains(&tier))
+                                                }
+                                                on:change:target=move |ev| {
+                                                    toggle_tier(tier, ev.target().checked());
+                                                }
+                                            />
+                                            {label}
+                                        </label>
+                                    }
+                                })
+                                .collect_view();
+                            view! { <div class="mt-2 grid gap-2 sm:grid-cols-2">{boxes}</div> }
+                                .into_any()
+                        }
+                        Err(e) => inline_error(&e.to_string()).into_any(),
+                    }
+                })}
+            </Suspense>
+            <div class="mt-3 flex items-center gap-2">
+                <button
+                    type="button"
+                    class=BTN_SECONDARY
+                    on:click=move |_| {
+                        compose.dispatch(checked_tiers.get());
+                    }
+                >
+                    "Compose the claim"
+                </button>
+            </div>
+            {move || {
+                composed_note
+                    .get()
+                    .map(|note| match note {
+                        Ok(line) => {
+                            view! { <p class="mt-2 text-sm text-ink-muted">{line}</p> }.into_any()
+                        }
+                        Err(e) => inline_error(&e).into_any(),
+                    })
+            }}
+        </div>
+    }
+}
+
+/// The statement pane: the committed examples that load into the box, the box
+/// itself, and the note the last load left.
+fn statement_picker(
+    statements: Resource<Result<Vec<StatementRow>, ServerFnError>>,
+    statement_json: RwSignal<String>,
+    load_example: Action<String, ()>,
+    example_note: RwSignal<Option<Result<String, String>>>,
+) -> impl IntoView + use<> {
+    view! {
+        <div>
+            <label class=LABEL for="statement-json">
+                "Party statement (ICS) — the claim this run grades"
+            </label>
+            <p class="mt-1 text-sm text-ink-muted">
+                "Paste the vendor's own statement.json, or load a committed example. Leave the box empty for an honest no-claim run: everything applicable drives, nothing is certified."
+            </p>
+            <Suspense fallback=|| {
+                view! { <p class="text-sm text-ink-muted">"Reading party/…"</p> }
+            }>
+                {move || Suspend::new(async move {
+                    match statements.await {
+                        Ok(rows) => {
+                            let buttons = rows
+                                .into_iter()
+                                .map(|row| {
+                                    let label = format!("Load {}", row.product);
+                                    let path = row.path;
+                                    view! {
+                                        <button
+                                            type="button"
+                                            class=BTN_SECONDARY
+                                            on:click=move |_| {
+                                                load_example.dispatch(path.clone());
+                                            }
+                                        >
+                                            {label}
+                                        </button>
+                                    }
+                                })
+                                .collect_view();
+                            view! {
+                                <div class="mt-2 flex flex-wrap items-center gap-2">{buttons}</div>
+                            }
+                                .into_any()
+                        }
+                        Err(e) => inline_error(&e.to_string()).into_any(),
+                    }
+                })}
+            </Suspense>
+            <textarea
+                id="statement-json"
+                class=format!("{TEXTAREA} mt-2 h-48")
+                placeholder="{ \"product\": { \"name\": …, \"version\": … }, \"claims\": { \"profiles\": [\"CORE\"], \"capabilities\": [s] }, … }"
+                prop:value=move || statement_json.get()
+                on:input:target=move |ev| statement_json.set(ev.target().value())
+            ></textarea>
+            {move || {
+                example_note
+                    .get()
+                    .map(|note| match note {
+                        Ok(line) => {
+                            view! { <p class="mt-1 text-sm text-ink-muted">{line}</p> }.into_any()
+                        }
+                        Err(e) => inline_error(&e).into_any(),
+                    })
+            }}
+        </div>
     }
 }
 

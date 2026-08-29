@@ -32,11 +32,12 @@ use crate::literal::{Literal, ViolationRef};
 use crate::load::LoadError;
 use crate::model::assertion::{Assertion, EquivalentTarget, assertion_refs};
 use crate::model::binding::{HeaderMatcher, OperationBinding, placeholder_names};
-use crate::model::capability::Realization;
+use crate::model::capability::{CapabilityMatrix, Realization};
 use crate::model::case::{
     CaseCore, ExpectSpec, FlowStep, ImportRequirement, MatrixCell, Parameters,
     PartyRelationshipRequirement,
 };
+use crate::model::corpus::CorpusManifest;
 use crate::model::value::TemplatedValue;
 use crate::model::wire_surface::{ServedExtension, WireSurface};
 use crate::refgrammar::{CaptureField, TimeExpr, ValueRef};
@@ -453,6 +454,96 @@ fn check_guard_scope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     let Some((_, matrix)) = &set.matrix else {
         return;
     };
+    for (path, case) in &set.cases {
+        let who = path.display().to_string();
+        for guard in &case.guards {
+            guard_restates_declaration_rule(case, guard, &who, findings);
+            guard_restates_capability_scope(case, guard, matrix, &who, findings);
+        }
+    }
+}
+
+/// Reports a `guard` restating one of the DECLARATION-ABSENCE selection rules
+/// the runner already decides from the case's own typed shape.
+///
+/// The phrasings key on a guard saying the party "declares no X", against the
+/// three typed shapes selection reads: the flow's own `on:` addressing,
+/// `requires.terminology`, and `requires.spec_profile`.
+fn guard_restates_declaration_rule(
+    case: &CaseCore,
+    guard: &str,
+    who: &str,
+    findings: &mut Vec<Finding>,
+) {
+    let declaration_phrases = ["declares no", "does not declare", "declaring no"];
+    let lowered = guard.to_lowercase();
+    if !declaration_phrases.iter().any(|p| lowered.contains(p)) {
+        return;
+    }
+    // The INSTANCE shape (FerroEHR#2378's sibling, FerroEHR#2389): the typed shape
+    // is the flow's own `on:` addressing — `run.rs` excuses a case
+    // addressing an instance the party does not declare, with the
+    // citation, once and globally.
+    for name in crate::run::addressed_instances(case) {
+        if mentions_word(guard, name.as_str()) {
+            push(
+                findings,
+                CheckId::GuardScope,
+                who,
+                format!(
+                    "guard {guard:?} restates the undeclared-instance selection \
+                     rule for `{name}`, which the runner implements globally from \
+                     the flow's own `on:` addressing — drop the guard and keep any \
+                     spec citation in spec_refs"
+                ),
+            );
+        }
+    }
+    // The REQUIREMENT shapes: `requires.terminology` and
+    // `requires.spec_profile` are matched at selection time by the
+    // same law, so a prose copy on a case that declares the typed
+    // block restates an implemented rule.
+    if case.requires.terminology.is_some() && lowered.contains("terminology") {
+        push(
+            findings,
+            CheckId::GuardScope,
+            who,
+            format!(
+                "guard {guard:?} restates the terminology selection rule the \
+                 runner implements from this case's own `requires.terminology` — \
+                 drop the guard and keep any spec citation in spec_refs"
+            ),
+        );
+    }
+    let requires_profile = case.requires.spec_profile.is_some()
+        || case
+            .requires
+            .instances
+            .as_ref()
+            .is_some_and(|map| map.values().any(|r| r.spec_profile.is_some()));
+    if requires_profile && lowered.contains("spec_profile") {
+        push(
+            findings,
+            CheckId::GuardScope,
+            who,
+            format!(
+                "guard {guard:?} restates the generation-set selection rule the \
+                 runner implements from this case's own `requires.spec_profile` — \
+                 drop the guard and keep any spec citation in spec_refs"
+            ),
+        );
+    }
+}
+
+/// Reports a `guard` scoping a selection rule to a capability name, which the
+/// runner already decides globally from the case's own `capabilities:` list.
+fn guard_restates_capability_scope(
+    case: &CaseCore,
+    guard: &str,
+    matrix: &CapabilityMatrix,
+    who: &str,
+    findings: &mut Vec<Finding>,
+) {
     let scoping_phrases = [
         "not-applicable",
         "not applicable",
@@ -463,100 +554,35 @@ fn check_guard_scope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
         "when the sut declares no",
         "when the sut does not",
     ];
-    // The DECLARATION-ABSENCE phrasings the instance/requirement shapes key
-    // on: a guard saying the party "declares no X" restates a selection the
-    // runner already decides from the case's own typed shape (`on:`
-    // addressing, `requires.terminology`, `requires.spec_profile`).
-    let declaration_phrases = ["declares no", "does not declare", "declaring no"];
-    for (path, case) in &set.cases {
-        let who = path.display().to_string();
-        for guard in &case.guards {
-            let lowered = guard.to_lowercase();
-            if declaration_phrases.iter().any(|p| lowered.contains(p)) {
-                // The INSTANCE shape (FerroEHR#2378's sibling, FerroEHR#2389): the typed shape
-                // is the flow's own `on:` addressing — `run.rs` excuses a case
-                // addressing an instance the party does not declare, with the
-                // citation, once and globally.
-                for name in crate::run::addressed_instances(case) {
-                    if mentions_word(guard, name.as_str()) {
-                        push(
-                            findings,
-                            CheckId::GuardScope,
-                            &who,
-                            format!(
-                                "guard {guard:?} restates the undeclared-instance selection \
-                                 rule for `{name}`, which the runner implements globally from \
-                                 the flow's own `on:` addressing — drop the guard and keep any \
-                                 spec citation in spec_refs"
-                            ),
-                        );
-                    }
-                }
-                // The REQUIREMENT shapes: `requires.terminology` and
-                // `requires.spec_profile` are matched at selection time by the
-                // same law, so a prose copy on a case that declares the typed
-                // block restates an implemented rule.
-                if case.requires.terminology.is_some() && lowered.contains("terminology") {
-                    push(
-                        findings,
-                        CheckId::GuardScope,
-                        &who,
-                        format!(
-                            "guard {guard:?} restates the terminology selection rule the \
-                             runner implements from this case's own `requires.terminology` — \
-                             drop the guard and keep any spec citation in spec_refs"
-                        ),
-                    );
-                }
-                let requires_profile = case.requires.spec_profile.is_some()
-                    || case
-                        .requires
-                        .instances
-                        .as_ref()
-                        .is_some_and(|map| map.values().any(|r| r.spec_profile.is_some()));
-                if requires_profile && lowered.contains("spec_profile") {
-                    push(
-                        findings,
-                        CheckId::GuardScope,
-                        &who,
-                        format!(
-                            "guard {guard:?} restates the generation-set selection rule the \
-                             runner implements from this case's own `requires.spec_profile` — \
-                             drop the guard and keep any spec citation in spec_refs"
-                        ),
-                    );
-                }
-            }
-            if !scoping_phrases.iter().any(|p| lowered.contains(p)) {
-                continue;
-            }
-            for (name, _) in matrix.entries() {
-                if !mentions_word(guard, &name.to_string()) {
-                    continue;
-                }
-                let gated = case.capabilities.contains(name);
-                push(
-                    findings,
-                    CheckId::GuardScope,
-                    &who,
-                    if gated {
-                        format!(
-                            "guard {guard:?} restates the capability-scoping rule for {name}, \
-                             which the runner implements globally from the case's own \
-                             `capabilities:` list — drop the guard; a per-case restatement can \
-                             drift from the implemented rule with nothing to catch it"
-                        )
-                    } else {
-                        format!(
-                            "guard {guard:?} states a selection rule scoped to {name}, but the \
-                             case does not gate that capability — the runner selects on \
-                             `capabilities:` alone, so this rule is stated and not implemented; \
-                             declare the capability or drop the claim"
-                        )
-                    },
-                );
-            }
+    let lowered = guard.to_lowercase();
+    if !scoping_phrases.iter().any(|p| lowered.contains(p)) {
+        return;
+    }
+    for (name, _) in matrix.entries() {
+        if !mentions_word(guard, &name.to_string()) {
+            continue;
         }
+        let gated = case.capabilities.contains(name);
+        push(
+            findings,
+            CheckId::GuardScope,
+            who,
+            if gated {
+                format!(
+                    "guard {guard:?} restates the capability-scoping rule for {name}, \
+                     which the runner implements globally from the case's own \
+                     `capabilities:` list — drop the guard; a per-case restatement can \
+                     drift from the implemented rule with nothing to catch it"
+                )
+            } else {
+                format!(
+                    "guard {guard:?} states a selection rule scoped to {name}, but the \
+                     case does not gate that capability — the runner selects on \
+                     `capabilities:` alone, so this rule is stated and not implemented; \
+                     declare the capability or drop the claim"
+                )
+            },
+        );
     }
 }
 
@@ -933,86 +959,9 @@ fn check_journey_envelope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
         push(findings, CheckId::JourneyEnvelope, &who, message);
         return;
     }
-    // Every stage template resolves in the corpus manifest: the OPT entry
-    // (the constraint carrier the seeder uploads) and its `.example`
-    // sibling (the committed payload skeleton the driver commits).
     if let Some((_, manifest)) = &set.corpus {
-        for (name, journey) in &catalogue.0 {
-            for stage in &journey.stages {
-                let Some(template) = &stage.template else {
-                    continue;
-                };
-                for (key, role) in [
-                    (template.clone(), "OPT"),
-                    (format!("{template}.example"), "example payload"),
-                ] {
-                    match CorpusKey::parse(&key) {
-                        Ok(parsed) if manifest.get(&parsed).is_some() => {}
-                        _ => push(
-                            findings,
-                            CheckId::JourneyEnvelope,
-                            &who,
-                            format!(
-                                "journey {name} template {template}: corpus manifest has no \
-                                 {role} entry {key}"
-                            ),
-                        ),
-                    }
-                }
-            }
-        }
-    }
-    // Every AUXILIARY payload a stage carries resolves in the corpus
-    // manifest too: the Simplified-FLAT pair and the demographic fixtures
-    // are committed corpus entries the functional catalogue already
-    // adjudicates — the load instrument never invents a payload, so a
-    // missing entry is an authoring defect, not a run-time surprise.
-    if let Some((_, manifest)) = &set.corpus {
-        let mut needed: Vec<crate::perf::AuxPayloadKind> = Vec::new();
-        for (_, journey) in &catalogue.0 {
-            for stage in &journey.stages {
-                if let Some(kind) = crate::perf::PerfOp::parse(&stage.op)
-                    .ok()
-                    .and_then(crate::perf::PerfOp::aux_payload)
-                    && !needed.contains(&kind)
-                {
-                    needed.push(kind);
-                }
-            }
-        }
-        for kind in needed {
-            let keys: &[&str] = match kind {
-                crate::perf::AuxPayloadKind::Flat => &[
-                    crate::perf_run::pack::FLAT_OPT_KEY,
-                    crate::perf_run::pack::FLAT_BODY_KEY,
-                ],
-                crate::perf::AuxPayloadKind::Person => &[
-                    crate::perf_run::pack::PERSON_KEY,
-                    crate::perf_run::pack::PERSON_AMENDED_KEY,
-                ],
-                crate::perf::AuxPayloadKind::PartyRelationship => {
-                    &[crate::perf_run::pack::PARTY_RELATIONSHIP_KEY]
-                }
-                crate::perf::AuxPayloadKind::Tdd => &[
-                    crate::perf_run::pack::TDD_OPT_KEY,
-                    crate::perf_run::pack::TDD_BODY_KEY,
-                ],
-            };
-            for key in keys {
-                match CorpusKey::parse(key) {
-                    Ok(parsed) if manifest.get(&parsed).is_some() => {}
-                    _ => push(
-                        findings,
-                        CheckId::JourneyEnvelope,
-                        &who,
-                        format!(
-                            "the catalogue names a stage whose payload is {kind:?}, but the \
-                             corpus manifest has no entry {key}"
-                        ),
-                    ),
-                }
-            }
-        }
+        check_stage_templates(catalogue, manifest, &who, findings);
+        check_aux_payloads(catalogue, manifest, &who, findings);
     }
     for (case_path, case) in &set.performance {
         if let Err(message) = catalogue.expansion(&case.workload.journeys) {
@@ -1022,6 +971,101 @@ fn check_journey_envelope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
                 &case_path.display().to_string(),
                 message,
             );
+        }
+    }
+}
+
+/// Reports every stage template the corpus manifest does not carry.
+///
+/// A template resolves as two entries: the OPT (the constraint carrier the
+/// seeder uploads) and its `.example` sibling (the committed payload skeleton
+/// the driver commits).
+fn check_stage_templates(
+    catalogue: &crate::perf::JourneyCatalogue,
+    manifest: &CorpusManifest,
+    who: &str,
+    findings: &mut Vec<Finding>,
+) {
+    for (name, journey) in &catalogue.0 {
+        for stage in &journey.stages {
+            let Some(template) = &stage.template else {
+                continue;
+            };
+            for (key, role) in [
+                (template.clone(), "OPT"),
+                (format!("{template}.example"), "example payload"),
+            ] {
+                match CorpusKey::parse(&key) {
+                    Ok(parsed) if manifest.get(&parsed).is_some() => {}
+                    _ => push(
+                        findings,
+                        CheckId::JourneyEnvelope,
+                        who,
+                        format!(
+                            "journey {name} template {template}: corpus manifest has no \
+                             {role} entry {key}"
+                        ),
+                    ),
+                }
+            }
+        }
+    }
+}
+
+/// Reports every AUXILIARY stage payload the corpus manifest does not carry.
+///
+/// The Simplified-FLAT pair and the demographic fixtures are committed corpus
+/// entries the functional catalogue already adjudicates — the load instrument
+/// never invents a payload, so a missing entry is an authoring defect.
+fn check_aux_payloads(
+    catalogue: &crate::perf::JourneyCatalogue,
+    manifest: &CorpusManifest,
+    who: &str,
+    findings: &mut Vec<Finding>,
+) {
+    let mut needed: Vec<crate::perf::AuxPayloadKind> = Vec::new();
+    for (_, journey) in &catalogue.0 {
+        for stage in &journey.stages {
+            if let Some(kind) = crate::perf::PerfOp::parse(&stage.op)
+                .ok()
+                .and_then(crate::perf::PerfOp::aux_payload)
+                && !needed.contains(&kind)
+            {
+                needed.push(kind);
+            }
+        }
+    }
+    for kind in needed {
+        let keys: &[&str] = match kind {
+            crate::perf::AuxPayloadKind::Flat => &[
+                crate::perf_run::pack::FLAT_OPT_KEY,
+                crate::perf_run::pack::FLAT_BODY_KEY,
+            ],
+            crate::perf::AuxPayloadKind::Person => &[
+                crate::perf_run::pack::PERSON_KEY,
+                crate::perf_run::pack::PERSON_AMENDED_KEY,
+            ],
+            crate::perf::AuxPayloadKind::PartyRelationship => {
+                &[crate::perf_run::pack::PARTY_RELATIONSHIP_KEY]
+            }
+            crate::perf::AuxPayloadKind::Tdd => &[
+                crate::perf_run::pack::TDD_OPT_KEY,
+                crate::perf_run::pack::TDD_BODY_KEY,
+            ],
+        };
+        for key in keys {
+            match CorpusKey::parse(key) {
+                Ok(parsed) if manifest.get(&parsed).is_some() => {}
+                _ => push(
+                    findings,
+                    CheckId::JourneyEnvelope,
+                    who,
+                    format!(
+                        "the catalogue names a stage whose payload is {kind:?}, but the \
+                         corpus manifest has no entry {key}"
+                    ),
+                ),
+            }
         }
     }
 }
@@ -2579,6 +2623,42 @@ fn section_resolves(candidates: &BTreeSet<String>, names: &BTreeSet<String>) -> 
     })
 }
 
+/// Resolves the vendored documents one citation clause's path hint names.
+///
+/// Each root is resolved independently and the hits pooled: an ITS-XML
+/// citation may name a docs-tree chapter OR an XSD of the vendored schema
+/// bundle (issue FerroEHR#1833). Brace shorthands expand first, and EVERY
+/// variant must resolve (issue FerroEHR#2545) — a half-phantom `{a,b}` still
+/// fails.
+///
+/// # Errors
+///
+/// Returns the first variant that matched no vendored document, spelled as
+/// its space-joined tokens.
+fn resolve_clause_documents<'r>(
+    clause: &CitationClause<'_>,
+    roots: &'r [PathBuf],
+    spec: &SpecIndex<'_>,
+) -> Result<Vec<(&'r PathBuf, PathBuf)>, String> {
+    let mut documents: Vec<(&PathBuf, PathBuf)> = Vec::new();
+    for variant in expand_braces(&clause.tokens) {
+        let tokens: Vec<&str> = variant.iter().map(String::as_str).collect();
+        let mut hits: Vec<(&PathBuf, PathBuf)> = Vec::new();
+        for root in roots {
+            hits.extend(
+                resolve_documents(spec, root, &tokens)
+                    .into_iter()
+                    .map(|document| (root, document)),
+            );
+        }
+        if hits.is_empty() {
+            return Err(variant.join(" "));
+        }
+        documents.extend(hits);
+    }
+    Ok(documents)
+}
+
 /// Resolve every citation of one artifact against the vendored spec tree:
 /// the component directory exists, the path hint names a real DOCUMENT, and
 /// every `§section` names a real section of it.
@@ -2620,38 +2700,20 @@ fn check_citations(
                 let _ = first; // component-only citation: dir existence was the check
                 continue;
             }
-            // Each root is resolved independently and the hits pooled: an
-            // ITS-XML citation may name a docs-tree chapter OR an XSD of the
-            // vendored schema bundle (issue FerroEHR#1833). Brace shorthands expand
-            // first, and EVERY variant must resolve (issue FerroEHR#2545) — a
-            // half-phantom `{a,b}` still fails, naming the missing variant.
-            let mut documents: Vec<(&PathBuf, PathBuf)> = Vec::new();
-            let mut unmatched: Option<String> = None;
-            for variant in expand_braces(&clause.tokens) {
-                let tokens: Vec<&str> = variant.iter().map(String::as_str).collect();
-                let mut hits: Vec<(&PathBuf, PathBuf)> = Vec::new();
-                for root in &roots {
-                    hits.extend(
-                        resolve_documents(spec, root, &tokens)
-                            .into_iter()
-                            .map(|document| (root, document)),
+            let documents = match resolve_clause_documents(&clause, &roots, spec) {
+                Ok(documents) => documents,
+                Err(missing) => {
+                    push(
+                        findings,
+                        CheckId::SpecRef,
+                        who,
+                        format!(
+                            "{citation:?}: no vendored document under {dir} matches {missing:?}"
+                        ),
                     );
+                    continue;
                 }
-                if hits.is_empty() {
-                    unmatched = Some(variant.join(" "));
-                    break;
-                }
-                documents.extend(hits);
-            }
-            if let Some(missing) = unmatched {
-                push(
-                    findings,
-                    CheckId::SpecRef,
-                    who,
-                    format!("{citation:?}: no vendored document under {dir} matches {missing:?}"),
-                );
-                continue;
-            }
+            };
             if clause.sections.is_empty() {
                 continue;
             }
@@ -3046,6 +3108,35 @@ fn driven_case(case: &CaseCore) -> std::borrow::Cow<'_, CaseCore> {
     }
 }
 
+/// The bindings `crate::exec::driver` would drive for `step` on operation
+/// `op`, mirroring its `binding_for_variant` resolution.
+///
+/// A step's `variant` selects the binding declaring that variant; a
+/// variant-less step, or a variant with no dedicated binding, falls back to
+/// the variant-less binding. An operation declaring neither keeps every
+/// binding it has, so a gate judges what the interpreter would actually drive.
+fn bindings_the_interpreter_would_drive<'a>(
+    set: &'a ArtifactSet,
+    op: &SmOperationRef,
+    step: &FlowStep,
+) -> Vec<&'a (PathBuf, OperationBinding)> {
+    let mut bindings: Vec<&(PathBuf, OperationBinding)> = set
+        .bindings
+        .iter()
+        .filter(|(_, b)| &b.sm_operation == op)
+        .collect();
+    if let Some(v) = &step.variant
+        && bindings
+            .iter()
+            .any(|(_, b)| b.variant.as_deref() == Some(v.as_str()))
+    {
+        bindings.retain(|(_, b)| b.variant.as_deref() == Some(v.as_str()));
+    } else if bindings.iter().any(|(_, b)| b.variant.is_none()) {
+        bindings.retain(|(_, b)| b.variant.is_none());
+    }
+    bindings
+}
+
 /// The binding `crate::exec::driver` would select for `step`, mirroring its
 /// variant resolution: an explicitly named variant when one exists, otherwise
 /// the bare binding.
@@ -3059,22 +3150,9 @@ fn step_binding<'a>(
     } else {
         anchor.sibling(&step.call)
     };
-    let mut bindings: Vec<&OperationBinding> = set
-        .bindings
-        .iter()
+    bindings_the_interpreter_would_drive(set, &op, step)
+        .first()
         .map(|(_, b)| b)
-        .filter(|b| b.sm_operation == op)
-        .collect();
-    if let Some(v) = &step.variant
-        && bindings
-            .iter()
-            .any(|b| b.variant.as_deref() == Some(v.as_str()))
-    {
-        bindings.retain(|b| b.variant.as_deref() == Some(v.as_str()));
-    } else if bindings.iter().any(|b| b.variant.is_none()) {
-        bindings.retain(|b| b.variant.is_none());
-    }
-    bindings.first().copied()
 }
 
 /// Every `pattern:` header matcher a driven step could be judged by resolves
@@ -3263,11 +3341,10 @@ fn check_binding_completeness(set: &ArtifactSet, findings: &mut Vec<Finding>) {
             } else {
                 anchor.sibling(&step.call)
             };
-            let mut bindings: Vec<_> = set
-                .bindings
-                .iter()
-                .filter(|(_, b)| b.sm_operation == op)
-                .collect();
+            // Completeness is judged against the bindings the interpreter
+            // would actually drive, not against every binding of the
+            // operation.
+            let bindings = bindings_the_interpreter_would_drive(set, &op, step);
             if bindings.is_empty() {
                 push(
                     findings,
@@ -3276,24 +3353,6 @@ fn check_binding_completeness(set: &ArtifactSet, findings: &mut Vec<Finding>) {
                     format!("no binding declares operation {op}"),
                 );
                 continue;
-            }
-            // Mirror the interpreter's binding selection (`binding_for_variant`):
-            // a step's `variant` selects the binding declaring that variant;
-            // a variant-less step (or a variant with no dedicated binding)
-            // falls back to the variant-less binding. Completeness is judged
-            // against the binding the interpreter would actually drive, not
-            // against every binding of the operation.
-            if let Some(v) = &step.variant
-                && bindings
-                    .iter()
-                    .any(|(_, b)| b.variant.as_deref() == Some(v.as_str()))
-            {
-                bindings.retain(|(_, b)| b.variant.as_deref() == Some(v.as_str()));
-            } else {
-                let has_variantless = bindings.iter().any(|(_, b)| b.variant.is_none());
-                if has_variantless {
-                    bindings.retain(|(_, b)| b.variant.is_none());
-                }
             }
             // An explicit `unrealized` declaration satisfies completeness:
             // the gap is machine-readable and the interpreter yields
@@ -4202,18 +4261,15 @@ fn check_surface_sm_operations(
             let Ok(op) = SmOperationRef::parse(&format!("{interface}.{name}")) else {
                 continue;
             };
-            let bound = set.bindings.iter().any(|(_, b)| b.sm_operation == op);
-            if bound || wire_surface.sm_exception(&op).is_some() {
-                continue;
-            }
-            push(
-                findings,
-                CheckId::SurfaceCoverage,
-                &op.to_string(),
+            require_binding_or_exception(
+                set,
+                wire_surface,
+                &op,
                 "SM operation has no its-rest binding and no wire_surface.yaml sm_operations \
                  exception — add a binding (realized or unrealized) or a cited \
                  off_wire/variant_of/coverage_gap entry"
                     .to_owned(),
+                findings,
             );
         }
     }
@@ -4230,19 +4286,16 @@ fn check_surface_sm_operations(
             );
             continue;
         };
-        let bound = set.bindings.iter().any(|(_, b)| b.sm_operation == op);
-        if bound || wire_surface.sm_exception(&op).is_some() {
-            continue;
-        }
-        push(
-            findings,
-            CheckId::SurfaceCoverage,
-            &op.to_string(),
+        require_binding_or_exception(
+            set,
+            wire_surface,
+            &op,
             format!(
                 "non-SM ITS-REST operation ({source}) has no its-rest binding and no \
                  wire_surface.yaml sm_operations exception — add a binding (realized or \
                  unrealized) or a cited off_wire/variant_of/coverage_gap entry"
             ),
+            findings,
         );
     }
     // Ratchet: an sm_operations exception for an operation that now HAS a
@@ -4263,6 +4316,22 @@ fn check_surface_sm_operations(
             );
         }
     }
+}
+
+/// Reports `message` against `op` unless the catalogue binds it or the wire
+/// surface carries a cited `sm_operations` exception for it.
+fn require_binding_or_exception(
+    set: &ArtifactSet,
+    wire_surface: &WireSurface,
+    op: &SmOperationRef,
+    message: String,
+    findings: &mut Vec<Finding>,
+) {
+    let bound = set.bindings.iter().any(|(_, b)| &b.sm_operation == op);
+    if bound || wire_surface.sm_exception(op).is_some() {
+        return;
+    }
+    push(findings, CheckId::SurfaceCoverage, &op.to_string(), message);
 }
 
 /// The `(operation, variant)` key identifying a binding realization.
@@ -4717,13 +4786,7 @@ fn check_axis3_section_derivation(
 /// Axis 1 (the per-interface section) and the Axis-3 section derivation render
 /// only when `spec_root` is supplied (they read the vendored spec tree).
 #[must_use]
-#[expect(
-    clippy::too_many_lines,
-    reason = "one deterministic report-rendering seam"
-)]
 pub fn render_coverage_report(set: &ArtifactSet, spec_root: Option<&Path>) -> String {
-    use std::fmt::Write;
-
     let empty = WireSurface::default();
     let wire_surface = set.wire_surface.as_ref().map_or(&empty, |(_, w)| w);
     let spec = spec_root.map(SpecIndex::new);
@@ -4737,70 +4800,93 @@ pub fn render_coverage_report(set: &ArtifactSet, spec_root: Option<&Path>) -> St
          never the vendored OAS. Every un-exercised behaviour is either a covering case or a \
          cited `vocab/wire_surface.yaml` exception; silence is not coverage.\n\n",
     );
-
-    // ── Axis 1 ──
     if let Some(spec) = spec.as_ref() {
-        out.push_str("## Axis 1 — SM-operation coverage (per platform interface)\n\n");
-        out.push_str("| Interface | Operations | Realized | Unrealized | Off-wire / exception |\n");
-        out.push_str("|---|--:|--:|--:|--:|\n");
-        for interface in PLATFORM_INTERFACES {
-            let Ok(ops) = spec.interface_operations(interface) else {
-                let _ = writeln!(out, "| {interface} | (no vendored SM class export) | | | |");
-                continue;
-            };
-            let (mut realized, mut unrealized, mut excepted) = (0_usize, 0_usize, 0_usize);
-            for name in ops.iter() {
-                let Ok(op) = SmOperationRef::parse(&format!("{interface}.{name}")) else {
-                    continue;
-                };
-                let binding = set.bindings.iter().find(|(_, b)| b.sm_operation == op);
-                match binding {
-                    Some((_, b)) if b.is_unrealized() => unrealized += 1,
-                    Some(_) => realized += 1,
-                    None if wire_surface.sm_exception(&op).is_some() => excepted += 1,
-                    None => {}
-                }
-            }
-            let _ = writeln!(
-                out,
-                "| {interface} | {} | {realized} | {unrealized} | {excepted} |",
-                ops.len()
-            );
-        }
-        // The ITS-side half of Axis 1: the pinned non-SM ITS-REST operations,
-        // grouped by their reserved pseudo-interface. Computed exactly like an
-        // SM row — the anchor differs, the obligation does not.
-        let mut pseudo: BTreeMap<String, Vec<SmOperationRef>> = BTreeMap::new();
-        for (name, _) in NON_SM_REST_OPERATIONS {
-            let Ok(op) = SmOperationRef::parse(name) else {
-                continue;
-            };
-            pseudo
-                .entry(op.interface().to_owned())
-                .or_default()
-                .push(op);
-        }
-        for (interface, ops) in pseudo {
-            let (mut realized, mut unrealized, mut excepted) = (0_usize, 0_usize, 0_usize);
-            for op in &ops {
-                match set.bindings.iter().find(|(_, b)| b.sm_operation == *op) {
-                    Some((_, b)) if b.is_unrealized() => unrealized += 1,
-                    Some(_) => realized += 1,
-                    None if wire_surface.sm_exception(op).is_some() => excepted += 1,
-                    None => {}
-                }
-            }
-            let _ = writeln!(
-                out,
-                "| {interface} (docs-text pinned, non-SM) | {} | {realized} | {unrealized} | \
-                 {excepted} |",
-                ops.len()
-            );
-        }
-        out.push('\n');
+        render_axis1(&mut out, set, wire_surface, spec);
     }
+    render_axis2(&mut out, set, wire_surface);
+    render_axis3(&mut out, wire_surface);
+    if let Some(spec) = spec.as_ref() {
+        render_axis3_derivation(&mut out, wire_surface, spec);
+    }
+    out
+}
 
-    // ── Axis 2 ──
+/// Appends the Axis-1 table: SM-operation coverage per platform interface,
+/// followed by the pinned non-SM ITS-REST operations grouped by their reserved
+/// pseudo-interface.
+fn render_axis1(
+    out: &mut String,
+    set: &ArtifactSet,
+    wire_surface: &WireSurface,
+    spec: &SpecIndex<'_>,
+) {
+    use std::fmt::Write;
+
+    out.push_str("## Axis 1 — SM-operation coverage (per platform interface)\n\n");
+    out.push_str("| Interface | Operations | Realized | Unrealized | Off-wire / exception |\n");
+    out.push_str("|---|--:|--:|--:|--:|\n");
+    for interface in PLATFORM_INTERFACES {
+        let Ok(ops) = spec.interface_operations(interface) else {
+            let _ = writeln!(out, "| {interface} | (no vendored SM class export) | | | |");
+            continue;
+        };
+        let (mut realized, mut unrealized, mut excepted) = (0_usize, 0_usize, 0_usize);
+        for name in ops.iter() {
+            let Ok(op) = SmOperationRef::parse(&format!("{interface}.{name}")) else {
+                continue;
+            };
+            let binding = set.bindings.iter().find(|(_, b)| b.sm_operation == op);
+            match binding {
+                Some((_, b)) if b.is_unrealized() => unrealized += 1,
+                Some(_) => realized += 1,
+                None if wire_surface.sm_exception(&op).is_some() => excepted += 1,
+                None => {}
+            }
+        }
+        let _ = writeln!(
+            out,
+            "| {interface} | {} | {realized} | {unrealized} | {excepted} |",
+            ops.len()
+        );
+    }
+    // The ITS-side half of Axis 1: the pinned non-SM ITS-REST operations,
+    // grouped by their reserved pseudo-interface. Computed exactly like an
+    // SM row — the anchor differs, the obligation does not.
+    let mut pseudo: BTreeMap<String, Vec<SmOperationRef>> = BTreeMap::new();
+    for (name, _) in NON_SM_REST_OPERATIONS {
+        let Ok(op) = SmOperationRef::parse(name) else {
+            continue;
+        };
+        pseudo
+            .entry(op.interface().to_owned())
+            .or_default()
+            .push(op);
+    }
+    for (interface, ops) in pseudo {
+        let (mut realized, mut unrealized, mut excepted) = (0_usize, 0_usize, 0_usize);
+        for op in &ops {
+            match set.bindings.iter().find(|(_, b)| b.sm_operation == *op) {
+                Some((_, b)) if b.is_unrealized() => unrealized += 1,
+                Some(_) => realized += 1,
+                None if wire_surface.sm_exception(op).is_some() => excepted += 1,
+                None => {}
+            }
+        }
+        let _ = writeln!(
+            out,
+            "| {interface} (docs-text pinned, non-SM) | {} | {realized} | {unrealized} | \
+             {excepted} |",
+            ops.len()
+        );
+    }
+    out.push('\n');
+}
+
+/// Appends the Axis-2 table: per-binding outcome and format coverage over the
+/// realized bindings, sorted by their label.
+fn render_axis2(out: &mut String, set: &ArtifactSet, wire_surface: &WireSurface) {
+    use std::fmt::Write;
+
     out.push_str("## Axis 2 — per-binding outcome/format coverage\n\n");
     out.push_str("| Binding | Outcomes covered | Formats covered |\n");
     out.push_str("|---|---|---|\n");
@@ -4854,8 +4940,13 @@ pub fn render_coverage_report(set: &ArtifactSet, spec_root: Option<&Path>) -> St
         );
     }
     out.push('\n');
+}
 
-    // ── Axis 3 ──
+/// Appends the Axis-3 table: the authored cross-cutting wire-surface elements
+/// with their covering cases or cited exception.
+fn render_axis3(out: &mut String, wire_surface: &WireSurface) {
+    use std::fmt::Write;
+
     out.push_str("## Axis 3 — cross-cutting wire-surface behaviours\n\n");
     out.push_str("| Element | Coverage |\n|---|---|\n");
     for element in &wire_surface.elements {
@@ -4870,38 +4961,39 @@ pub fn render_coverage_report(set: &ArtifactSet, spec_root: Option<&Path>) -> St
         let _ = writeln!(out, "| `{}` | {coverage} |", element.id);
     }
     out.push('\n');
+}
 
-    // ── Axis 3, derivation half ──
-    if let Some(spec) = spec.as_ref() {
-        out.push_str("### Axis 3 derivation — RELEASED overview sections\n\n");
-        out.push_str(
-            "The element list above is AUTHORED; this table is DERIVED — every `#`/`##` section \
-             of the two released overview chapters must be named by an authored \
-             `elements`/`branches` source or pinned in `AXIS3_SECTION_EXCLUSIONS`.\n\n",
-        );
-        out.push_str(
-            "| Chapter | Sections | Named by a source | Excluded (pinned) | Uncovered |\n",
-        );
-        out.push_str("|---|--:|--:|--:|--:|\n");
-        for derivation in axis3_derivation(wire_surface, spec, AXIS3_SECTION_EXCLUSIONS) {
-            if derivation.unreadable {
-                let _ = writeln!(out, "| `{}` | (not readable) | | | |", derivation.doc);
-                continue;
-            }
-            let sections =
-                derivation.covered.len() + derivation.excluded.len() + derivation.uncovered.len();
-            let _ = writeln!(
-                out,
-                "| `{}` | {sections} | {} | {} | {} |",
-                derivation.doc,
-                derivation.covered.len(),
-                derivation.excluded.len(),
-                derivation.uncovered.len()
-            );
+/// Appends the derivation half of Axis 3: the released overview chapters'
+/// sections, counted as named by an authored source, pinned as excluded, or
+/// uncovered.
+fn render_axis3_derivation(out: &mut String, wire_surface: &WireSurface, spec: &SpecIndex<'_>) {
+    use std::fmt::Write;
+
+    out.push_str("### Axis 3 derivation — RELEASED overview sections\n\n");
+    out.push_str(
+        "The element list above is AUTHORED; this table is DERIVED — every `#`/`##` section \
+         of the two released overview chapters must be named by an authored \
+         `elements`/`branches` source or pinned in `AXIS3_SECTION_EXCLUSIONS`.\n\n",
+    );
+    out.push_str("| Chapter | Sections | Named by a source | Excluded (pinned) | Uncovered |\n");
+    out.push_str("|---|--:|--:|--:|--:|\n");
+    for derivation in axis3_derivation(wire_surface, spec, AXIS3_SECTION_EXCLUSIONS) {
+        if derivation.unreadable {
+            let _ = writeln!(out, "| `{}` | (not readable) | | | |", derivation.doc);
+            continue;
         }
-        out.push('\n');
+        let sections =
+            derivation.covered.len() + derivation.excluded.len() + derivation.uncovered.len();
+        let _ = writeln!(
+            out,
+            "| `{}` | {sections} | {} | {} | {} |",
+            derivation.doc,
+            derivation.covered.len(),
+            derivation.excluded.len(),
+            derivation.uncovered.len()
+        );
     }
-    out
+    out.push('\n');
 }
 #[cfg(test)]
 mod surface_tests {

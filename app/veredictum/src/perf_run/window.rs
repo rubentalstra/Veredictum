@@ -64,6 +64,50 @@ pub struct WindowOutcome {
     pub generator_bound: bool,
 }
 
+/// Folds every completion the dispatcher reports into per-operation
+/// recorders, returning them beside the generator-fault count.
+///
+/// Only recorded arrivals reach a histogram. An arrival the generator could
+/// not fire, and the statically impossible histogram-construction failure,
+/// both count as generator faults instead.
+fn collect_completions(rx: mpsc::Receiver<Completion>) -> (Vec<(PerfOp, OpRecorder)>, u64) {
+    let mut recorders: Vec<(PerfOp, OpRecorder)> = Vec::new();
+    let mut generator_faults: u64 = 0;
+    for done in rx {
+        if !done.recorded {
+            continue;
+        }
+        if done.latency_us == u64::MAX {
+            generator_faults = generator_faults.saturating_add(1);
+            continue;
+        }
+        let index = if let Some(index) = recorders.iter().position(|(op, _)| *op == done.op) {
+            index
+        } else {
+            let Ok(histogram) = Histogram::new_with_bounds(1, HDR_MAX_US, 3) else {
+                generator_faults = generator_faults.saturating_add(1);
+                continue;
+            };
+            recorders.push((
+                done.op,
+                OpRecorder {
+                    histogram,
+                    errors: 0,
+                },
+            ));
+            recorders.len() - 1
+        };
+        if let Some((_, recorder)) = recorders.get_mut(index) {
+            let value = done.latency_us.clamp(1, HDR_MAX_US);
+            let _saturated = recorder.histogram.record(value);
+            if !done.ok {
+                recorder.errors = recorder.errors.saturating_add(1);
+            }
+        }
+    }
+    (recorders, generator_faults)
+}
+
 /// Execute one open-loop window: the journey workload at `rate` operation
 /// arrivals/s for `warmup_s + duration_s`, recording only the post-warmup
 /// span.
@@ -96,45 +140,7 @@ pub fn run_window(
     let captures = CaptureStore::new();
 
     let (tx, rx) = mpsc::channel::<Completion>();
-    let collector = std::thread::spawn(move || {
-        let mut recorders: Vec<(PerfOp, OpRecorder)> = Vec::new();
-        let mut generator_faults: u64 = 0;
-        for done in rx {
-            if !done.recorded {
-                continue;
-            }
-            if done.latency_us == u64::MAX {
-                generator_faults = generator_faults.saturating_add(1);
-                continue;
-            }
-            let index = if let Some(index) = recorders.iter().position(|(op, _)| *op == done.op) {
-                index
-            } else {
-                let Ok(histogram) = Histogram::new_with_bounds(1, HDR_MAX_US, 3) else {
-                    // Statically-valid bounds; treat the impossible
-                    // failure as a generator fault rather than panic.
-                    generator_faults = generator_faults.saturating_add(1);
-                    continue;
-                };
-                recorders.push((
-                    done.op,
-                    OpRecorder {
-                        histogram,
-                        errors: 0,
-                    },
-                ));
-                recorders.len() - 1
-            };
-            if let Some((_, recorder)) = recorders.get_mut(index) {
-                let value = done.latency_us.clamp(1, HDR_MAX_US);
-                let _saturated = recorder.histogram.record(value);
-                if !done.ok {
-                    recorder.errors = recorder.errors.saturating_add(1);
-                }
-            }
-        }
-        (recorders, generator_faults)
-    });
+    let collector = std::thread::spawn(move || collect_completions(rx));
 
     let start = Instant::now();
     let dispatched_measured = Arc::new(AtomicU64::new(0));

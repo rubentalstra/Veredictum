@@ -135,6 +135,26 @@ pub fn ward_size(ehr_count: usize) -> usize {
     ehr_count.min(10_000)
 }
 
+/// Creates one EHR through the public API and returns its `ehr_id`.
+///
+/// The id is read from the `Location` header's last segment, exactly as the
+/// `create_ehr` binding does.
+///
+/// # Errors
+/// A message when the server answers anything but 201, when the reply carries
+/// no usable `Location`, or on a transport fault.
+fn create_ehr(client: &PerfClient) -> Result<String, String> {
+    let reply = client.request(reqwest::Method::POST, "/ehr", None, true, None)?;
+    if reply.status != StatusCode::CREATED {
+        return Err(format!("create_ehr returned {}", reply.status.as_u16()));
+    }
+    reply
+        .location
+        .as_deref()
+        .and_then(location_last_segment)
+        .ok_or_else(|| "create_ehr: no Location ehr_id".to_owned())
+}
+
 /// Seeds the `scale_ladder` corpus through the public API.
 ///
 /// Uploads the
@@ -183,19 +203,7 @@ pub fn seed_scale_ladder(
     // treatment for every SUT (fairness); a no-op where no such lazy
     // state exists.
     let ehr_slots: Vec<Mutex<Option<String>>> = (0..ehrs).map(|_| Mutex::new(None)).collect();
-    let first = client
-        .request(reqwest::Method::POST, "/ehr", None, true, None)
-        .and_then(|reply| {
-            if reply.status != StatusCode::CREATED {
-                return Err(format!("create_ehr returned {}", reply.status.as_u16()));
-            }
-            reply
-                .location
-                .as_deref()
-                .and_then(location_last_segment)
-                .ok_or_else(|| "create_ehr: no Location ehr_id".to_owned())
-        })
-        .map_err(|e| format!("seeding EHRs failed: {e}"))?;
+    let first = create_ehr(client).map_err(|e| format!("seeding EHRs failed: {e}"))?;
     if let Some(slot) = ehr_slots.first()
         && let Ok(mut guard) = slot.lock()
     {
@@ -212,21 +220,7 @@ pub fn seed_scale_ladder(
                     if i >= ehrs {
                         break;
                     }
-                    let outcome = client
-                        .request(reqwest::Method::POST, "/ehr", None, true, None)
-                        .and_then(|reply| {
-                            if reply.status != StatusCode::CREATED {
-                                return Err(format!(
-                                    "create_ehr returned {}",
-                                    reply.status.as_u16()
-                                ));
-                            }
-                            reply
-                                .location
-                                .as_deref()
-                                .and_then(location_last_segment)
-                                .ok_or_else(|| "create_ehr: no Location ehr_id".to_owned())
-                        });
+                    let outcome = create_ehr(client);
                     match outcome {
                         Ok(id) => {
                             if let Some(Ok(mut slot)) = ehr_slots.get(i).map(Mutex::lock) {
@@ -363,6 +357,94 @@ pub fn seed_scale_ladder(
     })
 }
 
+/// Commits every pack example once, into a scratch EHR, before any window
+/// opens.
+///
+/// An RM-invalid generated payload is an instrument-ground defect, so it fails
+/// seeding loudly instead of surfacing as silent error arrivals inside a
+/// measured window. The Simplified-FLAT and TDD payloads ride the same
+/// preflight: both are template-derived, so a mismatch against the OPT is the
+/// same class of defect.
+///
+/// # Errors
+/// A message on any unexpected wire outcome or a transport fault.
+fn preflight_pack(
+    client: &PerfClient,
+    journey_pack: &JourneyPack,
+    progress: &(dyn Fn(String) + Sync),
+) -> Result<(), String> {
+    let scratch = client.request(reqwest::Method::POST, "/ehr", None, true, None)?;
+    let scratch_ehr = if scratch.status == StatusCode::CREATED {
+        scratch
+            .location
+            .as_deref()
+            .and_then(location_last_segment)
+            .ok_or_else(|| "preflight EHR: no Location ehr_id".to_owned())?
+    } else {
+        return Err(format!(
+            "preflight EHR create returned {}",
+            scratch.status.as_u16()
+        ));
+    };
+    for (index, template) in journey_pack.templates.iter().enumerate() {
+        let body = pack::composition_body(template, 0, u64::try_from(index).unwrap_or(0))?;
+        let reply = client.request(
+            reqwest::Method::POST,
+            &format!("/ehr/{scratch_ehr}/composition"),
+            Some(("application/json", body)),
+            true,
+            None,
+        )?;
+        if !created(reply.status) {
+            return Err(format!(
+                "pack preflight: template {} example returned {} — the committed payload                  ground is invalid for this SUT; fix the pack (or the SUT's validation)                  before measuring",
+                template.key,
+                reply.status.as_u16()
+            ));
+        }
+    }
+    if let Some(flat) = &journey_pack.aux.flat {
+        let reply = client.request_negotiated(
+            reqwest::Method::POST,
+            &format!("/ehr/{scratch_ehr}/composition"),
+            Some(("application/openehr.wt.flat+json", pack::flat_body(flat)?)),
+            true,
+            None,
+            None,
+            &[("openehr-template-id", flat.template_id.clone())],
+        )?;
+        if !created(reply.status) {
+            return Err(format!(
+                "pack preflight: the Simplified-FLAT payload returned {} — the committed payload \
+                 ground is invalid for this SUT; fix the pack (or the SUT's validation) before \
+                 measuring",
+                reply.status.as_u16()
+            ));
+        }
+    }
+    if let Some(tdd) = &journey_pack.aux.tdd {
+        let reply = client.request(
+            reqwest::Method::POST,
+            &format!("/message/tdd/{scratch_ehr}"),
+            Some(("application/xml", tdd.document.as_bytes().to_vec())),
+            false,
+            None,
+        )?;
+        if !created(reply.status) {
+            return Err(format!(
+                "pack preflight: the TDD payload returned {} — the committed payload ground is \
+                 invalid for this SUT; fix the pack (or the SUT's validation) before measuring",
+                reply.status.as_u16()
+            ));
+        }
+    }
+    progress(format!(
+        "pack preflight: {} template examples committed clean",
+        journey_pack.templates.len()
+    ));
+    Ok(())
+}
+
 /// Seeds the standing ward on top of a scale corpus.
 ///
 /// Uploads every pack OPT
@@ -422,86 +504,7 @@ pub fn seed_ward(
             ));
         }
     }
-    // PACK PREFLIGHT: every pack example must commit clean once (a
-    // scratch EHR) before any window opens — an RM-invalid generated
-    // payload is an instrument-ground defect and must fail seeding
-    // loudly, never surface as silent error arrivals inside a measured
-    // window.
-    let scratch = client.request(reqwest::Method::POST, "/ehr", None, true, None)?;
-    let scratch_ehr = if scratch.status == StatusCode::CREATED {
-        scratch
-            .location
-            .as_deref()
-            .and_then(location_last_segment)
-            .ok_or_else(|| "preflight EHR: no Location ehr_id".to_owned())?
-    } else {
-        return Err(format!(
-            "preflight EHR create returned {}",
-            scratch.status.as_u16()
-        ));
-    };
-    for (index, template) in journey_pack.templates.iter().enumerate() {
-        let body = pack::composition_body(template, 0, u64::try_from(index).unwrap_or(0))?;
-        let reply = client.request(
-            reqwest::Method::POST,
-            &format!("/ehr/{scratch_ehr}/composition"),
-            Some(("application/json", body)),
-            true,
-            None,
-        )?;
-        if !created(reply.status) {
-            return Err(format!(
-                "pack preflight: template {} example returned {} — the committed payload                  ground is invalid for this SUT; fix the pack (or the SUT's validation)                  before measuring",
-                template.key,
-                reply.status.as_u16()
-            ));
-        }
-    }
-    // The Simplified-FLAT payload rides the same preflight: its FLAT paths
-    // are template-derived, so a mismatch against the OPT is an
-    // instrument-ground defect exactly like an RM-invalid example.
-    if let Some(flat) = &journey_pack.aux.flat {
-        let reply = client.request_negotiated(
-            reqwest::Method::POST,
-            &format!("/ehr/{scratch_ehr}/composition"),
-            Some(("application/openehr.wt.flat+json", pack::flat_body(flat)?)),
-            true,
-            None,
-            None,
-            &[("openehr-template-id", flat.template_id.clone())],
-        )?;
-        if !created(reply.status) {
-            return Err(format!(
-                "pack preflight: the Simplified-FLAT payload returned {} — the committed payload \
-                 ground is invalid for this SUT; fix the pack (or the SUT's validation) before \
-                 measuring",
-                reply.status.as_u16()
-            ));
-        }
-    }
-    // The TDD payload rides the same preflight: its body is matched to the
-    // template node tree on the way in, so a mismatch against the OPT is an
-    // instrument-ground defect exactly like an RM-invalid example.
-    if let Some(tdd) = &journey_pack.aux.tdd {
-        let reply = client.request(
-            reqwest::Method::POST,
-            &format!("/message/tdd/{scratch_ehr}"),
-            Some(("application/xml", tdd.document.as_bytes().to_vec())),
-            false,
-            None,
-        )?;
-        if !created(reply.status) {
-            return Err(format!(
-                "pack preflight: the TDD payload returned {} — the committed payload ground is \
-                 invalid for this SUT; fix the pack (or the SUT's validation) before measuring",
-                reply.status.as_u16()
-            ));
-        }
-    }
-    progress(format!(
-        "pack preflight: {} template examples committed clean",
-        journey_pack.templates.len()
-    ));
+    preflight_pack(client, journey_pack, progress)?;
 
     // The dashboard stored query (`store_query` → wire 200).
     let stored = client.request(

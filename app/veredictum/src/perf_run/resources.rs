@@ -110,6 +110,49 @@ fn phase_of(offset_s: u64, warmup_s: u64, duration_s: u64) -> ResourcePhase {
     }
 }
 
+/// Records one delta sample against `target`, then rolls `slot` forward to
+/// `now`.
+///
+/// CPU percentage is a delta over the interval, so a container's first tick
+/// only seeds the slot and emits nothing; the first emitted sample lands one
+/// interval in.
+fn push_delta_sample(
+    target: &mut ContainerResourceSeries,
+    slot: &mut Option<(Instant, RawCounters)>,
+    started: Instant,
+    now: Instant,
+    counters: RawCounters,
+    warmup_s: u64,
+    duration_s: u64,
+) {
+    if let Some((prev_at, prev_counters)) = *slot {
+        let wall_ns = now.duration_since(prev_at).as_nanos().max(1);
+        let cpu_ns = counters
+            .cpu_total_ns
+            .saturating_sub(prev_counters.cpu_total_ns);
+        // % of one core over the interval (100 = one full core) — both
+        // deltas are far below 2^52.
+        #[expect(
+            clippy::as_conversions,
+            clippy::cast_precision_loss,
+            reason = "nanosecond counters within a sampling window are far below 2^52"
+        )]
+        let cpu_pct = cpu_ns as f64 / wall_ns as f64 * 100.0;
+        let offset_s = started.elapsed().as_secs();
+        target.samples.push(ResourceSample {
+            offset_s,
+            phase: phase_of(offset_s, warmup_s, duration_s),
+            cpu_pct,
+            rss_bytes: counters.rss_bytes,
+            blk_read_bytes: counters.blk_read_bytes,
+            blk_write_bytes: counters.blk_write_bytes,
+            net_rx_bytes: counters.net_rx_bytes,
+            net_tx_bytes: counters.net_tx_bytes,
+        });
+    }
+    *slot = Some((now, counters));
+}
+
 fn sample_loop(
     targets: &[(ContainerRole, String)],
     warmup_s: u64,
@@ -155,32 +198,9 @@ fn sample_loop(
             match container_counters(name) {
                 Ok(counters) => {
                     if let (Some(slot), Some(target)) = (prev.get_mut(i), series.get_mut(i)) {
-                        if let Some((prev_at, prev_counters)) = *slot {
-                            let wall_ns = now.duration_since(prev_at).as_nanos().max(1);
-                            let cpu_ns = counters
-                                .cpu_total_ns
-                                .saturating_sub(prev_counters.cpu_total_ns);
-                            // % of one core over the interval (100 = one
-                            // full core) — both deltas are far below 2^52.
-                            #[expect(
-                                clippy::as_conversions,
-                                clippy::cast_precision_loss,
-                                reason = "nanosecond counters within a sampling window are far below 2^52"
-                            )]
-                            let cpu_pct = cpu_ns as f64 / wall_ns as f64 * 100.0;
-                            let offset_s = started.elapsed().as_secs();
-                            target.samples.push(ResourceSample {
-                                offset_s,
-                                phase: phase_of(offset_s, warmup_s, duration_s),
-                                cpu_pct,
-                                rss_bytes: counters.rss_bytes,
-                                blk_read_bytes: counters.blk_read_bytes,
-                                blk_write_bytes: counters.blk_write_bytes,
-                                net_rx_bytes: counters.net_rx_bytes,
-                                net_tx_bytes: counters.net_tx_bytes,
-                            });
-                        }
-                        *slot = Some((now, counters));
+                        push_delta_sample(
+                            target, slot, started, now, counters, warmup_s, duration_s,
+                        );
                     }
                 }
                 Err(e) => {

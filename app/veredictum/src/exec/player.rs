@@ -159,6 +159,60 @@ impl<'a> TranscriptPlayer<'a> {
         }
         bindings.find(|b| b.sm_operation == op && b.variant.is_none())
     }
+
+    /// Binds `step`'s captures from the recorded response, mirroring the live
+    /// driver's closed capture grammar.
+    ///
+    /// Only the captures declared for the classified outcome `kind` bind. A
+    /// `commit_time` capture answers from the cursor, since a transcript
+    /// carries no clock.
+    fn bind_recorded_captures(
+        &self,
+        step: &FlowStep,
+        binding: &crate::model::binding::OperationBinding,
+        recorded: &TranscriptStep,
+        kind: OutcomeKind,
+        vars: &mut VarStore,
+    ) {
+        for (name, source) in step.captures() {
+            if source.outcome != kind {
+                continue;
+            }
+            match &source.field {
+                crate::refgrammar::CaptureField::Body => {
+                    if let Some(b) = &recorded.response.body {
+                        vars.set(name.clone(), Captured::Body(b.clone()));
+                    }
+                }
+                crate::refgrammar::CaptureField::CommitTime => {
+                    let ms = i64::try_from(self.cursor).unwrap_or(i64::MAX) * 1_000;
+                    vars.set(name.clone(), Captured::InstantMs { lo: ms, hi: ms });
+                }
+                crate::refgrammar::CaptureField::Field { name: field, list } => {
+                    let Some(spec) = binding
+                        .captures
+                        .as_deref()
+                        .unwrap_or_default()
+                        .iter()
+                        .find(|(n, _)| n == field)
+                        .map(|(_, s)| s)
+                    else {
+                        continue;
+                    };
+                    if *list {
+                        if let (Some(body), WireFrom::Body { path }) =
+                            (&recorded.response.body, &spec.from)
+                        {
+                            let items = extract_list(body, path);
+                            vars.set(name.clone(), Captured::List(items));
+                        }
+                    } else if let Some(value) = extract_scalar(&recorded.response, spec, vars) {
+                        vars.set(name.clone(), Captured::Scalar(value));
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl StepDriver for TranscriptPlayer<'_> {
@@ -184,47 +238,8 @@ impl StepDriver for TranscriptPlayer<'_> {
         let observation =
             outcome::classify_status(binding, selectors, recorded.response.status, expected);
 
-        // Bind captures from the recorded response exactly like the live
-        // driver (same closed grammar).
         if let outcome::Observation::Kind(kind) = observation {
-            for (name, source) in step.captures() {
-                if source.outcome != kind {
-                    continue;
-                }
-                match &source.field {
-                    crate::refgrammar::CaptureField::Body => {
-                        if let Some(b) = &recorded.response.body {
-                            vars.set(name.clone(), Captured::Body(b.clone()));
-                        }
-                    }
-                    crate::refgrammar::CaptureField::CommitTime => {
-                        let ms = i64::try_from(self.cursor).unwrap_or(i64::MAX) * 1_000;
-                        vars.set(name.clone(), Captured::InstantMs { lo: ms, hi: ms });
-                    }
-                    crate::refgrammar::CaptureField::Field { name: field, list } => {
-                        let Some(spec) = binding
-                            .captures
-                            .as_deref()
-                            .unwrap_or_default()
-                            .iter()
-                            .find(|(n, _)| n == field)
-                            .map(|(_, s)| s)
-                        else {
-                            continue;
-                        };
-                        if *list {
-                            if let (Some(body), WireFrom::Body { path }) =
-                                (&recorded.response.body, &spec.from)
-                            {
-                                let items = extract_list(body, path);
-                                vars.set(name.clone(), Captured::List(items));
-                            }
-                        } else if let Some(value) = extract_scalar(&recorded.response, spec, vars) {
-                            vars.set(name.clone(), Captured::Scalar(value));
-                        }
-                    }
-                }
-            }
+            self.bind_recorded_captures(step, binding, recorded, kind, vars);
         }
         Ok(StepObservation {
             observation,
