@@ -37,7 +37,7 @@ sm_operation: I_EHR_CONTRIBUTION.commit_contribution
 capabilities: [ChangeSets]
 exercises: [EhrStatus]
 profiles: [CORE]
-ambiguities: [AMB-82]
+ambiguities: [AMB-82, AMB-225]
 test_purpose: >-
   Committing a CONTRIBUTION carrying content into an EHR whose
   EHR_STATUS.is_modifiable is false is refused as a conflict with the EHR's

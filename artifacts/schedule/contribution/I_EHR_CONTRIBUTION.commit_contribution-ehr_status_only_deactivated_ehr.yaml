@@ -1,0 +1,79 @@
+# The EHR_STATUS carve-out on the native CONTRIBUTION route: a change set whose
+# only member is an EHR_STATUS is accepted against a deactivated EHR, and it is
+# accepted without reactivating anything.
+#
+# The RM makes the object unconditionally writable — RM UML/classes/
+# ehr_status.adoc §EHR_STATUS Class: "This object is always modifiable, in
+# order to change the status of the EHR as a whole" — and master04 §EHR Active
+# Status excludes it from what the flag governs: "An EHR's 'contents' consist
+# of everything other than the `EHR_STATUS` object". The convenience setters
+# already prove that through `PUT /ehr/{ehr_id}/ehr_status`; this is the same
+# permission through the primary commit route, and a server that gates the
+# CONTRIBUTION on `is_modifiable` without the carve-out strands a deactivated
+# EHR with no way back.
+#
+# The member keeps `is_modifiable = false` on purpose: the acceptance here is
+# the object's own permission, not a reactivation earning it. Together with
+# -mixed_change_set_stays_deactivated (the same status member, plus content,
+# refused) this pins the whole rule AMB-225 records — the set is judged once,
+# the status member is always committable, and content needs the set to leave
+# the EHR modifiable. `is_queryable` flips so the accepted commit is a real
+# change to the lineage rather than a re-statement of the current version.
+id: I_EHR_CONTRIBUTION.commit_contribution-ehr_status_only_deactivated_ehr
+kind: functional
+component: EHR_CONTRIBUTION
+sm_operation: I_EHR_CONTRIBUTION.commit_contribution
+capabilities: [ChangeSets]
+exercises: [EhrStatus]
+profiles: [CORE]
+ambiguities: [AMB-225]
+test_purpose: >-
+  A CONTRIBUTION whose only member is an EHR_STATUS is accepted against a
+  deactivated EHR even when the member keeps is_modifiable = false, because
+  the EHR_STATUS object is always modifiable.
+description: "Commit EHR_STATUS-only CONTRIBUTION into a deactivated EHR"
+spec_refs:
+  - "RM ehr §EHR Active Status (master04 — an EHR's contents are everything other than the EHR_STATUS object)"
+  - "RM ehr_status §EHR_STATUS Class (UML/classes — this object is always modifiable)"
+  - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
+  - "SM openehr_platform §I_EHR_STATUS.clear_ehr_modifiable"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  ehr: { commits: none }                 # mints ${ehr_id}; its EHR_STATUS v1 is is_modifiable = true
+flow:
+  - step: 1
+    call: I_EHR_STATUS.get_ehr_status    # the payload the PUT modifies + the If-Match precondition
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid }
+  - step: 2                              # deactivate through the wire: is_modifiable -> false
+    call: I_EHR_STATUS.clear_ehr_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    expect: updated
+    capture: { status_version_uid: updated.status_version_uid }
+  - step: 3                              # the status member alone, still deactivating
+    call: commit_contribution
+    with:
+      ehr_id: "${ehr_id}"
+      versions:
+        - data:
+            _type: EHR_STATUS
+            archetype_node_id: "openEHR-EHR-EHR_STATUS.generic.v1"
+            archetype_details:
+              _type: ARCHETYPED
+              archetype_id: { _type: ARCHETYPE_ID, value: "openEHR-EHR-EHR_STATUS.generic.v1" }
+              rm_version: "1.2.0"
+            name: { value: "EHR Status" }
+            subject: { _type: PARTY_SELF }
+            is_modifiable: false
+            is_queryable: false
+          change_type: modification
+          preceding_version_uid: "${status_version_uid}"   # body property: OAS UpdateVersion.preceding_version_uid
+    expect: created
+postconditions:
+  - assert: state
+    text: >-
+      The EHR_STATUS-only commit landed on the deactivated EHR: a third
+      EHR_STATUS version, still is_modifiable = false, and no content
+  - { assert: version, count: 3 }        # default EHR_STATUS + the deactivation + this modification
