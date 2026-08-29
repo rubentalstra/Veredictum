@@ -550,4 +550,85 @@ mod tests {
         );
         assert_eq!(message(&out, "badge-performance.json"), "not measured");
     }
+
+    /// A measured class that was NOT earned is named in red: the badge says
+    /// which class was attempted, so an unearned run never reads as unmeasured.
+    #[test]
+    fn a_measured_but_unearned_class_is_named_in_red() {
+        let mut r = report(&all_passed(), &[], None);
+        r.performance = vec![PerformanceVerdict {
+            case: crate::ids::CaseId::parse("PERF-hospital_sim-class_S").unwrap(),
+            class: PerfClass::S,
+            claimed: true,
+            verdict: ClassVerdict::NotEarned,
+            violations: vec!["error_rate 0.5 > max 0".to_owned()],
+        }];
+        let out = badges(&r, &matrix(), CaseCounts::default());
+        assert_eq!(
+            message(&out, "badge-performance.json"),
+            "class S not earned"
+        );
+        let badge = out
+            .iter()
+            .find(|b| b.file == "badge-performance.json")
+            .expect("performance badge");
+        assert_eq!(badge.badge.color, "red");
+    }
+
+    /// The badge names the highest EARNED class, not the highest measured
+    /// one: a run that earned POC while failing S publishes POC.
+    #[test]
+    fn the_performance_badge_names_the_highest_earned_class() {
+        let verdict = |class, verdict| PerformanceVerdict {
+            case: crate::ids::CaseId::parse("PERF-hospital_sim-class_x").unwrap(),
+            class,
+            claimed: true,
+            verdict,
+            violations: Vec::new(),
+        };
+        let mut r = report(&all_passed(), &[], None);
+        r.performance = vec![
+            verdict(PerfClass::Poc, ClassVerdict::Earned),
+            verdict(PerfClass::S, ClassVerdict::NotEarned),
+        ];
+        let out = badges(&r, &matrix(), CaseCounts::default());
+        assert_eq!(message(&out, "badge-performance.json"), "class POC earned");
+        let badge = out
+            .iter()
+            .find(|b| b.file == "badge-performance.json")
+            .expect("performance badge");
+        assert_eq!(badge.badge.color, "brightgreen");
+    }
+
+    /// A failing SEC-BASIC verdict renders as `fail`, and the badge still
+    /// carries the member count its verdict was judged on.
+    #[test]
+    fn a_failing_sec_basic_verdict_renders_as_fail() {
+        let out = badges(
+            &report(
+                &[("AuthenticatedAccess", Evidence::Failed)],
+                &[],
+                Some(SecBasicVerdict::Fail),
+            ),
+            &matrix(),
+            CaseCounts::default(),
+        );
+        assert_eq!(
+            message(&out, "badge-sec-basic.json"),
+            "FAIL 0/1 capabilities"
+        );
+    }
+
+    /// Every tier has its own file slug and its own display label, so two
+    /// badges can never overwrite each other or claim each other's tier.
+    #[test]
+    fn every_tier_carries_a_distinct_badge_slug_and_label() {
+        let slugs: std::collections::BTreeSet<&str> = Tier::ALL.iter().map(|t| slug(*t)).collect();
+        let labels: std::collections::BTreeSet<&str> =
+            Tier::ALL.iter().map(|t| label(*t)).collect();
+        assert_eq!(slugs.len(), Tier::ALL.len());
+        assert_eq!(labels.len(), Tier::ALL.len());
+        assert_eq!(slug(Tier::EnterpriseD), "enterprise-d");
+        assert_eq!(label(Tier::EnterpriseX), "X");
+    }
 }

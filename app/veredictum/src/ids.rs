@@ -308,4 +308,39 @@ mod tests {
         assert!(CorpusKey::parse("Cnf.Upper").is_err());
         assert!(CorpusKey::parse("cnf..double_dot").is_err());
     }
+
+    /// An SM operation anchor round-trips through every text seam the
+    /// artifacts use it on: `FromStr` (a `.parse()` call site), and serde in
+    /// both directions. All three go through the one lexical rule, so a
+    /// malformed anchor cannot enter by a side door.
+    #[test]
+    fn an_sm_operation_anchor_round_trips_through_every_text_seam() {
+        let parsed: SmOperationRef = "I_EHR_SERVICE.create_ehr".parse().unwrap();
+        assert_eq!(
+            parsed,
+            SmOperationRef::parse("I_EHR_SERVICE.create_ehr").unwrap()
+        );
+        assert!("EHR_SERVICE.create_ehr".parse::<SmOperationRef>().is_err());
+
+        let json = serde_json::to_string(&parsed).unwrap();
+        assert_eq!(json, "\"I_EHR_SERVICE.create_ehr\"");
+        let back: SmOperationRef = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, parsed);
+        assert!(serde_json::from_str::<SmOperationRef>("\"nope\"").is_err());
+    }
+
+    /// The string-id newtypes carry the same three seams, and the error names
+    /// the identifier kind and its rule so a bad artifact says which space it
+    /// violated.
+    #[test]
+    fn a_string_id_round_trips_and_its_error_names_the_rule() {
+        let name: CapabilityName = "EhrOperations".parse().unwrap();
+        assert_eq!(name.as_str(), "EhrOperations");
+        assert_eq!(serde_json::to_string(&name).unwrap(), "\"EhrOperations\"");
+        let error = CapabilityName::parse("2fast").expect_err("a leading digit is not an ident");
+        assert_eq!(
+            error.to_string(),
+            "invalid capability name: \"2fast\" (ASCII identifier)"
+        );
+    }
 }

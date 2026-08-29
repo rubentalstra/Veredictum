@@ -805,6 +805,11 @@ fn performance_scope_cell(verdicts: &VerdictReport) -> String {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Result-returning tests in the Book ch11 shape, each asserting; \
+              clippy offers no allow-in-tests knob for this lint"
+)]
 mod tests {
     use super::*;
 
@@ -1044,5 +1049,129 @@ mod tests {
             "violations": []
         }))
         .unwrap()
+    }
+
+    /// The rendered vocabulary IS what a certificate reader sees, so every
+    /// token is pinned to its published spelling. An `INCONCLUSIVE` that
+    /// rendered as anything softer would let errored rows read as green.
+    #[test]
+    fn the_rendered_vocabulary_keeps_its_published_spellings() {
+        assert_eq!(
+            Tier::ALL.iter().map(|t| tier_token(*t)).collect::<Vec<_>>(),
+            ["CORE", "STANDARD", "OPTIONS", "SEC-BASIC", "D", "M", "X"]
+        );
+        assert_eq!(
+            FormatName::ALL
+                .iter()
+                .map(|f| format_token(*f))
+                .collect::<Vec<_>>(),
+            [
+                "canonical-json",
+                "canonical-xml",
+                "wt-flat",
+                "wt-structured",
+                "wt"
+            ]
+        );
+        assert_eq!(
+            Family::ALL
+                .iter()
+                .map(|f| family_token(*f))
+                .collect::<Vec<_>>(),
+            ["Platform", "Enterprise", "Security"]
+        );
+        assert_eq!(evidence_token(Evidence::Failed), "FAIL");
+        assert_eq!(
+            evidence_token(Evidence::Inconclusive),
+            "INCONCLUSIVE (errored rows — never green by absorption)"
+        );
+        assert_eq!(sec_token(SecBasicVerdict::Pass), "PASS");
+        assert_eq!(sec_token(SecBasicVerdict::Fail), "FAIL");
+        assert_eq!(verdict_token(crate::perf::ClassVerdict::Earned), "EARNED");
+        assert_eq!(
+            verdict_token(crate::perf::ClassVerdict::NotEarned),
+            "not earned"
+        );
+        assert_eq!(
+            verification_token(&results_with_pack_status("failed")),
+            "failed"
+        );
+        assert_eq!(
+            verification_token(&results_with_pack_status("not_run")),
+            "not_run"
+        );
+    }
+
+    /// An empty list of tiers or formats renders as an explicit dash, so a
+    /// certificate cell is never silently blank.
+    #[test]
+    fn an_empty_tier_or_format_list_renders_as_a_dash() {
+        assert_eq!(join_tiers(&[]), "—");
+        assert_eq!(join_formats(&[]), "—");
+        assert_eq!(join_tiers(&[Tier::Core, Tier::SecBasic]), "CORE, SEC-BASIC");
+    }
+
+    /// The Scope-of-Test performance cell names the EARNED classes only, and
+    /// an unmeasured or unearned claim renders as a dash rather than as an
+    /// implied pass.
+    #[test]
+    fn the_performance_scope_cell_names_only_earned_classes() {
+        let mut report = verdicts();
+        assert_eq!(performance_scope_cell(&report), "—");
+        report.performance = vec![
+            crate::verdict::PerformanceVerdict {
+                case: crate::ids::CaseId::parse("PERF-hospital_sim-class_POC").unwrap(),
+                class: crate::perf::PerfClass::Poc,
+                claimed: true,
+                verdict: crate::perf::ClassVerdict::Earned,
+                violations: Vec::new(),
+            },
+            crate::verdict::PerformanceVerdict {
+                case: crate::ids::CaseId::parse("PERF-hospital_sim-class_S").unwrap(),
+                class: crate::perf::PerfClass::S,
+                claimed: true,
+                verdict: crate::perf::ClassVerdict::NotEarned,
+                violations: vec!["error_rate 0.5 > max 0".to_owned()],
+            },
+        ];
+        assert_eq!(performance_scope_cell(&report), "class POC (earned)");
+    }
+
+    fn results_with_pack_status(status: &str) -> Results {
+        let mut value = serde_json::to_value(results()).unwrap();
+        value["runner"]["verification_pack_status"] = serde_json::json!(status);
+        serde_json::from_value(value).unwrap()
+    }
+
+    /// A measurement's threshold violations are rendered under their own
+    /// heading, so the reason a class was not earned travels with the record
+    /// rather than only its verdict.
+    #[test]
+    fn measured_violations_are_rendered_under_their_own_heading()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut rs = results();
+        let mut m = measurement();
+        m.violations = vec!["error_rate 0.5 > max 0".to_owned()];
+        rs.measurements = vec![m];
+        let text = render_report(&rs, &verdicts(), &statement())?;
+        assert!(text.contains("## Performance measurements"), "{text}");
+        assert!(text.contains("Violations:"), "{text}");
+        assert!(text.contains("- error_rate 0.5 > max 0"), "{text}");
+        Ok(())
+    }
+
+    /// A run with every case executed carries no not-executed table, and the
+    /// report says so explicitly rather than leaving the section empty.
+    #[test]
+    fn a_fully_executed_run_states_that_nothing_was_excused()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut rs = results();
+        rs.outcomes.retain(|o| o.citation.is_none());
+        let text = render_report(&rs, &verdicts(), &statement())?;
+        assert!(
+            text.contains("No skipped or not-applicable verdicts."),
+            "{text}"
+        );
+        Ok(())
     }
 }

@@ -406,3 +406,100 @@ pub fn load_root(root: &Path) -> Result<Loaded, LoadError> {
 
     Ok(loaded)
 }
+
+#[cfg(test)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Result-returning tests in the Book ch11 shape, each asserting; \
+              clippy offers no allow-in-tests knob for this lint"
+)]
+mod tests {
+    use super::*;
+
+    /// Writes `body` at `root/rel`, creating the directories it needs.
+    fn put(root: &Path, rel: &str, body: &str) -> std::io::Result<()> {
+        let path = root.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(path, body)
+    }
+
+    /// A defective artifact is one FINDING against its own file, and the load
+    /// carries on: the tree's other files still land, so one broken file
+    /// cannot hide the rest of the catalogue from every gate downstream.
+    #[test]
+    fn a_defective_file_is_one_error_against_itself_and_the_load_continues()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = assert_fs::TempDir::new()?;
+        let root = tmp.path().join("artifacts");
+        std::fs::create_dir_all(&root)?;
+
+        // One sound case, so the load is not empty when the defects land.
+        put(
+            &root,
+            "schedule/ehr/I_EHR_SERVICE.create_ehr-main.yaml",
+            "id: I_EHR_SERVICE.create_ehr-main\n\
+             kind: functional\n\
+             component: EHR\n\
+             sm_operation: I_EHR_SERVICE.create_ehr\n\
+             test_purpose: t\n\
+             description: d\n\
+             spec_refs: [\"ITS-REST master02 §EHR\"]\n\
+             capabilities: [EhrOperations]\n\
+             flow:\n  - { step: 1, call: create_ehr, expect: created }\n",
+        )?;
+        // A performance case whose `kind` is not `performance`: the typed
+        // invariant, not the schema, is what refuses it.
+        put(
+            &root,
+            "schedule/performance/PERF-broken.yaml",
+            "id: PERF-broken\nkind: functional\ncomponent: PERFORMANCE\n\
+             description: d\ntest_purpose: t\nspec_refs: []\nclass: POC\n\
+             corpus: cnf.scale.10k\n\
+             workload: { arrival_rate: 2/s, warmup: PT5M, duration: PT1H,\n\
+             \x20            journeys: { chart_review: 100% } }\nthresholds: []\n",
+        )?;
+        // A singleton vocabulary file outside its schema.
+        put(&root, "vocab/selectors.yaml", "body_selectors: 7\n")?;
+        // A statement that is not JSON at all.
+        put(tmp.path(), "party/acme/statement.json", "not json\n")?;
+
+        let loaded = load_root(&root)?;
+        let failing: Vec<String> = loaded
+            .errors
+            .iter()
+            .map(|e| e.path().display().to_string())
+            .collect();
+        for expected in [
+            "schedule/performance/PERF-broken.yaml",
+            "vocab/selectors.yaml",
+            "party/acme/statement.json",
+        ] {
+            assert!(
+                failing.iter().any(|p| p.ends_with(expected)),
+                "{expected} missing from {failing:?}"
+            );
+        }
+        assert_eq!(loaded.set.cases.len(), 1, "{:?}", loaded.errors);
+        assert!(loaded.set.performance.is_empty());
+        assert!(loaded.set.selectors.is_none());
+        assert!(loaded.set.parties.is_empty());
+        Ok(())
+    }
+
+    /// A root with no artifacts at all loads clean and empty: an absent
+    /// singleton is not an error, so a partial tree still reaches the gates
+    /// that judge what it does carry.
+    #[test]
+    fn an_empty_root_loads_clean_and_empty() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = assert_fs::TempDir::new()?;
+        let loaded = load_root(tmp.path())?;
+        assert!(loaded.errors.is_empty(), "{:?}", loaded.errors);
+        assert!(loaded.set.cases.is_empty());
+        assert!(loaded.set.bindings.is_empty());
+        assert!(loaded.set.matrix.is_none());
+        assert!(loaded.set.corpus_dir.is_none());
+        Ok(())
+    }
+}

@@ -1398,6 +1398,107 @@ mod tests {
         }
     }
 
+    /// One stress step at `rate`, whose single operation's p99 is `p99_us`.
+    fn step(rate: f64, p99_us: u64, stable: bool) -> crate::stress::LoadStep {
+        let mut h = Histogram::<u64>::new(3).unwrap();
+        h.record(p99_us).unwrap();
+        crate::stress::LoadStep {
+            rate,
+            offered_load_sustained: rate,
+            operations: vec![
+                OperationMeasurement::from_histogram("composition_read", &h, 0).unwrap(),
+            ],
+            stable,
+            breaches: if stable {
+                Vec::new()
+            } else {
+                vec!["p99 3000ms > budget 1000ms".to_owned()]
+            },
+            generator_bound: false,
+            resources: None,
+        }
+    }
+
+    fn stress_report(max_sustainable_throughput_per_s: f64) -> crate::stress::StressReport {
+        crate::stress::StressReport {
+            corpus: "cnf.scale.10k".to_owned(),
+            environment: serde_json::from_value(serde_json::json!({
+                "hardware_class": "test", "cores": 1, "memory_gb": 1,
+                "storage_class": "ram", "topology": "stub"
+            }))
+            .unwrap(),
+            step_warmup_s: 10,
+            step_hold_s: 30,
+            p99_budget_ms: 1_000.0,
+            error_budget: 0.0,
+            steps: vec![
+                step(200.0, 40_000, false),
+                step(10.0, 2_000, true),
+                step(100.0, 9_000, true),
+            ],
+            max_sustainable_throughput_per_s,
+            ladder_capped: false,
+            generator_bound: false,
+            remark: "exploration only".to_owned(),
+        }
+    }
+
+    /// The stress curve is deterministic, plots its steps in RATE order
+    /// whatever order they were executed in (the ladder bisects, so execution
+    /// order is not rate order), marks a breached step with a distinct shape
+    /// rather than color alone, and names the knee it found.
+    #[test]
+    fn the_stress_curve_orders_by_rate_and_marks_breaches_by_shape() {
+        let report = stress_report(100.0);
+        let svg = stress_curve_svg(&report).unwrap();
+        assert_eq!(svg, stress_curve_svg(&report).unwrap());
+        assert!(
+            svg.contains("exploration only — never a conformance record"),
+            "{svg}"
+        );
+        assert!(svg.contains("p99 budget"), "{svg}");
+        assert!(svg.contains("max sustainable 100/s"), "{svg}");
+        // Two holding steps are circles; the one breached step is a cross.
+        assert_eq!(svg.matches("class=\"measured\"").count(), 2, "{svg}");
+        assert_eq!(svg.matches("stroke-width=\"2\"").count(), 1, "{svg}");
+        // x is a monotone function of the rate, so the path's x coordinates
+        // strictly increase exactly when the steps were plotted in rate order
+        // — the executed order here is 200, 10, 100.
+        let path = svg
+            .lines()
+            .find(|l| l.starts_with("<path d=\"M"))
+            .expect("a curve path");
+        let xs = path_x_coordinates(path);
+        assert_eq!(xs.len(), 3, "{path}");
+        assert!(xs.windows(2).all(|w| w[0] < w[1]), "{path}");
+    }
+
+    /// The knee label flips to the marker's left past the plot midline, so a
+    /// knee near the right edge can never render outside the canvas.
+    #[test]
+    fn the_knee_label_flips_side_rather_than_leaving_the_canvas() {
+        let low = stress_curve_svg(&stress_report(2.0)).unwrap();
+        assert!(
+            low.contains("text-anchor=\"start\">max sustainable 2/s"),
+            "{low}"
+        );
+        let high = stress_curve_svg(&stress_report(5000.0)).unwrap();
+        assert!(
+            high.contains("text-anchor=\"end\">max sustainable 5000/s"),
+            "{high}"
+        );
+    }
+
+    /// The x coordinate of every `M`/`L` command in a curve path.
+    fn path_x_coordinates(path: &str) -> Vec<f64> {
+        path.split_whitespace()
+            .filter_map(|token| {
+                let point = token.trim_start_matches(|c: char| !c.is_ascii_digit());
+                point.split_once(',')?.0.parse::<f64>().ok()
+            })
+            .collect()
+    }
+
     #[test]
     fn charts_are_deterministic_and_carry_the_data() {
         let cases = [

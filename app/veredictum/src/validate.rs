@@ -6152,3 +6152,522 @@ mod binding_selection_tests {
         assert_eq!(selected.variant, None);
     }
 }
+
+#[cfg(test)]
+mod kind_shape_tests {
+    use super::*;
+
+    /// A minimal well-formed functional case with the defect under test
+    /// merged over it. The committed catalogue is clean, so every finding
+    /// below needs its defect authored here.
+    fn case_with(overrides: &serde_json::Value) -> CaseCore {
+        let mut doc = serde_json::json!({
+            "id": "KS-shape", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{ "step": 1, "call": "create_ehr", "expect": "created" }]
+        });
+        if let (Some(target), Some(patch)) = (doc.as_object_mut(), overrides.as_object()) {
+            for (key, value) in patch {
+                target.insert(key.clone(), value.clone());
+            }
+        }
+        serde_json::from_value(doc).unwrap()
+    }
+
+    fn findings_for(overrides: &serde_json::Value) -> Vec<Finding> {
+        let case = case_with(overrides);
+        let mut findings = Vec::new();
+        check_kind_shape(&case, "KS-shape", &mut findings);
+        findings
+    }
+
+    fn only_message(overrides: &serde_json::Value) -> String {
+        let findings = findings_for(overrides);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let finding = findings.first().unwrap();
+        assert_eq!(finding.check, CheckId::KindShape);
+        finding.message.clone()
+    }
+
+    /// A guard is prose the runner cannot decide, so it carries the citation
+    /// that justifies it. A guard with neither an em-dash citation nor a
+    /// master-document reference states a rule with no source.
+    #[test]
+    fn a_guard_without_a_spec_citation_is_a_finding() {
+        let message = only_message(&serde_json::json!({ "guards": ["skip when slow"] }));
+        assert!(message.contains("carries no spec citation"), "{message}");
+        assert!(
+            findings_for(&serde_json::json!({
+                "guards": ["the SUT serves no FOLDER routes — ITS-REST master05 §Directory"]
+            }))
+            .is_empty()
+        );
+    }
+
+    /// A functional case is driven through an SM operation over a flow, so a
+    /// case missing either is undriveable rather than merely thin.
+    #[test]
+    fn a_functional_case_needs_an_operation_and_a_flow() {
+        assert!(
+            only_message(&serde_json::json!({ "sm_operation": serde_json::Value::Null }))
+                .contains("must carry sm_operation and a non-empty flow")
+        );
+        assert!(
+            only_message(&serde_json::json!({ "flow": [] }))
+                .contains("must carry sm_operation and a non-empty flow")
+        );
+    }
+
+    /// The content blocks belong to the content executor, so a functional
+    /// case carrying one would be judged completely by neither executor.
+    #[test]
+    fn a_functional_case_may_not_carry_content_blocks() {
+        let message = only_message(&serde_json::json!({
+            "decision_table": { "columns": ["value"], "rows": [] }
+        }));
+        assert!(
+            message.contains("must not carry content blocks"),
+            "{message}"
+        );
+    }
+
+    /// A content case is judged from `rm_class`, the constraint context and
+    /// the decision table together; any one missing leaves nothing to judge.
+    #[test]
+    fn a_content_case_needs_its_three_content_blocks() {
+        let message = only_message(&serde_json::json!({
+            "kind": "content",
+            "sm_operation": serde_json::Value::Null,
+            "flow": []
+        }));
+        assert!(
+            message.contains("must carry rm_class, constraint_context and decision_table"),
+            "{message}"
+        );
+    }
+
+    /// Row parameterization is either an inline matrix or a fixture set. Both
+    /// at once, or neither, leaves the row source undecided.
+    #[test]
+    fn parameters_carry_exactly_one_row_source() {
+        let neither = only_message(&serde_json::json!({
+            "parameters": { "iteration": "single_pass" }
+        }));
+        assert!(
+            neither.contains("exactly one of matrix | fixture_set"),
+            "{neither}"
+        );
+        let both = only_message(&serde_json::json!({
+            "parameters": {
+                "iteration": "single_pass",
+                "matrix": { "columns": ["expected"], "rows": [["created"]] },
+                "fixture_set": [{ "data_set": "cnf.set.bp-10", "expected": "created" }]
+            }
+        }));
+        assert!(
+            both.contains("exactly one of matrix | fixture_set"),
+            "{both}"
+        );
+    }
+
+    /// A short row silently drops the columns it does not reach, so the gate
+    /// names the row index and both counts. The dropped `expected` cell is
+    /// reported too: a truncated row loses its outcome as well as its width.
+    #[test]
+    fn a_matrix_row_states_one_cell_per_column() {
+        let findings = findings_for(&serde_json::json!({
+            "parameters": {
+                "iteration": "reset_per_row",
+                "matrix": {
+                    "columns": ["magnitude", "expected"],
+                    "rows": [["120", "created"], ["140"]]
+                }
+            }
+        }));
+        let messages: Vec<&str> = findings.iter().map(|f| f.message.as_str()).collect();
+        assert_eq!(
+            messages,
+            [
+                "matrix row 1 has 1 cells for 2 columns",
+                "matrix row 1: `expected` cell must be an outcome kind"
+            ]
+        );
+    }
+
+    /// An `expected` cell drives the row's outcome comparison, so a cell
+    /// outside the outcome vocabulary would judge the row against nothing.
+    #[test]
+    fn a_matrix_expected_cell_is_an_outcome_kind() {
+        let message = only_message(&serde_json::json!({
+            "parameters": {
+                "iteration": "reset_per_row",
+                "matrix": { "columns": ["expected"], "rows": [["creatd"]] }
+            }
+        }));
+        assert!(
+            message.contains("matrix row 0: `expected` cell must be an outcome kind"),
+            "{message}"
+        );
+    }
+
+    /// An aggregate assertion is evaluated once over every row, which holds
+    /// only when the rows share one server state.
+    #[test]
+    fn an_aggregate_assertion_requires_single_pass_iteration() {
+        let message = only_message(&serde_json::json!({
+            "parameters": {
+                "iteration": "reset_per_row",
+                "matrix": { "columns": ["expected"], "rows": [["created"]] }
+            },
+            "postconditions": [
+                { "assert": "unique", "over": "${version_uids}", "aggregate": true }
+            ]
+        }));
+        assert!(
+            message.contains("aggregate assertions require parameters.iteration: single_pass"),
+            "{message}"
+        );
+    }
+
+    /// A prose state postcondition is evidence only when something verifies
+    /// it: a linked case, or a further step in this case.
+    #[test]
+    fn a_state_assertion_needs_a_verification() {
+        let message = only_message(&serde_json::json!({
+            "postconditions": [{ "assert": "state", "text": "the EHR exists" }]
+        }));
+        assert!(
+            message.contains("state assertion needs verified_by or an in-case verification step"),
+            "{message}"
+        );
+        assert!(
+            findings_for(&serde_json::json!({
+                "postconditions": [
+                    { "assert": "state", "text": "the EHR exists", "verified_by": "EHR.get_ehr-ok" }
+                ]
+            }))
+            .is_empty()
+        );
+    }
+
+    /// Step numbers order execution, so a repeated or descending number makes
+    /// the authored order ambiguous.
+    #[test]
+    fn flow_step_numbers_strictly_increase() {
+        let message = only_message(&serde_json::json!({
+            "flow": [
+                { "step": 2, "call": "create_ehr", "expect": "created" },
+                { "step": 2, "call": "get_ehr", "expect": "ok" }
+            ]
+        }));
+        assert!(
+            message.contains("flow step numbers must strictly increase (step 2)"),
+            "{message}"
+        );
+    }
+
+    /// `${fixture.expected}` resolves per fixture-set row, so a case without
+    /// a fixture set has no per-row expectation to resolve it from.
+    #[test]
+    fn a_fixture_expectation_requires_a_fixture_set() {
+        let message = only_message(&serde_json::json!({
+            "flow": [
+                { "step": 1, "call": "create_ehr", "expect": "${fixture.expected}" }
+            ]
+        }));
+        assert!(
+            message.contains("expect: ${fixture.expected} requires parameters.fixture_set"),
+            "{message}"
+        );
+    }
+
+    /// A capture reads the mapping of ONE outcome, so naming a different
+    /// outcome than the step expects reads a mapping the step never produces.
+    #[test]
+    fn a_capture_reads_the_outcome_its_step_expects() {
+        let message = only_message(&serde_json::json!({
+            "flow": [{
+                "step": 1, "call": "create_ehr", "expect": "created",
+                "capture": { "ehr_id": "ok.ehr_id" }
+            }]
+        }));
+        assert!(
+            message.contains("capture ehr_id reads outcome `ok` but the step expects `created`"),
+            "{message}"
+        );
+    }
+
+    /// Every gate has its own report token, and a finding renders as
+    /// `[token] artifact: message` — the line the CLI prints and the
+    /// integration gates read.
+    #[test]
+    fn every_check_id_carries_a_distinct_report_token() {
+        let all = [
+            CheckId::Load,
+            CheckId::IdUniqueness,
+            CheckId::KindShape,
+            CheckId::ReferenceGrammar,
+            CheckId::LiteralGrammar,
+            CheckId::SmOperation,
+            CheckId::SpecRef,
+            CheckId::BindingCompleteness,
+            CheckId::BindingFilename,
+            CheckId::StepArguments,
+            CheckId::MatcherPlaceholder,
+            CheckId::VerifiedBy,
+            CheckId::CorpusIntegrity,
+            CheckId::AmbiguityLink,
+            CheckId::OptionTag,
+            CheckId::CapabilityTier,
+            CheckId::VocabDrift,
+            CheckId::JourneyEnvelope,
+            CheckId::ClaimCompleteness,
+            CheckId::GuardScope,
+            CheckId::ServedExtensionDeclaration,
+            CheckId::CapabilityDepth,
+            CheckId::WorkloadCoverage,
+            CheckId::RealizationScope,
+            CheckId::SurfaceCoverage,
+        ];
+        let tokens: BTreeSet<&str> = all.iter().map(|c| c.token()).collect();
+        assert_eq!(tokens.len(), all.len());
+        let rendered = Finding {
+            check: CheckId::JourneyEnvelope,
+            artifact: "artifacts/journeys.yaml".to_owned(),
+            message: "write share outside the derivation band".to_owned(),
+        }
+        .to_string();
+        assert_eq!(
+            rendered,
+            "[journey-envelope] artifacts/journeys.yaml: write share outside the derivation band"
+        );
+    }
+}
+
+#[cfg(test)]
+mod reference_grammar_tests {
+    use super::*;
+
+    fn case_with(overrides: &serde_json::Value) -> CaseCore {
+        let mut doc = serde_json::json!({
+            "id": "RG-refs", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_SERVICE.create_ehr",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{ "step": 1, "call": "create_ehr", "expect": "created" }]
+        });
+        if let (Some(target), Some(patch)) = (doc.as_object_mut(), overrides.as_object()) {
+            for (key, value) in patch {
+                target.insert(key.clone(), value.clone());
+            }
+        }
+        serde_json::from_value(doc).unwrap()
+    }
+
+    /// The empty artifact set carries no corpus, so `${ds:…}` resolution stays
+    /// out of the way and every finding below is the reference gate's own.
+    fn only_message(overrides: &serde_json::Value) -> String {
+        let case = case_with(overrides);
+        let set = ArtifactSet::default();
+        let mut findings = Vec::new();
+        check_references(&case, "RG-refs", &set, &mut findings);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let finding = findings.first().unwrap();
+        assert_eq!(finding.check, CheckId::ReferenceGrammar);
+        finding.message.clone()
+    }
+
+    /// A `${row.…}` reference binds a matrix column, so one naming no column
+    /// resolves to nothing at drive time.
+    #[test]
+    fn a_row_reference_names_a_declared_matrix_column() {
+        let message = only_message(&serde_json::json!({
+            "parameters": {
+                "iteration": "reset_per_row",
+                "matrix": { "columns": ["expected"], "rows": [["created"]] }
+            },
+            "flow": [{
+                "step": 1, "call": "create_ehr", "expect": "created",
+                "with": { "subject": "${row.magnitude}" }
+            }]
+        }));
+        assert!(
+            message.contains("${row.magnitude} names no matrix column"),
+            "{message}"
+        );
+    }
+
+    /// The `${name?}` optional marker belongs to a binding request template,
+    /// where an unresolved name means "omit the field". In a case core there
+    /// is nothing to omit, so the form is refused rather than read as a
+    /// capture.
+    #[test]
+    fn the_optional_marker_is_binding_template_only() {
+        let message = only_message(&serde_json::json!({
+            "flow": [{
+                "step": 1, "call": "create_ehr", "expect": "created",
+                "with": { "subject": "${offset?}" }
+            }]
+        }));
+        assert!(
+            message.contains("${offset?} optional form is binding-template-only"),
+            "{message}"
+        );
+    }
+
+    /// A temporal reference reads a captured commit instant, so one naming a
+    /// capture no earlier step made has no instant to offset from.
+    #[test]
+    fn a_temporal_reference_needs_an_earlier_capture() {
+        let message = only_message(&serde_json::json!({
+            "flow": [{
+                "step": 1, "call": "create_ehr", "expect": "created",
+                "with": { "version_at_time": "${time:before(t1)}" }
+            }]
+        }));
+        assert!(
+            message.contains("${time:…(t1)} references no earlier capture"),
+            "{message}"
+        );
+    }
+
+    /// `equivalent to: committed` compares a retrieved body against what this
+    /// case committed, so a flow that posts no payload leaves the comparison
+    /// with no left-hand side.
+    #[test]
+    fn equivalent_to_committed_needs_a_step_that_commits() {
+        let message = only_message(&serde_json::json!({
+            "postconditions": [{ "assert": "equivalent", "to": "committed" }]
+        }));
+        assert!(
+            message.contains("equivalent to: committed, but no flow step commits a payload"),
+            "{message}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod literal_gate_tests {
+    use super::*;
+
+    fn content_case(table: &serde_json::Value) -> CaseCore {
+        serde_json::from_value(serde_json::json!({
+            "id": "CONT-DV_QUANTITY-range", "kind": "content", "component": "CONTENT",
+            "rm_class": "DV_QUANTITY",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "constraint_context": {
+                "template": "cnf.opt.minimal_event",
+                "path": "/content[openEHR-EHR-OBSERVATION.x.v1]/data"
+            },
+            "decision_table": table
+        }))
+        .unwrap()
+    }
+
+    fn messages(table: &serde_json::Value) -> Vec<String> {
+        let case = content_case(table);
+        let mut findings = Vec::new();
+        check_literals(&case, "CONT-DV_QUANTITY-range", &mut findings);
+        for finding in &findings {
+            assert_eq!(finding.check, CheckId::LiteralGrammar);
+        }
+        findings.into_iter().map(|f| f.message).collect()
+    }
+
+    /// A `violates` cell is a LIST of violation strings. A bare string, and a
+    /// non-string list member, are both named rather than read as one opaque
+    /// category nothing can resolve.
+    #[test]
+    fn a_violates_cell_is_a_list_of_violation_strings() {
+        assert_eq!(
+            messages(&serde_json::json!({
+                "columns": ["violates", "expected"],
+                "rows": [["rm_schema: mandatory", "rejected"]]
+            })),
+            ["row 0: violates cell must be a list"]
+        );
+        assert_eq!(
+            messages(&serde_json::json!({
+                "columns": ["violates", "expected"],
+                "rows": [[[7], "rejected"]]
+            })),
+            ["row 0: violates entries must be strings"]
+        );
+        let malformed = messages(&serde_json::json!({
+            "columns": ["violates", "expected"],
+            "rows": [[["bogus: nope"], "rejected"]]
+        }));
+        assert_eq!(malformed.len(), 1, "{malformed:?}");
+        assert!(
+            malformed
+                .first()
+                .is_some_and(|m| m.contains("unknown violation category")),
+            "{malformed:?}"
+        );
+    }
+
+    /// A content row's verdict is `accepted` or `rejected`. Anything else
+    /// leaves the row with no verdict to compare a server's answer against.
+    #[test]
+    fn a_content_row_verdict_is_accepted_or_rejected() {
+        assert_eq!(
+            messages(&serde_json::json!({
+                "columns": ["expected"],
+                "rows": [["ok"]]
+            })),
+            ["row 0: expected cell must be accepted | rejected"]
+        );
+    }
+
+    /// Every other cell runs through the decision-table literal grammar, so a
+    /// structured-looking cell that fails its production is a finding here
+    /// rather than a drive-time surprise.
+    #[test]
+    fn a_data_cell_parses_through_the_literal_grammar() {
+        let found = messages(&serde_json::json!({
+            "columns": ["magnitude", "expected"],
+            "rows": [["banana..apple", "accepted"]]
+        }));
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert!(
+            found
+                .first()
+                .is_some_and(|m| m.starts_with("row 0: invalid decision-table literal")),
+            "{found:?}"
+        );
+    }
+
+    /// Only a LITERAL member-level token is judged: a member authored as a
+    /// whole reference, and a closed key whose value is a structure rather
+    /// than text, are left to the driver to resolve per row.
+    #[test]
+    fn only_a_literal_member_level_token_is_judged() {
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "CONTRIB-versions", "kind": "functional", "component": "EHR_CONTRIBUTION",
+            "sm_operation": "I_EHR_CONTRIBUTION.create_contribution",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{
+                "step": 1, "call": "create_contribution", "expect": "created",
+                "with": { "versions": [
+                    "${ds:cnf.contribution.one_composition.v1}",
+                    { "change_type": { "value": "creation" } },
+                    { "change_type": "${row.change_type}" },
+                    { "change_type": "invention" }
+                ] }
+            }]
+        }))
+        .unwrap();
+        let mut findings = Vec::new();
+        check_member_tokens(&case, "CONTRIB-versions", &mut findings);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let finding = findings.first().unwrap();
+        assert_eq!(finding.check, CheckId::LiteralGrammar);
+        assert!(
+            finding
+                .message
+                .contains("step 1: versions[3].change_type: \"invention\" is not"),
+            "{}",
+            finding.message
+        );
+    }
+}

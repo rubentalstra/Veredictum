@@ -592,6 +592,58 @@ mod tests {
         assert_eq!(r.status, OutcomeStatus::Errored);
     }
 
+    /// A case whose every row was skipped rolls up to `skipped` carrying the
+    /// FIRST skip citation, so the excuse travels with the published record
+    /// rather than being flattened into a bare status.
+    #[test]
+    fn a_wholly_skipped_case_rolls_up_carrying_its_first_citation() {
+        let r = OutcomeRecord::from(&record(vec![
+            RowOutcome::Skipped {
+                citation: "operator selection".to_owned(),
+            },
+            RowOutcome::Skipped {
+                citation: "operator selection (second row)".to_owned(),
+            },
+        ]));
+        assert_eq!(r.status, OutcomeStatus::Skipped);
+        assert_eq!(r.citation.as_deref(), Some("operator selection"));
+        assert_eq!(r.failing_step, None);
+    }
+
+    /// The document-level invariant collects EVERY offending outcome, so one
+    /// pass names the whole repair list instead of stopping at the first.
+    #[test]
+    fn the_document_invariant_reports_every_uncited_outcome() {
+        let document = |outcomes: serde_json::Value| -> Results {
+            serde_json::from_value(serde_json::json!({
+                "sut": { "name": "s", "version": "1" },
+                "runner": { "name": "veredictum", "version": "0",
+                             "verification_pack_status": "passed" },
+                "schedule_release": "CNF-2.0",
+                "tech_profile": { "its": "its-rest", "formats": ["canonical-json"] },
+                "ixit_digest": "d",
+                "outcomes": outcomes
+            }))
+            .unwrap()
+        };
+        let uncited = document(serde_json::json!([
+            { "case": "A-x", "status": "not_applicable", "rows_driven": 0, "rows_total": 1 },
+            { "case": "B-y", "status": "skipped", "rows_driven": 0, "rows_total": 1 },
+            { "case": "C-z", "status": "passed", "rows_driven": 1, "rows_total": 1 }
+        ]));
+        let errors = uncited
+            .check_invariants()
+            .expect_err("two outcomes carry no citation");
+        assert_eq!(errors.len(), 2, "{errors:?}");
+
+        let cited = document(serde_json::json!([
+            { "case": "A-x", "status": "not_applicable", "rows_driven": 0, "rows_total": 1,
+              "citation": "AMB-32" },
+            { "case": "C-z", "status": "passed", "rows_driven": 1, "rows_total": 1 }
+        ]));
+        assert!(cited.check_invariants().is_ok());
+    }
+
     #[test]
     fn citation_invariant_bites() {
         let mut r = OutcomeRecord::from(&record(vec![RowOutcome::NotApplicable {

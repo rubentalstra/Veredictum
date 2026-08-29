@@ -113,4 +113,26 @@ mod tests {
         let bad = serde_json::json!({ "nested": [{ "x": "${step2.body}" }] });
         assert!(TemplatedValue::from_value(&bad).is_err());
     }
+
+    /// Every JSON scalar shape survives the conversion, and none of them
+    /// carries a reference — so a `null`, a boolean or a number in a `with:`
+    /// block resolves to itself rather than to a missing binding.
+    #[test]
+    fn scalar_values_convert_and_carry_no_references() {
+        let value = TemplatedValue::from_value(&serde_json::json!({
+            "absent": serde_json::Value::Null,
+            "flag": true,
+            "count": 3
+        }))
+        .unwrap();
+        assert!(value.refs().is_empty());
+        let TemplatedValue::Map(entries) = &value else {
+            panic!("expected a map")
+        };
+        assert_eq!(
+            entries.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
+            ["absent", "flag", "count"]
+        );
+        assert_eq!(entries.first().map(|(_, v)| v), Some(&TemplatedValue::Null));
+    }
 }

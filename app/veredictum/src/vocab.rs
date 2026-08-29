@@ -835,6 +835,8 @@ impl XVersionedClass {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
 
     #[test]
@@ -876,6 +878,82 @@ mod tests {
         assert_eq!(comp, Component::DefinitionAdl14);
         let fmt: FormatName = serde_json::from_value(serde_json::json!("wt-flat")).unwrap();
         assert_eq!(fmt, FormatName::WtFlat);
+    }
+
+    /// Every `audit_change_type` member carries its own token and its own
+    /// openEHR code, and the token parses back. A shared code would commit
+    /// one change type under another's identity.
+    #[test]
+    fn every_audit_change_type_carries_its_own_code_and_round_trips() {
+        let tokens: BTreeSet<&str> = MemberChangeType::ALL.iter().map(|c| c.token()).collect();
+        let codes: BTreeSet<&str> = MemberChangeType::ALL.iter().map(|c| c.code()).collect();
+        assert_eq!(tokens.len(), MemberChangeType::ALL.len());
+        assert_eq!(codes.len(), MemberChangeType::ALL.len());
+        for change in MemberChangeType::ALL {
+            assert_eq!(MemberChangeType::from_token(change.token()), Some(*change));
+        }
+        assert_eq!(MemberChangeType::Creation.code(), "249");
+        assert_eq!(
+            MemberChangeType::FormatConversion.token(),
+            "format conversion"
+        );
+    }
+
+    /// Every `version_lifecycle_state` member carries its own token and code,
+    /// and the token parses back.
+    #[test]
+    fn every_version_lifecycle_state_carries_its_own_code_and_round_trips() {
+        let codes: BTreeSet<&str> = VersionLifecycleState::ALL
+            .iter()
+            .map(|s| s.code())
+            .collect();
+        assert_eq!(codes.len(), VersionLifecycleState::ALL.len());
+        for state in VersionLifecycleState::ALL {
+            assert_eq!(
+                VersionLifecycleState::from_token(state.token()),
+                Some(*state)
+            );
+        }
+        assert_eq!(VersionLifecycleState::Complete.code(), "532");
+    }
+
+    /// Every `X_VERSIONED_*` class round-trips its RM class name, which is the
+    /// spelling the versioned-object routes are addressed with.
+    #[test]
+    fn every_x_versioned_class_round_trips_its_rm_class_name() {
+        for class in XVersionedClass::ALL {
+            assert_eq!(XVersionedClass::from_token(class.token()), Some(*class));
+            assert!(
+                class.token().starts_with("X_VERSIONED_"),
+                "{}",
+                class.token()
+            );
+        }
+        assert_eq!(XVersionedClass::from_token("X_VERSIONED_NOTHING"), None);
+    }
+
+    /// The spec-component keys are the one spelling every `applies` map, every
+    /// statement's `spec_versions` and every renderer uses.
+    #[test]
+    fn every_spec_component_carries_a_distinct_authored_key() {
+        let tokens: Vec<&str> = SpecComponent::ALL.iter().map(|c| c.token()).collect();
+        assert_eq!(tokens, ["rm", "base", "am", "aql", "its_rest", "term"]);
+    }
+
+    /// The XML-namespace expectation renders its published token and accepts
+    /// exactly the URIs its lineage names; `openehr-published` accepts both
+    /// bundles, each pinned token only its own.
+    #[test]
+    fn every_xml_namespace_expectation_renders_its_token_and_scopes_its_uris() {
+        assert_eq!(XmlNamespace::Published.token(), "openehr-published");
+        assert_eq!(XmlNamespace::V1.token(), "openehr-v1");
+        assert_eq!(XmlNamespace::V2.token(), "openehr-v2");
+        assert!(XmlNamespace::Published.accepts(XmlNamespace::V1_URI));
+        assert!(XmlNamespace::Published.accepts(XmlNamespace::V2_URI));
+        assert!(XmlNamespace::V1.accepts(XmlNamespace::V1_URI));
+        assert!(!XmlNamespace::V1.accepts(XmlNamespace::V2_URI));
+        assert!(XmlNamespace::V2.accepts(XmlNamespace::V2_URI));
+        assert!(!XmlNamespace::V2.accepts(XmlNamespace::V1_URI));
     }
 }
 
