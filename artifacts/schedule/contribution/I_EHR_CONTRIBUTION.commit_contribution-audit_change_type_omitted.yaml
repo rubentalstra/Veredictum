@@ -27,6 +27,14 @@
 # binding's `validation_failed` also admits the 400 the same table gives a
 # request whose content is structurally invalid, because a missing required
 # member can be read either way and no released sentence separates them.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-audit_change_type_omitted
 kind: functional
 component: EHR_CONTRIBUTION
@@ -63,6 +71,3 @@ flow:
       audit:
         change_type: absent              # the mandatory member, omitted
     expect: validation_failed
-postconditions:
-  # The change set was refused whole: no version and no audit were written.
-  - { assert: version, count: 0 }

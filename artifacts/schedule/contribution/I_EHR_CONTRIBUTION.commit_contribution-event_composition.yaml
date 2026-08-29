@@ -38,6 +38,7 @@ flow:
     expect: created
     capture:
       v1_uids: created.version_uids[]
+      versioned_object_uid: created.first_versioned_object_uid   # addresses the released revision-history read
     assert:
       - { assert: version, for_each: "${v1_uids}", change_type: CREATE }
   - step: 2

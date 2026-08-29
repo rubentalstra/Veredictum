@@ -27,6 +27,14 @@
 # Each row commits a PRE-BUILT ORIGINAL_VERSION member so the change_type ×
 # lifecycle_state pair is controlled independently; no preceding_version_uid is
 # sent — this IS the first commit.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-demographic_invalid_change_types
 kind: functional
 component: DEMOGRAPHIC
@@ -86,5 +94,3 @@ flow:
                   code_string: "${row.change_code}"
             data: "${ds:cnf.demographic.person.v1}"
     expect: validation_failed
-postconditions:
-  - { assert: version, count: 0 }

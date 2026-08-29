@@ -5,6 +5,14 @@
 # the CONT-DV_IDENTIFIER matrix's rm_schema row. This row pins the
 # present-but-EMPTY id — a distinct RM invariant refusal, single-cause under
 # the open history_open.en.v1 template.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-identifier_empty_id
 kind: functional
 component: EHR_CONTRIBUTION
@@ -33,6 +41,3 @@ flow:
       versions: "${ds:fixture}"
       audit: { change_type: creation, committer: { name: "conformance tester" } }
     expect: "${fixture.expected}"
-postconditions:
-  - assert: version
-    count: 0

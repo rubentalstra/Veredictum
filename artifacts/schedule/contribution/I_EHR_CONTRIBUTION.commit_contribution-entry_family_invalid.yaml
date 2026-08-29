@@ -3,6 +3,14 @@
 # defect per row (the maximal OPT leaves the ISM nodes archetype-open, so
 # each named RM rule is the only violation). The accepting twin is
 # commit_contribution-instruction_rich.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-entry_family_invalid
 kind: functional
 component: EHR_CONTRIBUTION
@@ -35,6 +43,3 @@ flow:
       versions: "${ds:fixture}"
       audit: { change_type: creation, committer: { name: "conformance tester" } }
     expect: "${fixture.expected}"
-postconditions:
-  - assert: version
-    count: 0

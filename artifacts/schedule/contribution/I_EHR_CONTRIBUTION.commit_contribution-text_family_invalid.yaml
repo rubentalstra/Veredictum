@@ -4,6 +4,14 @@
 # so the named RM rule is the only violation). Accepting twins: the
 # committed corpus text values everywhere (Valid_value family), and
 # cnf.composition.history_open.deprecated_text_forms for the paragraph path.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-text_family_invalid
 kind: functional
 component: EHR_CONTRIBUTION
@@ -36,6 +44,3 @@ flow:
       versions: "${ds:fixture}"
       audit: { change_type: creation, committer: { name: "conformance tester" } }
     expect: "${fixture.expected}"
-postconditions:
-  - assert: version
-    count: 0

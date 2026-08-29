@@ -21,6 +21,14 @@
 # a server can easily enforce it on one route only — the whole point of the RM
 # sentence naming both. Step 4 keeps the refusal honest: the EHR holds no
 # COMPOSITION, so the refused create really committed nothing.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-ehr_not_modifiable
 kind: functional
 component: EHR_COMPOSITION
@@ -63,4 +71,3 @@ postconditions:
     text: >-
       The refused create committed nothing: the deactivated EHR holds no
       COMPOSITION version
-  - { assert: version, count: 0 }

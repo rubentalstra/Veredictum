@@ -5,6 +5,14 @@
 # template-/RM-mediated conversion failure (SF-CTX-missing_mandatory) stays
 # the 422 class. Simplified Formats is an OPTIONS capability, so this reject
 # never gates CORE/STANDARD.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: SF-FLAT-malformed_path
 kind: functional
 component: SIMPLIFIED_FORMATS
@@ -32,5 +40,3 @@ flow:
     format: wt-flat                       # binding adds openehr-template-id
     with: { ehr_id: "${ehr_id}", composition: "${ds:cnf.sf.flat.malformed_path}" }
     expect: bad_request                   # the 400 row — not readable AS FLAT (template-independent)
-postconditions:
-  - { assert: version, count: 0 }

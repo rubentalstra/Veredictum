@@ -359,6 +359,41 @@ version on.
 
 ### Changed
 
+- **Every unjudgeable `version` assertion is adjudicated per case (#238).**
+  #225 made the assertion family judge at drive time and #245 routed an
+  unjudgeable one to the inconclusive channel, which left the catalogue
+  carrying sites no released read can settle. Each was adjudicated first-hand
+  against the vendored ITS-REST text, and no expectation was bent to reach a
+  verdict.
+  - Nineteen contribution and security cases now bind
+    `versioned_object_uid` from the commit's own
+    `first_versioned_object_uid` capture, so the released
+    `versioned_composition_revision_history` /
+    `versioned_party_revision_history` read and the released VERSION envelope
+    read can address the container the assertion judges.
+  - The three multi-member commit cases move their change-set membership onto
+    `contribution_get` (`200_CONTRIBUTION.yaml` over
+    `schemas/common/Contribution.yaml`, whose `versions` array carries one
+    `OBJECT_REF` per committed VERSION). `assert: version, count` counts one
+    container's versions, and those commits create two containers, which the
+    released ITS publishes no read for.
+  - Fifty-six refusal cases stop authoring `count: 0`. The refused write minted
+    no container identity, and `specifications/ehr.openapi.yaml` and
+    `specifications/demographic.openapi.yaml` address every version read by
+    `{versioned_object_uid}` or `{version_uid}`, so no released operation
+    counts the versions a service holds. The refusal outcome the flow step
+    asserts is what the wire discloses, and it still gates. Each case records
+    the boundary in its header.
+  - The `VERSIONED_FOLDER` and `PARTY_RELATIONSHIP` families stop authoring
+    version facts, with the realization gap cited on each case (register
+    AMB-24 and AMB-32). `specifications/ehr.openapi.yaml` carries
+    `/ehr/{ehr_id}/directory` and `/ehr/{ehr_id}/directory/{version_uid}` and
+    nothing versioned, and `directory_get_by_version_id` answers
+    `200_FOLDER_retrieved.yaml`; `specifications/demographic.openapi.yaml`
+    declares no `/demographic/party_relationship` path at all. Where a case
+    lost its only in-flow verification it gained a `verified_by` naming the
+    sibling case that reads the fact back over a released route.
+
 - **The console's engine pin names the version being released (#179).** The
   pin could only ever name a version crates.io already carried, so the console
   normally shipped against the previous engine and every window between a tag

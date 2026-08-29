@@ -37,6 +37,14 @@
 #
 # The refusal is proved to have refused, not just answered: the postcondition
 # asks whether anything was committed at all.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-link_target_bad_scheme
 kind: functional
 component: EHR_COMPOSITION
@@ -66,5 +74,3 @@ flow:
       ehr_id: "${ehr_id}"
       composition: "${ds:cnf.composition.minimal_event.link_target_bad_scheme}"
     expect: validation_failed             # overview §HTTP status codes, the 422 row
-postconditions:
-  - { assert: version, count: 0 }         # nothing committed

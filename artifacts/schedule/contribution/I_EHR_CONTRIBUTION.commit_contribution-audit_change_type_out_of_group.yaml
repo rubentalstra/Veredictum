@@ -25,6 +25,14 @@
 # Requests_and_responses.md §HTTP status codes, verbatim: "The request was
 # well-formed but was unable to be followed due to semantic errors") — the
 # request IS well-formed here, and only the terminology binding fails.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-audit_change_type_out_of_group
 kind: functional
 component: EHR_CONTRIBUTION
@@ -66,6 +74,3 @@ flow:
             terminology_id: { _type: TERMINOLOGY_ID, value: openehr }
             code_string: "999"
     expect: validation_failed
-postconditions:
-  # The change set was refused whole: no version and no audit were written.
-  - { assert: version, count: 0 }

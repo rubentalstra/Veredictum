@@ -52,7 +52,9 @@ flow:
       versions:
         - { data: "${ds:cnf.composition.minimal_event.v1}", change_type: creation }
     expect: created
-    capture: { stale_version_uid: created.first_version_uid }   # …::1, superseded by step 2
+    capture:
+      stale_version_uid: created.first_version_uid   # …::1, superseded by step 2
+      versioned_object_uid: created.first_versioned_object_uid   # addresses the released revision-history read
   - step: 2
     call: commit_contribution
     with:

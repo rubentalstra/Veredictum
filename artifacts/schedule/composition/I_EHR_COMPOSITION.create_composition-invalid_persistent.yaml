@@ -8,6 +8,14 @@
 # scopes 422 to content that "could be converted to a resource" and then fails
 # semantic validation. A body missing a `required` member never converts, so
 # it is the 400 row.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-invalid_persistent
 kind: functional
 component: EHR_COMPOSITION
@@ -38,5 +46,3 @@ flow:
     expect: bad_request                   # the `required: [data]` member is absent — the body never converts
     assert:
       - { assert: message_exemplar, text: "information about the errors in the provided COMPOSITION" }
-postconditions:
-  - { assert: version, count: 0 }        # nothing committed

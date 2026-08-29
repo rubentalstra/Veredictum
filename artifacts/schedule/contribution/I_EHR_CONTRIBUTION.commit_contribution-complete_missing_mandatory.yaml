@@ -16,6 +16,14 @@
 #
 # The ONLY difference from the accepting sibling is the lifecycle code, so a red
 # row localizes to the relaxation's scope and nothing else.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-complete_missing_mandatory
 kind: functional
 component: EHR_CONTRIBUTION
@@ -66,5 +74,3 @@ flow:
                   code_string: "249"
             data: "${ds:cnf.composition.minimal_event.missing_mandatory}"
     expect: validation_failed
-postconditions:
-  - { assert: version, count: 0 }

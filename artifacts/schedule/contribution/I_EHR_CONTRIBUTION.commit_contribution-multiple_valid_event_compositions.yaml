@@ -4,6 +4,17 @@
 # both valid — the change-set capability's defining positive. Both VERSIONs
 # are created atomically in the one CONTRIBUTION (SM i_ehr_contribution:
 # commit_contribution takes "any number of UPDATE_VERSION objects").
+#
+# WHAT THE VERSION FAMILY CANNOT JUDGE HERE, and what replaces it: this commit
+# creates TWO versioned objects, one version each, while `assert: version`
+# counts the versions of ONE container (RM common
+# UML/classes/revision_history_item.adoc: an entry "corresponding to a version
+# from a versioned container"), addressed by {versioned_object_uid}. ITS-REST
+# 1.1.0 publishes no read that counts an EHR's containers. What it does publish
+# is contribution_get — GET /ehr/{ehr_id}/contribution/{contribution_uid},
+# 200_CONTRIBUTION.yaml over schemas/common/Contribution.yaml, whose `versions`
+# array carries one OBJECT_REF per committed VERSION — so step 2 reads the
+# change set back and pins its membership there.
 id: I_EHR_CONTRIBUTION.commit_contribution-multiple_valid_event_compositions
 kind: functional
 component: EHR_CONTRIBUTION
@@ -38,7 +49,18 @@ flow:
     capture:
       contribution_uid: created.contribution_uid
       version_uids: created.version_uids[]
+  - step: 2                              # the released read of the change set
+    call: get_contribution
+    with: { ehr_id: "${ehr_id}", contribution_uid: "${contribution_uid}" }
+    expect: ok
     assert:
-      - { assert: version, for_each: "${version_uids}", change_type: CREATE, uid_pattern: "<uuid>::<system>::1" }
+      - { assert: instance_of, rm_type: CONTRIBUTION }
+      - { assert: field, path: "versions[0]/id/value", exists: true }
+      - { assert: field, path: "versions[1]/id/value", exists: true }
+      - { assert: field, path: "versions[2]", absent: true }
 postconditions:
-  - { assert: version, count: 2 }        # two new VERSIONed objects, one CONTRIBUTION
+  - assert: state
+    text: >-
+      Both VERSIONs were created, each the first version of its own versioned
+      object, under the one CONTRIBUTION.
+    verified_by: I_EHR_CONTRIBUTION.get_contribution-version_ref_shape        # two new VERSIONed objects, one CONTRIBUTION

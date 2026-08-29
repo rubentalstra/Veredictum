@@ -51,6 +51,7 @@ flow:
     capture:
       contribution_uid: created.contribution_uid
       version_uids: created.version_uids[]
+      versioned_object_uid: created.first_versioned_object_uid   # addresses the released VERSION envelope read
     assert:
       - { assert: version, for_each: "${version_uids}", change_type: CREATE, uid_pattern: "<uuid>::<system>::1" }
 postconditions:

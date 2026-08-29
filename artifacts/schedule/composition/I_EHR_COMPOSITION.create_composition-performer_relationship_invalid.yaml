@@ -29,6 +29,14 @@
 # THE STATUS is the docs text's 422 row (ITS-REST overview
 # Requests_and_responses.md §HTTP status codes, verbatim: "The request was
 # well-formed but was unable to be followed due to semantic errors").
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-performer_relationship_invalid
 kind: functional
 component: EHR_COMPOSITION
@@ -60,5 +68,3 @@ flow:
       ehr_id: "${ehr_id}"
       composition: "${ds:cnf.composition.minimal_event.performer_relationship_out_of_group}"
     expect: validation_failed
-postconditions:
-  - { assert: version, count: 0 }        # nothing committed

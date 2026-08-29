@@ -61,6 +61,7 @@ flow:
     capture:
       v1_uid: created.first_version_uid
       vo_uid: created.first_versioned_object_uid
+      versioned_object_uid: created.first_versioned_object_uid   # addresses the released revision-history read
   - step: 2                              # 523|deleted| change type, 532|complete| state
     call: commit_contribution
     with:

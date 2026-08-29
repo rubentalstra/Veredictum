@@ -5,6 +5,14 @@
 # ("could not be parsed or is invalid"; owner ruling 2026-08-03) — where the
 # pre-seam behaviour surfaced it from the post-parse slot-conformance rule as
 # a 422. The valid twin is every accepted minimal_event commit.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-foreign_type_in_content
 kind: functional
 component: EHR_COMPOSITION
@@ -31,5 +39,3 @@ flow:
     call: create_composition
     with: { ehr_id: "${ehr_id}", composition: "${ds:cnf.composition.dv_text_in_content}" }
     expect: bad_request                   # the 400 row — a DV_TEXT is not a CONTENT_ITEM; construction refuses
-postconditions:
-  - { assert: version, count: 0 }

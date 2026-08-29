@@ -9,6 +9,15 @@
 # PARTY_RELATIONSHIP resource (register AMB-32); the product serves the update
 # on a declared extension route that realizes the SM preceding_version_uid as
 # `If-Match`, so the case provisions v1 in-flow and commits v2 against it.
+#
+# WHAT IS NOT AUTHORED as a machine assert here (register AMB-32): the version
+# facts. ITS-REST 1.1.0 surfaces no PARTY_RELATIONSHIP resource at all —
+# specifications/demographic.openapi.yaml declares twenty-seven paths and none
+# of them is /demographic/party_relationship* — so the family has neither a
+# REVISION_HISTORY read nor a VERSION envelope read. The extension route these
+# cases drive serves the PARTY_RELATIONSHIP itself, never an ORIGINAL_VERSION,
+# so the container's version count and a version's commit_audit.change_type
+# have nothing released to read them from.
 id: I_DEMOGRAPHIC_SERVICE.update_party_relationship-aaaa
 kind: functional
 component: DEMOGRAPHIC
@@ -50,7 +59,3 @@ flow:
     capture: { v2_uid: updated.version_uid }
     assert:
       - { assert: version, of: "${v2_uid}", uid_pattern: "${versioned_object_uid}::<system>::2" }
-postconditions:
-  - { assert: version, count: 2 }
-  - { assert: version, of: "${preceding_version_uid}", change_type: CREATE }
-  - { assert: version, of: "${v2_uid}", change_type: MODIFY }

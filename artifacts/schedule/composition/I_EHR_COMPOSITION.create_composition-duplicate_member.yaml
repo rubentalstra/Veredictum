@@ -24,6 +24,14 @@
 #
 # The ACCEPTING twin is create_composition-single_member, whose body is
 # byte-identical apart from the repetition.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-duplicate_member
 kind: functional
 component: EHR_COMPOSITION
@@ -52,5 +60,3 @@ flow:
     call: create_composition
     with: { ehr_id: "${ehr_id}", composition: "${ds:cnf.composition.minimal_event.duplicate_member}" }
     expect: bad_request
-postconditions:
-  - { assert: version, count: 0 }        # neither occurrence won: nothing was committed

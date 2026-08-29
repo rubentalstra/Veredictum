@@ -28,6 +28,15 @@
 # get_directory_at_version-deleted_version case, which reads the captured uid
 # back and gets 204: had the ETag echoed the addressed v1 uid, that read would
 # return v1's live content with a 200 instead.
+#
+# WHAT IS NOT AUTHORED as a machine assert here (register AMB-24): the
+# container's version count and the two versions' change_type /
+# lifecycle_state. specifications/ehr.openapi.yaml carries
+# /ehr/{ehr_id}/directory and /ehr/{ehr_id}/directory/{version_uid} and nothing
+# versioned, and directory_get_by_version_id answers 200_FOLDER_retrieved.yaml,
+# the FOLDER rather than an ORIGINAL_VERSION envelope, so ITS-REST 1.1.0
+# realizes neither a VERSIONED_FOLDER revision history nor a VERSION envelope
+# read. The sibling read named above is what the released wire discloses.
 id: I_EHR_DIRECTORY.delete_directory-etag_names_new_version
 kind: functional
 component: EHR_DIRECTORY
@@ -68,7 +77,4 @@ flow:
       # the entity tag names version 2 — the version the delete committed —
       # which the addressed …::1 uid cannot be
       - { assert: version, of: "${deleted_uid}", uid_pattern: "${versioned_object_uid}::<system>::2" }
-postconditions:
-  - { assert: version, count: 2 }
-  - { assert: version, of: "${deleted_uid}", change_type: DELETED, lifecycle_state: "openehr::523|deleted|" }
-  - { assert: version, of: "${preceding_version_uid}", change_type: CREATE }
+verified_by: [I_EHR_DIRECTORY.get_directory_at_version-deleted_version]

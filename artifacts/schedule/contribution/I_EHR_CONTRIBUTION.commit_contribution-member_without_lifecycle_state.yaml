@@ -18,6 +18,14 @@
 #
 # The accepting twin is every other commit case in this chapter, each of which
 # states its member's lifecycle explicitly.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-member_without_lifecycle_state
 kind: functional
 component: EHR_CONTRIBUTION
@@ -61,5 +69,3 @@ flow:
                   code_string: "249"
             data: "${ds:cnf.composition.minimal_event.v1}"
     expect: bad_request
-postconditions:
-  - { assert: version, count: 0 }

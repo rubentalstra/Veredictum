@@ -8,6 +8,14 @@
 # the refusal so a reader that silently drops or stores the member is
 # caught (the both-twins coverage law) — the accepting twin over the five
 # MODELLED attributes is -feeder_audit_roundtrip.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-feeder_audit_change_type
 kind: functional
 component: EHR_COMPOSITION
@@ -38,5 +46,3 @@ flow:
       ehr_id: "${ehr_id}"
       composition: "${ds:cnf.composition.minimal_event.feeder_audit.change_type}"
     expect: bad_request                  # the strict reader refuses the undeclared key at parse (the 400-class shape check)
-postconditions:
-  - { assert: version, count: 0 }        # nothing committed
