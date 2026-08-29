@@ -18,6 +18,43 @@ version on.
 
 ## [Unreleased]
 
+### Added
+
+- **The universal-benchmark engine (#163).** Two new subcommands measure
+  comparative speed against any reachable openEHR CDR, with no artifact root,
+  no IXIT and no party statement. `bench --base-url <URL>` drives an embedded
+  pack: a seed phase bulk-loads a fixed corpus through the public API, then the
+  measured phases offer a seeded open-loop arrival schedule over a closed
+  operation vocabulary, with every latency taken from the planned arrival
+  instant. The run seeds once and repeats the measured phases, three times by
+  default; a result carrying fewer than three is recorded as not submittable.
+  `bench-compare --result <FILE> --result <FILE>` aligns two or more committed
+  results into one table, one column per file, and names every pack-version or
+  host mismatch in the header before any number.
+
+  Credentials never ride the command line: `--auth basic` reads
+  `VEREDICTUM_BENCH_PASSWORD` and `--auth bearer` reads
+  `VEREDICTUM_BENCH_TOKEN`. Before anything is measured, a preflight reads the
+  template list, uploads the pack's template, then creates one scratch EHR,
+  commits a composition into it and reads it back; a failure at any of those
+  refuses the run and names the exchange, so a half-measured document never
+  exists.
+
+  Packs are compiled into the binary with a sha256 pin on every fixture,
+  verified at load and recorded in the result. A bench result is a benchmark
+  record for comparative speed. It is not a conformance record, not a
+  certificate, and not a performance-class rating; a bench result may motivate
+  a class run, never substitute for one. That sentence is a schema-required
+  constant in the artifact and is printed with every rendered view.
+
+- **`schemas/bench-result.schema.json`**, the published schema for the new
+  artifact family: pack identity with its fixture pins and seed, the target
+  with its userinfo stripped, the generator's host fingerprint, per-repetition
+  per-operation counts, error counts by class, percentiles in microseconds and
+  the re-checkable `HdrHistogram` V2 encoding, the cross-repetition median and
+  inter-quartile range, and the methodology block. The `posture` object is
+  reserved and always absent.
+
 ### Security
 
 - The container image build and the release pipeline now fetch their pinned

@@ -335,8 +335,8 @@ resolution against the vendored specs, binding completeness, coverage of the
 enumerated wire surface, claim completeness against the committed party
 statements — and **zero findings is the only passing result.** The instrument's
 own canonical CLI table (`validate`, `run`, `verdicts`, `verify-record`,
-`perf`, `stress`, `stress-compare`, `aql-probe`, `perf-assets`,
-`conformance-assets`, `emit-schemas`) is the authority on how to invoke
+`perf`, `stress`, `stress-compare`, `aql-probe`, `bench`, `bench-compare`,
+`perf-assets`, `conformance-assets`, `emit-schemas`) is the authority on how to invoke
 everything else; never improvise a flag. `scripts/checks/cli-surface.sh` holds
 this list, the binary's own header table and the book's command reference to
 clap's `--help`, so a subcommand cannot land in one copy and rot in another.

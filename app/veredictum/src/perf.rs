@@ -1213,10 +1213,6 @@ impl OperationMeasurement {
         histogram: &Histogram<u64>,
         errors: u64,
     ) -> Result<Self, String> {
-        let mut buffer = Vec::new();
-        V2Serializer::new()
-            .serialize(histogram, &mut buffer)
-            .map_err(|e| format!("hdr serialize: {e}"))?;
         Ok(Self {
             operation: operation.to_owned(),
             requests: histogram.len(),
@@ -1224,7 +1220,7 @@ impl OperationMeasurement {
             latency_ms_p50: us_to_ms(histogram.value_at_quantile(0.50)),
             latency_ms_p90: us_to_ms(histogram.value_at_quantile(0.90)),
             latency_ms_p99: us_to_ms(histogram.value_at_quantile(0.99)),
-            hdr_v2_base64: base64::engine::general_purpose::STANDARD.encode(&buffer),
+            hdr_v2_base64: encode_hdr_v2(histogram)?,
         })
     }
 
@@ -1234,13 +1230,37 @@ impl OperationMeasurement {
     /// # Errors
     /// Returns a message on a corrupt encoding.
     pub fn decode_histogram(&self) -> Result<Histogram<u64>, String> {
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(&self.hdr_v2_base64)
-            .map_err(|e| format!("hdr base64: {e}"))?;
-        Deserializer::new()
-            .deserialize(&mut bytes.as_slice())
-            .map_err(|e| format!("hdr decode: {e}"))
+        decode_hdr_v2(&self.hdr_v2_base64)
     }
+}
+
+/// Encodes a recorded histogram in the standard `HdrHistogram` V2
+/// serialization, base64-wrapped.
+///
+/// Every instrument that embeds a histogram in an artifact goes through here,
+/// so one encoding reaches every artifact family.
+///
+/// # Errors
+/// Returns a message on serialization failure.
+pub fn encode_hdr_v2(histogram: &Histogram<u64>) -> Result<String, String> {
+    let mut buffer = Vec::new();
+    V2Serializer::new()
+        .serialize(histogram, &mut buffer)
+        .map_err(|e| format!("hdr serialize: {e}"))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&buffer))
+}
+
+/// Decodes a base64-wrapped `HdrHistogram` V2 serialization.
+///
+/// # Errors
+/// Returns a message on a corrupt encoding.
+pub fn decode_hdr_v2(encoded: &str) -> Result<Histogram<u64>, String> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .map_err(|e| format!("hdr base64: {e}"))?;
+    Deserializer::new()
+        .deserialize(&mut bytes.as_slice())
+        .map_err(|e| format!("hdr decode: {e}"))
 }
 
 /// The container roles the resource sampler distinguishes (closed

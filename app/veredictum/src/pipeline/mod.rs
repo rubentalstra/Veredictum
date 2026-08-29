@@ -6,8 +6,9 @@
 //! Each module here is one whole operation: loading and validating a
 //! catalogue ([`catalogue`]), driving it against a running system under test
 //! ([`conformance`]), judging the recorded outcomes ([`judgement`]),
-//! rendering the deterministic published assets ([`assets`]), and running the
-//! measured instruments ([`measured`]). Every seam returns typed facts —
+//! rendering the deterministic published assets ([`assets`]), running the
+//! measured instruments ([`measured`]), and driving the universal benchmark
+//! ([`mod@bench`]). Every seam returns typed facts —
 //! never pre-rendered console text — so a second consumer renders its own
 //! views over the same values the command line prints.
 //!
@@ -24,6 +25,7 @@
 )]
 
 pub mod assets;
+pub mod bench;
 pub mod catalogue;
 pub mod conformance;
 pub mod judgement;
