@@ -688,6 +688,20 @@ cnf.opt.minimal_persistent:
   validity: { verdict: valid }
   template_id: "persistent_minimal.en.v1"
   provenance: "openEHR CNF Robot corpus (vendored specs/openehr/CNF/tests/platform/robot @ the CNF pin); re-adjudicated 2026-07-21 to spec-text-only evidence"
+cnf.composition.two_links:
+  source: fixtures/composition/two_links.json
+  format: canonical-json
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "cnf.blood_pressure"
+  provenance: "authored 2026-08-29 (issue #178) as the multi-valued-predicate ground: the blood-pressure event composition shape (recipe contract digest-pinned by cnf.set.query-bp-10) plus a two-member LOCATABLE.links list (RM common UML/classes/locatable.adoc: links List<LINK> 0..1; link.adoc: meaning/type DV_TEXT, target DV_EHR_URI, all 1..1). Only the SECOND link's target/value carries the queried literal ehr://cnf.example/second-target, so a first-element-only predicate evaluation returns zero rows where AMB-222's any-element reading returns the row"
+cnf.composition.two_participations:
+  source: fixtures/composition/two_participations.json
+  format: canonical-json
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "cnf.blood_pressure"
+  provenance: "authored 2026-08-29 (issue #178) as the participation twin of cnf.composition.two_links: the same composition shape plus a two-member EVENT_CONTEXT.participations list (RM ehr UML/classes/event_context.adoc: participations List<PARTICIPATION> 0..1; RM common participation.adoc: function DV_TEXT and performer PARTY_PROXY 1..1). Only the SECOND participation's performer/name reads Second Witness, the queried literal"
 cnf.composition.minimal_persistent.v1:
   source: fixtures/composition/minimal_persistent.v1.json
   format: canonical-json

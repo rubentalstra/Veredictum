@@ -1,0 +1,43 @@
+# The zero-row negative twin of multivalued_link_second_match (#178): the
+# queried literal appears on NO link of the committed composition, so the
+# any-element reading AMB-222 pins returns nothing — the twin that separates
+# a real predicate from one that ignores the WHERE clause over such paths.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-multivalued_link_no_match
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+test_purpose: >-
+  A WHERE predicate over a multi-valued path returns nothing when no
+  traversed element satisfies it.
+description: "AQL WHERE over links returns zero rows when no link matches"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §WHERE"
+  - "RM common §locatable (links: List<LINK>)"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.composition.two_links]
+data_sets: [cnf.composition.two_links]
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        WHERE c/links/target/value = 'ehr://cnf.example/absent-target'
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 0 }   # no link carries the literal
+postconditions:
+  - assert: state
+    text: >-
+      The any-element reading is a filter, never a pass-through: a literal no
+      link carries selects nothing (AMB-222).

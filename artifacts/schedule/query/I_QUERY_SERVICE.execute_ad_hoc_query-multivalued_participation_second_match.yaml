@@ -1,0 +1,47 @@
+# The participation half of the multi-valued-predicate pair (#178): the same
+# defect class over EVENT_CONTEXT.participations (RM ehr event_context:
+# participations List<PARTICIPATION>). The committed composition carries two
+# participations and only the SECOND performer's name equals the queried
+# literal; a first-element-only evaluation (FerroEHR#2919's class) returns
+# zero rows where AMB-222's any-element reading returns the row.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-multivalued_participation_second_match
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+test_purpose: >-
+  A WHERE predicate over the participations list matches when any traversed
+  performer satisfies it: a composition whose second participation carries
+  the queried performer name is returned.
+description: "AQL WHERE over participations matches the second element"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §WHERE"
+  - "RM ehr §event_context (participations: List<PARTICIPATION>)"
+  - "RM common §participation"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.composition.two_participations]
+data_sets: [cnf.composition.two_participations]
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        WHERE c/context/participations/performer/name = 'Second Witness'
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 1 }   # the second participation matched (AMB-222)
+postconditions:
+  - assert: state
+    text: >-
+      The predicate evaluated over every traversed participation, so the
+      second-element match returned the committed composition (AMB-222).

@@ -9880,3 +9880,34 @@ AMB-221:
     silently absorbed.
   disposition: fixed_handling
   upstream_issue: 169
+AMB-222:
+  ambiguity: >-
+    How a WHERE predicate evaluates across a MULTI-VALUED identified path is
+    undefined. A path can traverse LOCATABLE.links, EVENT_CONTEXT.participations,
+    PARTY_IDENTIFIED.identifiers or DV_TEXT.mappings and reach several leaf
+    values; the released text defines multiplicity only on the right-hand
+    side (the value list, matched as OR) and never states whether the
+    left-hand set matches on any element, every element, or the first. A
+    first-element-only evaluation shipped in one CDR and silently returned
+    nothing for a second-element match (FerroEHR#2919, the defect class the
+    carrying cases pin).
+  source: >-
+    QUERY AQL master03-syntax.adoc §WHERE (identified expressions; no
+    multi-valued rule) and its value-list section ("A value list is only
+    used in AQL WHERE clause when the criteria is to match one item of the
+    list. The relationships among these value list items are OR" — the
+    right-hand rule with no left-hand mirror); searches for multi-valued /
+    any-element language across the QUERY component return nothing on the
+    topic; verified first-hand 2026-08-29.
+  handling: >-
+    Fixed handling: a predicate over a multi-valued path matches when ANY
+    traversed leaf satisfies it. This is the only reading under which the
+    chapter's own worked predicates over repeated structures (the §WHERE
+    example's events path) select the data they describe, and the only one
+    under which multiply-occurring data is addressable at all. The carrying
+    cases commit values on the SECOND element so a first-element-only
+    evaluation goes red. The PROJECTION shape over such paths stays
+    unpinned: that half is genuinely silent and implementations differ, so
+    no case asserts it.
+  disposition: fixed_handling
+  upstream_issue: 195

@@ -1,0 +1,50 @@
+# The multi-valued-predicate detector, LINK half (#178). QUERY AQL
+# master03-syntax §WHERE defines identified-expression criteria and never
+# says how a predicate evaluates when the path traverses a multi-valued
+# attribute; register AMB-222 (fixed_handling, upstream #195) pins the
+# any-element reading. The committed composition carries TWO links (RM
+# common locatable: links List<LINK>) and only the SECOND link's
+# target/value equals the queried literal, so the first-element-only
+# evaluation that shipped in FerroEHR#2919 returns zero rows exactly where
+# this case requires one.
+id: I_QUERY_SERVICE.execute_ad_hoc_query-multivalued_link_second_match
+kind: functional
+component: QUERY
+sm_operation: I_QUERY_SERVICE.execute_ad_hoc_query
+capabilities: [AqlBasic]
+profiles: [STANDARD]
+test_purpose: >-
+  A WHERE predicate over a multi-valued path matches when any traversed
+  element satisfies it: a composition whose second link carries the queried
+  target value is returned.
+description: "AQL WHERE over links matches the second element"
+spec_refs:
+  - "SM openehr_platform §I_QUERY_SERVICE.execute_ad_hoc_query"
+  - "QUERY AQL master03-syntax §WHERE"
+  - "RM common §locatable (links: List<LINK>)"
+  - "RM common §link"
+  - "ITS-REST query §200_Query (RESULT_SET)"
+applies: { rm: ">=1.0.2", aql: ">=1.1" }
+requires:
+  server: any
+  templates: [cnf.opt.blood_pressure]
+  ehr: { commits: none }                    # mints ${ehr_id}
+  commit: [cnf.composition.two_links]
+data_sets: [cnf.composition.two_links]
+flow:
+  - step: 1
+    call: execute_ad_hoc_query
+    with:
+      q: >-
+        SELECT c/uid/value AS uid
+        FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c
+        WHERE c/links/target/value = 'ehr://cnf.example/second-target'
+      fetch: 100                            # fetch always explicit
+    expect: ok
+    assert:
+      - { assert: result_set, match: count, count: 1 }   # the second element matched (AMB-222)
+postconditions:
+  - assert: state
+    text: >-
+      The predicate evaluated over every traversed link, so the
+      second-element match returned the committed composition (AMB-222).
