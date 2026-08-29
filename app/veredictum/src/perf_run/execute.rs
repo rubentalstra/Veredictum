@@ -35,7 +35,7 @@ use reqwest::StatusCode;
 
 use crate::perf::PerfOp;
 use crate::perf_run::client::{
-    PerfClient, PerfPrincipals, location_last_segment, object_uid_of, strip_weak_quotes,
+    PerfClient, location_last_segment, object_uid_of, strip_weak_quotes,
 };
 use crate::perf_run::corpus::{
     ADHOC_AQL, ANALYTICS_AQL, STORED_QUERY_NAME, SeededCorpus, TERMINOLOGY_AQL, WARD_AQL,
@@ -172,6 +172,32 @@ fn stride(arrival: u64) -> u64 {
         .max(arrival)
 }
 
+/// Create the journey instance's own EHR and capture its id, which every
+/// later stage of a fresh-EHR journey addresses.
+///
+/// Returns whether the create landed in the `Prefer: return=minimal`
+/// created family WITH the identifying `Location`.
+///
+/// # Errors
+/// A transport fault, which counts as an error observation at the call
+/// site.
+fn create_ehr(
+    client: &PerfClient,
+    journey: u64,
+    captures: &CaptureStore,
+    observed: &mut Option<u16>,
+) -> Result<bool, String> {
+    let reply = client.request(reqwest::Method::POST, "/ehr", None, true, None)?;
+    if created(note(observed, reply.status))
+        && let Some(id) = reply.location.as_deref().and_then(location_last_segment)
+    {
+        captures.journey(journey, |s| s.ehr_id = Some(id));
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
 /// Execute one planned arrival against the SUT.
 ///
 /// Returns whether the wire outcome matched the binding's expected kind.
@@ -184,7 +210,7 @@ fn stride(arrival: u64) -> u64 {
     reason = "one match arm per closed-vocabulary operation"
 )]
 pub(crate) fn perform(
-    principals: &PerfPrincipals,
+    client: &PerfClient,
     arrival_index: u64,
     planned: &PlannedArrival,
     corpus: &SeededCorpus,
@@ -194,58 +220,44 @@ pub(crate) fn perform(
 ) -> Result<bool, String> {
     let offset_s = planned.at.as_secs();
     let journey = planned.journey;
-    // The principal the operation is driven by. The schedule never plans an
-    // arrival whose principal the party's ixit leaves undeclared, so this
-    // resolution failing is an instrument defect, recorded as an honest
-    // error arrival rather than a run failure.
-    let principal = planned.op.principal();
-    let client = principals.client(principal).ok_or_else(|| {
-        format!(
-            "the ixit declares no instance for the {principal:?} principal that {} needs",
-            planned.op.as_str()
-        )
-    })?;
 
     // The EHR the stage addresses: the instance's fresh EHR, the standing
-    // ward patient, or (read-only fallbacks) a corpus stride.
-    let ehr_id: String = if let Some(patient) = planned.patient {
-        corpus
-            .ehr_ids
-            .get(corpus.ward.get(patient).map_or(patient, |w| w.ehr_index))
-            .cloned()
-            .ok_or_else(|| "ward patient outside the corpus".to_owned())?
-    } else if planned.op == PerfOp::EhrCreate {
-        String::new() // created below
+    // ward patient, or (read-only fallbacks) a corpus stride. The create
+    // MAKES the EHR its journey's later stages address, so it is the one
+    // stage that addresses none.
+    let addressed: Option<String> = if planned.op == PerfOp::EhrCreate {
+        None
+    } else if let Some(patient) = planned.patient {
+        Some(
+            corpus
+                .ehr_ids
+                .get(corpus.ward.get(patient).map_or(patient, |w| w.ehr_index))
+                .cloned()
+                .ok_or_else(|| "ward patient outside the corpus".to_owned())?,
+        )
     } else {
-        captures
-            .journey(journey, |s| s.ehr_id.clone())
-            .flatten()
-            .ok_or_else(|| "prerequisite EHR not yet created (SUT stall)".to_owned())?
+        Some(
+            captures
+                .journey(journey, |s| s.ehr_id.clone())
+                .flatten()
+                .ok_or_else(|| "prerequisite EHR not yet created (SUT stall)".to_owned())?,
+        )
+    };
+    let Some(ehr_id) = addressed else {
+        let ok = create_ehr(client, journey, captures, observed)?;
+        if planned.last {
+            captures.drop_journey(journey);
+        }
+        return Ok(ok);
     };
     let ward = planned.patient.and_then(|p| corpus.ward.get(p));
 
     let ok = match planned.op {
-        PerfOp::EhrCreate => {
-            let reply = client.request(reqwest::Method::POST, "/ehr", None, true, None)?;
-            if created(note(observed, reply.status))
-                && let Some(id) = reply.location.as_deref().and_then(location_last_segment)
-            {
-                captures.journey(journey, |s| s.ehr_id = Some(id));
-                true
-            } else {
-                false
-            }
-        }
+        PerfOp::EhrCreate => create_ehr(client, journey, captures, observed)?,
         PerfOp::EhrRead => {
-            let target = if ehr_id.is_empty() {
-                // audit_review addresses the ward; fresh journeys their own
-                return Err("ehr_read without a resolved EHR".to_owned());
-            } else {
-                ehr_id
-            };
             let reply = client.request(
                 reqwest::Method::GET,
-                &format!("/ehr/{target}"),
+                &format!("/ehr/{ehr_id}"),
                 None,
                 false,
                 None,
@@ -1103,6 +1115,53 @@ mod tests {
         assert!(!created(StatusCode::OK) && !created(StatusCode::ACCEPTED));
         assert!(updated(StatusCode::OK) && updated(StatusCode::NO_CONTENT));
         assert!(!updated(StatusCode::CREATED) && !updated(StatusCode::RESET_CONTENT));
+    }
+
+    /// The EHR a stage addresses is resolved BEFORE the wire, and only the
+    /// create addresses none. A fresh-EHR journey whose create has not
+    /// landed refuses its later stage without sending anything, so an
+    /// unresolved prerequisite is never a wire observation.
+    #[test]
+    fn a_fresh_ehr_stage_refuses_before_the_wire_when_the_create_has_not_landed() {
+        let ixit: crate::ixit::Ixit = serde_json::from_value(serde_json::json!({
+            "instances": { "sut": { "base_url": "http://stub", "auth": { "mode": "none" } } }
+        }))
+        .unwrap();
+        let client = PerfClient::from_instance(ixit.default_instance().unwrap(), &ixit).unwrap();
+        let corpus = SeededCorpus {
+            corpus: "cnf.scale.10k".to_owned(),
+            ehr_ids: Vec::new(),
+            compositions: Vec::new(),
+            ward: Vec::new(),
+        };
+        let pack = JourneyPack {
+            templates: Vec::new(),
+            aux: pack::AuxPayloads::default(),
+        };
+        let planned = PlannedArrival {
+            at: std::time::Duration::ZERO,
+            op: PerfOp::EhrRead,
+            template: None,
+            journey: 3,
+            patient: None,
+            doc: WardDoc::Gp,
+            recorded: true,
+            last: false,
+        };
+        let captures = CaptureStore::new();
+        let mut observed = None;
+        let error = perform(
+            &client,
+            0,
+            &planned,
+            &corpus,
+            &pack,
+            &captures,
+            &mut observed,
+        )
+        .expect_err("an unresolved EHR refuses the stage");
+        assert_eq!(error, "prerequisite EHR not yet created (SUT stall)");
+        assert_eq!(observed, None, "nothing reached the wire");
     }
 
     #[test]

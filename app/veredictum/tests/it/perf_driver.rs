@@ -793,6 +793,72 @@ fn the_diurnal_curve_runs_and_an_undeclared_principal_drops_its_journey() {
     );
 }
 
+/// An arrival the generator cannot fire is an INSTRUMENT fault, never a
+/// wire observation about the server: the principal set driving the window
+/// declares no instance for the access-control probe's boundary
+/// principals, so those arrivals never reach the SUT at all. The window
+/// refuses to publish a measurement and names how many arrivals it lost.
+#[test]
+fn arrivals_the_generator_cannot_fire_fail_the_window_with_their_count() {
+    let (base_url, _server, _faults) = spawn_stub();
+    let (declared, _environment) = client_and_env(&base_url);
+    let notes = std::sync::Mutex::new(Vec::new());
+    let progress = |message: String| {
+        notes
+            .lock()
+            .expect("the progress lock is uncontended")
+            .push(message);
+    };
+    let pack = journey_pack();
+    let catalogue = catalogue();
+    let corpus = seeded(declared.primary(), &pack);
+
+    // The workload is PLANNED against the full declaration, so the probe
+    // journey survives the schedulable filter; the window is DRIVEN by the
+    // default instance alone, so the probe's arrivals have no client to
+    // fire through.
+    let driving = PerfPrincipals::single(declared.primary().clone());
+    // The correction journey carries the one write, at 6.25% of the
+    // expanded arrivals, which is inside the read:write derivation band the
+    // expansion enforces.
+    let shares = vec![
+        ("chart_review".to_owned(), veredictum::perf::Percent(60.0)),
+        ("correction".to_owned(), veredictum::perf::Percent(20.0)),
+        (
+            "access_control_probe".to_owned(),
+            veredictum::perf::Percent(20.0),
+        ),
+    ];
+    let workload = JourneyWorkload {
+        catalogue: &catalogue,
+        shares: &shares,
+        pack: &pack,
+        curve: ArrivalCurve::Uniform,
+        principals: &declared,
+    };
+    let failure = run_window(&driving, &corpus, &workload, 100.0, 0, 3, &progress).unwrap_err();
+
+    assert!(
+        failure.contains("generator faults"),
+        "the window failed for another reason: {failure}"
+    );
+    let counted: u64 = failure
+        .split_whitespace()
+        .next()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    assert!(counted > 0, "the failure names no fault count: {failure}");
+    assert!(
+        failure.contains("unauthenticated_probe"),
+        "the failure names no faulting operation: {failure}"
+    );
+    let seen = notes.lock().expect("the progress lock is uncontended");
+    assert!(
+        seen.iter().any(|m| m.starts_with("arrival not fired")),
+        "no unfired arrival was sampled to the progress channel: {seen:?}"
+    );
+}
+
 /// A SUT that has stopped answering: every arrival's request is a transport
 /// fault, so every stage propagates it as an error observation instead of a
 /// run failure. That distinction is the attribution law on the measured

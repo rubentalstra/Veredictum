@@ -323,6 +323,17 @@ version on.
 
 ### Fixed
 
+- **A measured window fails on an arrival the generator could not fire
+  (#233).** The collector counted a generator fault on a `u64::MAX` latency
+  sentinel that the only producer of a completion could never emit, so the
+  count was always zero and the run-failing arm behind it never ran. An
+  arrival now reports either a measured completion or a typed fault. The one
+  fault the dispatcher can hit is an arrival whose principal the driving ixit
+  declares no instance for, and it stops the window with the count and the
+  faulting operations named, where it used to be recorded as a wire error
+  against the server. `perf` and `stress` runs are unaffected while every
+  arrival fires; a run that loses arrivals to the instrument now says so
+  instead of publishing a measurement over the arrivals that survived.
 - **`assert: version` judges the envelope it names (#225).** The driver's
   version arm evaluated to `Ok(())` unconditionally, so every one of the
   catalogue's authored version assertions reported a pass it never earned. The
