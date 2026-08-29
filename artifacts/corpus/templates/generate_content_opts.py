@@ -623,10 +623,17 @@ def value_template(template_id, value_children, extra_terms=None):
 # ---------------------------------------------------------------------------
 # EVALUATION carrier (for the ITEM_STRUCTURE type-narrowing case).
 # ---------------------------------------------------------------------------
-def evaluation_template(template_id, data_rm_type):
-    data_child = c_complex(data_rm_type, node_id="at0003")
-    data_attr = c_single_attr("data", data_child, exist=(1, 1))
-    eval_root = (
+def evaluation_root(data_attr, extra_terms=()):
+    """The EVALUATION C_ARCHETYPE_ROOT around a `data` attribute, with the
+    at0000/at0003 term definitions plus (code, text, description) extras."""
+    terms = "".join(
+        f'<term_definitions code="{code}">'
+        f'<items id="description">{xesc(desc)}</items>'
+        f'<items id="text">{xesc(text)}</items>'
+        "</term_definitions>"
+        for code, text, desc in extra_terms
+    )
+    return (
         '<children xsi:type="C_ARCHETYPE_ROOT">'
         "<rm_type_name>EVALUATION</rm_type_name>"
         "<occurrences><lower_included>true</lower_included><lower_unbounded>false</lower_unbounded>"
@@ -636,9 +643,89 @@ def evaluation_template(template_id, data_rm_type):
         "<archetype_id><value>openEHR-EHR-EVALUATION.minimal.v1</value></archetype_id>"
         '<term_definitions code="at0000"><items id="description">unknown</items><items id="text">Minimal</items></term_definitions>'
         '<term_definitions code="at0003"><items id="description">@ internal @</items><items id="text">structure</items></term_definitions>'
+        f"{terms}"
         "</children>"
     )
-    return composition(template_id, eval_root)
+
+
+def evaluation_template(template_id, data_rm_type):
+    data_child = c_complex(data_rm_type, node_id="at0003")
+    data_attr = c_single_attr("data", data_child, exist=(1, 1))
+    return composition(template_id, evaluation_root(data_attr))
+
+
+def _leaf_element_member():
+    """A leaf ELEMENT (at0004) with a DV_TEXT value, as a container member."""
+    value_attr = c_single_attr("value", dv_string_type("DV_TEXT"), exist=(0, 1))
+    return (
+        '<children xsi:type="C_COMPLEX_OBJECT"><rm_type_name>ELEMENT</rm_type_name>'
+        f"{occ(0, None)}<node_id>at0004</node_id>{value_attr}</children>"
+    )
+
+
+def _table_row_cluster():
+    """One ITEM_TABLE row: a CLUSTER (at0010) of leaf ELEMENTs (RM
+    data_structures ITEM_TABLE.rows: List<CLUSTER>, Valid_structure)."""
+    items = c_multiple_attr(
+        "items", _leaf_element_member(), cardinality(0, None), exist=(1, 1)
+    )
+    return c_complex("CLUSTER", items, node_id="at0010", occ_lu=(0, None))
+
+
+def structural_item_container_cardinality(template_id, rm_class, card):
+    """C_MULTIPLE_ATTRIBUTE.cardinality on the member container of one
+    ITEM_STRUCTURE subtype, or of a CLUSTER. CLUSTER.items is RM 1..1 (the
+    others are 0..1), so its attribute existence never follows the token."""
+    attribute = "rows" if rm_class == "ITEM_TABLE" else "items"
+    member = _table_row_cluster() if rm_class == "ITEM_TABLE" else _leaf_element_member()
+    # The baked representative is the 3..5 cardinality, whose attribute
+    # existence is 1..1 on every container class (CLUSTER.items is RM 1..1
+    # regardless; the 0..1 containers follow the token, which is 1..1 here).
+    container_attr = c_multiple_attr(attribute, member, card, exist=(1, 1))
+    value_term = ("at0004", "value", "*")
+    if rm_class == "CLUSTER":
+        cluster = c_complex("CLUSTER", container_attr, node_id="at0010", occ_lu=(0, 1))
+        tree_items = c_multiple_attr("items", cluster, cardinality(0, None), exist=(0, 1))
+        data_child = c_complex("ITEM_TREE", tree_items, node_id="at0003")
+        extra = (value_term, ("at0010", "Cluster", "@ internal @"))
+    elif rm_class == "ITEM_TABLE":
+        data_child = c_complex(rm_class, container_attr, node_id="at0003")
+        extra = (value_term, ("at0010", "Row", "@ internal @"))
+    else:
+        data_child = c_complex(rm_class, container_attr, node_id="at0003")
+        extra = (value_term,)
+    data_attr = c_single_attr("data", data_child, exist=(1, 1))
+    return composition(template_id, evaluation_root(data_attr, extra))
+
+
+def structural_element_existence(template_id, value_exist, null_flavour_exist):
+    """C_ATTRIBUTE.existence on ELEMENT.value AND ELEMENT.null_flavour."""
+    value_attr = c_single_attr("value", dv_string_type("DV_TEXT"), exist=value_exist)
+    nf_attr = c_single_attr(
+        "null_flavour", c_complex("DV_CODED_TEXT"), exist=null_flavour_exist
+    )
+    element = (
+        '<children xsi:type="C_COMPLEX_OBJECT"><rm_type_name>ELEMENT</rm_type_name>'
+        f"{occ(0, None)}<node_id>at0004</node_id>{value_attr}{nf_attr}</children>"
+    )
+    items = c_multiple_attr("items", element, cardinality(0, None), exist=(0, 1))
+    tree = c_complex("ITEM_TREE", items, node_id="at0003")
+    data_attr = c_single_attr("data", tree, exist=(1, 1))
+    return composition(
+        template_id, evaluation_root(data_attr, (("at0004", "value", "*"),))
+    )
+
+
+def structural_item_type_narrowing(template_id, slot_type):
+    """C_OBJECT.rm_type_name on the ITEM member of an ITEM_TREE (RM
+    data_structures ITEM: the abstract parent of CLUSTER and ELEMENT)."""
+    member = c_complex(slot_type, node_id="at0004", occ_lu=(0, None))
+    items = c_multiple_attr("items", member, cardinality(0, None), exist=(0, 1))
+    tree = c_complex("ITEM_TREE", items, node_id="at0003")
+    data_attr = c_single_attr("data", tree, exist=(1, 1))
+    return composition(
+        template_id, evaluation_root(data_attr, (("at0004", "item", "*"),))
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1036,6 +1123,18 @@ def build_all():
     T["ecc_history_events_cardinality"] = lambda k: structural_history(k, events_card=cardinality(3, 5))
     T["ecc_history_summary_existence"] = lambda k: structural_history(k, summary_exist=(1, 1))
     T["ecc_item_structure_type_narrowing"] = lambda k: evaluation_template(k, "ITEM_TREE")
+    # The container families below ITEM_STRUCTURE: one key per container class,
+    # each baking the 3..5 representative of its own member attribute
+    # (ITEM_TREE.items / ITEM_LIST.items / ITEM_TABLE.rows / CLUSTER.items).
+    T["ecc_item_tree_items_cardinality"] = lambda k: structural_item_container_cardinality(k, "ITEM_TREE", cardinality(3, 5))
+    T["ecc_item_list_items_cardinality"] = lambda k: structural_item_container_cardinality(k, "ITEM_LIST", cardinality(3, 5))
+    T["ecc_item_table_rows_cardinality"] = lambda k: structural_item_container_cardinality(k, "ITEM_TABLE", cardinality(3, 5))
+    T["ecc_cluster_items_cardinality"] = lambda k: structural_item_container_cardinality(k, "CLUSTER", cardinality(3, 5))
+    # ELEMENT.value mandatory / null_flavour optional is the representative:
+    # RM data_structures ELEMENT's Inv_null_flavour_indicated admits no
+    # instance when BOTH are mandated, so that pair is never baked.
+    T["ecc_element_existence"] = lambda k: structural_element_existence(k, (1, 1), (0, 1))
+    T["ecc_item_type_narrowing"] = lambda k: structural_item_type_narrowing(k, "CLUSTER")
     # The Simplified-Formats INTERVAL_EVENT carrier: the same structural_event
     # skeleton, narrowed to the OTHER concrete EVENT subtype. It is not an
     # `ecc_` structural case — it exists so the ITS-REST simplified_formats

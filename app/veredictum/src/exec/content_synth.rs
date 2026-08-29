@@ -187,6 +187,11 @@ pub fn synthesize_opt(
         }
         "HISTORY" => Ok(history_summary_existence(template_id, &row)),
         "ITEM_STRUCTURE" => Ok(item_structure_type_narrowing(template_id, &row)),
+        "ITEM_TREE" | "ITEM_LIST" | "ITEM_TABLE" | "CLUSTER" => {
+            Ok(item_container_cardinality(rm_class, template_id, &row))
+        }
+        "ELEMENT" => Ok(element_value_null_flavour_existence(template_id, &row)),
+        "ITEM" => Ok(item_type_narrowing(template_id, &row)),
         "OBSERVATION" => Ok(observation_state_protocol_existence(template_id, &row)),
         // Value + interval families.
         _ => opt_synth::synthesize_value_opt(case_id, rm_class, template_id, columns, cells),
@@ -622,17 +627,149 @@ fn history_summary_existence(template_id: &str, row: &Cells<'_>) -> String {
     composition(template_id, &obs, &cardinality(0, None), (0, 1), None)
 }
 
-fn item_structure_type_narrowing(template_id: &str, row: &Cells<'_>) -> String {
-    let slot = row.text("slot_type").unwrap_or("ITEM_STRUCTURE");
-    let data_child = c_complex(slot, "", "at0003", (1, Some(1)));
-    let data_attr = c_single_attr("data", &data_child, (1, 1));
-    let eval_root = format!(
+/// The EVALUATION `C_ARCHETYPE_ROOT` (openEHR-EHR-EVALUATION.minimal.v1) around
+/// a `data` attribute, carrying the at0000/at0003 term definitions plus extras.
+fn evaluation_root(data_attr: &str, extra_terms: &[(&str, &str, &str)]) -> String {
+    let mut terms = String::new();
+    for (code, text, desc) in extra_terms {
+        let _ = write!(
+            terms,
+            "<term_definitions code=\"{code}\"><items id=\"description\">{}</items><items id=\"text\">{}</items></term_definitions>",
+            xesc(desc),
+            xesc(text)
+        );
+    }
+    format!(
         "<children xsi:type=\"C_ARCHETYPE_ROOT\"><rm_type_name>EVALUATION</rm_type_name>\
 <occurrences><lower_included>true</lower_included><lower_unbounded>false</lower_unbounded><upper_unbounded>true</upper_unbounded><lower>0</lower></occurrences>\
 <node_id>at0000</node_id>{data_attr}<archetype_id><value>openEHR-EHR-EVALUATION.minimal.v1</value></archetype_id>\
 <term_definitions code=\"at0000\"><items id=\"description\">unknown</items><items id=\"text\">Minimal</items></term_definitions>\
-<term_definitions code=\"at0003\"><items id=\"description\">@ internal @</items><items id=\"text\">structure</items></term_definitions></children>"
+<term_definitions code=\"at0003\"><items id=\"description\">@ internal @</items><items id=\"text\">structure</items></term_definitions>{terms}</children>"
+    )
+}
+
+fn item_structure_type_narrowing(template_id: &str, row: &Cells<'_>) -> String {
+    let slot = row.text("slot_type").unwrap_or("ITEM_STRUCTURE");
+    let data_child = c_complex(slot, "", "at0003", (1, Some(1)));
+    let data_attr = c_single_attr("data", &data_child, (1, 1));
+    let eval_root = evaluation_root(&data_attr, &[]);
+    composition(template_id, &eval_root, &cardinality(0, None), (0, 1), None)
+}
+
+/// A leaf ELEMENT (at0004) with a `DV_TEXT` value, as a container member.
+fn leaf_element_member() -> String {
+    let value_attr = c_single_attr("value", &dv_text_value(), (0, 1));
+    format!(
+        "<children xsi:type=\"C_COMPLEX_OBJECT\"><rm_type_name>ELEMENT</rm_type_name>{}<node_id>at0004</node_id>{value_attr}</children>",
+        occ(0, None)
+    )
+}
+
+/// One `ITEM_TABLE` row (at0010): a `CLUSTER` whose `items` carry the leaf
+/// `ELEMENT` (RM `data_structures` §`ITEM_TABLE` — `rows: List<CLUSTER>`,
+/// invariant `Valid_structure: rows.for_all (items.for_all (instance_of
+/// ("ELEMENT")))`).
+fn table_row_cluster() -> String {
+    let items = c_multiple_attr(
+        "items",
+        &leaf_element_member(),
+        &cardinality(0, None),
+        (1, 1),
     );
+    c_complex("CLUSTER", &items, "at0010", (0, None))
+}
+
+/// The RM attribute a container class holds its members in: `ITEM_TABLE` names
+/// it `rows`, every other container class names it `items` (RM
+/// `data_structures` §`ITEM_TREE` / §`ITEM_LIST` / §`ITEM_TABLE` / §`CLUSTER`).
+fn container_attribute(rm_class: &str) -> &'static str {
+    if rm_class == "ITEM_TABLE" {
+        "rows"
+    } else {
+        "items"
+    }
+}
+
+/// `C_MULTIPLE_ATTRIBUTE.cardinality` on the member container of one
+/// `ITEM_STRUCTURE` subtype or of a `CLUSTER` (AOM1.4 §`C_MULTIPLE_ATTRIBUTE`).
+///
+/// NOTE: RM `data_structures` §`CLUSTER` makes `items` 1..1 where the three
+/// `ITEM_STRUCTURE` containers make theirs 0..1, so it keeps existence 1..1 for
+/// every token instead of following it.
+fn item_container_cardinality(rm_class: &str, template_id: &str, row: &Cells<'_>) -> String {
+    let token = row.text("cardinality").unwrap_or("any");
+    let card = cardinality_token(token);
+    let is_cluster = rm_class == "CLUSTER";
+    let exist = if is_cluster {
+        (1, 1)
+    } else {
+        cardinality_existence(token)
+    };
+    let member = if rm_class == "ITEM_TABLE" {
+        table_row_cluster()
+    } else {
+        leaf_element_member()
+    };
+    let container_attr = c_multiple_attr(container_attribute(rm_class), &member, &card, exist);
+    let (data_child, extra_terms): (String, &[(&str, &str, &str)]) = if is_cluster {
+        let cluster = c_complex("CLUSTER", &container_attr, "at0010", (0, Some(1)));
+        let tree_items = c_multiple_attr("items", &cluster, &cardinality(0, None), (0, 1));
+        (
+            c_complex("ITEM_TREE", &tree_items, "at0003", (1, Some(1))),
+            &[
+                ("at0004", "value", "*"),
+                ("at0010", "Cluster", "@ internal @"),
+            ],
+        )
+    } else if rm_class == "ITEM_TABLE" {
+        (
+            c_complex(rm_class, &container_attr, "at0003", (1, Some(1))),
+            &[("at0004", "value", "*"), ("at0010", "Row", "@ internal @")],
+        )
+    } else {
+        (
+            c_complex(rm_class, &container_attr, "at0003", (1, Some(1))),
+            &[("at0004", "value", "*")],
+        )
+    };
+    let data_attr = c_single_attr("data", &data_child, (1, 1));
+    let eval_root = evaluation_root(&data_attr, extra_terms);
+    composition(template_id, &eval_root, &cardinality(0, None), (0, 1), None)
+}
+
+/// `C_ATTRIBUTE.existence` on `ELEMENT.value` AND `ELEMENT.null_flavour` in one
+/// template (AOM1.4 §`C_ATTRIBUTE`; RM `data_structures` §`ELEMENT` — both 0..1).
+fn element_value_null_flavour_existence(template_id: &str, row: &Cells<'_>) -> String {
+    let value_exist = existence_token(row.text("value_existence").unwrap_or("optional"));
+    let null_flavour_exist =
+        existence_token(row.text("null_flavour_existence").unwrap_or("optional"));
+    let value_attr = c_single_attr("value", &dv_text_value(), value_exist);
+    let null_flavour_attr = c_single_attr(
+        "null_flavour",
+        &c_complex("DV_CODED_TEXT", "", "", (1, Some(1))),
+        null_flavour_exist,
+    );
+    let element = format!(
+        "<children xsi:type=\"C_COMPLEX_OBJECT\"><rm_type_name>ELEMENT</rm_type_name>{}<node_id>at0004</node_id>{value_attr}{null_flavour_attr}</children>",
+        occ(0, None)
+    );
+    let items = c_multiple_attr("items", &element, &cardinality(0, None), (0, 1));
+    let tree = c_complex("ITEM_TREE", &items, "at0003", (1, Some(1)));
+    let data_attr = c_single_attr("data", &tree, (1, 1));
+    let eval_root = evaluation_root(&data_attr, &[("at0004", "value", "*")]);
+    composition(template_id, &eval_root, &cardinality(0, None), (0, 1), None)
+}
+
+/// `C_OBJECT.rm_type_name` on the `ITEM` member of an `ITEM_TREE` (AOM1.4
+/// §`C_OBJECT`; RM `data_structures` §`ITEM` — the abstract parent of `CLUSTER`
+/// and `ELEMENT`).
+fn item_type_narrowing(template_id: &str, row: &Cells<'_>) -> String {
+    let slot = row.text("slot_type").unwrap_or("ITEM");
+    let member = c_complex(slot, "", "at0004", (0, None));
+    let items = c_multiple_attr("items", &member, &cardinality(0, None), (0, 1));
+    let tree = c_complex("ITEM_TREE", &items, "at0003", (1, Some(1)));
+    let data_attr = c_single_attr("data", &tree, (1, 1));
+    let eval_root = evaluation_root(&data_attr, &[("at0004", "item", "*")]);
     composition(template_id, &eval_root, &cardinality(0, None), (0, 1), None)
 }
 
@@ -764,6 +901,112 @@ mod tests {
         .unwrap();
         assert!(xml.contains("openEHR-EHR-EVALUATION.minimal.v1"));
         assert!(xml.contains("<rm_type_name>ITEM_TREE</rm_type_name>"));
+    }
+
+    /// Every synthesized template is well-formed XML: the families below the
+    /// `ITEM_STRUCTURE` slot assemble their carriers by hand, so an unbalanced
+    /// element would otherwise only surface as a rejected upload mid-run.
+    #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: plumbing propagates with ?, the claim is an assertion"
+    )]
+    fn every_new_container_family_is_well_formed_xml() -> Result<(), quick_xml::Error> {
+        let card = cols(&["cardinality", "member_count", "expected", "violates"]);
+        let card_cells = vec![
+            lit("3to5"),
+            MatrixCell::Literal(json!(3)),
+            lit("accepted"),
+            lit("[]"),
+        ];
+        let mut documents = Vec::new();
+        for rm_class in ["ITEM_TREE", "ITEM_LIST", "ITEM_TABLE", "CLUSTER"] {
+            documents.push(
+                synthesize_opt(
+                    "CONT-X-items_cardinality",
+                    rm_class,
+                    "cnf.tpl.x.r0",
+                    &card,
+                    &card_cells,
+                )
+                .unwrap(),
+            );
+        }
+        documents.push(
+            synthesize_opt(
+                "CONT-ELEMENT-value_null_flavour_existence",
+                "ELEMENT",
+                "cnf.tpl.x.r0",
+                &cols(&[
+                    "value_existence",
+                    "null_flavour_existence",
+                    "value_committed",
+                    "null_flavour_committed",
+                    "expected",
+                    "violates",
+                ]),
+                &[
+                    lit("mandatory"),
+                    lit("optional"),
+                    lit("present"),
+                    lit("absent"),
+                    lit("accepted"),
+                    lit("[]"),
+                ],
+            )
+            .unwrap(),
+        );
+        documents.push(
+            synthesize_opt(
+                "CONT-ITEM-type_cluster",
+                "ITEM",
+                "cnf.tpl.x.r0",
+                &cols(&["slot_type", "committed_type", "expected", "violates"]),
+                &[lit("CLUSTER"), lit("ELEMENT"), lit("rejected"), lit("[]")],
+            )
+            .unwrap(),
+        );
+        for document in &documents {
+            let mut reader = quick_xml::Reader::from_str(document);
+            let mut buffer = Vec::new();
+            loop {
+                match reader.read_event_into(&mut buffer)? {
+                    quick_xml::events::Event::Eof => break,
+                    _ => buffer.clear(),
+                }
+            }
+            assert!(document.contains("openEHR-EHR-EVALUATION.minimal.v1"));
+        }
+        Ok(())
+    }
+
+    /// The container attribute under test is the one the RM names, and the
+    /// CLUSTER family keeps its RM-mandatory 1..1 existence.
+    #[test]
+    fn the_container_family_constrains_the_rm_named_attribute() {
+        let c = cols(&["cardinality", "member_count", "expected", "violates"]);
+        let cells = vec![
+            lit("any"),
+            MatrixCell::Literal(json!(0)),
+            lit("accepted"),
+            lit("[]"),
+        ];
+        let table = synthesize_opt("CONT-X", "ITEM_TABLE", "cnf.tpl.x.r0", &c, &cells).unwrap();
+        assert!(table.contains("<rm_attribute_name>rows</rm_attribute_name>"));
+        assert!(table.contains("<rm_type_name>ITEM_TABLE</rm_type_name>"));
+        let cluster = synthesize_opt("CONT-X", "CLUSTER", "cnf.tpl.x.r0", &c, &cells).unwrap();
+        assert!(cluster.contains("<node_id>at0010</node_id>"));
+        // The `any` token would leave a 0..1 existence on the three
+        // ITEM_STRUCTURE containers; CLUSTER.items is RM 1..1 and never follows
+        // it, so no 0..1 existence sits on this template's items attribute.
+        let items = cluster
+            .split("<rm_attribute_name>items</rm_attribute_name>")
+            .nth(2)
+            .unwrap_or_default();
+        assert!(
+            items.contains("<lower>1</lower><upper>1</upper></existence>"),
+            "{items}"
+        );
     }
 
     #[test]

@@ -355,7 +355,17 @@ pub fn content_instance(
 fn is_structural(rm_class: &str) -> bool {
     matches!(
         rm_class,
-        "COMPOSITION" | "EVENT" | "HISTORY" | "ITEM_STRUCTURE" | "OBSERVATION"
+        "CLUSTER"
+            | "COMPOSITION"
+            | "ELEMENT"
+            | "EVENT"
+            | "HISTORY"
+            | "ITEM"
+            | "ITEM_LIST"
+            | "ITEM_STRUCTURE"
+            | "ITEM_TABLE"
+            | "ITEM_TREE"
+            | "OBSERVATION"
     )
 }
 
@@ -848,8 +858,165 @@ fn min_evaluation(data: Value) -> Value {
     })
 }
 
+/// One `ITEM_TABLE` row: a `CLUSTER` (at0010) of leaf `ELEMENT`s (RM
+/// `data_structures` §`ITEM_TABLE` — `rows: List<CLUSTER>`, invariant
+/// `Valid_structure: rows.for_all (items.for_all (instance_of ("ELEMENT")))`).
+fn table_row_cluster() -> Value {
+    json!({
+        "_type": "CLUSTER",
+        "name": { "_type": "DV_TEXT", "value": "row" },
+        "archetype_node_id": "at0010",
+        "items": [min_element()]
+    })
+}
+
+/// The committed container structure under an `EVALUATION.data` slot, holding
+/// `members` member objects.
+///
+/// A zero count OMITS the container attribute, which is what an empty list
+/// serializes as on the canonical wire; for `CLUSTER` that omission is itself
+/// the RM violation (RM `data_structures` §`CLUSTER` — `items` is 1..1, where
+/// the three `ITEM_STRUCTURE` containers make theirs 0..1).
+fn container_structure(rm_class: &str, members: usize) -> Value {
+    let member = || {
+        if rm_class == "ITEM_TABLE" {
+            table_row_cluster()
+        } else {
+            min_element()
+        }
+    };
+    let list: Vec<Value> = (0..members).map(|_| member()).collect();
+    let attribute = if rm_class == "ITEM_TABLE" {
+        "rows"
+    } else {
+        "items"
+    };
+    if rm_class == "CLUSTER" {
+        let mut cluster = serde_json::Map::new();
+        cluster.insert("_type".to_owned(), Value::String("CLUSTER".to_owned()));
+        cluster.insert(
+            "name".to_owned(),
+            json!({ "_type": "DV_TEXT", "value": "cluster" }),
+        );
+        cluster.insert(
+            "archetype_node_id".to_owned(),
+            Value::String("at0010".to_owned()),
+        );
+        if !list.is_empty() {
+            cluster.insert("items".to_owned(), Value::Array(list));
+        }
+        return json!({
+            "_type": "ITEM_TREE",
+            "name": { "_type": "DV_TEXT", "value": "structure" },
+            "archetype_node_id": "at0003",
+            "items": [Value::Object(cluster)]
+        });
+    }
+    let mut container = serde_json::Map::new();
+    container.insert("_type".to_owned(), Value::String(rm_class.to_owned()));
+    container.insert(
+        "name".to_owned(),
+        json!({ "_type": "DV_TEXT", "value": "structure" }),
+    );
+    container.insert(
+        "archetype_node_id".to_owned(),
+        Value::String("at0003".to_owned()),
+    );
+    if !list.is_empty() {
+        container.insert(attribute.to_owned(), Value::Array(list));
+    }
+    Value::Object(container)
+}
+
+/// The `ELEMENT` (at0004) carrying `value` and/or `null_flavour` per the row's
+/// data axes.
+///
+/// The null flavour is `openehr::253` (RM `data_structures` §`ELEMENT` names
+/// `253|unknown|` among the flavours, and `Inv_null_flavour_valid` requires a
+/// code from that group).
+fn existence_element(with_value: bool, with_null_flavour: bool) -> Value {
+    let mut element = serde_json::Map::new();
+    element.insert("_type".to_owned(), Value::String("ELEMENT".to_owned()));
+    element.insert(
+        "name".to_owned(),
+        json!({ "_type": "DV_TEXT", "value": "value" }),
+    );
+    element.insert(
+        "archetype_node_id".to_owned(),
+        Value::String("at0004".to_owned()),
+    );
+    if with_value {
+        element.insert(
+            "value".to_owned(),
+            json!({ "_type": "DV_TEXT", "value": "cnf value" }),
+        );
+    }
+    if with_null_flavour {
+        element.insert("null_flavour".to_owned(), json!({ "_type": "DV_CODED_TEXT", "value": "unknown",
+            "defining_code": { "_type": "CODE_PHRASE", "terminology_id": { "_type": "TERMINOLOGY_ID", "value": "openehr" }, "code_string": "253" } }));
+    }
+    Value::Object(element)
+}
+
+/// A committed `ITEM` member at at0004: the leaf `ELEMENT`, or a `CLUSTER`
+/// carrying one (RM `data_structures` §`ITEM` — `CLUSTER` and `ELEMENT` are its
+/// two subtypes).
+fn item_member(rm_type: &str) -> Value {
+    if rm_type == "CLUSTER" {
+        return json!({
+            "_type": "CLUSTER",
+            "name": { "_type": "DV_TEXT", "value": "item" },
+            "archetype_node_id": "at0004",
+            "items": [min_element()]
+        });
+    }
+    json!({
+        "_type": "ELEMENT",
+        "name": { "_type": "DV_TEXT", "value": "item" },
+        "archetype_node_id": "at0004",
+        "value": { "_type": "DV_TEXT", "value": "cnf value" }
+    })
+}
+
+/// An `ITEM_TREE` (at0003) holding the given members.
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "the members are serialized into the JSON tree"
+)]
+fn tree_of(members: Vec<Value>) -> Value {
+    json!({
+        "_type": "ITEM_TREE",
+        "name": { "_type": "DV_TEXT", "value": "structure" },
+        "archetype_node_id": "at0003",
+        "items": members
+    })
+}
+
+/// The per-row carrier for the families constrained BELOW the `ITEM_STRUCTURE`
+/// slot (container cardinality, `ELEMENT` attribute existence, `ITEM` type
+/// narrowing); `None` when `rm_class` names none of them.
+fn data_structure_instance(rm_class: &str, template_id: &str, row: &RowView<'_>) -> Option<Value> {
+    let data = match rm_class {
+        "ITEM_TREE" | "ITEM_LIST" | "ITEM_TABLE" | "CLUSTER" => {
+            container_structure(rm_class, count(row, "member_count"))
+        }
+        "ELEMENT" => tree_of(vec![existence_element(
+            committed(row, "value_committed"),
+            committed(row, "null_flavour_committed"),
+        )]),
+        "ITEM" => tree_of(vec![item_member(
+            row.text("committed_type").unwrap_or("ELEMENT"),
+        )]),
+        _ => return None,
+    };
+    Some(comp_shell(template_id, vec![min_evaluation(data)], true))
+}
+
 /// Build the per-row structural carrier for one content row.
 fn structural_instance(rm_class: &str, template_id: &str, row: &RowView<'_>) -> Value {
+    if let Some(instance) = data_structure_instance(rm_class, template_id, row) {
+        return instance;
+    }
     match rm_class {
         "COMPOSITION" if row.cell("cardinality").is_some() => {
             let n = count(row, "content_count");

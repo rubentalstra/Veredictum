@@ -1591,6 +1591,48 @@ cnf.tpl.ecc_item_structure_type_narrowing:
   validity: { verdict: valid }
   template_id: "cnf.tpl.ecc_item_structure_type_narrowing"
   provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per the official master16 CONT-ITEM_STR-type_* family (AM 1.4 C_OBJECT.rm_type_name); validated against the SUT 2026-07-21"
+cnf.tpl.ecc_item_tree_items_cardinality:
+  source: templates/cnf.tpl.ecc_item_tree_items_cardinality.opt
+  format: opt-xml
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "cnf.tpl.ecc_item_tree_items_cardinality"
+  provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per CONT-ITEM_TREE-items_cardinality (AM 1.4 C_MULTIPLE_ATTRIBUTE.cardinality over RM data_structures ITEM_TREE.items, 0..1 List<ITEM>)"
+cnf.tpl.ecc_item_list_items_cardinality:
+  source: templates/cnf.tpl.ecc_item_list_items_cardinality.opt
+  format: opt-xml
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "cnf.tpl.ecc_item_list_items_cardinality"
+  provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per CONT-ITEM_LIST-items_cardinality (AM 1.4 C_MULTIPLE_ATTRIBUTE.cardinality over RM data_structures ITEM_LIST.items, 0..1 List<ELEMENT> with the Valid_structure invariant)"
+cnf.tpl.ecc_item_table_rows_cardinality:
+  source: templates/cnf.tpl.ecc_item_table_rows_cardinality.opt
+  format: opt-xml
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "cnf.tpl.ecc_item_table_rows_cardinality"
+  provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per CONT-ITEM_TABLE-rows_cardinality (AM 1.4 C_MULTIPLE_ATTRIBUTE.cardinality over RM data_structures ITEM_TABLE.rows, 0..1 List<CLUSTER> with the Valid_structure invariant)"
+cnf.tpl.ecc_cluster_items_cardinality:
+  source: templates/cnf.tpl.ecc_cluster_items_cardinality.opt
+  format: opt-xml
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "cnf.tpl.ecc_cluster_items_cardinality"
+  provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per CONT-CLUSTER-items_cardinality (AM 1.4 C_MULTIPLE_ATTRIBUTE.cardinality over RM data_structures CLUSTER.items, 1..1 List<ITEM> — the one container attribute the RM makes mandatory, so the attribute existence stays 1..1 on every row)"
+cnf.tpl.ecc_element_existence:
+  source: templates/cnf.tpl.ecc_element_existence.opt
+  format: opt-xml
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "cnf.tpl.ecc_element_existence"
+  provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per CONT-ELEMENT-value_null_flavour_existence (AM 1.4 C_ATTRIBUTE.existence over RM data_structures ELEMENT.value and ELEMENT.null_flavour, both 0..1)"
+cnf.tpl.ecc_item_type_narrowing:
+  source: templates/cnf.tpl.ecc_item_type_narrowing.opt
+  format: opt-xml
+  rm_versions: [">=1.0.2"]
+  validity: { verdict: valid }
+  template_id: "cnf.tpl.ecc_item_type_narrowing"
+  provenance: "generated from the openEHR CNF Robot minimal_observation.opt skeleton by generate_content_opts.py; constraint per the CONT-ITEM-type_* family (AM 1.4 C_OBJECT.rm_type_name over RM data_structures ITEM, the abstract parent of CLUSTER and ELEMENT)"
 # Corpus additions for the CNF master11 (QUERY) schedule cases. Same entry
 # schema as MANIFEST.yaml; the validate harness concatenates this into
 # corpus/MANIFEST.yaml at integration (never edit MANIFEST.yaml directly here).
