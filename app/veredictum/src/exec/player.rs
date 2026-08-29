@@ -269,7 +269,7 @@ impl StepDriver for TranscriptPlayer<'_> {
         _case: &CaseCore,
         _row: usize,
         _vars: &mut VarStore,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<crate::exec::assertions::AssertionOutcome>, String> {
         Ok(Vec::new())
     }
 

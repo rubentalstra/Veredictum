@@ -376,10 +376,10 @@ fn a_uids_selection_spec_expects_the_committed_uid_at_each_index() -> Fallible {
         &mut vars,
     )?;
     assert_eq!(observed.observation, Observation::Kind(OutcomeKind::Ok));
-    assert_eq!(
-        observed.assertion_failures,
-        Vec::<String>::new(),
-        "the served row is the committed uid at index 2"
+    assert!(
+        observed.assertion_failures.is_empty(),
+        "the served row is the committed uid at index 2: {:?}",
+        observed.assertion_failures
     );
 
     let wrong = FakeSut::start();
@@ -404,8 +404,8 @@ fn a_uids_selection_spec_expects_the_committed_uid_at_each_index() -> Fallible {
         .first()
         .ok_or("a wrong uid must fail the result_set assertion")?;
     assert!(
-        failure.contains("uid-two"),
-        "the failure must name the expected uid: {failure}"
+        failure.reason().contains("uid-two"),
+        "the failure must name the expected uid: {failure:?}"
     );
     Ok(())
 }
@@ -446,10 +446,10 @@ fn a_pairs_selection_spec_pairs_a_literal_with_the_committed_uid() -> Fallible {
         query_case("folder_composition_pairs", "set", &Value::Null),
         &mut vars,
     )?;
-    assert_eq!(
-        observed.assertion_failures,
-        Vec::<String>::new(),
-        "the ten authored pairs are the ten served rows"
+    assert!(
+        observed.assertion_failures.is_empty(),
+        "the ten authored pairs are the ten served rows: {:?}",
+        observed.assertion_failures
     );
     Ok(())
 }
