@@ -18,6 +18,17 @@
 #
 # The projection is the ORDERED VALUE itself rather than the uid, so a red row
 # names the ordering and nothing about identifier minting.
+#
+# Steps 1 and 2 judge the DATE/TIME cell as an INSTANT, not as bytes. ITS-REST
+# Resources.md §Datetime format assigns the query path only a SHOULD —
+# "Retrieval or querying those resources SHOULD return date, datetime, or time
+# values in the (original) format provided by underlying backend engine,
+# avoiding any format change" — and BASE iso8601_timezone.adoc §Description
+# states "`Z` is a literal meaning UTC (modern replacement for GMT), i.e.
+# timezone `+0000`", so `Z` and `+00:00` name one instant. `cells: instant`
+# gates on the instant and records the respelling; the ORDERING itself is
+# unaffected, being what these rows are about. Steps 3 and 4 read DV_TEXT and
+# keep exact-lexeme comparison.
 id: I_QUERY_SERVICE.execute_ad_hoc_query-order_by_non_numeric
 kind: functional
 component: QUERY
@@ -35,6 +46,8 @@ spec_refs:
   - "QUERY AQL master03-syntax §Identified Paths"
   - "QUERY AQL master03-syntax §Name alias"
   - "ITS-REST query §200_Query (RESULT_SET)"
+  - "ITS-REST overview Resources.md §Datetime format (querying SHOULD return the backend's original format — the served spelling is not gating)"
+  - "BASE UML/classes/iso8601_timezone.adoc §Description (`Z` is a literal meaning UTC, i.e. timezone `+0000`)"
 applies: { rm: ">=1.0.2", aql: ">=1.1" }
 requires:
   server: any
@@ -54,6 +67,7 @@ flow:
     assert:
       - assert: result_set
         match: ordered
+        cells: instant                      # Resources.md §Datetime format: the query-side spelling is a SHOULD
         columns: [{ name: t }]
         rows:
           - ["2026-01-01T00:00:00Z"]
@@ -78,6 +92,7 @@ flow:
     assert:
       - assert: result_set
         match: ordered
+        cells: instant                      # Resources.md §Datetime format: the query-side spelling is a SHOULD
         columns: [{ name: t }]
         rows:
           - ["2026-01-01T09:00:00Z"]

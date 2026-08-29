@@ -1261,6 +1261,14 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> E
         outcome.report.exceptions.len(),
         outcome.results_path.display()
     );
+    // Non-gating observations: a SHOULD the SUT did not follow while meeting
+    // every MUST the row gates on. They change no verdict, so they stay out of
+    // `results.json` and are reported here instead of being swallowed.
+    for record in &outcome.report.records {
+        for advisory in &record.advisories {
+            println!("observed: {} {advisory}", record.case);
+        }
+    }
     report_transcript(&outcome);
     if outcome.is_clean() {
         ExitCode::SUCCESS

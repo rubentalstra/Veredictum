@@ -537,6 +537,7 @@ mod tests {
             rows_driven: rows.len(),
             rows_total: rows.len(),
             rows,
+            advisories: Vec::new(),
         }
     }
 

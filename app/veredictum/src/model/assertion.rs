@@ -25,7 +25,9 @@ use serde::{Deserialize, Deserializer};
 use crate::ids::CaseId;
 use crate::model::value::TemplatedValue;
 use crate::refgrammar::{RefError, Template, ValueRef};
-use crate::vocab::{ChangeType, FormatName, IgnoreSetName, ResultSetMatch, XmlNamespace};
+use crate::vocab::{
+    CellComparison, ChangeType, FormatName, IgnoreSetName, ResultSetMatch, XmlNamespace,
+};
 
 /// The `equivalent` assertion's comparison target.
 #[derive(Debug, Clone, PartialEq)]
@@ -275,6 +277,19 @@ pub enum Assertion {
         /// How the expected rows are compared against the served ones.
         #[serde(rename = "match")]
         match_mode: ResultSetMatch,
+        /// How a scalar cell is compared. Absent is
+        /// [`CellComparison::Lexeme`], the exact-lexeme comparison every row
+        /// gets by default; a row reading date/time values back through a
+        /// QUERY declares `cells: instant`, because ITS-REST
+        /// `specifications/docs/overview/Resources.md` §Datetime format puts
+        /// the query-side SPELLING at SHOULD-strength — "Retrieval or
+        /// querying those resources SHOULD return date, datetime, or time
+        /// values in the (original) format provided by underlying backend
+        /// engine, avoiding any format change" — while the instant itself
+        /// stays a fact. The mode never widens past the instant, and a
+        /// tolerated respelling is recorded rather than swallowed.
+        #[serde(default)]
+        cells: Option<CellComparison>,
         /// The expected rows (inline, or a reference to a corpus row set).
         #[serde(default)]
         rows: Option<RowsSpec>,
@@ -496,11 +511,20 @@ impl Assertion {
                 match_mode,
                 rows,
                 count,
+                cells,
                 ..
             } => match match_mode {
                 ResultSetMatch::Count => {
                     if count.is_none() {
                         return Err("result_set match:count requires `count`".to_owned());
+                    }
+                    // A cell mode nothing consults is a declaration that
+                    // silently does nothing — match:count compares no cell.
+                    if cells.is_some() {
+                        return Err(
+                            "result_set match:count compares no cell, so it takes no `cells` mode"
+                                .to_owned(),
+                        );
                     }
                 }
                 _ => {
@@ -860,6 +884,45 @@ mod tests {
 
         let a = parse(serde_json::json!({
             "assert": "field", "path": "meta/_created", "absent_or_matches": "([unclosed"
+        }));
+        assert!(a.check_invariants().is_err());
+    }
+
+    /// The `cells:` vocabulary is closed and opt-in: absent is the exact
+    /// comparison, `instant` is the declared one, an unknown token is a parse
+    /// refusal, and `match: count` refuses the modifier outright.
+    #[test]
+    fn cells_mode_is_a_closed_opt_in_vocabulary() {
+        let a = parse(serde_json::json!({
+            "assert": "result_set", "match": "ordered",
+            "rows": [["2026-01-01T00:00:00Z"]]
+        }));
+        assert!(a.check_invariants().is_ok());
+        assert!(matches!(a, Assertion::ResultSet { cells: None, .. }));
+
+        let a = parse(serde_json::json!({
+            "assert": "result_set", "match": "ordered", "cells": "instant",
+            "rows": [["2026-01-01T00:00:00Z"]]
+        }));
+        assert!(a.check_invariants().is_ok());
+        assert!(matches!(
+            a,
+            Assertion::ResultSet {
+                cells: Some(CellComparison::Instant),
+                ..
+            }
+        ));
+
+        assert!(
+            serde_json::from_value::<Assertion>(serde_json::json!({
+                "assert": "result_set", "match": "ordered", "cells": "iso8601",
+                "rows": [["x"]]
+            }))
+            .is_err()
+        );
+
+        let a = parse(serde_json::json!({
+            "assert": "result_set", "match": "count", "count": 3, "cells": "instant"
         }));
         assert!(a.check_invariants().is_err());
     }

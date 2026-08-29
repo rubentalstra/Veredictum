@@ -31,6 +31,18 @@ version on.
     resolve a tie on the leftmost expression with the next one; `MIN`/`MAX`
     return the edges of a non-numeric ordered set in the input's own type and
     `COUNT` returns an Integer over the same argument.
+  - A `result_set` assertion may declare `cells: instant`, and the two
+    non-numeric query cases above declare it on their date/time rows. ITS-REST
+    `docs/overview/Resources.md` §Datetime format assigns the query path only
+    a SHOULD ("Retrieval or querying those resources SHOULD return date,
+    datetime, or time values in the (original) format provided by underlying
+    backend engine"), and BASE `iso8601_timezone.adoc` §Description makes `Z`
+    "a literal meaning UTC …, i.e. timezone `+0000`", so a served `+00:00` is
+    the same fact as a committed `Z`. Under the mode the row gates on the
+    instant and the run prints the tolerated respelling as an `observed:` line
+    beside the tally. The default is unchanged exact-lexeme comparison, which
+    is what tests the unconditional write-path sentence one line above the
+    SHOULD; `match: count` refuses the modifier, because it compares no cell.
   - `SUM` and `AVG` declare Integer or Real input and assign nothing outside
     it, so register entry AMB-227 (option_select, upstream #229) records the
     silence and twin cases pin the two branches a party may declare,

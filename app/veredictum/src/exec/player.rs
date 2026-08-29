@@ -245,6 +245,7 @@ impl StepDriver for TranscriptPlayer<'_> {
         Ok(StepObservation {
             observation,
             assertion_failures: Vec::new(),
+            advisories: Vec::new(),
         })
     }
 

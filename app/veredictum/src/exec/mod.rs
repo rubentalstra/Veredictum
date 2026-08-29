@@ -97,6 +97,14 @@ pub struct CaseRecord {
     pub rows_driven: usize,
     /// How many rows selection admitted in total.
     pub rows_total: usize,
+    /// Non-gating observations the rows produced, in execution order.
+    ///
+    /// A recorded observation is a spec sentence of SHOULD strength that the
+    /// SUT did not follow while satisfying every MUST the row gates on, so it
+    /// changes no verdict. It stays out of `results.json` for exactly that
+    /// reason: the results document carries what a verdict is computed from,
+    /// and the run prints these beside the tally instead.
+    pub advisories: Vec<String>,
 }
 
 impl CaseRecord {
@@ -120,6 +128,9 @@ pub struct StepObservation {
     /// own channel: a mismatch fails the row, an unjudgeable assertion errors
     /// it. Only meaningful when the observation matched the expectation.
     pub assertion_failures: Vec<AssertionOutcome>,
+    /// Non-gating observations the step's assertions recorded: a SHOULD-strength
+    /// divergence a passing assertion tolerated (see [`CaseRecord::advisories`]).
+    pub advisories: Vec<String>,
 }
 
 impl StepObservation {
@@ -130,7 +141,18 @@ impl StepObservation {
         Self {
             observation: Observation::Transport(message),
             assertion_failures: Vec::new(),
+            advisories: Vec::new(),
         }
+    }
+
+    /// This step's recorded observations, each prefixed with the row and step
+    /// it was made on.
+    #[must_use]
+    pub fn labelled_advisories(&self, row: usize, step: u32) -> Vec<String> {
+        self.advisories
+            .iter()
+            .map(|advisory| format!("row {row} step {step}: {advisory}"))
+            .collect()
     }
 }
 
@@ -303,6 +325,7 @@ pub fn run_case<D: StepDriver>(
 
     let mut rows = Vec::with_capacity(total);
     let mut row_states: Vec<VarStore> = Vec::with_capacity(total);
+    let mut advisories: Vec<String> = Vec::new();
     let mut vars = VarStore::default();
 
     for row in 0..total {
@@ -336,6 +359,7 @@ pub fn run_case<D: StepDriver>(
                 break 'steps;
             };
             let observed = driver.perform(case, step, expected, row, &mut vars)?;
+            advisories.extend(observed.labelled_advisories(row, step.step));
             match outcome::judge(expected, &observed.observation) {
                 StepJudgement::Continue => {
                     if let Some(failure) = judged_first(&observed.assertion_failures) {
@@ -395,6 +419,7 @@ pub fn run_case<D: StepDriver>(
         rows_driven: rows.len(),
         rows_total: total,
         rows,
+        advisories,
     })
 }
 
@@ -425,6 +450,7 @@ mod tests {
             Ok(StepObservation {
                 observation,
                 assertion_failures: Vec::new(),
+                advisories: Vec::new(),
             })
         }
         fn provision(

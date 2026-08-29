@@ -7547,7 +7547,11 @@ AMB-171:
     specifications/docs/overview/Resources.md §Datetime format (the extended
     format is a MUST only for "HTTP query parameters and path segments";
     a body value "will be preserved as it was sent by the client, and passed
-    to the underlying backend engine as is") — all CONFIRMED first-hand.
+    to the underlying backend engine as is", and the sentence immediately
+    after it drops the READ path to SHOULD strength: "Retrieval or querying
+    those resources SHOULD return date, datetime, or time values in the
+    (original) format provided by underlying backend engine, avoiding any
+    format change") — all CONFIRMED first-hand.
     The ITS-JSON schema adds nothing: `openehr_rm_1.1.0_all.json`
     `definitions.DV_DATE_TIME.properties.value` is a bare
     `{"type": "string"}` with no pattern.

@@ -11,6 +11,17 @@
 # time 2026-01-01T0k:00:00Z and name "blood pressure k", so the edges of both
 # ten-value sets are known outright.
 #
+# The DATE/TIME cell is judged as an INSTANT, not as bytes. ITS-REST
+# Resources.md §Datetime format assigns the query path only a SHOULD —
+# "Retrieval or querying those resources SHOULD return date, datetime, or time
+# values in the (original) format provided by underlying backend engine,
+# avoiding any format change" — so a served `+00:00` is the same fact as the
+# committed `Z`: BASE iso8601_timezone.adoc §Description states "`Z` is a
+# literal meaning UTC (modern replacement for GMT), i.e. timezone `+0000`".
+# `cells: instant` gates on the instant and records the respelling. The
+# unconditional preservation sentence one line above it governs the WRITE path
+# and is tested there, by exact-lexeme rows.
+#
 # SUM and AVG are deliberately absent here: their declared input set is
 # Integer or Real only, and the released text assigns no behaviour to an
 # argument outside a function's declared set (register AMB-227, upstream #229).
@@ -32,6 +43,8 @@ spec_refs:
   - "QUERY AQL master03-syntax §Aggregate functions, §COUNT, §MIN, §MAX"
   - "QUERY AQL master03-syntax §Name alias"
   - "ITS-REST query §200_Query (RESULT_SET)"
+  - "ITS-REST overview Resources.md §Datetime format (querying SHOULD return the backend's original format — the served spelling is not gating)"
+  - "BASE UML/classes/iso8601_timezone.adoc §Description (`Z` is a literal meaning UTC, i.e. timezone `+0000`)"
 applies: { rm: ">=1.0.2", aql: ">=1.1" }
 requires:
   server: any
@@ -52,6 +65,7 @@ flow:
     assert:
       - assert: result_set
         match: ordered                      # a single aggregate row: order is determined
+        cells: instant                      # Resources.md §Datetime format: the query-side spelling is a SHOULD
         columns: [{ name: mn }, { name: mx }]
         rows: [["2026-01-01T00:00:00Z", "2026-01-01T09:00:00Z"]]
   - step: 2                                 # String input: the edges of the ten distinct composition names
