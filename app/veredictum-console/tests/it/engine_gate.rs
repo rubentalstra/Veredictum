@@ -20,14 +20,28 @@ pub(crate) fn repo_root() -> &'static Path {
 }
 
 /// The engine binary for the gate: the [`engine::ENGINE_ENV`] override when
-/// set, else the workspace build. Both run paths use the SAME binary, which
-/// is exactly the property under test — the console must add and remove
-/// nothing around it.
+/// set, else the build that produced THIS test executable. Both run paths use
+/// the SAME binary, which is exactly the property under test — the console
+/// must add and remove nothing around it.
+///
+/// The path is derived from `current_exe` rather than spelled as
+/// `target/debug/veredictum`, because cargo honours `CARGO_TARGET_DIR` and a
+/// literal path stops naming the binary cargo just built the moment anything
+/// redirects it — which `cargo llvm-cov` always does
+/// (<https://doc.rust-lang.org/cargo/reference/environment-variables.html>).
+/// A literal path also resolves to a STALE binary from an older build instead
+/// of skipping, which is a gate silently grading yesterday's engine.
 pub(crate) fn gate_binary() -> PathBuf {
-    std::env::var(engine::ENGINE_ENV).map_or_else(
-        |_| repo_root().join("target/debug/veredictum"),
-        PathBuf::from,
-    )
+    if let Ok(override_path) = std::env::var(engine::ENGINE_ENV) {
+        return PathBuf::from(override_path);
+    }
+    // `<target>/<profile>/deps/<test binary>` — two hops up is the profile
+    // directory cargo places a package's binaries in.
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().and_then(Path::parent).map(Path::to_path_buf))
+        .unwrap_or_else(|| repo_root().join("target/debug"))
+        .join("veredictum")
 }
 
 /// A minimal fixture SUT: answers every request `500` with a fixed body, so

@@ -24,3 +24,7 @@ mod read_surfaces;
 mod run_live;
 #[cfg(feature = "ssr")]
 mod run_scope;
+#[cfg(feature = "ssr")]
+mod server_fns;
+#[cfg(feature = "ssr")]
+mod verify_surfaces;

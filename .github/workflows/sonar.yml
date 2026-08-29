@@ -15,10 +15,10 @@
 # and CSS, and secret detection across the tree. The shell coverage is a second
 # opinion beside the shellcheck bundled in the actionlint image, not a
 # replacement: shellcheck reads the shell embedded in workflow `run:` blocks,
-# which is a set of files Sonar never sees as shell. Coverage is not imported
-# yet (issue #9); the vendored trees are excluded in
-# `sonar-project.properties`, because acting on a finding inside vendored bytes
-# is forbidden here.
+# which is a set of files Sonar never sees as shell. Coverage rides this lane
+# too (#9), through the `cargo-llvm-cov` steps below; the vendored trees are
+# excluded in `sonar-project.properties`, because acting on a finding inside
+# vendored bytes is forbidden here.
 #
 # CI-based analysis rather than Automatic Analysis, and that is a decision:
 # Automatic Analysis would serve a YAML-and-HTML tree with no workflow at all,
@@ -87,6 +87,42 @@ jobs:
       # default-members note says every CI cargo command passes it explicitly.
       # `--features veredictum-console/ssr` is what compiles the console's
       # server-side tests, which is where its coverable code lives.
+      #
+      # `--workspace` also BUILDS the engine binary into this lane's own
+      # target directory, which is what the console's engine, export, run and
+      # scope gates spawn. They resolve it from the test executable's own
+      # location rather than from a literal `target/debug/veredictum`, because
+      # `cargo llvm-cov` redirects `CARGO_TARGET_DIR` and a literal path there
+      # names either nothing (the gate skips, and the console under-reads) or a
+      # stale binary from an older build (the gate grades yesterday's engine).
+      #
+      # THE COVERAGE DENOMINATOR, and what is deliberately outside it. The
+      # exclusion list itself lives in `sonar-project.properties`, beside the
+      # reason for each entry; this is the same adjudication stated where the
+      # measurement is made, because a lane and a properties file that disagree
+      # about the denominator produce a number nobody can check.
+      #
+      #   the engine   `src/bin/**`, argument plumbing over library functions
+      #                the suite already drives, and the two `*_assets.rs`
+      #                renderers, whose output is checked by
+      #                regenerate-and-diff over committed artifacts.
+      #   the console  its VIEW layer only — `app.rs`, `main.rs`, `pages.rs`,
+      #                `pages/**`, `components.rs`, `components/**`,
+      #                `theme.rs`. A Leptos component body executes in the
+      #                BROWSER after hydration; this lane compiles the crate
+      #                for `ssr` on a native target, so the instrumented
+      #                binary those lines live in is never the binary that
+      #                runs them, and llvm-cov cannot observe one of them.
+      #                They are measured by `scripts/ui-e2e.sh` instead: a
+      #                headless-Chromium journey per routed surface, each
+      #                failing on any browser-console error, hydration
+      #                mismatch or panic. Covered by a harness this lane
+      #                cannot read, never uncovered.
+      #   both suites  a suite measures the instrument, not itself.
+      #
+      # The console's server-fn seams, engine seam, run supervisor, export
+      # renderer, redirect helper and startup state stay INSIDE the
+      # denominator: they are ordinary Rust the ssr suite drives directly.
       - run: cargo llvm-cov --no-report nextest --locked --workspace --features veredictum-console/ssr --profile ci
       - run: cargo llvm-cov report --lcov --output-path lcov.info
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
