@@ -19,6 +19,12 @@ version on.
 ## [Unreleased]
 
 ### Added
+- Multi-valued-predicate coverage (#178): register entry AMB-222 pins the
+  any-element reading of a WHERE predicate over a multi-valued path (upstream
+  report #195), and three QUERY cases commit compositions whose SECOND link or
+  participation carries the queried literal — the first-element-only
+  evaluation class FerroEHR#2919 fixed goes red on contact — plus the
+  zero-row negative twin.
 
 - **Bench baselines and the relative index (#184).** `bench --with-baselines`
   measures the target, then composes each pinned reference CDR on the same
