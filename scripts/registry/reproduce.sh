@@ -175,6 +175,20 @@ else
   echo "::error::$TOPOLOGY declares no statement, and a verdict is computed against one" >&2
   exit 1
 fi
+# The same tolerance as the run step: a judgement carrying review findings
+# (exit 1) is a legitimate record whose verdicts state the findings, while a
+# judge error (exit 2) is not a judgement and stops the lane.
+set +e
 cargo run --quiet --locked -- "${judge_args[@]}"
+judged=$?
+set -e
+if [[ "$judged" -ge 2 ]]; then
+  echo "::error::the verdicts could not be computed (exit $judged)" >&2
+  exit 1
+fi
+if [[ ! -f "$OUT/judgement/verdicts.json" ]]; then
+  echo "::error::the judgement wrote no verdicts.json" >&2
+  exit 1
+fi
 
 echo "reproduce: wrote $OUT/run/results.json and $OUT/judgement/verdicts.json"
