@@ -50,6 +50,22 @@ version on.
   `bench-compare` states a posture disagreement in the header, above the
   numbers, beside the pack and host mismatches it already reported.
 
+- **The benchmark legend, generated from the binary (#189).** A new
+  `bench-packs --out DIR` subcommand writes `bench-packs.json`: every embedded
+  pack's id, version, seed and phases, each phase's load discipline and counts,
+  each measured phase's operation mix with the share, the offered rate and the
+  probe rationale of every entry, each posture profile with what it declares
+  item by item, each fixture's sha256 pin with its size and its provenance, the
+  closed operation vocabulary with the request each token puts on the wire, and
+  the requirements a record meets before it may be ranked. Emission is byte-deterministic and `schemas/bench-packs.schema.json`
+  publishes its shape. The public page at
+  `veredictum.eu/benchmark-methodology.html` is rendered from the committed
+  copy of that document by `scripts/render/bench-legend.sh`, so a page that
+  described a pack the binary no longer runs cannot exist: the integration
+  suite holds the document to the packs, and `--check` holds the page to the
+  document, in the site build and in CI. The board links the legend and the
+  legend links back to the board and to the submission guide.
+
 - Multi-valued-predicate coverage (#178): register entry AMB-222 pins the
   any-element reading of a WHERE predicate over a multi-valued path (upstream
   report #195), and three QUERY cases commit compositions whose SECOND link or

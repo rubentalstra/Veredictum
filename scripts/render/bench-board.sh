@@ -37,6 +37,7 @@ readonly SUBMISSIONS='benchmarks/submissions'
 readonly PAGE='website/landing/benchmarks.html'
 readonly GUIDE_URL='https://github.com/rubentalstra/Veredictum/blob/main/benchmarks/SUBMITTING.md'
 readonly TREE_URL='https://github.com/rubentalstra/Veredictum/tree/main/benchmarks/submissions'
+readonly LEGEND='./benchmark-methodology.html'
 
 # The reference whose index decides the ROW ORDER. Every reference gets its own
 # column either way; this one only breaks the tie that sorting a list is, and a
@@ -66,7 +67,8 @@ model_of() {
 # number on the page is derived from the records, and `@html` escapes every
 # value that came out of one.
 render_body() {
-  jq -r --arg anchor "$ANCHOR" --arg guide "$GUIDE_URL" --arg tree "$TREE_URL" '
+  jq -r --arg anchor "$ANCHOR" --arg guide "$GUIDE_URL" --arg tree "$TREE_URL" \
+        --arg legend "$LEGEND" '
     def median:
       sort as $v
       | ($v | length) as $n
@@ -232,6 +234,9 @@ render_body() {
     "          repetition, the machine it ran on, and the reference deployments it was measured\n" +
     "          against on that same machine. CI validates all of that before a maintainer looks\n" +
     "          at it, and the merge is the acceptance.</p>\n" +
+    "        <p><a href=\"" + $legend + "\">What each pack actually creates and measures →</a>\n" +
+    "          That page is generated from the packs the instrument embeds, so it says what a\n" +
+    "          row below was produced by rather than what anyone remembers it being.</p>\n" +
     "      </div>\n" +
     "      <div class=\"boundary\">\n" +
     "        <p><b>A bench number is not a conformance verdict.</b> This board reports\n" +
@@ -395,7 +400,7 @@ render_page() {
     <nav aria-label="Primary">
       <a href="./docs/">Docs</a>
       <a href="./benchmarks.html" aria-current="page">Benchmarks</a>
-      <a href="./#method" class="hide-sm">Method</a>
+      <a href="./benchmark-methodology.html">Methodology</a>
       <a href="https://github.com/rubentalstra/Veredictum" rel="noopener">GitHub</a>
     </nav>
   </div>

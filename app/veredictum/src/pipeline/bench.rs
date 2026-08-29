@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//! The universal-benchmark seams: drive a pack against a base URL, and align
-//! several committed results into one comparison.
+//! The universal-benchmark seams: describe the embedded packs, drive one
+//! against a base URL, and align several committed results into one
+//! comparison.
 //!
 //! Both seams return typed facts plus finished [`RenderedFile`] values, so a
 //! second consumer writes and displays them however it likes. Nothing here
@@ -14,6 +15,7 @@ use std::path::PathBuf;
 use crate::bench::baselines::{BaselineRun, DockerCli, run_baselines};
 use crate::bench::client::AuthKind;
 use crate::bench::compare::Comparison;
+use crate::bench::manifest::{MANIFEST_FILE, PackManifest};
 use crate::bench::pack::BenchPack;
 use crate::bench::posture::PostureProfile;
 use crate::bench::render::COMPARISON_FILE;
@@ -21,6 +23,40 @@ use crate::bench::result::BenchResult;
 use crate::bench::run::BenchRun;
 use crate::bench::{compare, render, run};
 use crate::pipeline::{Error, RenderedFile};
+
+/// The described packs plus the document that carries them.
+#[derive(Debug)]
+pub struct ManifestOutcome {
+    /// The manifest itself.
+    pub manifest: PackManifest,
+    /// `bench-packs.json`, ready to write.
+    pub document: RenderedFile,
+}
+
+/// Describes every embedded pack as one byte-deterministic document.
+///
+/// The packs are versioned data compiled into this binary, so this seam is
+/// the only source a rendered description may be built from: anything else is
+/// a second copy that drifts the first time a pack version moves.
+///
+/// # Errors
+/// [`Error::Instrument`] carrying the engine's diagnostic when an embedded
+/// fixture's bytes no longer hash to their pin, or when the document cannot
+/// be serialized.
+pub fn describe_packs() -> Result<ManifestOutcome, Error> {
+    let manifest = PackManifest::of_embedded()
+        .map_err(|error| Error::Instrument(format!("bench: {error}")))?;
+    let body = manifest
+        .to_document()
+        .map_err(|error| Error::Instrument(format!("bench: {error}")))?;
+    Ok(ManifestOutcome {
+        manifest,
+        document: RenderedFile {
+            name: MANIFEST_FILE.to_owned(),
+            body,
+        },
+    })
+}
 
 /// What a `bench` invocation asks for.
 #[derive(Debug)]

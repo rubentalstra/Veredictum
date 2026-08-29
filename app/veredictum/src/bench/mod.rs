@@ -26,8 +26,9 @@
 //! declaration refuses the run.
 //!
 //! Module map: [`pack`] the embedded packs, their pinned fixtures and the
-//! operation vocabulary · [`client`] targeting and credentials · [`posture`]
-//! the profiles, the disclosure block and its canaries · [`run`] the preflight,
+//! operation vocabulary · [`manifest`] the emitted description of every
+//! embedded pack · [`client`] targeting and credentials · [`posture`] the
+//! profiles, the disclosure block and its canaries · [`run`] the preflight,
 //! the seed phase and the open-loop dispatcher · [`baselines`] the pinned
 //! reference deployments and their compose orchestration · [`relative`] the
 //! relative index · [`result`] the emitted artifact · [`fingerprint`] the host
@@ -41,6 +42,7 @@ pub mod baselines;
 pub mod client;
 pub mod compare;
 pub mod fingerprint;
+pub mod manifest;
 pub mod pack;
 pub mod posture;
 pub mod relative;

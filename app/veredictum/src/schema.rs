@@ -2269,6 +2269,204 @@ fn bench_posture_def() -> Value {
     })
 }
 
+/// `bench-packs.json` — the embedded benchmark packs, as the binary describes
+/// them.
+///
+/// The document a rendered legend is generated from: every phase with its
+/// discipline, every mix entry with what it probes, every fixture pin with its
+/// provenance, and the requirements a record meets before it may be ranked.
+#[must_use]
+#[expect(clippy::too_many_lines, reason = "one literal JSON-Schema document")]
+pub fn bench_packs_schema() -> Value {
+    let fixtures = json!({
+        "type": "array",
+        "minItems": 1,
+        "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "kind", "media_type", "bytes", "sha256", "provenance"],
+            "properties": {
+                "key": { "type": "string", "minLength": 1 },
+                "kind": {
+                    "enum": bench_tokens(&crate::bench::pack::FixtureKind::ALL
+                        .iter().map(|kind| kind.as_str()).collect::<Vec<_>>())
+                },
+                "media_type": { "type": "string", "minLength": 1 },
+                "bytes": { "type": "integer", "minimum": 1 },
+                "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+                "provenance": { "type": "string", "minLength": 1 }
+            }
+        }
+    });
+    let seed_phase = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "name", "discipline", "ehrs", "compositions_per_ehr",
+                      "compositions", "workers", "fixtures"],
+        "properties": {
+            "kind": { "const": "seed" },
+            "name": { "type": "string", "minLength": 1 },
+            "discipline": { "const": "closed-loop" },
+            "ehrs": { "type": "integer", "minimum": 0 },
+            "compositions_per_ehr": { "type": "integer", "minimum": 0 },
+            "compositions": { "type": "integer", "minimum": 0 },
+            "workers": { "type": "integer", "minimum": 1 },
+            "fixtures": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 }
+            }
+        }
+    });
+    let sweep_phase = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "name", "discipline", "workers", "requests_per_composition",
+                      "operations"],
+        "properties": {
+            "kind": { "const": "sweep" },
+            "name": { "type": "string", "minLength": 1 },
+            "discipline": { "const": "closed-loop" },
+            "workers": { "type": "integer", "minimum": 1 },
+            "requests_per_composition": { "type": "integer", "minimum": 1 },
+            "operations": {
+                "type": "array",
+                "minItems": 1,
+                "items": bench_operation_names()
+            }
+        }
+    });
+    let measure_phase = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "name", "discipline", "rate_per_s", "warmup_s", "duration_s",
+                      "planned_arrivals", "planned_measured_arrivals", "mix"],
+        "properties": {
+            "kind": { "const": "measure" },
+            "name": { "type": "string", "minLength": 1 },
+            "discipline": { "const": "open-loop" },
+            "rate_per_s": { "type": "number", "exclusiveMinimum": 0.0 },
+            "warmup_s": { "type": "integer", "minimum": 0 },
+            "duration_s": { "type": "integer", "minimum": 1 },
+            "planned_arrivals": { "type": "integer", "minimum": 1 },
+            "planned_measured_arrivals": { "type": "integer", "minimum": 1 },
+            "mix": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["op", "share", "rate_per_s", "rationale"],
+                    "properties": {
+                        "op": bench_operation_names(),
+                        "share": { "type": "integer", "minimum": 1 },
+                        "rate_per_s": { "type": "number", "minimum": 0.0 },
+                        "rationale": { "type": "string", "minLength": 1 }
+                    }
+                }
+            }
+        }
+    });
+    json!({
+        "$schema": DRAFT,
+        "$id": urn("bench-packs"),
+        "title": "Veredictum benchmark pack manifest",
+        "description": "Every benchmark pack this binary embeds: the phases with their load discipline, the operation mix with what each entry probes, the pinned fixtures with their provenance, the seed the arrival streams draw from, and the requirements a record meets before it may be ranked. Emitted by `veredictum bench-packs`, and the only source a published description of a pack may be generated from.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "boundary_statement", "methodology", "relative_index",
+                      "seed_disclosure", "posture_disclosure", "submission_requirements",
+                      "operations", "packs"],
+        "properties": {
+            "schema_version": { "type": "string", "minLength": 1 },
+            "boundary_statement": { "const": crate::bench::BOUNDARY_STATEMENT },
+            "methodology": { "const": crate::bench::METHODOLOGY },
+            "relative_index": { "const": crate::bench::relative::RELATIVE_DERIVATION },
+            "seed_disclosure": { "const": crate::bench::manifest::SEED_DISCLOSURE },
+            "posture_disclosure": { "const": crate::bench::manifest::POSTURE_DISCLOSURE },
+            "submission_requirements": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["token", "statement"],
+                    "properties": {
+                        "token": {
+                            "enum": bench_tokens(&crate::bench::result::SubmissionRequirement::ALL
+                                .iter().map(|requirement| requirement.as_str()).collect::<Vec<_>>())
+                        },
+                        "statement": { "type": "string", "minLength": 1 }
+                    }
+                }
+            },
+            "operations": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["token", "wire"],
+                    "properties": {
+                        "token": bench_operation_names(),
+                        "wire": { "type": "string", "pattern": "^(GET|POST) /" }
+                    }
+                }
+            },
+            "packs": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "version", "description", "seed", "fixtures", "phases",
+                                  "profiles", "probe_rationales"],
+                    "properties": {
+                        "id": { "type": "string", "pattern": OPTION_TAG_PATTERN },
+                        "version": { "type": "string", "minLength": 1 },
+                        "description": { "type": "string", "minLength": 1 },
+                        "seed": { "type": "integer", "minimum": 0 },
+                        "fixtures": fixtures,
+                        "phases": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": { "oneOf": [seed_phase, sweep_phase, measure_phase] }
+                        },
+                        "profiles": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": ["name", "summary", "default", "declares"],
+                                "properties": {
+                                    "name": { "type": "string", "pattern": OPTION_TAG_PATTERN },
+                                    "summary": { "type": "string", "minLength": 1 },
+                                    "default": { "type": "boolean" },
+                                    "declares": {
+                                        "type": "object",
+                                        "minProperties": 1,
+                                        "propertyNames": {
+                                            "enum": bench_tokens(&crate::bench::posture::PostureItem::ALL
+                                                .iter().map(|item| item.as_str()).collect::<Vec<_>>())
+                                        },
+                                        "additionalProperties": { "type": "string", "minLength": 1 }
+                                    }
+                                }
+                            }
+                        },
+                        "probe_rationales": {
+                            "type": "object",
+                            "propertyNames": bench_operation_names(),
+                            "additionalProperties": { "type": "string", "minLength": 1 }
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
+
 /// The full published set: (file name, schema document).
 #[must_use]
 pub fn emit_all() -> Vec<(&'static str, Value)> {
@@ -2294,6 +2492,7 @@ pub fn emit_all() -> Vec<(&'static str, Value)> {
         ("transcript.schema.json", transcript_schema()),
         ("run-transcript.schema.json", run_transcript_schema()),
         ("bench-result.schema.json", bench_result_schema()),
+        ("bench-packs.schema.json", bench_packs_schema()),
     ]
 }
 

@@ -424,6 +424,35 @@ carries no relative index are named too, because nothing in that table is
 comparable across them. Each row also names the discipline its numbers came
 from.
 
+## bench-packs
+
+Write the embedded benchmark pack manifest.
+
+```bash
+veredictum bench-packs --out <OUT>
+```
+
+| Flag | Meaning |
+|---|---|
+| `--out <OUT>` | Output directory for `bench-packs.json`, created if missing. Required |
+
+A pack is versioned data compiled into the binary, so the binary is the only
+honest source for a description of one. This command writes that description:
+per pack the id, the version, the seed every arrival stream draws from, each
+phase with its load discipline and its counts, each measured phase's operation
+mix with the share and the probe rationale of every entry, each posture profile
+the pack defines with what it declares item by item, and each embedded fixture
+with its sha256 pin, its size and where the bytes came from. The document also
+carries the boundary statement, the methodology, how a relative index is
+derived, what the seed and the posture canaries govern, and the requirements a
+record meets before it may be ranked.
+
+Emission is byte-deterministic and every collection is ordered, so regenerating
+the file and diffing it is a build gate. The public page at
+[veredictum.eu/benchmark-methodology.html](https://veredictum.eu/benchmark-methodology.html)
+is generated from the committed copy of this document, and CI refuses a pack
+change that leaves either of them stale.
+
 ## stress-compare
 
 Render the cross-SUT stress overlay from two committed stress reports.

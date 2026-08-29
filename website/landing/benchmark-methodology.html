@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- GitHub Pages serves static files and sets no response headers, so the
+       policy travels as a <meta> element. A meta CSP is weaker than the header
+       by specification: `frame-ancestors`, `report-uri` and `sandbox` are
+       ignored in meta form (W3C CSP3 §3.3). It still blocks an injected
+       external script and an exfiltrating connection, which is the realistic
+       risk for a static page.
+       This page carries no <script> at all: every expansion is a <details>
+       element and the phase diagrams are inline SVG, neither of which needs
+       one. style-src keeps 'unsafe-inline' only because the shared stylesheet's
+       siblings use it; this page's own styles all live in style.css. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>Benchmark methodology — Veredictum</title>
+  <meta name="description" content="What each Veredictum benchmark pack creates, what it measures, and why. The population, the phases and their load discipline, every request in the mix with what it probes, and the pinned fixtures with their provenance. Generated from the packs the binary embeds.">
+  <link rel="canonical" href="https://veredictum.eu/benchmark-methodology.html">
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
+  <link rel="stylesheet" href="./style.css">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Benchmark methodology — Veredictum">
+  <meta property="og:description" content="What each openEHR benchmark pack creates, what it measures, and why — generated from the packs the instrument embeds.">
+  <meta property="og:url" content="https://veredictum.eu/benchmark-methodology.html">
+  <meta property="og:site_name" content="Veredictum">
+  <meta property="og:image" content="https://veredictum.eu/assets/veredictum-seal.svg">
+  <meta property="og:image:alt" content="The Veredictum conformance seal">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Benchmark methodology — Veredictum">
+  <meta name="twitter:description" content="What each openEHR benchmark pack creates, what it measures, and why.">
+  <meta name="twitter:image" content="https://veredictum.eu/assets/veredictum-seal.svg">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <img src="./assets/veredictum-icon.svg" alt="" aria-hidden="true">
+      <span>Veredictum</span>
+    </a>
+    <nav aria-label="Primary">
+      <a href="./docs/">Docs</a>
+      <a href="./benchmarks.html">Benchmarks</a>
+      <a href="./benchmark-methodology.html" aria-current="page">Methodology</a>
+      <a href="https://github.com/rubentalstra/Veredictum" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="board-intro">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Benchmark methodology</span>
+        <h1>What the benchmark actually creates, and what it actually measures</h1>
+        <p>The <a href="./benchmarks.html">benchmark board</a> ranks openEHR clinical data
+          repositories by speed. This page says what produced those numbers: the data each
+          benchmark pack creates, the requests it then issues, how long it issues them for,
+          and what each request is there to find out. It is written for someone who has
+          never run the tool.</p>
+        <p>Nothing below is typed by hand. A pack is versioned data compiled into the
+          <code>veredictum</code> binary, and the binary emits its own description as
+          <a href="./bench-packs.json">bench-packs.json</a>, which this page is rendered
+          from. A change to a pack that left this page saying something else would fail the
+          build.</p>
+      </div>
+      <div class="boundary">
+        <p><b>A bench number is not a conformance verdict.</b> This is a benchmark record for comparative speed. It is not a conformance record, not a certificate, and not a performance-class rating; a bench result may motivate a class run, never substitute for one. Conformance is a separate record, produced by a
+          different part of the same tool: it drives a catalogue of spec-cited cases and
+          judges each answer against the released openEHR specifications. Speed says nothing
+          about whether a server is correct, and nothing on this page claims otherwise.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="how-a-run-works">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">How a run works</span>
+        <h2>Seed once, measure several times</h2>
+        <p>Every pack follows the same shape, and each term below means the same thing
+          further down this page, on the board, and inside every published record.</p>
+      </div>
+      <div class="prose">
+        <p><b>What gets created.</b> A run starts by uploading the pack&#39;s operational
+          template, creating EHRs, and committing compositions into them, all through the
+          same public REST API a real client would use. The tool reaches no database and
+          reads no server-internal state. The population that load leaves behind is what
+          every measured request then addresses, so two runs of the same pack measure work
+          against the same amount of data.</p>
+        <p><b>Closed-loop.</b> The next request goes out once the previous one has come
+          back. A slow server therefore receives fewer requests, which is why a closed-loop
+          phase reports throughput and a whole-loop average rather than percentiles. It is
+          the discipline a single-client harness uses, and it is how the bulk load and the
+          read walk are reported.</p>
+        <p><b>Open-loop.</b> Arrivals fire at instants planned before the phase starts, at a
+          rate the pack version pins, whether or not earlier requests have answered. Every
+          latency is measured from the planned instant rather than from the moment the
+          request went out, so a server that stalls for a second charges that second to
+          every arrival that was due during it. This is where the percentiles come from, and
+          it is what stops a stall from hiding behind a lower request count.</p>
+        <p><b>Warmup.</b> The first seconds of an open-loop phase are dispatched and then
+          thrown away. A cold cache and a just-started process describe the first minute of
+          a deployment rather than the deployment, so those arrivals are made and their
+          latencies are discarded. Each pack below states how long its warmup is and how
+          many arrivals it costs.</p>
+        <p><b>The seed.</b> Every pack declares one seed, and every draw a run makes derives from it: which operation each arrival offers, which EHR or composition it addresses, and the query parameters a measured AQL class substitutes. Two runs of the same pack version at the same scale therefore offer the same work in the same order, on any machine and against any system, which is what makes two records comparable at all. The seed is a property of the pack rather than of the run, so it is not an operator input and no command-line flag moves it.</p>
+        <p><b>The posture.</b> Two speed numbers are comparable only when the same features were switched on behind them, so every pack defines named posture profiles and a run declares exactly one with --posture. The record then carries one line per disclosed item, and each line is labelled verified or declared-only: a black-box canary reads the item off the running system before and after the measured window, and where released ITS-REST surfaces nothing to read the declaration is carried as a claim and says so. A canary that contradicts the declaration, and a pair of brackets that disagree with each other, both refuse the whole run. Authentication and TLS are facts of the invocation rather than choices of the profile, so a profile leaves them to the run. Each pack
+          below lists the profiles it defines and what each one declares, and every record
+          names the profile its own run was measured under.</p>
+        <p><b>Repetitions.</b> The population is built once and the measured phases are then
+          repeated. Every figure a record publishes is the median across repetitions, with
+          the spread beside it, because one repetition measures a moment.</p>
+        <p><b>The relative index.</b> The relative index is the target&apos;s cross-repetition median divided by the baseline&apos;s cross-repetition median for the same phase, operation and metric, both measured on the same host in the same session. It is dimensionless. On a latency metric a value below 1.0 means the target answered faster than the baseline and above 1.0 slower; on throughput the sense inverts, because there a larger number is the faster system. A record
+          earns one by composing the pinned reference deployments on the same machine, in
+          the same session, and driving the same pack at the same seed against them. That is
+          the figure the board sorts on, because milliseconds taken on somebody else&#39;s
+          hardware cannot be compared with yours.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="packs">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">The packs</span>
+        <h2>3 packs, each pinned by version</h2>
+        <p>Two records are comparable when they name the same pack at the same version. A
+          change to any figure below is a change to the work, so it moves the version and
+          the older records stop being comparable with the newer ones.</p>
+      </div>
+      <article class="pack" id="pack-aql-mix">
+        <div class="pack-head">
+          <h3><code>aql-mix</code> <span class="pack-version">version 1.0.0</span></h3>
+          <p class="pack-meta">seed <code>4706627057783240704</code> · 2 phases · drive it with <code>--pack aql-mix</code></p>
+        </div>
+        <svg class="timeline" viewBox="0 0 640 118" role="img" aria-label="The phases of the aql-mix pack, in execution order" xmlns="http://www.w3.org/2000/svg">
+          <text class="tl-name" x="0" y="29">seed</text>
+          <rect class="tl-closed" x="168" y="16" width="412" height="18"/>
+          <text class="tl-note" x="168" y="47">closed-loop, runs until it is finished</text>
+          <text class="tl-name" x="0" y="75">queries</text>
+          <rect class="tl-warm" x="168" y="62" width="90" height="18"/>
+          <rect class="tl-meas" x="258" y="62" width="362" height="18"/>
+          <text class="tl-note" x="168" y="93">warmup 15s, discarded · measured 60s at 24 arrivals/s</text>
+        </svg>
+        <div class="phase">
+          <p>The <b>seed</b> phase builds the population. It creates 50 EHRs through the public API and commits the same composition 20 times into each, on 8 workers, leaving 1,000 compositions behind. Every later phase reads and writes against exactly that population. The phase is closed-loop: the next request goes out once the previous one has answered, so it reports bulk-load throughput and never a latency claim.</p>
+        </div>
+        <div class="phase">
+          <p>The <b>queries</b> phase offers arrivals on a fixed schedule: 24 a second for 60 seconds, after a 15-second warmup whose 360 arrivals are dispatched and then discarded. 1,440 arrivals are measured. They fire at their planned instants whether or not an earlier request has come back, and every latency is measured from the planned instant, so a server that stalls shows the stall in its percentiles instead of quietly receiving fewer requests.</p>
+          <div class="table-scroll">
+            <table>
+              <caption>What the <b>queries</b> phase offers, and why each one is in the mix</caption>
+              <thead><tr><th scope="col">Operation</th><th scope="col">Request</th><th scope="col">Share</th><th scope="col">Offered</th><th scope="col">What it probes</th></tr></thead>
+              <tbody>
+                <tr><td><code>adhoc_query_point_lookup</code></td><td><code>POST /query/aql</code></td><td>1</td><td>4/s</td><td>the indexed-read floor: one composition addressed by its own uid inside one EHR, the cheapest query a server can answer</td></tr>
+                <tr><td><code>adhoc_query_ehr_scan</code></td><td><code>POST /query/aql</code></td><td>1</td><td>4/s</td><td>the loaded-database shape: every composition in one EHR projected by uid, so the cost follows how much that EHR holds</td></tr>
+                <tr><td><code>adhoc_query_filtered</code></td><td><code>POST /query/aql</code></td><td>1</td><td>4/s</td><td>the value index: a systolic magnitude threshold over the observation leaves of one EHR, with the threshold drawn per arrival so no result set can be memoized</td></tr>
+                <tr><td><code>adhoc_query_population</code></td><td><code>POST /query/aql</code></td><td>1</td><td>4/s</td><td>the cross-EHR planner: the same magnitude threshold with no EHR scope and a fetch bound, so the server picks an access path over the whole population</td></tr>
+                <tr><td><code>adhoc_query_aggregate</code></td><td><code>POST /query/aql</code></td><td>1</td><td>4/s</td><td>the columnar shape: one COUNT over the population that threshold matches, which returns a single row and reads every value behind it</td></tr>
+                <tr><td><code>adhoc_query_ordered_page</code></td><td><code>POST /query/aql</code></td><td>1</td><td>4/s</td><td>sorting and pagination: an ORDER BY over composition start time read through a moving fetch window, the shape a paged user interface issues</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="phase">
+          <p>A run against this pack declares one <b>posture profile</b>, which says what
+            was switched on behind the numbers. <code>minimal</code> is what a run takes when it names none.</p>
+          <div class="table-scroll">
+            <table>
+              <caption>The posture profiles <code>aql-mix</code> defines, and what each one declares</caption>
+              <thead><tr><th scope="col">Profile</th><th scope="col">What it switches on</th><th scope="col">Declares</th></tr></thead>
+              <tbody>
+                <tr><td><code>minimal</code> <span class="tier tier-self">default</span></td><td>The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> none</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <details class="pack-detail">
+          <summary>The bytes it offers, and where they came from</summary>
+          <div class="fixture">
+            <p class="fixture-head"><code>vital_signs.opt</code> · operational template · 217.9 KiB · <code>application/xml</code></p>
+            <p>The openEHR Clinical Knowledge Manager&apos;s own Operational Template export for template id &apos;Vital signs&apos; (CKM cid 1013.26.380, &lt;https://ckm.openehr.org/ckm&gt;), vendored byte-identically and rooted at openEHR-EHR-COMPOSITION.encounter.v1.</p>
+            <p class="fixture-pin">sha256 <code>3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128</code></p>
+          </div>
+          <div class="fixture">
+            <p class="fixture-head"><code>vital_signs_composition.json</code> · composition · 22.1 KiB · <code>application/json</code></p>
+            <p>The composition attached to post 8 of the openEHR community&apos;s vital-signs benchmark thread (&lt;https://discourse.openehr.org/t/17224&gt;), vendored byte-identically: eight OBSERVATION entries under openEHR-EHR-COMPOSITION.encounter.v1, rm_version 1.0.2, declaring template id &apos;Vital signs&apos;.</p>
+            <p class="fixture-pin">sha256 <code>468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947</code></p>
+          </div>
+          <div class="fixture">
+            <p class="fixture-head"><code>vital_signs_composition.missing_composer.json</code> · invalid composition · 21.8 KiB · <code>application/json</code></p>
+            <p>Derived in this repository from vital_signs_composition.json by deleting the mandatory COMPOSITION.composer member and nothing else, so a server that validates a commit against the reference model refuses it.</p>
+            <p class="fixture-pin">sha256 <code>f0598db5ab447b371ead28cba0f841f72370dbbf93db98d5b8e477910a42688d</code></p>
+          </div>
+          <p class="pack-note">Each digest is verified when the pack loads, so a run
+            refuses to start if a single byte of any fixture has moved. Two records that
+            name the same pack version therefore offered the same bytes to both systems.
+            A fixture marked <b>invalid composition</b> is never committed by a phase and
+            never enters the measured population: the commit-validation canary offers it
+            once before and once after the measured window, to see whether the server
+            refuses it as the declared posture says it should.</p>
+        </details>
+        <details class="pack-detail">
+          <summary>The pack&#39;s own description, as every record carries it</summary>
+          <p class="pack-verbatim">Measures AQL query speed over the same Vital signs population the community-vitals pack seeds, so a query figure and a read figure describe the same corpus. The seed phase creates 50 EHRs and commits the same composition 20 times into each, on a pool of 8 workers. This pack version pins that population, and it is sized for query shapes: large enough that a query has to choose an access path, small enough to load before a measured window opens. The measured phase is open-loop at 24 arrivals a second for 60s after a 15s warmup, over six query classes at equal share, so each class is offered at 4 arrivals a second and every class returns the same number of samples. Each class posts one AQL statement to /query/aql, accepts only 200, and counts every other answer in its own error class, so a server that refuses one shape never contaminates another class&apos;s percentiles. Every query parameter draws from the run&apos;s seeded streams: the systolic threshold, the page offset, and the EHR or composition each arrival addresses, so no arrival repeats the previous one&apos;s result set and the whole draw is reproducible from the seed the record discloses. The six classes: adhoc_query_point_lookup probes the indexed-read floor: one composition addressed by its own uid inside one EHR, the cheapest query a server can answer; adhoc_query_ehr_scan probes the loaded-database shape: every composition in one EHR projected by uid, so the cost follows how much that EHR holds; adhoc_query_filtered probes the value index: a systolic magnitude threshold over the observation leaves of one EHR, with the threshold drawn per arrival so no result set can be memoized; adhoc_query_population probes the cross-EHR planner: the same magnitude threshold with no EHR scope and a fetch bound, so the server picks an access path over the whole population; adhoc_query_aggregate probes the columnar shape: one COUNT over the population that threshold matches, which returns a single row and reads every value behind it; adhoc_query_ordered_page probes sorting and pagination: an ORDER BY over composition start time read through a moving fetch window, the shape a paged user interface issues. Fixture provenance: the operational template is the vendored CKM export for template id &apos;Vital signs&apos; (CKM cid 1013.26.380) and the composition is the attachment on post 8 of &lt;https://discourse.openehr.org/t/17224&gt;, both byte-identical and pinned by sha256.</p>
+        </details>
+      </article>
+      <article class="pack" id="pack-community-vitals">
+        <div class="pack-head">
+          <h3><code>community-vitals</code> <span class="pack-version">version 1.0.0</span></h3>
+          <p class="pack-meta">seed <code>4859222839474415988</code> · 3 phases · drive it with <code>--pack community-vitals</code></p>
+        </div>
+        <svg class="timeline" viewBox="0 0 640 164" role="img" aria-label="The phases of the community-vitals pack, in execution order" xmlns="http://www.w3.org/2000/svg">
+          <text class="tl-name" x="0" y="29">write</text>
+          <rect class="tl-closed" x="168" y="16" width="412" height="18"/>
+          <text class="tl-note" x="168" y="47">closed-loop, runs until it is finished</text>
+          <text class="tl-name" x="0" y="75">read_walk</text>
+          <rect class="tl-closed" x="168" y="62" width="412" height="18"/>
+          <text class="tl-note" x="168" y="93">closed-loop, runs until it is finished</text>
+          <text class="tl-name" x="0" y="121">read_open_loop</text>
+          <rect class="tl-warm" x="168" y="108" width="90" height="18"/>
+          <rect class="tl-meas" x="258" y="108" width="362" height="18"/>
+          <text class="tl-note" x="168" y="139">warmup 15s, discarded · measured 60s at 200 arrivals/s</text>
+        </svg>
+        <div class="phase">
+          <p>The <b>write</b> phase builds the population. It creates 100 EHRs through the public API and commits the same composition 1,000 times into each, on 1 worker, leaving 100,000 compositions behind. Every later phase reads and writes against exactly that population. The phase is closed-loop: the next request goes out once the previous one has answered, so it reports bulk-load throughput and never a latency claim.</p>
+        </div>
+        <div class="phase">
+          <p>The <b>read_walk</b> phase walks the whole population in order, issuing 7 reads against every committed composition on 1 worker. That is what a single-client harness does, and it is closed-loop by construction, so the figure it reports is the whole-loop average per request. It is the number that compares with a published harness figure, and it is not a percentile.</p>
+          <div class="table-scroll">
+            <table>
+              <caption>The 7 reads the <b>read_walk</b> phase issues against every composition, in this order</caption>
+              <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Request</th></tr></thead>
+              <tbody>
+                <tr><td>1</td><td><code>get_composition_latest</code></td><td><code>GET /ehr/{ehr_id}/composition/{uid}</code></td></tr>
+                <tr><td>2</td><td><code>get_composition_at_time</code></td><td><code>GET /ehr/{ehr_id}/composition/{uid}?version_at_time={at_time}</code></td></tr>
+                <tr><td>3</td><td><code>get_versioned_composition</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}</code></td></tr>
+                <tr><td>4</td><td><code>get_versioned_composition_version_latest</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version</code></td></tr>
+                <tr><td>5</td><td><code>get_versioned_composition_version_at_time</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version?version_at_time={at_time}</code></td></tr>
+                <tr><td>6</td><td><code>get_versioned_composition_version_by_id</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version/{version_uid}</code></td></tr>
+                <tr><td>7</td><td><code>get_versioned_composition_revision_history</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/revision_history</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="phase">
+          <p>The <b>read_open_loop</b> phase offers arrivals on a fixed schedule: 200 a second for 60 seconds, after a 15-second warmup whose 3,000 arrivals are dispatched and then discarded. 12,000 arrivals are measured. They fire at their planned instants whether or not an earlier request has come back, and every latency is measured from the planned instant, so a server that stalls shows the stall in its percentiles instead of quietly receiving fewer requests.</p>
+          <div class="table-scroll">
+            <table>
+              <caption>What the <b>read_open_loop</b> phase offers, and why each one is in the mix</caption>
+              <thead><tr><th scope="col">Operation</th><th scope="col">Request</th><th scope="col">Share</th><th scope="col">Offered</th><th scope="col">What it probes</th></tr></thead>
+              <tbody>
+                <tr><td><code>get_composition_latest</code></td><td><code>GET /ehr/{ehr_id}/composition/{uid}</code></td><td>1</td><td>28.57/s</td><td>the harness&apos;s latest-version composition read, the read a client issues most</td></tr>
+                <tr><td><code>get_composition_at_time</code></td><td><code>GET /ehr/{ehr_id}/composition/{uid}?version_at_time={at_time}</code></td><td>1</td><td>28.57/s</td><td>the harness&apos;s composition read at an instant, which resolves a version by time</td></tr>
+                <tr><td><code>get_versioned_composition</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}</code></td><td>1</td><td>28.57/s</td><td>the harness&apos;s read of the VERSIONED_COMPOSITION container itself</td></tr>
+                <tr><td><code>get_versioned_composition_version_latest</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version</code></td><td>1</td><td>28.57/s</td><td>the harness&apos;s latest-version read through the versioned object</td></tr>
+                <tr><td><code>get_versioned_composition_version_at_time</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version?version_at_time={at_time}</code></td><td>1</td><td>28.57/s</td><td>the harness&apos;s version-at-an-instant read through the versioned object</td></tr>
+                <tr><td><code>get_versioned_composition_version_by_id</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version/{version_uid}</code></td><td>1</td><td>28.57/s</td><td>the harness&apos;s read of one version by its own identifier</td></tr>
+                <tr><td><code>get_versioned_composition_revision_history</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/revision_history</code></td><td>1</td><td>28.57/s</td><td>the harness&apos;s revision-history read, which walks every version of the object</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="phase">
+          <p>A run against this pack declares one <b>posture profile</b>, which says what
+            was switched on behind the numbers. <code>minimal</code> is what a run takes when it names none.</p>
+          <div class="table-scroll">
+            <table>
+              <caption>The posture profiles <code>community-vitals</code> defines, and what each one declares</caption>
+              <thead><tr><th scope="col">Profile</th><th scope="col">What it switches on</th><th scope="col">Declares</th></tr></thead>
+              <tbody>
+                <tr><td><code>minimal</code> <span class="tier tier-self">default</span></td><td>The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> none</td></tr>
+                <tr><td><code>clinical-default</code></td><td>A clinical deployment&apos;s usual configuration: an audit trail written to the deployment&apos;s own store, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> internal<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> none</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <details class="pack-detail">
+          <summary>The bytes it offers, and where they came from</summary>
+          <div class="fixture">
+            <p class="fixture-head"><code>vital_signs.opt</code> · operational template · 217.9 KiB · <code>application/xml</code></p>
+            <p>The openEHR Clinical Knowledge Manager&apos;s own Operational Template export for template id &apos;Vital signs&apos; (CKM cid 1013.26.380, &lt;https://ckm.openehr.org/ckm&gt;), vendored byte-identically and rooted at openEHR-EHR-COMPOSITION.encounter.v1.</p>
+            <p class="fixture-pin">sha256 <code>3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128</code></p>
+          </div>
+          <div class="fixture">
+            <p class="fixture-head"><code>vital_signs_composition.json</code> · composition · 22.1 KiB · <code>application/json</code></p>
+            <p>The composition attached to post 8 of the openEHR community&apos;s vital-signs benchmark thread (&lt;https://discourse.openehr.org/t/17224&gt;), vendored byte-identically: eight OBSERVATION entries under openEHR-EHR-COMPOSITION.encounter.v1, rm_version 1.0.2, declaring template id &apos;Vital signs&apos;.</p>
+            <p class="fixture-pin">sha256 <code>468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947</code></p>
+          </div>
+          <div class="fixture">
+            <p class="fixture-head"><code>vital_signs_composition.missing_composer.json</code> · invalid composition · 21.8 KiB · <code>application/json</code></p>
+            <p>Derived in this repository from vital_signs_composition.json by deleting the mandatory COMPOSITION.composer member and nothing else, so a server that validates a commit against the reference model refuses it.</p>
+            <p class="fixture-pin">sha256 <code>f0598db5ab447b371ead28cba0f841f72370dbbf93db98d5b8e477910a42688d</code></p>
+          </div>
+          <p class="pack-note">Each digest is verified when the pack loads, so a run
+            refuses to start if a single byte of any fixture has moved. Two records that
+            name the same pack version therefore offered the same bytes to both systems.
+            A fixture marked <b>invalid composition</b> is never committed by a phase and
+            never enters the measured population: the commit-validation canary offers it
+            once before and once after the measured window, to see whether the server
+            refuses it as the declared posture says it should.</p>
+        </details>
+        <details class="pack-detail">
+          <summary>The pack&#39;s own description, as every record carries it</summary>
+          <p class="pack-verbatim">Reproduces the openEHR community&apos;s vital-signs benchmark harness (&lt;https://discourse.openehr.org/t/17224&gt;) and measures the same work a second way. The write phase creates 100 EHRs and commits the same Vital signs composition 1,000 times into each with Prefer: return=identifier, on one worker, and reports bulk-load throughput plus the whole-loop milliseconds-per-composition average the thread quotes, labelled closed-loop. The read phase then runs twice: read_walk is the sequential walk over every committed composition, seven GETs each (latest, version_at_time, the VERSIONED_COMPOSITION, its latest version, its version at that instant, one version by id, and the revision history), reporting the whole-loop microseconds-per-request average, labelled closed-loop; read_open_loop offers the same seven reads as an arrival schedule pinned at 200/s for 60s after a 15s warmup, which is where the coordinated-omission-free percentiles come from. The pinned rate is part of this pack version: changing it changes the work and bumps the version. Every version_at_time read addresses one instant captured after the write phase finished, which every seeded version predates, so it selects the same versions the harness&apos;s own start-of-run instant selects. Fixture provenance: the operational template is the vendored CKM export for template id &apos;Vital signs&apos; (CKM cid 1013.26.380), byte-identical; the composition is the attachment on post 8 of that thread, byte-identical. Both are pinned by sha256 and verified at load.</p>
+        </details>
+      </article>
+      <article class="pack" id="pack-smoke">
+        <div class="pack-head">
+          <h3><code>smoke</code> <span class="pack-version">version 1.0.0</span></h3>
+          <p class="pack-meta">seed <code>6216465318106710868</code> · 2 phases · drive it with <code>--pack smoke</code></p>
+        </div>
+        <svg class="timeline" viewBox="0 0 640 118" role="img" aria-label="The phases of the smoke pack, in execution order" xmlns="http://www.w3.org/2000/svg">
+          <text class="tl-name" x="0" y="29">seed</text>
+          <rect class="tl-closed" x="168" y="16" width="412" height="18"/>
+          <text class="tl-note" x="168" y="47">closed-loop, runs until it is finished</text>
+          <text class="tl-name" x="0" y="75">mixed</text>
+          <rect class="tl-warm" x="168" y="62" width="64" height="18"/>
+          <rect class="tl-meas" x="232" y="62" width="388" height="18"/>
+          <text class="tl-note" x="168" y="93">warmup 10s, discarded · measured 60s at 50 arrivals/s</text>
+        </svg>
+        <div class="phase">
+          <p>The <b>seed</b> phase builds the population. It creates 200 EHRs through the public API and commits the same composition 5 times into each, on 8 workers, leaving 1,000 compositions behind. Every later phase reads and writes against exactly that population. The phase is closed-loop: the next request goes out once the previous one has answered, so it reports bulk-load throughput and never a latency claim.</p>
+        </div>
+        <div class="phase">
+          <p>The <b>mixed</b> phase offers arrivals on a fixed schedule: 50 a second for 60 seconds, after a 10-second warmup whose 500 arrivals are dispatched and then discarded. 3,000 arrivals are measured. They fire at their planned instants whether or not an earlier request has come back, and every latency is measured from the planned instant, so a server that stalls shows the stall in its percentiles instead of quietly receiving fewer requests.</p>
+          <div class="table-scroll">
+            <table>
+              <caption>What the <b>mixed</b> phase offers, and why each one is in the mix</caption>
+              <thead><tr><th scope="col">Operation</th><th scope="col">Request</th><th scope="col">Share</th><th scope="col">Offered</th><th scope="col">What it probes</th></tr></thead>
+              <tbody>
+                <tr><td><code>create_composition</code></td><td><code>POST /ehr/{ehr_id}/composition</code></td><td>20</td><td>10/s</td><td>the commit path, measured while reads compete with it</td></tr>
+                <tr><td><code>get_composition_latest</code></td><td><code>GET /ehr/{ehr_id}/composition/{uid}</code></td><td>30</td><td>15/s</td><td>the latest-version composition read</td></tr>
+                <tr><td><code>get_ehr</code></td><td><code>GET /ehr/{ehr_id}</code></td><td>20</td><td>10/s</td><td>the EHR resource read, the cheapest addressed read the API offers</td></tr>
+                <tr><td><code>get_ehr_status</code></td><td><code>GET /ehr/{ehr_id}/ehr_status</code></td><td>15</td><td>7.5/s</td><td>the status read, which reaches a second versioned object in the same EHR</td></tr>
+                <tr><td><code>adhoc_query_uid</code></td><td><code>POST /query/aql</code></td><td>15</td><td>7.5/s</td><td>an EHR-scoped projection, so the query path is exercised beside the direct reads</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="phase">
+          <p>A run against this pack declares one <b>posture profile</b>, which says what
+            was switched on behind the numbers. <code>minimal</code> is what a run takes when it names none.</p>
+          <div class="table-scroll">
+            <table>
+              <caption>The posture profiles <code>smoke</code> defines, and what each one declares</caption>
+              <thead><tr><th scope="col">Profile</th><th scope="col">What it switches on</th><th scope="col">Declares</th></tr></thead>
+              <tbody>
+                <tr><td><code>minimal</code> <span class="tier tier-self">default</span></td><td>The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> none</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <details class="pack-detail">
+          <summary>The bytes it offers, and where they came from</summary>
+          <div class="fixture">
+            <p class="fixture-head"><code>blood_pressure.opt</code> · operational template · 10.2 KiB · <code>application/xml</code></p>
+            <p>Authored in this repository for the smoke pack: an ADL 1.4 operational template with template id &apos;cnf.blood_pressure&apos;, rooted at openEHR-EHR-COMPOSITION.minimal.v1 and constraining openEHR-EHR-OBSERVATION.blood_pressure.v2. It exists to give the smoke pack a small upload, and it is not derived from any published library.</p>
+            <p class="fixture-pin">sha256 <code>97549fb2ab7ca36b9baa1cc86e857ef82924927a42140dfd3fd09a05dd83d006</code></p>
+          </div>
+          <div class="fixture">
+            <p class="fixture-head"><code>bp_composition.json</code> · composition · 3.4 KiB · <code>application/json</code></p>
+            <p>Authored in this repository for the smoke pack: a canonical-JSON COMPOSITION declaring template id &apos;cnf.blood_pressure&apos;, carrying one POINT_EVENT with a systolic and a diastolic DV_QUANTITY in mm[Hg].</p>
+            <p class="fixture-pin">sha256 <code>9eaea10c5171d1f4648c8e932a21ce624312a2cad98f49115f35efbbb344a3ce</code></p>
+          </div>
+          <div class="fixture">
+            <p class="fixture-head"><code>bp_composition.missing_composer.json</code> · invalid composition · 3.4 KiB · <code>application/json</code></p>
+            <p>Derived in this repository from bp_composition.json by deleting the mandatory COMPOSITION.composer member and nothing else, so a server that validates a commit against the reference model refuses it.</p>
+            <p class="fixture-pin">sha256 <code>602039bed3f3daf060152af6034baf6d7ce74fde6ec77e8ff1cc89eda2b3e0b3</code></p>
+          </div>
+          <p class="pack-note">Each digest is verified when the pack loads, so a run
+            refuses to start if a single byte of any fixture has moved. Two records that
+            name the same pack version therefore offered the same bytes to both systems.
+            A fixture marked <b>invalid composition</b> is never committed by a phase and
+            never enters the measured population: the commit-validation canary offers it
+            once before and once after the measured window, to see whether the server
+            refuses it as the declared posture says it should.</p>
+        </details>
+        <details class="pack-detail">
+          <summary>The pack&#39;s own description, as every record carries it</summary>
+          <p class="pack-verbatim">One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface.</p>
+        </details>
+      </article>
+    </div>
+  </section>
+
+  <section id="vocabulary">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">The operation vocabulary</span>
+        <h2>Every request a pack is allowed to offer</h2>
+        <p>A pack may only offer an operation from this closed list. A token outside it is
+          refused when the pack loads, so a typo can never quietly become a different
+          measurement.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th scope="col">Token</th><th scope="col">Request</th></tr></thead>
+          <tbody>
+            <tr><td><code>adhoc_query_aggregate</code></td><td><code>POST /query/aql</code></td></tr>
+            <tr><td><code>adhoc_query_ehr_scan</code></td><td><code>POST /query/aql</code></td></tr>
+            <tr><td><code>adhoc_query_filtered</code></td><td><code>POST /query/aql</code></td></tr>
+            <tr><td><code>adhoc_query_ordered_page</code></td><td><code>POST /query/aql</code></td></tr>
+            <tr><td><code>adhoc_query_point_lookup</code></td><td><code>POST /query/aql</code></td></tr>
+            <tr><td><code>adhoc_query_population</code></td><td><code>POST /query/aql</code></td></tr>
+            <tr><td><code>adhoc_query_uid</code></td><td><code>POST /query/aql</code></td></tr>
+            <tr><td><code>create_composition</code></td><td><code>POST /ehr/{ehr_id}/composition</code></td></tr>
+            <tr><td><code>get_composition_at_time</code></td><td><code>GET /ehr/{ehr_id}/composition/{uid}?version_at_time={at_time}</code></td></tr>
+            <tr><td><code>get_composition_latest</code></td><td><code>GET /ehr/{ehr_id}/composition/{uid}</code></td></tr>
+            <tr><td><code>get_ehr</code></td><td><code>GET /ehr/{ehr_id}</code></td></tr>
+            <tr><td><code>get_ehr_status</code></td><td><code>GET /ehr/{ehr_id}/ehr_status</code></td></tr>
+            <tr><td><code>get_versioned_composition</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}</code></td></tr>
+            <tr><td><code>get_versioned_composition_revision_history</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/revision_history</code></td></tr>
+            <tr><td><code>get_versioned_composition_version_at_time</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version?version_at_time={at_time}</code></td></tr>
+            <tr><td><code>get_versioned_composition_version_by_id</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version/{version_uid}</code></td></tr>
+            <tr><td><code>get_versioned_composition_version_latest</code></td><td><code>GET /ehr/{ehr_id}/versioned_composition/{uid}/version</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="after-code">A path shown with <code>{ehr_id}</code>, <code>{uid}</code>,
+        <code>{version_uid}</code> or <code>{at_time}</code> has that value substituted per
+        arrival from the seeded draw. The tool builds every request it sends from exactly
+        these templates.</p>
+    </div>
+  </section>
+
+  <section class="quickstart" id="submitting">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Getting on the board</span>
+        <h2>What a record has to carry before it can be ranked</h2>
+        <p>A run against your own deployment is useful on its own. Ranking one against other
+          people&#39;s records asks for more, and a record that misses any of it stays valid for
+          local work while naming what it is missing.</p>
+      </div>
+      <div class="prose">
+        <ul>
+          <li><b>repetitions:</b> at least 3 repetitions, because one repetition measures a moment rather than a system</li>
+          <li><b>baseline:</b> at least one same-machine baseline, because an absolute number without an anchor describes the machine as much as the system</li>
+        </ul>
+        <p>Both are decided by the tool from the record itself, and CI checks them again
+          before a maintainer reads the numbers. The full procedure, including the file
+          naming and the append-only rule over merged records, is in
+          <a href="https://github.com/rubentalstra/Veredictum/blob/main/benchmarks/SUBMITTING.md">the submission guide</a>.</p>
+        <p>A record for the <a href="./benchmarks.html">board</a> comes out of one command,
+          driving one of the pack versions on this page.</p>
+      </div>
+      <figure class="code">
+        <figcaption>One command, one record</figcaption>
+        <pre><code><span class="cmt"># The credential is read from the environment; it never rides argv.</span>
+<span class="p">$</span> export VEREDICTUM_BENCH_PASSWORD=…
+<span class="p">$</span> veredictum bench --base-url https://cdr.example/openehr/v1 \
+      --auth basic --user &lt;user&gt; \
+      --pack community-vitals --repetitions 3 --with-baselines \
+      --out ./bench --label &quot;Your CDR 1.2.3&quot;</code></pre>
+      </figure>
+      <p class="after-code">To read this page as data instead, the manifest it was
+        generated from is <a href="./bench-packs.json">bench-packs.json</a>, and
+        <code>veredictum bench-packs --out DIR</code> writes the same document from any
+        build.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="wordmark" href="./">
+      <img src="./assets/veredictum-icon.svg" alt="" aria-hidden="true">
+      <span>Veredictum</span>
+    </a>
+    <p>This page is generated from <a href="./bench-packs.json">bench-packs.json</a>, which
+      the <code>veredictum</code> binary emits from the packs it embeds. Nothing on it is
+      typed by hand, and a pack change that left it stale fails the build.</p>
+    <div class="fine">
+      <p>openEHR® is the registered trademark of the openEHR Foundation.
+        Veredictum is an independent, community-driven conformance instrument:
+        it names openEHR descriptively, to say what is being tested, and it is
+        not an official openEHR Foundation product, not the Foundation's CNF
+        program, and not endorsed by or affiliated with the Foundation.</p>
+      <p>© Veredictum contributors.</p>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

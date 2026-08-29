@@ -40,17 +40,25 @@ mkdir -p "$OUT"
 log "benchmark board (committed page vs the committed records)"
 bash "$ROOT/scripts/render/bench-board.sh" --check
 
-# 3. The landing page at the site root. Its HTML uses relative URLs only, so
+# 3. The benchmark legend, the same shape one level further back: the page is
+#    generated from `website/landing/bench-packs.json`, which the binary emits
+#    from the packs it embeds. This check holds the page to that document; the
+#    Rust integration suite holds the document to the packs, which is why no
+#    Rust toolchain is needed here.
+log "benchmark legend (committed page vs the emitted pack manifest)"
+bash "$ROOT/scripts/render/bench-legend.sh" --check
+
+# 4. The landing page at the site root. Its HTML uses relative URLs only, so
 #    there is no base-path rewriting to do.
 log "landing -> $OUT"
 cp -R "$ROOT/website/landing/." "$OUT/"
 
-# 4. The book at /docs/.
+# 5. The book at /docs/.
 log "book -> $OUT/docs  (site-url ${SITE_BASE}/docs/)"
 MDBOOK_OUTPUT__HTML__SITE_URL="${SITE_BASE}/docs/" \
   mdbook build "$ROOT/website/book" -d "$OUT/docs" >/dev/null
 
-# 5. CNAME. GitHub Pages reads this file out of the DEPLOYED ARTIFACT, so the
+# 6. CNAME. GitHub Pages reads this file out of the DEPLOYED ARTIFACT, so the
 #    custom domain has to be written by the build; a CNAME that exists only in
 #    the repository is never seen by a workflow deployment.
 if [[ -n "$SITE_BASE" ]]; then
@@ -60,7 +68,7 @@ else
   printf '%s\n' "$SITE_DOMAIN" > "$OUT/CNAME"
 fi
 
-# 6. sitemap.xml — the landing page, the benchmark board, and every built book
+# 7. sitemap.xml — the landing page, the two benchmark pages, and every built book
 #    page.
 log "sitemap.xml"
 {
@@ -69,6 +77,7 @@ log "sitemap.xml"
   host="${SITE_ORIGIN}${SITE_BASE}"
   echo "  <url><loc>${host}/</loc></url>"
   echo "  <url><loc>${host}/benchmarks.html</loc></url>"
+  echo "  <url><loc>${host}/benchmark-methodology.html</loc></url>"
   # print.html is the book's single-page render of pages already listed, and
   # 404.html is not a destination; both stay out of the sitemap.
   find "$OUT/docs" -name '*.html' \

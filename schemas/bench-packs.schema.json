@@ -1,0 +1,469 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:openehr:cnf:schema:bench-packs:0.1.0",
+  "title": "Veredictum benchmark pack manifest",
+  "description": "Every benchmark pack this binary embeds: the phases with their load discipline, the operation mix with what each entry probes, the pinned fixtures with their provenance, the seed the arrival streams draw from, and the requirements a record meets before it may be ranked. Emitted by `veredictum bench-packs`, and the only source a published description of a pack may be generated from.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "boundary_statement",
+    "methodology",
+    "relative_index",
+    "seed_disclosure",
+    "posture_disclosure",
+    "submission_requirements",
+    "operations",
+    "packs"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "boundary_statement": {
+      "const": "This is a benchmark record for comparative speed. It is not a conformance record, not a certificate, and not a performance-class rating; a bench result may motivate a class run, never substitute for one."
+    },
+    "methodology": {
+      "const": "Seed once, measure N times. Measured phases are open-loop: arrivals fire at their planned instants regardless of any other request's completion, and every latency is measured from the planned arrival instant, so coordinated omission cannot hide a stall. Seed phases are closed-loop by construction and are reported as bulk-load throughput only."
+    },
+    "relative_index": {
+      "const": "The relative index is the target's cross-repetition median divided by the baseline's cross-repetition median for the same phase, operation and metric, both measured on the same host in the same session. It is dimensionless. On a latency metric a value below 1.0 means the target answered faster than the baseline and above 1.0 slower; on throughput the sense inverts, because there a larger number is the faster system."
+    },
+    "seed_disclosure": {
+      "const": "Every pack declares one seed, and every draw a run makes derives from it: which operation each arrival offers, which EHR or composition it addresses, and the query parameters a measured AQL class substitutes. Two runs of the same pack version at the same scale therefore offer the same work in the same order, on any machine and against any system, which is what makes two records comparable at all. The seed is a property of the pack rather than of the run, so it is not an operator input and no command-line flag moves it."
+    },
+    "posture_disclosure": {
+      "const": "Two speed numbers are comparable only when the same features were switched on behind them, so every pack defines named posture profiles and a run declares exactly one with --posture. The record then carries one line per disclosed item, and each line is labelled verified or declared-only: a black-box canary reads the item off the running system before and after the measured window, and where released ITS-REST surfaces nothing to read the declaration is carried as a claim and says so. A canary that contradicts the declaration, and a pair of brackets that disagree with each other, both refuse the whole run. Authentication and TLS are facts of the invocation rather than choices of the profile, so a profile leaves them to the run."
+    },
+    "submission_requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "token",
+          "statement"
+        ],
+        "properties": {
+          "token": {
+            "enum": [
+              "repetitions",
+              "baseline"
+            ]
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "token",
+          "wire"
+        ],
+        "properties": {
+          "token": {
+            "enum": [
+              "adhoc_query_aggregate",
+              "adhoc_query_ehr_scan",
+              "adhoc_query_filtered",
+              "adhoc_query_ordered_page",
+              "adhoc_query_point_lookup",
+              "adhoc_query_population",
+              "adhoc_query_uid",
+              "create_composition",
+              "get_composition_at_time",
+              "get_composition_latest",
+              "get_ehr",
+              "get_ehr_status",
+              "get_versioned_composition",
+              "get_versioned_composition_revision_history",
+              "get_versioned_composition_version_at_time",
+              "get_versioned_composition_version_by_id",
+              "get_versioned_composition_version_latest"
+            ]
+          },
+          "wire": {
+            "type": "string",
+            "pattern": "^(GET|POST) /"
+          }
+        }
+      }
+    },
+    "packs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version",
+          "description",
+          "seed",
+          "fixtures",
+          "phases",
+          "profiles",
+          "probe_rationales"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9_-]+$"
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fixtures": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "key",
+                "kind",
+                "media_type",
+                "bytes",
+                "sha256",
+                "provenance"
+              ],
+              "properties": {
+                "key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "enum": [
+                    "composition",
+                    "invalid_composition",
+                    "operational_template"
+                  ]
+                },
+                "media_type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "bytes": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "provenance": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "phases": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "name",
+                    "discipline",
+                    "ehrs",
+                    "compositions_per_ehr",
+                    "compositions",
+                    "workers",
+                    "fixtures"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "seed"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "discipline": {
+                      "const": "closed-loop"
+                    },
+                    "ehrs": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "compositions_per_ehr": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "compositions": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "workers": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "fixtures": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "name",
+                    "discipline",
+                    "workers",
+                    "requests_per_composition",
+                    "operations"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "sweep"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "discipline": {
+                      "const": "closed-loop"
+                    },
+                    "workers": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "requests_per_composition": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "operations": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "enum": [
+                          "adhoc_query_aggregate",
+                          "adhoc_query_ehr_scan",
+                          "adhoc_query_filtered",
+                          "adhoc_query_ordered_page",
+                          "adhoc_query_point_lookup",
+                          "adhoc_query_population",
+                          "adhoc_query_uid",
+                          "create_composition",
+                          "get_composition_at_time",
+                          "get_composition_latest",
+                          "get_ehr",
+                          "get_ehr_status",
+                          "get_versioned_composition",
+                          "get_versioned_composition_revision_history",
+                          "get_versioned_composition_version_at_time",
+                          "get_versioned_composition_version_by_id",
+                          "get_versioned_composition_version_latest"
+                        ]
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind",
+                    "name",
+                    "discipline",
+                    "rate_per_s",
+                    "warmup_s",
+                    "duration_s",
+                    "planned_arrivals",
+                    "planned_measured_arrivals",
+                    "mix"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "measure"
+                    },
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "discipline": {
+                      "const": "open-loop"
+                    },
+                    "rate_per_s": {
+                      "type": "number",
+                      "exclusiveMinimum": 0.0
+                    },
+                    "warmup_s": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "duration_s": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "planned_arrivals": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "planned_measured_arrivals": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "mix": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "op",
+                          "share",
+                          "rate_per_s",
+                          "rationale"
+                        ],
+                        "properties": {
+                          "op": {
+                            "enum": [
+                              "adhoc_query_aggregate",
+                              "adhoc_query_ehr_scan",
+                              "adhoc_query_filtered",
+                              "adhoc_query_ordered_page",
+                              "adhoc_query_point_lookup",
+                              "adhoc_query_population",
+                              "adhoc_query_uid",
+                              "create_composition",
+                              "get_composition_at_time",
+                              "get_composition_latest",
+                              "get_ehr",
+                              "get_ehr_status",
+                              "get_versioned_composition",
+                              "get_versioned_composition_revision_history",
+                              "get_versioned_composition_version_at_time",
+                              "get_versioned_composition_version_by_id",
+                              "get_versioned_composition_version_latest"
+                            ]
+                          },
+                          "share": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "rate_per_s": {
+                            "type": "number",
+                            "minimum": 0.0
+                          },
+                          "rationale": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "profiles": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "summary",
+                "default",
+                "declares"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9_-]+$"
+                },
+                "summary": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "default": {
+                  "type": "boolean"
+                },
+                "declares": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "propertyNames": {
+                    "enum": [
+                      "audit",
+                      "version_signing",
+                      "commit_validation",
+                      "authn",
+                      "tls",
+                      "compression",
+                      "tenancy"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          },
+          "probe_rationales": {
+            "type": "object",
+            "propertyNames": {
+              "enum": [
+                "adhoc_query_aggregate",
+                "adhoc_query_ehr_scan",
+                "adhoc_query_filtered",
+                "adhoc_query_ordered_page",
+                "adhoc_query_point_lookup",
+                "adhoc_query_population",
+                "adhoc_query_uid",
+                "create_composition",
+                "get_composition_at_time",
+                "get_composition_latest",
+                "get_ehr",
+                "get_ehr_status",
+                "get_versioned_composition",
+                "get_versioned_composition_revision_history",
+                "get_versioned_composition_version_at_time",
+                "get_versioned_composition_version_by_id",
+                "get_versioned_composition_version_latest"
+              ]
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}

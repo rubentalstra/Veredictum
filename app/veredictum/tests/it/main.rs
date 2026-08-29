@@ -5,8 +5,9 @@
 //! committed catalogue's artifact gates and schema-drift guards, the
 //! claim/coverage completeness gates, the vendored corpus packs, defect-fixture
 //! rejection, the measured-performance driver, the universal-benchmark engine,
-//! the public board's committed submissions, the self-verification pack, and
-//! the wire-speaking modules against the `fake_sut` harness.
+//! the published pack manifest, the public board's committed submissions, the
+//! self-verification pack, and the wire-speaking modules against the
+//! `fake_sut` harness.
 //!
 //! One binary per crate, split into topic modules: Cargo compiles and links
 //! every top-level `tests/*.rs` as its own crate
@@ -21,6 +22,7 @@
 
 mod artifact_gates;
 mod bench_engine;
+mod bench_manifest;
 mod bench_submissions;
 mod claim_completeness;
 mod corpus_packs;
