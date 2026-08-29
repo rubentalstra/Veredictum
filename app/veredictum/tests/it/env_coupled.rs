@@ -119,15 +119,33 @@ impl DbContainer {
     }
 
     /// Block until the database accepts connections, or fail the test.
+    ///
+    /// `pg_isready` alone is not enough: on a fresh data directory the
+    /// image's entrypoint starts a temporary server for initialization,
+    /// stops it, and only then starts the real one
+    /// (<https://hub.docker.com/_/postgres>, "Caveats"), so a probe can
+    /// succeed against the temporary server and the next statement can land
+    /// in the restart gap. The entrypoint prints "init process complete"
+    /// between the two, so readiness is that line plus a successful probe.
     fn wait_ready(&self) {
-        for _ in 0..60 {
+        for _ in 0..120 {
+            let logs = Command::new("docker")
+                .args(["logs", &self.name])
+                .output()
+                .map(|out| {
+                    let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+                    text.push_str(&String::from_utf8_lossy(&out.stderr));
+                    text
+                });
+            let initialized =
+                logs.is_ok_and(|text| text.contains("PostgreSQL init process complete"));
             let ready = Command::new("docker")
                 .args(["exec", &self.name, "pg_isready", "-U", "postgres"])
                 .output();
-            if ready.is_ok_and(|out| out.status.success()) {
+            if initialized && ready.is_ok_and(|out| out.status.success()) {
                 return;
             }
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_millis(500));
         }
         panic!("{} never accepted connections", self.name);
     }
