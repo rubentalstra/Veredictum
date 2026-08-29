@@ -31,7 +31,9 @@ use crate::exec::{Provisioned, StepDriver, StepObservation};
 use crate::ids::{CaptureName, SmOperationRef};
 use crate::ixit::{AuthMode, Instance, Ixit};
 use crate::model::assertion::{Assertion, EquivalentTarget, RowsSpec};
-use crate::model::binding::{OperationBinding, RequestBody, StripRule, WireCapture, WireFrom};
+use crate::model::binding::{
+    OperationBinding, RequestBody, RequestSpec, StripRule, WireCapture, WireFrom,
+};
 use crate::model::case::{CaseCore, EhrRequirement, FlowStep, ImportRequirement};
 use crate::refgrammar::{CaptureField, Template, ValueRef};
 use crate::transcript::{
@@ -306,114 +308,16 @@ impl<'a> HttpDriver<'a> {
             .request
             .as_ref()
             .ok_or_else(|| "binding is unrealized".to_owned())?;
-        let mut path = String::new();
-        let raw = request.path.raw();
-        let mut rest = raw;
-        while let Some(start) = rest.find('{') {
-            let (head, tail) = rest.split_at(start);
-            path.push_str(head);
-            let end = tail
-                .find('}')
-                .ok_or_else(|| format!("path {raw}: unterminated param"))?;
-            let name = tail.get(1..end).unwrap_or_default();
-            let value = with
-                .get(name)
-                .and_then(Value::as_str)
-                .map(ToOwned::to_owned)
-                .or_else(|| {
-                    CaptureName::parse(name)
-                        .ok()
-                        .and_then(|c| vars.scalar(&c).map(ToOwned::to_owned))
-                })
-                .ok_or_else(|| format!("path param {{{name}}} unresolved"))?;
-            path.push_str(&urlencoding::encode(&value));
-            rest = tail.get(end + 1..).unwrap_or_default();
-        }
-        path.push_str(rest);
-
+        let path = render_path(request, with, vars)?;
         let mut url = format!("{base}{path}");
-        if let Some(query) = &request.query {
-            let mut params: Vec<(String, String)> = Vec::new();
-            for (name, value) in query {
-                for template in value.templates() {
-                    // A member bound to a LIST capture expands element-wise:
-                    // the repeated form's whole point is one pair per value
-                    // (RFC 6570 `{?p*}`). Only a repeated declaration may
-                    // expand — a single-valued parameter stays single.
-                    if value.is_repeated()
-                        && let Some(items) = list_capture_items(template, vars)
-                    {
-                        for item in items {
-                            params.push((name.clone(), item));
-                        }
-                        continue;
-                    }
-                    match assertions::render_template(template, vars) {
-                        Ok(rendered) => params.push((name.clone(), rendered)),
-                        // An optional ref that is genuinely UNBOUND omits the
-                        // parameter — but a name that IS bound (in the step's
-                        // `with:` or as an earlier capture in the var store)
-                        // and does not render as a scalar is a case-authoring
-                        // or capture-shape defect and must be loud, never a
-                        // silent drop that masquerades as a SUT failure.
-                        Err(e) if template_is_optional(template) => {
-                            if let Some(referenced) = template_ref_name(template)
-                                && (with.contains_key(referenced)
-                                    || CaptureName::parse(referenced)
-                                        .is_ok_and(|n| vars.get(&n).is_some()))
-                            {
-                                return Err(format!(
-                                    "query {name}: the optional ref ${{{referenced}?}} is bound \
-                                     but did not render as a scalar: {e}"
-                                ));
-                            }
-                        }
-                        Err(e) => return Err(format!("query {name}: {e}")),
-                    }
-                }
-            }
-            // `with` keys that match query names override/backfill
-            for (name, declared) in query {
-                if let Some(v) = with.get(name)
-                    && !params.iter().any(|(n, _)| n == name)
-                    && !v.is_null()
-                {
-                    match v {
-                        Value::String(s) => params.push((name.clone(), s.clone())),
-                        // A backfilled ARRAY is the repeated form and only
-                        // that: JSON-encoding it into one pair would send
-                        // `?p=%5B%22a%22%5D`, a value no released parameter
-                        // grammar defines.
-                        Value::Array(items) if declared.is_repeated() => {
-                            for item in items {
-                                params.push((name.clone(), scalar_text(item)?));
-                            }
-                        }
-                        Value::Array(_) => {
-                            return Err(format!(
-                                "query {name}: the step's `with:` binds a list where the binding \
-                                 declares a single-valued parameter — repeatability is the \
-                                 binding's declaration, not the case's"
-                            ));
-                        }
-                        Value::Object(_) => {
-                            return Err(format!(
-                                "query {name}: the step's `with:` binds an object; a query \
-                                 parameter value is a scalar"
-                            ));
-                        }
-                        other => params.push((name.clone(), other.to_string())),
-                    }
-                }
-            }
-            if !params.is_empty() {
-                url.push('?');
-                let encoded: Vec<String> = params
-                    .iter()
-                    .map(|(n, v)| format!("{n}={}", urlencoding::encode(v)))
-                    .collect();
-                url.push_str(&encoded.join("&"));
-            }
+        let params = render_query(request, with, vars)?;
+        if !params.is_empty() {
+            url.push('?');
+            let encoded: Vec<String> = params
+                .iter()
+                .map(|(n, v)| format!("{n}={}", urlencoding::encode(v)))
+                .collect();
+            url.push_str(&encoded.join("&"));
         }
         Ok(url)
     }
@@ -1072,6 +976,160 @@ fn same_deployment(left: &str, right: &str) -> bool {
 )]
 fn committed_uids_handle() -> CaptureName {
     CaptureName::parse("committed_uids").expect("`committed_uids` should be a valid capture name")
+}
+
+/// Substitute the binding path's `{param}` templates from the step's
+/// resolved `with` values, then the captures, percent-encoding each value.
+fn render_path(
+    request: &RequestSpec,
+    with: &BTreeMap<String, Value>,
+    vars: &VarStore,
+) -> Result<String, String> {
+    let mut path = String::new();
+    let raw = request.path.raw();
+    let mut rest = raw;
+    while let Some(start) = rest.find('{') {
+        let (head, tail) = rest.split_at(start);
+        path.push_str(head);
+        let end = tail
+            .find('}')
+            .ok_or_else(|| format!("path {raw}: unterminated param"))?;
+        let name = tail.get(1..end).unwrap_or_default();
+        let value = with
+            .get(name)
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned)
+            .or_else(|| {
+                CaptureName::parse(name)
+                    .ok()
+                    .and_then(|c| vars.scalar(&c).map(ToOwned::to_owned))
+            })
+            .ok_or_else(|| format!("path param {{{name}}} unresolved"))?;
+        path.push_str(&urlencoding::encode(&value));
+        rest = tail.get(end + 1..).unwrap_or_default();
+    }
+    path.push_str(rest);
+    Ok(path)
+}
+
+/// Compose the query pairs the binding declares: template rendering with the
+/// repeated-parameter expansion and the loud bound-but-unrenderable rule,
+/// then the `with:` override/backfill pass.
+fn render_query(
+    request: &RequestSpec,
+    with: &BTreeMap<String, Value>,
+    vars: &VarStore,
+) -> Result<Vec<(String, String)>, String> {
+    let mut params: Vec<(String, String)> = Vec::new();
+    let Some(query) = &request.query else {
+        return Ok(params);
+    };
+    for (name, value) in query {
+        for template in value.templates() {
+            // A member bound to a LIST capture expands element-wise:
+            // the repeated form's whole point is one pair per value
+            // (RFC 6570 `{?p*}`). Only a repeated declaration may
+            // expand — a single-valued parameter stays single.
+            if value.is_repeated()
+                && let Some(items) = list_capture_items(template, vars)
+            {
+                for item in items {
+                    params.push((name.clone(), item));
+                }
+                continue;
+            }
+            match assertions::render_template(template, vars) {
+                Ok(rendered) => params.push((name.clone(), rendered)),
+                // An optional ref that is genuinely UNBOUND omits the
+                // parameter — but a name that IS bound (in the step's
+                // `with:` or as an earlier capture in the var store)
+                // and does not render as a scalar is a case-authoring
+                // or capture-shape defect and must be loud, never a
+                // silent drop that masquerades as a SUT failure.
+                Err(e) if template_is_optional(template) => {
+                    if let Some(referenced) = template_ref_name(template)
+                        && (with.contains_key(referenced)
+                            || CaptureName::parse(referenced).is_ok_and(|n| vars.get(&n).is_some()))
+                    {
+                        return Err(format!(
+                            "query {name}: the optional ref ${{{referenced}?}} is bound \
+                             but did not render as a scalar: {e}"
+                        ));
+                    }
+                }
+                Err(e) => return Err(format!("query {name}: {e}")),
+            }
+        }
+    }
+    // `with` keys that match query names override/backfill
+    for (name, declared) in query {
+        if let Some(v) = with.get(name)
+            && !params.iter().any(|(n, _)| n == name)
+            && !v.is_null()
+        {
+            match v {
+                Value::String(s) => params.push((name.clone(), s.clone())),
+                // A backfilled ARRAY is the repeated form and only
+                // that: JSON-encoding it into one pair would send
+                // `?p=%5B%22a%22%5D`, a value no released parameter
+                // grammar defines.
+                Value::Array(items) if declared.is_repeated() => {
+                    for item in items {
+                        params.push((name.clone(), scalar_text(item)?));
+                    }
+                }
+                Value::Array(_) => {
+                    return Err(format!(
+                        "query {name}: the step's `with:` binds a list where the binding \
+                         declares a single-valued parameter — repeatability is the \
+                         binding's declaration, not the case's"
+                    ));
+                }
+                Value::Object(_) => {
+                    return Err(format!(
+                        "query {name}: the step's `with:` binds an object; a query \
+                         parameter value is a scalar"
+                    ));
+                }
+                other => params.push((name.clone(), other.to_string())),
+            }
+        }
+    }
+    Ok(params)
+}
+
+/// Resolve the `openehr-template-id` header value a `Required` format
+/// header carries: the committed payload's own manifest-declared template
+/// identity wins — the step's `${ds:…}` body names the data set and its
+/// corpus entry carries the authoritative `template_id` (which also serves
+/// cases provisioning their template IN-FLOW, where `requires.templates` is
+/// rightly empty) — with the case's provisioned template list as fallback.
+fn template_id_header_value(
+    set: &ArtifactSet,
+    case: &CaseCore,
+    step: Option<&FlowStep>,
+) -> Option<String> {
+    let body_ds_template_id = step.and_then(|step| {
+        step.with_entries().iter().find_map(|(_, v)| {
+            v.refs().iter().find_map(|r| match r {
+                ValueRef::DataSet { key, .. } => set
+                    .corpus
+                    .as_ref()
+                    .and_then(|(_, m)| m.get(key))
+                    .and_then(|e| e.template_id.clone()),
+                _ => None,
+            })
+        })
+    });
+    body_ds_template_id.or_else(|| {
+        case.requires.templates.first().map(|key| {
+            set.corpus
+                .as_ref()
+                .and_then(|(_, m)| m.get(key))
+                .and_then(|e| e.template_id.clone())
+                .unwrap_or_else(|| key.to_string())
+        })
+    })
 }
 
 fn template_is_optional(template: &Template) -> bool {
@@ -1745,7 +1803,7 @@ impl HttpDriver<'_> {
     /// Body per the binding request contract.
     fn select_body(
         &mut self,
-        request_spec: &crate::model::binding::RequestSpec,
+        request_spec: &RequestSpec,
         with: &BTreeMap<String, Value>,
         step: &FlowStep,
         vars: &VarStore,
@@ -2171,35 +2229,7 @@ impl HttpDriver<'_> {
                             }
                         }
                         crate::model::binding::FormatHeaderReq::Required => {
-                            // openehr-template-id: the committed payload's own
-                            // manifest-declared template identity wins — the step's
-                            // `${ds:…}` body names the data set and its corpus entry
-                            // carries the authoritative `template_id` (which also
-                            // serves cases provisioning their template IN-FLOW, where
-                            // `requires.templates` is rightly empty). Fallback: the
-                            // case's provisioned template list.
-                            let body_ds_template_id = step.and_then(|step| {
-                                step.with_entries().iter().find_map(|(_, v)| {
-                                    v.refs().iter().find_map(|r| match r {
-                                        ValueRef::DataSet { key, .. } => set
-                                            .corpus
-                                            .as_ref()
-                                            .and_then(|(_, m)| m.get(key))
-                                            .and_then(|e| e.template_id.clone()),
-                                        _ => None,
-                                    })
-                                })
-                            });
-                            let template_id = body_ds_template_id.or_else(|| {
-                                case.requires.templates.first().map(|key| {
-                                    set.corpus
-                                        .as_ref()
-                                        .and_then(|(_, m)| m.get(key))
-                                        .and_then(|e| e.template_id.clone())
-                                        .unwrap_or_else(|| key.to_string())
-                                })
-                            });
-                            if let Some(template_id) = template_id {
+                            if let Some(template_id) = template_id_header_value(set, case, step) {
                                 headers.insert(name.clone(), template_id);
                             }
                         }
@@ -3120,7 +3150,7 @@ impl HttpDriver<'_> {
     fn record_exchange_bookkeeping(
         &mut self,
         binding: &OperationBinding,
-        request_spec: &crate::model::binding::RequestSpec,
+        request_spec: &RequestSpec,
         body: Option<&Value>,
         exchange: &Exchange,
     ) {
