@@ -90,6 +90,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       docker: ${{ steps.filter.outputs.docker }}
+      bench: ${{ steps.filter.outputs.bench }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -155,6 +156,15 @@ jobs:
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else
             echo "docker=false" >> "$GITHUB_OUTPUT"
+          fi
+          # The benchmark-submission tier: the committed records, the gate that
+          # validates them, the generator that renders the public board, and the
+          # board page itself — a hand edit to the page is exactly the drift the
+          # generator's --check exists to refuse.
+          if echo "$changed" | grep -qE '^(benchmarks/|scripts/checks/bench-submission\.sh$|scripts/render/bench-board\.sh$|website/landing/benchmarks\.html$|app/veredictum/tests/it/bench_submissions\.rs$|\.github/workflows/ci\.yml$)'; then
+            echo "bench=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bench=false" >> "$GITHUB_OUTPUT"
           fi
 
   # ── The guard tier: prose, licensing, commit messages, changelog structure ──
@@ -647,6 +657,60 @@ jobs:
           tool: cargo-machete
       - run: cargo machete
 
+  # ── The benchmark board's submission gate ───────────────────────────────────
+  # The submission channel is a pull request that adds one bench record, and the
+  # merge is the acceptance, so the machine check has to happen before a human
+  # reads the numbers. `bench-submission.sh` is the whole gate: append-only over
+  # the tree, the record-content integration test, and the board page held to
+  # the records it was generated from.
+  #
+  # Its own tier rather than a step in `test`, because a submission pull request
+  # touches nothing the `code` filter watches — a contributor adding a JSON
+  # record would otherwise land it with no gate having run at all.
+  bench-submissions:
+    name: benchmark submissions
+    needs: changes
+    if: needs.changes.outputs.bench == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The append-only half walks a commit range.
+          fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        with:
+          tool: cargo-nextest
+      - name: Every submission is valid, additive, and on the board
+        shell: bash
+        # Context reaches the shell through `env:`, never `${{ }}` inline.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            base="$PR_BASE"; head="$PR_HEAD"
+          elif [ "$EVENT_NAME" = "merge_group" ]; then
+            # `github.event.before` does not exist on this event, and the push
+            # branch would build `..<sha>` — a range git reads as nothing, which
+            # would pass the append-only half vacuously.
+            base="$QUEUE_BASE"; head="$PUSH_SHA"
+          else
+            base="$PUSH_BEFORE"; head="$PUSH_SHA"
+          fi
+          bash scripts/checks/bench-submission.sh "$base" "$head"
+
   # The console's browser journeys (#69): the one gate that proves the shipped
   # UI actually renders, hydrates and navigates, and the only one that reads the
   # browser console — where a hydration mismatch and a client panic surface and
@@ -777,6 +841,7 @@ jobs:
       - deny
       - fuzz-build
       - unused-deps
+      - bench-submissions
       - ui-e2e
       - ui-screenshot-guard
     runs-on: ubuntu-latest
