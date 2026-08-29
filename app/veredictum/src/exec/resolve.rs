@@ -278,6 +278,9 @@ impl<'a> Resolver<'a> {
         "systolic_ge_140_uids_asc",
         "all_uids_asc",
         "top3_systolic_desc_uids",
+        "folder_composition_pairs",
+        "f2_scoped_uids",
+        "referenced_uids",
     ];
 
     /// Resolve a declared corpus view to its selection-spec value.
@@ -330,6 +333,23 @@ impl<'a> Resolver<'a> {
             // ORDER BY systolic DESC LIMIT 3 — the top of the 100+10k ladder
             "top3_systolic_desc_uids" => {
                 Ok(serde_json::json!({ "systolic_min": 0, "order": "systolic_desc", "limit": 3 }))
+            }
+            // cnf.directory.folder_containment_tree#… — the folder-containment
+            // selection specs over the committed set. The (folder, index)
+            // topology is the fixture's provenance contract; the driver maps
+            // each index to the committed uid it captured (AMB-218/AMB-219).
+            "folder_composition_pairs" => Ok(serde_json::json!({
+                "select": "pairs",
+                "pairs": [
+                    ["f11", 3],
+                    ["f1", 0], ["f1", 1], ["f1", 2], ["f1", 3],
+                    ["f2", 2],
+                    ["root", 0], ["root", 1], ["root", 2], ["root", 3],
+                ],
+            })),
+            "f2_scoped_uids" => Ok(serde_json::json!({ "select": "uids", "indices": [2] })),
+            "referenced_uids" => {
+                Ok(serde_json::json!({ "select": "uids", "indices": [0, 1, 2, 3] }))
             }
             other => Err(ResolveError::View {
                 key: key.clone(),
@@ -697,6 +717,83 @@ mod tests {
             r.resolve_ref(&reference, &vars),
             Err(ResolveError::Ixit("system_id"))
         ));
+    }
+
+    /// A manifest declaring EVERY registered view over one generated set, so
+    /// a view name can be evaluated without a fixture on disk.
+    fn every_view_manifest() -> CorpusManifest {
+        let mut declared = String::new();
+        for view in Resolver::REGISTERED_VIEWS {
+            declared.push_str("    ");
+            declared.push_str(view);
+            declared.push_str(": { select: s }\n");
+        }
+        serde_saphyr::from_str(&format!(
+            "cnf.set.bp-10:\n  generated_by: {{ recipe: bp_series, digest: \"sha256:x\" }}\n  \
+             format: canonical-json\n  validity: {{ verdict: valid }}\n  provenance: p\n  \
+             views:\n{declared}"
+        ))
+        .unwrap()
+    }
+
+    /// `REGISTERED_VIEWS` is the list the `corpus-integrity` validate gate
+    /// checks a manifest's declared views against, so a name on it with no
+    /// evaluator arm passes validate and fails at run time instead.
+    #[test]
+    fn every_registered_view_name_has_an_evaluator() {
+        let m = every_view_manifest();
+        let dir = PathBuf::from(".");
+        let key = CorpusKey::parse("cnf.set.bp-10").unwrap();
+        for name in Resolver::REGISTERED_VIEWS {
+            let mut r = Resolver::new(&m, &dir, None);
+            let view = ViewName::parse(name).unwrap();
+            if let Err(e) = r.view(&key, &view) {
+                assert!(
+                    !e.to_string().contains("no registered evaluator"),
+                    "{name} is registered but has no evaluator arm"
+                );
+            }
+        }
+    }
+
+    /// The folder-containment views are index-addressed SELECTION SPECS: the
+    /// driver maps each index to the uid it captured from the case's own
+    /// commit set, so a composition classified by several folders is expected
+    /// once per containing folder.
+    #[test]
+    fn folder_containment_views_are_index_addressed_selection_specs() {
+        let m = every_view_manifest();
+        let dir = PathBuf::from(".");
+        let key = CorpusKey::parse("cnf.set.bp-10").unwrap();
+        let mut r = Resolver::new(&m, &dir, None);
+
+        let pairs = r
+            .view(&key, &ViewName::parse("folder_composition_pairs").unwrap())
+            .unwrap();
+        assert_eq!(pairs.get("select").unwrap(), "pairs");
+        let rows = pairs.get("pairs").unwrap().as_array().unwrap();
+        assert_eq!(rows.len(), 10, "the authored containment pair set");
+        let classifying: Vec<&str> = rows
+            .iter()
+            .filter(|pair| pair.get(1) == Some(&serde_json::json!(2)))
+            .filter_map(|pair| pair.get(0).and_then(Value::as_str))
+            .collect();
+        assert_eq!(
+            classifying,
+            vec!["f1", "f2", "root"],
+            "composition 2 is multiply classified"
+        );
+
+        assert_eq!(
+            r.view(&key, &ViewName::parse("f2_scoped_uids").unwrap())
+                .unwrap(),
+            serde_json::json!({ "select": "uids", "indices": [2] })
+        );
+        assert_eq!(
+            r.view(&key, &ViewName::parse("referenced_uids").unwrap())
+                .unwrap(),
+            serde_json::json!({ "select": "uids", "indices": [0, 1, 2, 3] })
+        );
     }
 
     #[test]

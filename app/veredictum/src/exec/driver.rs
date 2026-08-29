@@ -975,6 +975,24 @@ impl<'a> HttpDriver<'a> {
                                 .into(),
                         )
                     })?;
+                // Generic committed-uid selection specs (`select: uids|pairs`):
+                // index-addressed rows over the captured uid list, so a view
+                // can name WHICH committed objects a result must hold without
+                // recipe-specific semantics.
+                if let Some(select) = spec.get("select").and_then(Value::as_str) {
+                    let rows = selected_rows(select, &spec, &uids)?;
+                    let outcome = match match_mode {
+                        ResultSetMatch::Ordered => resultset::compare_ordered(body, &rows),
+                        ResultSetMatch::Set => resultset::compare_bag(body, &rows),
+                        ResultSetMatch::Contains => resultset::compare_contains(body, &rows),
+                        ResultSetMatch::Count => {
+                            return Err(AssertionFailure(
+                                "result_set rows.from: count match takes no rows".into(),
+                            ));
+                        }
+                    };
+                    return outcome.map_err(|e| AssertionFailure(e.0));
+                }
                 let min = spec
                     .get("systolic_min")
                     .and_then(Value::as_u64)
@@ -1935,9 +1953,121 @@ impl HttpDriver<'_> {
                     uids.push(uid);
                 }
             }
+            // Index-addressed handles beside the list: `committed_uid_<k>`
+            // (the version uid) and `committed_object_id_<k>` (its leading
+            // object id), so a rendered precondition payload — a directory
+            // fixture's OBJECT_REF items — can name one committed object.
+            for (k, uid) in uids.iter().enumerate() {
+                let object_id = uid.split("::").next().unwrap_or(uid.as_str()).to_owned();
+                vars.set(
+                    CaptureName::parse(&format!("committed_uid_{k}")).map_err(|e| e.to_string())?,
+                    Captured::Scalar(uid.clone()),
+                );
+                vars.set(
+                    CaptureName::parse(&format!("committed_object_id_{k}"))
+                        .map_err(|e| e.to_string())?,
+                    Captured::Scalar(object_id),
+                );
+            }
             vars.set(committed_uids_handle(), Captured::List(uids));
         }
         Ok(())
+    }
+}
+
+/// Build the expected rows of a committed-uid selection spec: `select: uids`
+/// yields one-column rows of the committed uid at each declared index,
+/// `select: pairs` two-column rows of a literal beside one committed uid. An
+/// out-of-range index, a malformed pair, or an unknown selection is a loud
+/// failure, never a silently narrowed expectation.
+fn selected_rows(
+    select: &str,
+    spec: &Value,
+    uids: &[String],
+) -> Result<Vec<Value>, AssertionFailure> {
+    let uid_at = |k: u64| -> Result<String, AssertionFailure> {
+        usize::try_from(k)
+            .ok()
+            .and_then(|k| uids.get(k))
+            .cloned()
+            .ok_or_else(|| {
+                AssertionFailure(format!(
+                    "result_set rows.from: committed-uid index {k} out of range ({} committed)",
+                    uids.len()
+                ))
+            })
+    };
+    let member = |name: &str| -> Result<&Vec<Value>, AssertionFailure> {
+        spec.get(name).and_then(Value::as_array).ok_or_else(|| {
+            AssertionFailure(format!(
+                "result_set rows.from: select={select} without {name}"
+            ))
+        })
+    };
+    match select {
+        "uids" => member("indices")?
+            .iter()
+            .map(|i| {
+                let k = i.as_u64().ok_or_else(|| {
+                    AssertionFailure(format!("result_set rows.from: non-integer index {i}"))
+                })?;
+                Ok(Value::Array(vec![Value::String(uid_at(k)?)]))
+            })
+            .collect(),
+        "pairs" => member("pairs")?
+            .iter()
+            .map(|pair| {
+                let (name, k) = pair
+                    .as_array()
+                    .and_then(|p| match p.as_slice() {
+                        [Value::String(name), index] => index.as_u64().map(|k| (name.clone(), k)),
+                        _ => None,
+                    })
+                    .ok_or_else(|| {
+                        AssertionFailure(format!(
+                            "result_set rows.from: pair {pair} is not \
+                             [literal, committed-uid index]"
+                        ))
+                    })?;
+                Ok(Value::Array(vec![
+                    Value::String(name),
+                    Value::String(uid_at(k)?),
+                ]))
+            })
+            .collect(),
+        other => Err(AssertionFailure(format!(
+            "result_set rows.from: unknown selection {other}"
+        ))),
+    }
+}
+
+/// Render every string leaf of a JSON tree through the `${…}` template
+/// grammar against the bound captures. Strings without a reference pass
+/// through unchanged, so ordinary fixtures are unaffected; a fixture that
+/// names an unbound capture fails loudly at provisioning time.
+fn render_string_leaves(value: Value, vars: &VarStore) -> Result<Value, String> {
+    match value {
+        Value::String(s) => {
+            if s.contains("${") {
+                let template = Template::parse(&s).map_err(|e| e.to_string())?;
+                Ok(Value::String(assertions::render_template(&template, vars)?))
+            } else {
+                Ok(Value::String(s))
+            }
+        }
+        Value::Array(items) => Ok(Value::Array(
+            items
+                .into_iter()
+                .map(|item| render_string_leaves(item, vars))
+                .collect::<Result<_, _>>()?,
+        )),
+        Value::Object(members) => Ok(Value::Object(
+            members
+                .into_iter()
+                .map(|(name, member)| Ok((name, render_string_leaves(member, vars)?)))
+                .collect::<Result<_, String>>()?,
+        )),
+        other => Ok(other),
     }
 }
 
@@ -3231,11 +3361,17 @@ impl StepDriver for HttpDriver<'_> {
         if let Provisioned::RowErrored { reason } = self.provision_import(case, vars)? {
             return Ok(Provisioned::RowErrored { reason });
         }
+        // Commit sets provision BEFORE the directory tree so a directory
+        // fixture can reference the committed versioned objects: its string
+        // leaves render against the captured handles (the folder-containment
+        // fixtures carry ${committed_object_id_k} item references, AMB-218).
+        self.provision_commit_sets(case, vars)?;
         // directory: provision the FOLDER tree via create_directory.
         if let Some(crate::model::case::DirectoryRequirement::Tree(key)) =
             case.requires.directory.clone()
         {
             let payload = self.resolver.data_set(&key).map_err(|e| e.to_string())?;
+            let payload = render_string_leaves(payload, vars)?;
             let binding = self.binding_for(case, "I_EHR_DIRECTORY.create_directory")?;
             let instance = self.provisioning_instance(case)?;
             let request_spec = binding
@@ -3280,7 +3416,6 @@ impl StepDriver for HttpDriver<'_> {
         }
         self.provision_party(case, vars)?;
         self.provision_party_relationship(case, vars)?;
-        self.provision_commit_sets(case, vars)?;
         Ok(Provisioned::Ready)
     }
 
@@ -3398,6 +3533,70 @@ fn extract_list(body: &Value, path: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A store binding one committed object id, the shape a directory
+    /// precondition renders against.
+    fn bound_object_id() -> VarStore {
+        let mut vars = VarStore::default();
+        vars.set(
+            CaptureName::parse("committed_object_id_0")
+                .expect("`committed_object_id_0` is a valid capture name"),
+            Captured::Scalar("aaaaaaaa-1111-4111-8111-111111111111".to_owned()),
+        );
+        vars
+    }
+
+    /// A tree carrying no `${…}` reference reaches the SUT byte-identical:
+    /// numbers, booleans, nulls and ordinary strings are never rewritten, so
+    /// an ordinary fixture is unaffected by the rendering pass.
+    #[test]
+    fn render_string_leaves_passes_a_reference_free_tree_through_unchanged() {
+        let plain = serde_json::json!({
+            "_type": "FOLDER",
+            "depth": 2,
+            "sealed": false,
+            "parent": null,
+            "items": [{ "id": "1e0a7f34" }, ["nested", 2.5]]
+        });
+        let rendered =
+            render_string_leaves(plain.clone(), &bound_object_id()).expect("no reference to bind");
+        assert_eq!(rendered.to_string(), plain.to_string());
+    }
+
+    /// A `${…}` string leaf renders from the bound capture wherever it sits —
+    /// including inside an array of objects, which is where a FOLDER tree's
+    /// `items` `OBJECT_REF` ids actually live.
+    #[test]
+    fn render_string_leaves_renders_nested_reference_leaves() {
+        let templated = serde_json::json!({
+            "folders": [{
+                "items": [{ "id": { "value": "${committed_object_id_0}" } }],
+                "note": "urn:${committed_object_id_0}:ref"
+            }]
+        });
+        let rendered =
+            render_string_leaves(templated, &bound_object_id()).expect("the capture is bound");
+        assert_eq!(
+            rendered,
+            serde_json::json!({
+                "folders": [{
+                    "items": [{ "id": { "value": "aaaaaaaa-1111-4111-8111-111111111111" } }],
+                    "note": "urn:aaaaaaaa-1111-4111-8111-111111111111:ref"
+                }]
+            })
+        );
+    }
+
+    /// An unbound reference is a LOUD failure: posting the literal `${…}`
+    /// would classify a FOLDER against an object that does not exist and turn
+    /// the whole case into a false red.
+    #[test]
+    fn render_string_leaves_refuses_an_unbound_reference() {
+        let unbound = serde_json::json!({ "id": { "value": "${committed_object_id_9}" } });
+        let failure = render_string_leaves(unbound, &bound_object_id())
+            .expect_err("index 9 was never committed");
+        assert_eq!(failure, "capture committed_object_id_9 is not bound");
+    }
 
     /// A status a message RENDERS reaches the recorded artifacts as a bare
     /// wire number (`docs/conformance/<sut>/results.json` carries

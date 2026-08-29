@@ -17,15 +17,15 @@ QueryProvisioning: { family: Platform, tier: STANDARD, required: true, min_cases
 EhrOperations: { family: Platform, tier: CORE, required: true, min_cases: 24, source: "CNF profiles master03-profiles.adoc §Functional (EHR Persistence: EHR Operations)" }
 EhrStatus: { family: Platform, tier: CORE, required: true, min_cases: 50, source: "CNF profiles master03-profiles.adoc §Functional (EHR Persistence: EHR Status)" }
 CompositionOps: { family: Platform, tier: CORE, required: true, min_cases: 60, source: "CNF profiles master03-profiles.adoc §Functional (EHR Persistence: Composition Operations)" }
-DirectoryOps: { family: Platform, tier: STANDARD, required: true, min_cases: 86, source: "CNF profiles master03-profiles.adoc §Functional (EHR Persistence: Directory Operations)" }
+DirectoryOps: { family: Platform, tier: STANDARD, required: true, min_cases: 92, source: "CNF profiles master03-profiles.adoc §Functional (EHR Persistence: Directory Operations)" }
 ChangeSets: { family: Platform, tier: CORE, required: true, min_cases: 109, source: "CNF profiles master03-profiles.adoc §Functional (EHR Persistence: Change sets)" }
 Versioning: { family: Platform, tier: CORE, required: true, min_cases: 75, source: "CNF profiles master03-profiles.adoc §Functional (EHR Persistence: Versioning)" }
 ArchetypeValidation: { family: Platform, tier: CORE, required: true, min_cases: 125, source: "CNF profiles master03-profiles.adoc §Functional (EHR Persistence: Archetype Validation)" }
 PartyOperations: { family: Platform, tier: OPTIONS, required: false, min_cases: 92, source: "CNF profiles master03-profiles.adoc §Functional (Demographic Persistence: Party Operations)" }
 PartyRelationshipOperations: { family: Platform, tier: OPTIONS, required: false, realization: extension, min_cases: 19, source: "CNF profiles master03-profiles.adoc §Functional (Demographic Persistence: Party Relationship Operations)" }
 DemographicArchetypeValidation: { family: Platform, tier: OPTIONS, required: false, min_cases: 11, source: "CNF profiles master03-profiles.adoc §Functional (Demographic Persistence: Archetype validation)" }
-AqlBasic: { family: Platform, tier: STANDARD, required: true, min_cases: 36, source: "CNF profiles master03-profiles.adoc §Functional (Querying: AQL basic)" }
-AqlAdvanced: { family: Platform, tier: OPTIONS, required: false, min_cases: 3, source: "CNF profiles master03-profiles.adoc §Functional (Querying: AQL advanced)" }
+AqlBasic: { family: Platform, tier: STANDARD, required: true, min_cases: 43, source: "CNF profiles master03-profiles.adoc §Functional (Querying: AQL basic)" }
+AqlAdvanced: { family: Platform, tier: OPTIONS, required: false, min_cases: 4, source: "CNF profiles master03-profiles.adoc §Functional (Querying: AQL advanced)" }
 AqlTerminology: { family: Platform, tier: OPTIONS, required: false, min_cases: 6, source: "CNF profiles master03-profiles.adoc §Functional (Querying: AQL & terminology)" }
 ActivityReport: { family: Platform, tier: OPTIONS, required: false, realization: extension, min_cases: 15, source: "CNF profiles master03-profiles.adoc §Functional (Admin: Activity Report)" }
 PhysicalDeletion: { family: Platform, tier: OPTIONS, required: false, min_cases: 11, workload_exclusion: { register: AMB-170, reason: "destructive mid-measurement: the released admin operations erase an EHR and its whole version history outright, so every arrival would shrink the population-anchored corpus the measured window is bound to and the earned class would no longer describe the declared volumetric class" }, source: "CNF profiles master03-profiles.adoc §Functional (Admin: Physical Deletion)" }
