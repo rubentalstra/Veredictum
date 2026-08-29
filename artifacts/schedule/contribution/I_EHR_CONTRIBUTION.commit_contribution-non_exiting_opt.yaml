@@ -5,6 +5,14 @@
 # "the underlying template is not known" verbatim); the kind is distinguished by
 # the fixture (cnf.composition.unknown_template references the reserved-absent id
 # cnf.absent_template.v99).
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-non_exiting_opt
 kind: functional
 component: EHR_CONTRIBUTION
@@ -31,5 +39,3 @@ flow:
       versions:
         - { data: "${ds:cnf.composition.unknown_template}", change_type: creation }
     expect: template_not_found             # missing-OPT reject (ITS-REST overview §HTTP status codes — 422 = semantic errors; 422.yaml: "the underlying template is not known")
-postconditions:
-  - { assert: version, count: 0 }

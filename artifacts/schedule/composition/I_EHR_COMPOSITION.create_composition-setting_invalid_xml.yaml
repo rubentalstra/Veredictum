@@ -13,6 +13,14 @@
 # split: XML 422, JSON 201). The 422 itself derives from the RM invariant +
 # Requests_and_responses §HTTP status codes (422 "well-formed but was unable
 # to be followed due to semantic errors").
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-setting_invalid_xml
 kind: functional
 component: EHR_COMPOSITION
@@ -45,5 +53,3 @@ flow:
     expect: validation_failed
     assert:
       - { assert: message_exemplar, text: "information about the errors in the provided COMPOSITION" }
-postconditions:
-  - { assert: version, count: 0 }      # nothing committed

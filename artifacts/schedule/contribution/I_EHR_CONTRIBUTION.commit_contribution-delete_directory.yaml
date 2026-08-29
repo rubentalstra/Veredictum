@@ -7,6 +7,14 @@
 # deletion; the lifecycle code openehr::523|deleted| is spec-defined (RM common
 # master06 §Version lifecycle + TERM Version Lifecycle State list 523|deleted|). The logical-delete effect is under-specified in the SM
 # (AMB-10) — the state postcondition reports but does not gate.
+#
+# NOT AUTHORED as machine asserts (register AMB-24): the committed VERSION's
+# change_type / lifecycle_state and the container's version count. ITS-REST
+# 1.1.0 surfaces no VERSIONED_FOLDER container — specifications/ehr.openapi.yaml
+# carries /ehr/{ehr_id}/directory and /ehr/{ehr_id}/directory/{version_uid} and
+# nothing versioned, and directory_get_by_version_id answers
+# 200_FOLDER_retrieved.yaml, the FOLDER rather than an ORIGINAL_VERSION
+# envelope — so neither a revision history nor a VERSION envelope can be read.
 id: I_EHR_CONTRIBUTION.commit_contribution-delete_directory
 kind: functional
 component: EHR_CONTRIBUTION
@@ -39,18 +47,16 @@ flow:
     expect: created
     capture:
       version_uids: created.version_uids[]
-    assert:
-      - { assert: version, for_each: "${version_uids}", change_type: DELETED, lifecycle_state: "523" }
 postconditions:
-  - { assert: version, count: 2 }        # the created directory VERSION + the deletion VERSION
   - assert: state
     text: >-
       The EHR's directory (root FOLDER) is logically deleted (effect
       under-specified in the SM — AMB-10; reported, not gating).
+    verified_by: I_EHR_DIRECTORY.get_directory-deleted_head
 # AMB-85: the ACCEPTANCE of this data-less member rests on following the RM
 # procedure over the released commit schema, which makes the member's `data`
 # required with no null form. The register's fixed handling is what makes a
 # data-less deletion member legal here at all; the rejection half — a
 # 523|deleted| member that carries data — is the sibling
 # -deleted_member_with_data case.
-ambiguities: [AMB-10, AMB-85]
+ambiguities: [AMB-10, AMB-85, AMB-24]

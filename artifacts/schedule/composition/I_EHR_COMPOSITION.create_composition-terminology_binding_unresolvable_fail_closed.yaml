@@ -17,6 +17,14 @@
 # one terminology posture declares only that one, and the other case is
 # not-applicable with the citation instead of being driven against a server
 # that legitimately behaves the other way.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-terminology_binding_unresolvable_fail_closed
 kind: functional
 component: EHR_COMPOSITION
@@ -54,6 +62,4 @@ flow:
     expect: validation_failed             # "information about the errors in the provided COMPOSITION"
     assert:
       - { assert: message_exemplar, text: "information about the errors in the provided COMPOSITION" }
-postconditions:
-  - { assert: version, count: 0 }        # nothing committed
 ambiguities: [AMB-172]

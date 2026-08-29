@@ -9,6 +9,14 @@
 # be followed due to semantic errors"), not from any SUT. One of the TERM
 # ch.3 §3.1 wire-refusal twins (#1417); the valid twin is every accepted
 # minimal_event.v1 commit (language en).
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-language_invalid
 kind: functional
 component: EHR_COMPOSITION
@@ -37,5 +45,3 @@ flow:
     expect: validation_failed
     assert:
       - { assert: message_exemplar, text: "information about the errors in the provided COMPOSITION" }
-postconditions:
-  - { assert: version, count: 0 }        # nothing committed

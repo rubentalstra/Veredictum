@@ -9,6 +9,15 @@
 # The delete is LOGICAL (a deletion VERSION is committed), so the SM
 # postcondition is verified through the RM change_control version facts — which
 # are unambiguous regardless of what the route answers to a later read.
+#
+# WHAT IS NOT AUTHORED as a machine assert here (register AMB-32): the version
+# facts. ITS-REST 1.1.0 surfaces no PARTY_RELATIONSHIP resource at all —
+# specifications/demographic.openapi.yaml declares twenty-seven paths and none
+# of them is /demographic/party_relationship* — so the family has neither a
+# REVISION_HISTORY read nor a VERSION envelope read. The extension route these
+# cases drive serves the PARTY_RELATIONSHIP itself, never an ORIGINAL_VERSION,
+# so the container's version count and a version's commit_audit.change_type
+# have nothing released to read them from.
 id: I_DEMOGRAPHIC_SERVICE.delete_party_relationship-aaaa
 kind: functional
 component: DEMOGRAPHIC
@@ -46,7 +55,3 @@ flow:
     with: { version_uid: "${preceding_version_uid}" }
     expect: deleted
     capture: { deleted_uid: deleted.version_uid }
-postconditions:
-  - { assert: version, count: 2 }
-  - { assert: version, of: "${preceding_version_uid}", change_type: CREATE }
-  - { assert: version, of: "${deleted_uid}", change_type: DELETED }

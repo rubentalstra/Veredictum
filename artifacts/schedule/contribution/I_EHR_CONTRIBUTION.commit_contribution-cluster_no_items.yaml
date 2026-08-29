@@ -15,6 +15,14 @@
 #
 # The ACCEPTING twin is `cnf.composition.lab_result.v1`, whose specimen CLUSTER carries
 # a populated `items` list and commits (create_composition-lab_result).
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-cluster_no_items
 kind: functional
 component: EHR_CONTRIBUTION
@@ -56,5 +64,3 @@ flow:
           _type: PARTY_IDENTIFIED
           name: "Dr Conformant"
     expect: bad_request
-postconditions:
-  - { assert: version, count: 0 }        # the refused commit stored nothing

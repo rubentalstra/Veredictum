@@ -19,6 +19,14 @@
 #
 # One behaviour per case: the payload is cnf.composition.minimal_event.v1 with
 # ONE member added — an empty links list at the root.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-links_empty
 kind: functional
 component: EHR_COMPOSITION
@@ -46,5 +54,3 @@ flow:
       ehr_id: "${ehr_id}"
       composition: "${ds:cnf.composition.minimal_event.links_empty}"
     expect: bad_request                   # parse class since #1730 (Option<NonEmptyVec>; the #1727 ruling — overview §HTTP status codes, the 400 row)
-postconditions:
-  - { assert: version, count: 0 }         # nothing committed

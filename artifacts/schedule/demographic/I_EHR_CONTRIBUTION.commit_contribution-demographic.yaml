@@ -51,6 +51,7 @@ flow:
       contribution_uid: created.contribution_uid
       first_version_uid: created.first_version_uid
       first_versioned_object_uid: created.first_versioned_object_uid
+      versioned_object_uid: created.first_versioned_object_uid   # addresses the released revision-history read
   - step: 2                              # the change set is retrievable by its own uid
     call: get_contribution
     variant: demographic

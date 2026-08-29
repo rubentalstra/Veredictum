@@ -25,6 +25,12 @@
 # The target is the EHR directory because the provisioning vocabulary can
 # establish one with a known current version uid, so the ONLY defect in the
 # member is the data it should not carry.
+#
+# THE CONTAINER'S VERSION COUNT IS NOT AUTHORED as a machine assert (register
+# AMB-24): ITS-REST 1.1.0 surfaces no VERSIONED_FOLDER container, so
+# specifications/ehr.openapi.yaml publishes no revision-history read for a
+# directory. Step 2 reads the live directory back over the released route, and
+# that is what gates the "nothing was deleted" claim.
 id: I_EHR_CONTRIBUTION.commit_contribution-deleted_member_with_data
 kind: functional
 component: EHR_CONTRIBUTION
@@ -32,7 +38,7 @@ sm_operation: I_EHR_CONTRIBUTION.commit_contribution
 capabilities: [ChangeSets]
 exercises: [Versioning]
 profiles: [CORE]
-ambiguities: [AMB-85]
+ambiguities: [AMB-85, AMB-24]
 test_purpose: >-
   A CONTRIBUTION member with change_type/lifecycle 523|deleted| that also
   carries data is rejected as semantically unfollowable, and the target is not
@@ -68,4 +74,3 @@ postconditions:
     text: >-
       No deletion version was committed from a data-carrying member: the
       directory is still live (verified by step 2)
-  - { assert: version, count: 1 }        # only the provisioned directory VERSION

@@ -3,6 +3,14 @@
 # this case keeps the operation's validation_failed branch exercised with a
 # body that CONSTRUCTS fine and fails the semantic pass — the archetype root's
 # node_id disagrees with its archetype_details.archetype_id.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_DEMOGRAPHIC_SERVICE.create_party-role_root_identity_mismatch
 kind: functional
 component: DEMOGRAPHIC
@@ -32,5 +40,3 @@ flow:
     variant: role
     with: { party: "${ds:cnf.demographic.role.root_identity_mismatch}" }
     expect: validation_failed            # the 422 semantic class — converts, then fails the invariant pass
-postconditions:
-  - { assert: version, count: 0 }

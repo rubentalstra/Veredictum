@@ -50,6 +50,7 @@ flow:
     expect: created
     capture:
       v1_uid: created.first_version_uid
+      versioned_object_uid: created.first_versioned_object_uid   # addresses the released revision-history read
   - step: 2                              # complete -> abandoned: not in the table
     call: commit_contribution
     with:

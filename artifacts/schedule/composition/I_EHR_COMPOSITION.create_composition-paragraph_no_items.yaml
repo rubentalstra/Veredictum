@@ -14,6 +14,14 @@
 #
 # The ACCEPTING twin is the populated DV_TEXT leaf every valid composition fixture
 # carries (cnf.composition.minimal_event.v1, committed by dozens of cases).
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-paragraph_no_items
 kind: functional
 component: EHR_COMPOSITION
@@ -39,5 +47,3 @@ flow:
     call: create_composition
     with: { ehr_id: "${ehr_id}", composition: "${ds:cnf.composition.history_open.paragraph_items_empty}" }
     expect: bad_request
-postconditions:
-  - { assert: version, count: 0 }

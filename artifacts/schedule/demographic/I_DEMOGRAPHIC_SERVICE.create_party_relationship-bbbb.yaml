@@ -8,6 +8,15 @@
 # The refused content is spec-grounded regardless of the route: RM demographic
 # §PARTY_RELATIONSHIP declares `source` and `target` as mandatory PARTY_REFs,
 # and the fixture omits `target`.
+#
+# WHAT IS NOT AUTHORED as a machine assert here (register AMB-32): the version
+# facts. ITS-REST 1.1.0 surfaces no PARTY_RELATIONSHIP resource at all —
+# specifications/demographic.openapi.yaml declares twenty-seven paths and none
+# of them is /demographic/party_relationship* — so the family has neither a
+# REVISION_HISTORY read nor a VERSION envelope read. The extension route these
+# cases drive serves the PARTY_RELATIONSHIP itself, never an ORIGINAL_VERSION,
+# so the container's version count and a version's commit_audit.change_type
+# have nothing released to read them from.
 id: I_DEMOGRAPHIC_SERVICE.create_party_relationship-bbbb
 kind: functional
 component: DEMOGRAPHIC
@@ -36,5 +45,3 @@ flow:
     call: create_party_relationship
     with: { party_relationship: "${ds:cnf.demographic.party_relationship.invalid}" }
     expect: bad_request                  # the 400 parse class (overview Requests_and_responses §HTTP status codes 400 row; typed construction refuses — owner ruling 2026-08-03)
-postconditions:
-  - { assert: version, count: 0 }

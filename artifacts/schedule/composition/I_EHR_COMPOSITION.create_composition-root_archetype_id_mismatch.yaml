@@ -22,6 +22,14 @@
 # ONE string changed — the root archetype_node_id. The composition surface's
 # twin of the demographic
 # I_DEMOGRAPHIC_SERVICE.create_party-archetype_node_id_mismatch case.
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_COMPOSITION.create_composition-root_archetype_id_mismatch
 kind: functional
 component: EHR_COMPOSITION
@@ -51,5 +59,3 @@ flow:
       ehr_id: "${ehr_id}"
       composition: "${ds:cnf.composition.minimal_event.root_archetype_id_mismatch}"
     expect: validation_failed             # overview §HTTP status codes, the 422 row
-postconditions:
-  - { assert: version, count: 0 }         # nothing committed

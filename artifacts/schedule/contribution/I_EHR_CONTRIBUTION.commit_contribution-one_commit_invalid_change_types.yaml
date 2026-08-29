@@ -13,6 +13,14 @@
 # Codes per the openEHR Terminology: audit change type 249|creation|,
 # 250|amendment|, 251|modification|, 523|deleted|; version lifecycle state
 # 532|complete|, 523|deleted| (RM common master06 §change_control).
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-one_commit_invalid_change_types
 kind: functional
 component: EHR_CONTRIBUTION
@@ -76,5 +84,3 @@ flow:
                   code_string: "${row.change_code}"
             data: "${ds:cnf.composition.minimal_event.v1}"
     expect: validation_failed              # 400_CONTRIBUTION verbatim: "the modification type does not match the operation - i.e. first version of a MODIFICATION"
-postconditions:
-  - { assert: version, count: 0 }          # nothing committed on any row

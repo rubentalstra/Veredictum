@@ -4,6 +4,14 @@
 # file's comment says it exists precisely to redefine the set) — so a member
 # whose data is a PERSON asserts a kind the route cannot mean. The refusal
 # is released-assigned; the STATUS rides AMB-131's fixed handling (422).
+#
+# THE "NOTHING WAS STORED" POSTCONDITION IS NOT AUTHORED as a machine assert
+# on this ITS. The refused write minted no container identity, and ITS-REST
+# 1.1.0 addresses every version read by {versioned_object_uid} or
+# {version_uid} (specifications/ehr.openapi.yaml,
+# specifications/demographic.openapi.yaml), so the release publishes no read
+# that counts the versions a service holds. What the released wire does
+# disclose is the refusal outcome the flow step asserts, and that gates.
 id: I_EHR_CONTRIBUTION.commit_contribution-demographic_kind_in_ehr
 kind: functional
 component: EHR_CONTRIBUTION
@@ -33,5 +41,3 @@ flow:
       versions:
         - { data: "${ds:cnf.demographic.person.v1}", change_type: creation }
     expect: validation_failed              # AMB-131 (a): a body the route cannot mean
-postconditions:
-  - { assert: version, count: 0 }          # nothing committed
