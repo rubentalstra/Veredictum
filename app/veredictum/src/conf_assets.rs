@@ -1390,4 +1390,53 @@ mod tests {
             assert!(bars.contains(&xml_escape(raw)), "missing escaped {raw}");
         }
     }
+
+    /// Every tier has its own chart title, so two tier bands can never render
+    /// under one heading.
+    #[test]
+    fn every_tier_carries_a_distinct_chart_title() {
+        let titles: std::collections::BTreeSet<&str> =
+            Tier::ALL.iter().map(|t| tier_title(*t)).collect();
+        assert_eq!(titles.len(), Tier::ALL.len());
+        assert_eq!(tier_title(Tier::EnterpriseD), "ENTERPRISE-D");
+        assert_eq!(tier_title(Tier::EnterpriseX), "ENTERPRISE-X");
+    }
+
+    /// The taxonomy is TOTAL by contract: there is no `Other` bucket, so a
+    /// case id no band claims refuses to publish and names the id. Every id
+    /// shape reaches that refusal — an unknown interface, an unknown
+    /// operation inside a banded interface, an unknown family topic, and an
+    /// id of neither shape.
+    #[test]
+    fn a_case_id_outside_the_taxonomy_refuses_to_publish() {
+        for id in [
+            "I_NO_SUCH_SERVICE.create_thing-main",
+            "I_QUERY_SERVICE.invent_query-main",
+            "I_DEMOGRAPHIC_SERVICE.create_folder-main",
+            "CONT-NOT_A_CONSTRUCT-main",
+            "SF-NOT_A_TOPIC-main",
+            "SEC-NOT_A_TOPIC-main",
+            "SIG-NOT_A_TOPIC-main",
+            "SMART-NOT_A_TOPIC-main",
+            "PERF-not_a_workload",
+            "NO_SEPARATOR",
+        ] {
+            let error = band_of(id).expect_err("no band claims this id");
+            assert!(
+                matches!(&error, TaxonomyError::UnmappedCase(named) if named == id),
+                "{error}"
+            );
+        }
+        let error = chapter_counts(&results_with(&[(
+            "I_NO_SUCH_SERVICE.create_thing-main",
+            OutcomeStatus::Passed,
+        )]))
+        .expect_err("the chart refuses an unmapped id");
+        assert!(
+            error
+                .to_string()
+                .contains("maps to no (chapter, band) pair"),
+            "{error}"
+        );
+    }
 }

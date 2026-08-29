@@ -156,4 +156,44 @@ mod tests {
         .unwrap();
         assert!(e.check_invariants().is_err());
     }
+
+    fn entry(disposition: &str, options: &[&str]) -> AmbiguityEntry {
+        serde_json::from_value(serde_json::json!({
+            "ambiguity": "x", "source": "s", "handling": "h",
+            "disposition": disposition, "options": options
+        }))
+        .unwrap()
+    }
+
+    /// `option_select` is a CHOICE the ICS makes, so an entry offering fewer
+    /// than two branches leaves nothing to select between.
+    #[test]
+    fn an_option_select_entry_enumerates_at_least_two_branches() {
+        let message = entry("option_select", &["only-one"])
+            .check_invariants()
+            .expect_err("one branch is not a choice");
+        assert_eq!(
+            message,
+            "option_select entry must enumerate at least two option tags"
+        );
+        assert!(
+            entry("option_select", &["one", "two"])
+                .check_invariants()
+                .is_ok()
+        );
+    }
+
+    /// Only `option_select` branches, so tags on any other disposition state
+    /// a choice the pipeline never makes.
+    #[test]
+    fn only_option_select_may_carry_option_tags() {
+        let message = entry("fixed_handling", &["stray"])
+            .check_invariants()
+            .expect_err("a fixed handling has no branches");
+        assert_eq!(
+            message,
+            "disposition FixedHandling carries option tags (only option_select may)"
+        );
+        assert!(entry("fixed_handling", &[]).check_invariants().is_ok());
+    }
 }

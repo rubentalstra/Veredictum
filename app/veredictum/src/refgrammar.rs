@@ -457,6 +457,11 @@ impl<'de> serde::Deserialize<'de> for CaptureValueSource {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Result-returning tests in the Book ch11 shape, each asserting; \
+              clippy offers no allow-in-tests knob for this lint"
+)]
 mod tests {
     use super::*;
 
@@ -566,5 +571,85 @@ mod tests {
         ));
         assert!(CaptureValueSource::parse("nonsense.ehr_id").is_err());
         assert!(CaptureValueSource::parse("created").is_err());
+    }
+
+    /// Every closed form renders back to the text it was parsed from, and the
+    /// rendered text parses to the same reference. A catalogue artifact that
+    /// is read and re-emitted therefore carries the same reference, so a
+    /// `Display` that dropped a field could not survive its own round trip.
+    #[test]
+    fn every_reference_form_renders_to_the_text_it_parsed_from() -> Result<(), RefError> {
+        for body in [
+            "row.magnitude",
+            "fixture.data_set",
+            "fixture.expected",
+            "fixture.defect",
+            "ehr_id",
+            "offset?",
+            "ds:cnf.set.bp-10",
+            "ds:cnf.set.bp-10#magnitude_ge_140_by_uid",
+            "ds:fixture",
+            "recipe:ehr_status(row)",
+            "ixit:system_id",
+            "ixit:dump_location",
+            "time:before(t1)",
+            "time:after(t1)",
+            "time:between(t1,t2)",
+        ] {
+            let parsed = ValueRef::parse(body)?;
+            assert_eq!(parsed.to_string(), format!("${{{body}}}"));
+            let template = Template::parse(&parsed.to_string())?;
+            assert_eq!(template.as_single_ref(), Some(&parsed));
+        }
+        Ok(())
+    }
+
+    /// A template keeps its authored text: `Display` and the serialized form
+    /// both give back the raw string, and deserializing that string yields the
+    /// same template. Re-emitting a case core cannot rewrite its templates.
+    #[test]
+    fn a_template_renders_and_serializes_as_its_authored_text()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let raw = "${versioned_object_uid}::<system>::2";
+        let template = Template::parse(raw)?;
+        assert_eq!(template.to_string(), raw);
+        assert_eq!(template.raw(), raw);
+        let json = serde_json::to_string(&template)?;
+        assert_eq!(json, format!("\"{raw}\""));
+        let back: Template = serde_json::from_str(&json)?;
+        assert_eq!(back, template);
+        Ok(())
+    }
+
+    /// A capture source renders back to the text it parsed from, the `[]` list
+    /// marker included, and serializes as that same string.
+    #[test]
+    fn a_capture_source_renders_and_serializes_as_the_text_it_parsed_from()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for raw in [
+            "created.ehr_id",
+            "created.version_uids[]",
+            "ok.body",
+            "created.commit_time",
+        ] {
+            let source = CaptureValueSource::parse(raw)?;
+            assert_eq!(source.to_string(), raw);
+            assert_eq!(serde_json::to_string(&source)?, format!("\"{raw}\""));
+            let back: CaptureValueSource = serde_json::from_str(&format!("\"{raw}\""))?;
+            assert_eq!(back, source);
+        }
+        Ok(())
+    }
+
+    /// A capture source's field is a lexical capture name. A field that is not
+    /// one fails as a `BadIdent` naming the whole source, so the error points
+    /// at the authored text rather than at a bare fragment.
+    #[test]
+    fn a_capture_source_field_must_be_a_lexical_capture_name() {
+        let error = CaptureValueSource::parse("created.9lives").unwrap_err();
+        assert!(
+            matches!(&error, RefError::BadIdent { reference, .. } if reference == "created.9lives"),
+            "{error}"
+        );
     }
 }

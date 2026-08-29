@@ -1273,4 +1273,443 @@ mod tests {
             report.review
         );
     }
+
+    fn messages(report: &VerdictReport) -> Vec<&str> {
+        report.review.iter().map(|f| f.message.as_str()).collect()
+    }
+
+    /// A capability the statement claims but the matrix does not carry is a
+    /// review finding: the claim names a rating dimension no verdict exists
+    /// for, so nothing could ever evidence it.
+    #[test]
+    fn an_unknown_claimed_capability_is_a_review_finding() {
+        let st = statement(&["NoSuchCapability"], &[], &[]);
+        let report = compute(
+            &st,
+            &results(serde_json::json!([])),
+            &[],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert!(
+            messages(&report)
+                .contains(&"claimed capability NoSuchCapability is not in the capability matrix"),
+            "{:?}",
+            report.review
+        );
+    }
+
+    /// A tier is claimed through the capabilities that carry it, so a profile
+    /// no claimed capability belongs to rests on nothing.
+    #[test]
+    fn a_profile_tier_no_claimed_capability_carries_is_a_review_finding() {
+        let st = statement(&["EhrOperations"], &["CORE", "SEC-BASIC"], &[]);
+        let report = compute(
+            &st,
+            &results(serde_json::json!([])),
+            &[],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert!(
+            messages(&report).iter().any(|m| m.contains(
+                "profile SecBasic is claimed but no claimed capability carries that tier"
+            )),
+            "{:?}",
+            report.review
+        );
+    }
+
+    /// An `option_select` register entry governing claimed cases needs the ICS
+    /// to declare one of its branches; otherwise the run drives sibling cases
+    /// whose expectations nothing selected between.
+    #[test]
+    fn an_option_select_over_claimed_cases_needs_a_declared_option() {
+        let mut governed = functional_case(
+            "SF-deprecated_types-supported",
+            &["SimplifiedFormats"],
+            &["OPTIONS"],
+        );
+        governed.option = Some(OptionTag::parse("sf-deprecated-types-supported").unwrap());
+        let st = statement(&["SimplifiedFormats"], &["OPTIONS"], &[]);
+        let report = compute(
+            &st,
+            &results(serde_json::json!([])),
+            &[governed],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert!(
+            messages(&report)
+                .iter()
+                .any(|m| m.starts_with("option_select AMB-39 governs claimed cases")),
+            "{:?}",
+            report.review
+        );
+
+        // The same catalogue with the branch declared raises nothing.
+        let declaring = statement(
+            &["SimplifiedFormats"],
+            &["OPTIONS"],
+            &["sf-deprecated-types-supported"],
+        );
+        let mut governed = functional_case(
+            "SF-deprecated_types-supported",
+            &["SimplifiedFormats"],
+            &["OPTIONS"],
+        );
+        governed.option = Some(OptionTag::parse("sf-deprecated-types-supported").unwrap());
+        let report = compute(
+            &declaring,
+            &results(serde_json::json!([])),
+            &[governed],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert!(
+            messages(&report)
+                .iter()
+                .all(|m| !m.starts_with("option_select")),
+            "{:?}",
+            report.review
+        );
+    }
+
+    fn statement_with_performance(class: &str, environment_ref: &str) -> Statement {
+        let mut st = statement(&["EhrOperations"], &[], &[]);
+        st.performance = Some(crate::party::Performance {
+            class: class.to_owned(),
+            environment_ref: environment_ref.to_owned(),
+        });
+        st
+    }
+
+    /// The performance ladder is closed, so a class token outside it is a
+    /// review finding rather than a silently dropped claim. A claim with no
+    /// environment reference is meaningless in the same pass: a class is only
+    /// earned in a described deployment.
+    #[test]
+    fn a_malformed_performance_claim_is_reviewed_on_both_of_its_parts() {
+        let report = compute(
+            &statement_with_performance("XL", "  "),
+            &results(serde_json::json!([])),
+            &[],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert!(
+            messages(&report).contains(&"performance claim: unknown performance class \"XL\""),
+            "{:?}",
+            report.review
+        );
+        assert!(
+            messages(&report)
+                .iter()
+                .any(|m| m.contains("is claimed without an environment reference")),
+            "{:?}",
+            report.review
+        );
+    }
+
+    /// A claimed class with no measurement carrying it has no evidence at all,
+    /// so the claim is reviewed rather than quietly unverdicted.
+    #[test]
+    fn a_claimed_class_with_no_measurement_is_a_review_finding() {
+        let report = compute(
+            &statement_with_performance("POC", "env-1"),
+            &results(serde_json::json!([])),
+            &[],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert_eq!(
+            messages(&report),
+            ["performance class POC is claimed but the results carry no measurement for it"]
+        );
+    }
+
+    /// One measured record over a class-POC workload; `verdict` is what the
+    /// results FILE stored, which the pipeline re-derives rather than trusts.
+    fn measurement(stored_verdict: &str, operation: &str) -> crate::perf::Measurement {
+        serde_json::from_value(serde_json::json!({
+            "case": "PERF-hospital_sim-class_POC",
+            "class": "POC",
+            "verdict": stored_verdict,
+            "offered_load_sustained": 2.0,
+            "duration_s": 3600,
+            "warmup_s": 300,
+            "environment": { "hardware_class": "laptop", "cores": 8, "memory_gb": 16,
+                              "storage_class": "nvme", "topology": "single-node" },
+            "operations": [
+                { "operation": operation, "requests": 10, "errors": 0,
+                   "latency_ms_p50": 1.0, "latency_ms_p90": 2.0, "latency_ms_p99": 3.0,
+                   "hdr_v2_base64": "" }
+            ],
+            "violations": []
+        }))
+        .unwrap()
+    }
+
+    /// A class-POC case whose only bound is the offered-load floor, so the
+    /// verdict re-derives without decoding a histogram.
+    fn perf_case(threshold: &serde_json::Value) -> PerformanceCase {
+        serde_json::from_value(serde_json::json!({
+            "id": "PERF-hospital_sim-class_POC",
+            "kind": "performance", "component": "PERFORMANCE",
+            "description": "d", "test_purpose": "t", "spec_refs": [],
+            "class": "POC", "corpus": "cnf.scale.10k",
+            "workload": {
+                "arrival_rate": "2/s", "warmup": "PT5M", "duration": "PT1H",
+                "journeys": { "chart_review": "100%" }
+            },
+            "thresholds": [threshold]
+        }))
+        .unwrap()
+    }
+
+    fn results_with(measurement: crate::perf::Measurement) -> Results {
+        let mut rs = results(serde_json::json!([]));
+        rs.measurements = vec![measurement];
+        rs
+    }
+
+    /// A measurement naming a case the catalogue does not carry cannot be
+    /// re-derived against anything, so it is reviewed rather than accepted on
+    /// its stored verdict.
+    #[test]
+    fn a_measurement_without_its_catalogue_case_is_a_review_finding() {
+        let report = compute(
+            &statement(&["EhrOperations"], &[], &[]),
+            &results_with(measurement("earned", "ehr_create")),
+            &[],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert_eq!(
+            messages(&report),
+            [
+                "measurement references performance case PERF-hospital_sim-class_POC not in the catalogue"
+            ]
+        );
+        assert!(report.performance.is_empty());
+    }
+
+    /// The stored verdict is never trusted: it is re-derived from the case's
+    /// thresholds and the measurement, and a disagreement is named with both
+    /// values. This is the tamper check the published record rests on.
+    #[test]
+    fn a_stored_verdict_that_does_not_re_derive_is_flagged() {
+        let case = perf_case(&serde_json::json!({ "metric": "offered_load_sustained", "min": 2 }));
+        let report = compute(
+            &statement(&["EhrOperations"], &[], &[]),
+            &results_with(measurement("not-earned", "ehr_create")),
+            &[],
+            std::slice::from_ref(&case),
+            &matrix(),
+            &register(),
+        );
+        assert!(
+            messages(&report).iter().any(|m| m.contains(
+                "stored verdict does not re-derive from the embedded histograms (stored NotEarned, derived Earned)"
+            )),
+            "{:?}",
+            report.review
+        );
+        assert_eq!(report.performance.len(), 1);
+
+        // An agreeing record re-derives silently.
+        let report = compute(
+            &statement(&["EhrOperations"], &[], &[]),
+            &results_with(measurement("earned", "ehr_create")),
+            &[],
+            std::slice::from_ref(&case),
+            &matrix(),
+            &register(),
+        );
+        assert!(report.review.is_empty(), "{:?}", report.review);
+    }
+
+    /// A threshold scoped to an operation the run never drove cannot be
+    /// judged, so the re-derivation fails loudly instead of returning a
+    /// verdict computed over the wrong population.
+    #[test]
+    fn a_threshold_over_an_unmeasured_operation_fails_the_re_derivation() {
+        let case = perf_case(
+            &serde_json::json!({ "metric": "latency_p99", "operation": "aql_query", "max": 1000 }),
+        );
+        let report = compute(
+            &statement(&["EhrOperations"], &[], &[]),
+            &results_with(measurement("earned", "ehr_create")),
+            &[],
+            &[case],
+            &matrix(),
+            &register(),
+        );
+        assert_eq!(
+            messages(&report),
+            [
+                "measurement PERF-hospital_sim-class_POC: threshold references unmeasured operation aql_query"
+            ]
+        );
+        assert!(report.performance.is_empty());
+    }
+
+    /// A served manifest version outside semver is compared as text, so a
+    /// non-numeric advertisement still has to match the declaration rather
+    /// than being waved through as unparsable.
+    #[test]
+    fn a_non_semver_manifest_version_is_compared_literally() {
+        let st = statement(&["EhrOperations"], &[], &[]);
+        let mut same = results(serde_json::json!([]));
+        same.restapi_specs_version = Some("1.1.0-rc.candidate".to_owned());
+        let mut statement_same = st.clone();
+        statement_same.spec_versions.its_rest = Some("1.1.0-rc.candidate".to_owned());
+        let report = compute(&statement_same, &same, &[], &[], &matrix(), &register());
+        assert!(
+            messages(&report)
+                .iter()
+                .all(|m| !m.contains("restapi_specs_version")),
+            "{:?}",
+            report.review
+        );
+
+        let mut different = results(serde_json::json!([]));
+        different.restapi_specs_version = Some("release-candidate".to_owned());
+        let report = compute(&st, &different, &[], &[], &matrix(), &register());
+        assert!(
+            messages(&report)
+                .iter()
+                .any(|m| m.contains("restapi_specs_version")),
+            "{:?}",
+            report.review
+        );
+    }
+
+    fn one_case_report(status: &str, citation: Option<&str>) -> VerdictReport {
+        let case = functional_case(
+            "I_EHR_SERVICE.create_ehr-main",
+            &["EhrOperations"],
+            &["CORE"],
+        );
+        let mut record = serde_json::json!({
+            "case": "I_EHR_SERVICE.create_ehr-main", "format": "canonical-json",
+            "status": status, "rows_driven": 1, "rows_total": 1
+        });
+        if let (Some(citation), Some(map)) = (citation, record.as_object_mut()) {
+            map.insert("citation".to_owned(), serde_json::json!(citation));
+        }
+        compute(
+            &statement(&["EhrOperations"], &["CORE"], &[]),
+            &results(serde_json::json!([record])),
+            std::slice::from_ref(&case),
+            &[],
+            &matrix(),
+            &register(),
+        )
+    }
+
+    fn evidence_for(report: &VerdictReport, name: &str) -> Evidence {
+        let wanted = CapabilityName::parse(name).unwrap();
+        evidence_of(&report.capabilities, &wanted).unwrap()
+    }
+
+    fn tally_for(report: &VerdictReport, name: &str) -> CapabilityTally {
+        let wanted = CapabilityName::parse(name).unwrap();
+        report
+            .capability_tallies
+            .iter()
+            .find(|(n, _)| *n == wanted)
+            .map(|(_, t)| *t)
+            .unwrap()
+    }
+
+    /// An errored row is the runner's own inconclusive result, never a SUT
+    /// failure: the capability reads Inconclusive and the tally counts it
+    /// there, so a transport fault can never be published as a pass or a
+    /// fail.
+    #[test]
+    fn an_errored_row_makes_its_capability_inconclusive() {
+        let report = one_case_report("errored", None);
+        assert_eq!(
+            evidence_for(&report, "EhrOperations"),
+            Evidence::Inconclusive
+        );
+        assert_eq!(tally_for(&report, "EhrOperations").inconclusive, 1);
+        assert_eq!(report.coverage.inconclusive, 1);
+    }
+
+    /// A not-applicable row excused by a register citation is excused
+    /// EVIDENCE, not a pass: the capability stays unevidenced and the tally
+    /// counts it so.
+    #[test]
+    fn a_row_excused_by_the_register_evidences_nothing() {
+        let report = one_case_report("not_applicable", Some("AMB-32 — no released wire"));
+        assert_eq!(
+            evidence_for(&report, "EhrOperations"),
+            Evidence::NotEvidenced
+        );
+        assert_eq!(tally_for(&report, "EhrOperations").unevidenced, 1);
+    }
+
+    /// A not-applicable row with a non-register citation, and a skipped row,
+    /// both evidence nothing either — the excuse arms were deleted, so no
+    /// path turns an undriven row into a pass.
+    #[test]
+    fn a_not_applicable_or_skipped_row_evidences_nothing() {
+        for (status, citation) in [
+            ("not_applicable", "ITS-REST master05 §Directory — no route"),
+            ("skipped", "operator selection"),
+        ] {
+            let report = one_case_report(status, Some(citation));
+            assert_eq!(
+                evidence_for(&report, "EhrOperations"),
+                Evidence::NotEvidenced,
+                "{status}"
+            );
+            assert_eq!(
+                tally_for(&report, "EhrOperations").unevidenced,
+                1,
+                "{status}"
+            );
+        }
+    }
+
+    /// SEC-BASIC fails when its required Security capability carries no
+    /// passing evidence — a claimed security profile is never earned by
+    /// silence.
+    #[test]
+    fn sec_basic_fails_without_passing_security_evidence() {
+        let st = statement(&["AuthenticatedAccess"], &["SEC-BASIC"], &[]);
+        let report = compute(
+            &st,
+            &results(serde_json::json!([])),
+            &[],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert_eq!(report.security, Some(SecBasicVerdict::Fail));
+    }
+
+    /// The Enterprise tiers carry no verdict rule, so they have no member set
+    /// — a count rendered beside them would describe a population no verdict
+    /// quantifies over.
+    #[test]
+    fn the_enterprise_tiers_have_no_member_set() {
+        let matrix = matrix();
+        for tier in [Tier::EnterpriseD, Tier::EnterpriseM, Tier::EnterpriseX] {
+            assert!(tier_members(tier, &matrix).is_empty(), "{tier:?}");
+        }
+        assert_eq!(
+            tier_members(Tier::SecBasic, &matrix),
+            vec![CapabilityName::parse("AuthenticatedAccess").unwrap()]
+        );
+    }
 }

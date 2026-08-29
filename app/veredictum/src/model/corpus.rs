@@ -261,5 +261,21 @@ mod tests {
             .check_invariants()
             .is_err()
         );
+
+        // A committed fixture and a generated set are the two ways an entry
+        // gets its bytes; an entry declaring both leaves the source ambiguous,
+        // and one declaring neither has no bytes at all.
+        assert_eq!(
+            entry(serde_json::json!({
+                "source": "fixtures/raw/dup_member.json",
+                "generated_by": { "recipe": "bp_series", "digest": "sha256:x" }
+            }))
+            .check_invariants(),
+            Err("entry declares both source and generated_by".to_owned())
+        );
+        assert_eq!(
+            entry(serde_json::json!({})).check_invariants(),
+            Err("entry declares neither source nor generated_by".to_owned())
+        );
     }
 }

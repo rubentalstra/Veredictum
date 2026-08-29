@@ -1907,4 +1907,344 @@ mod tests {
         c.workload.duration = WorkloadDuration(8 * 3600);
         assert!(c.check_invariants().is_ok());
     }
+
+    /// The performance ladder is closed and each rung round-trips its token,
+    /// so a class can only enter a claim or a case by its published spelling.
+    #[test]
+    fn the_performance_ladder_round_trips_and_stays_closed() {
+        for class in PerfClass::ALL {
+            assert_eq!(PerfClass::parse(class.token()), Ok(*class));
+        }
+        assert_eq!(
+            PerfClass::parse("XL"),
+            Err("unknown performance class \"XL\"".to_owned())
+        );
+        // The ladder is ascending, which is what makes its index the rank.
+        let floors: Vec<f64> = PerfClass::ALL
+            .iter()
+            .map(|c| c.arrival_floor_per_s())
+            .collect();
+        assert!(floors.windows(2).all(|w| w[0] < w[1]), "{floors:?}");
+    }
+
+    /// The workload scalars carry their unit in the authored text, so each one
+    /// renders back to the form the artifact was written in. A rate that lost
+    /// its `/s`, or a duration that re-rendered as a different length, would
+    /// silently redefine the offered load.
+    #[test]
+    fn the_workload_scalars_render_back_to_their_authored_forms() {
+        #[derive(Debug, PartialEq, Deserialize, Serialize)]
+        struct Carrier {
+            rate: RatePerSecond,
+            warmup: WorkloadDuration,
+            share: Percent,
+        }
+        let carrier: Carrier =
+            serde_saphyr::from_str("rate: 15/s\nwarmup: PT1H30M\nshare: 52.6%\n").unwrap();
+        assert_eq!(carrier.rate, RatePerSecond(15.0));
+        assert_eq!(carrier.warmup, WorkloadDuration(5400));
+        assert_eq!(carrier.share, Percent(52.6));
+        assert_eq!(
+            serde_json::to_value(&carrier).unwrap(),
+            serde_json::json!({ "rate": "15/s", "warmup": "PT1H30M", "share": "52.6%" })
+        );
+
+        // A whole-second duration keeps its `S` component, and a zero-length
+        // one still renders a component rather than a bare `PT`.
+        assert_eq!(
+            serde_json::to_value(WorkloadDuration(0)).unwrap(),
+            serde_json::json!("PT0S")
+        );
+        assert_eq!(
+            serde_json::to_value(WorkloadDuration(90)).unwrap(),
+            serde_json::json!("PT1M30S")
+        );
+    }
+
+    /// Each scalar names the unit it wanted when the text lacks it, so an
+    /// unqualified number never enters a workload as a silent default.
+    #[test]
+    fn a_workload_scalar_without_its_unit_is_refused() {
+        for (yaml, wanted) in [
+            ("rate: 15\n", "must end in /s"),
+            ("warmup: 90\n", "is not PT[nH][nM][nS]"),
+            ("share: 52.6\n", "must end in %"),
+        ] {
+            #[derive(Deserialize)]
+            struct Scalars {
+                #[serde(default)]
+                rate: Option<RatePerSecond>,
+                #[serde(default)]
+                warmup: Option<WorkloadDuration>,
+                #[serde(default)]
+                share: Option<Percent>,
+            }
+            let error = serde_saphyr::from_str::<Scalars>(yaml)
+                .map(|s| (s.rate.is_some(), s.warmup.is_some(), s.share.is_some()))
+                .expect_err("an unqualified scalar is refused");
+            assert!(error.to_string().contains(wanted), "{error}");
+        }
+        // A duration carrying an unknown designator is refused too, and one
+        // whose components overflow a second count is refused rather than
+        // wrapping into a shorter window than the artifact authored.
+        assert!(serde_saphyr::from_str::<WorkloadDuration>("PT3Y\n").is_err());
+        assert!(serde_saphyr::from_str::<WorkloadDuration>("PT18446744073709551615S1S\n").is_err());
+    }
+
+    /// A performance case states the four things a measured run needs from
+    /// it: the `performance` kind, the `PERFORMANCE` chapter, journey shares
+    /// that sum to 100%, and a bound on every threshold. Each refusal names
+    /// the rule it violated.
+    #[test]
+    fn a_performance_case_refuses_every_shape_that_measures_nothing() {
+        let mut c = case("15/s");
+        c.kind = "functional".to_owned();
+        assert_eq!(
+            c.check_invariants(),
+            Err("kind must be `performance`, got \"functional\"".to_owned())
+        );
+
+        let mut c = case("15/s");
+        c.component = "EHR".to_owned();
+        assert_eq!(
+            c.check_invariants(),
+            Err("component must be PERFORMANCE, got \"EHR\"".to_owned())
+        );
+
+        let mut c = case("15/s");
+        c.workload.journeys = vec![("chart_review".to_owned(), Percent(60.0))];
+        assert_eq!(
+            c.check_invariants(),
+            Err("workload journeys sum to 60%, must be 100%".to_owned())
+        );
+
+        let mut c = case("15/s");
+        c.thresholds.push(Threshold {
+            metric: Metric::LatencyP50,
+            operation: None,
+            max: None,
+            min: None,
+        });
+        assert_eq!(
+            c.check_invariants(),
+            Err("threshold carries neither max nor min".to_owned())
+        );
+    }
+
+    /// The journey catalogue refuses the shapes that decompose nothing: an
+    /// empty catalogue, and a journey with no stages.
+    #[test]
+    fn a_journey_catalogue_refuses_an_empty_decomposition() {
+        let empty: JourneyCatalogue = serde_saphyr::from_str("{}\n").unwrap();
+        assert_eq!(
+            empty.check_invariants(),
+            Err("journey catalogue is empty".to_owned())
+        );
+        let stageless: JourneyCatalogue =
+            serde_saphyr::from_str("chart_review: { description: d, derivation: x, stages: [] }\n")
+                .unwrap();
+        assert_eq!(
+            stageless.check_invariants(),
+            Err("journey chart_review has no stages".to_owned())
+        );
+    }
+
+    /// A workload that names no journey, or whose shares do not reconcile,
+    /// expands to nothing — the expansion says which rule failed rather than
+    /// returning an empty schedule.
+    #[test]
+    fn an_expansion_over_no_journeys_names_the_rule_it_failed() {
+        let cat = catalogue();
+        assert_eq!(
+            cat.expansion(&[]).unwrap_err(),
+            "workload journeys is empty"
+        );
+        let short = vec![("chart_review".to_owned(), Percent(60.0))];
+        assert_eq!(
+            cat.expansion(&short).unwrap_err(),
+            "journey shares sum to 60%, must be 100%"
+        );
+    }
+
+    /// A run that recorded no request at all reads as a 100% error rate,
+    /// never as a clean zero: an empty window evidences nothing, and a
+    /// divide-by-zero default of 0.0 would publish it as perfect.
+    #[test]
+    fn a_window_with_no_requests_reads_as_a_total_error_rate() {
+        let mut c = case("15/s");
+        c.thresholds = vec![Threshold {
+            metric: Metric::ErrorRate,
+            operation: None,
+            max: Some(0.0),
+            min: None,
+        }];
+        let (verdict, violations) = class_verdict(&c, 15.2, &[]).unwrap();
+        assert_eq!(verdict, ClassVerdict::NotEarned);
+        assert!(
+            violations.iter().any(|v| v.starts_with("error_rate 1 >")),
+            "{violations:?}"
+        );
+    }
+
+    /// Each latency metric reads its own quantile out of the same histogram,
+    /// so a p50 bound and a p99 bound over one recording judge different
+    /// values.
+    #[test]
+    fn each_latency_metric_reads_its_own_quantile() {
+        let mut c = case("15/s");
+        let h = histogram(&[
+            10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 10_000, 900_000,
+        ]);
+        let m = OperationMeasurement::from_histogram("composition_read", &h, 0).unwrap();
+        // p50 is 10 ms, p90/p99 reach the 900 ms tail: a 100 ms bound holds
+        // at p50 and breaks at p90 and p99.
+        for (metric, breaches) in [
+            (Metric::LatencyP50, false),
+            (Metric::LatencyP90, true),
+            (Metric::LatencyP99, true),
+        ] {
+            c.thresholds = vec![Threshold {
+                metric,
+                operation: Some("composition_read".to_owned()),
+                max: Some(100.0),
+                min: None,
+            }];
+            let (verdict, violations) = class_verdict(&c, 15.2, std::slice::from_ref(&m)).unwrap();
+            assert_eq!(
+                verdict == ClassVerdict::NotEarned,
+                breaches,
+                "{metric:?}: {violations:?}"
+            );
+        }
+    }
+
+    /// The one-line verdict evidence names the class, the verdict, the
+    /// offered load against its floor, the worst operation's p99 and the
+    /// error count — and appends the violations behind a `not-earned`.
+    #[test]
+    fn the_verdict_evidence_line_carries_the_numbers_behind_it() {
+        let h = histogram(&[40_000]);
+        let op = OperationMeasurement::from_histogram("composition_read", &h, 2).unwrap();
+        let mut m = Measurement {
+            case: CaseId::parse("PERF-hospital_sim-class_POC").unwrap(),
+            class: PerfClass::Poc,
+            environment: serde_json::from_value(serde_json::json!({
+                "hardware_class": "test", "cores": 1, "memory_gb": 1,
+                "storage_class": "ram", "topology": "stub"
+            }))
+            .unwrap(),
+            offered_load_sustained: 2.02,
+            warmup_s: 300,
+            duration_s: 3600,
+            operations: vec![op],
+            verdict: ClassVerdict::Earned,
+            violations: Vec::new(),
+            resources: None,
+        };
+        let earned = verdict_evidence(&m);
+        assert!(earned.contains("class POC EARNED"), "{earned}");
+        assert!(earned.contains("offered 2.02/s vs floor 2/s"), "{earned}");
+        assert!(
+            earned.contains("worst p99 40 ms (composition_read)"),
+            "{earned}"
+        );
+        assert!(earned.contains("2 errors / 1 requests"), "{earned}");
+
+        m.verdict = ClassVerdict::NotEarned;
+        m.violations = vec!["error_rate 2 > max 0".to_owned()];
+        let not_earned = verdict_evidence(&m);
+        assert!(not_earned.contains("class POC NOT EARNED"), "{not_earned}");
+        assert!(
+            not_earned.ends_with(" — error_rate 2 > max 0"),
+            "{not_earned}"
+        );
+
+        // A window that measured no operation says so rather than printing a
+        // p99 it never observed.
+        m.operations.clear();
+        assert!(
+            verdict_evidence(&m).contains("no operations measured"),
+            "{}",
+            verdict_evidence(&m)
+        );
+    }
+
+    /// The resource aggregates DERIVE from the series, so an empty series
+    /// reads as zero peaks, and a window that never reached the measured
+    /// phase still reports the samples it did take.
+    #[test]
+    fn the_resource_aggregates_derive_from_the_series() {
+        let sample = |offset_s, phase, cpu_pct, rss_bytes| ResourceSample {
+            offset_s,
+            phase,
+            cpu_pct,
+            rss_bytes,
+            blk_read_bytes: 0,
+            blk_write_bytes: 0,
+            net_rx_bytes: 0,
+            net_tx_bytes: 0,
+        };
+        let empty = ContainerResourceSeries {
+            role: ContainerRole::Sut,
+            name: "sut".to_owned(),
+            samples: Vec::new(),
+        };
+        assert!(empty.cpu_peak().abs() < f64::EPSILON);
+        assert_eq!(empty.rss_peak(), 0);
+        assert!(empty.measured_samples().is_empty());
+
+        let aborted = ContainerResourceSeries {
+            role: ContainerRole::Sut,
+            name: "sut".to_owned(),
+            samples: vec![
+                sample(10, ResourcePhase::Warmup, 42.5, 100),
+                sample(20, ResourcePhase::Warmup, 11.0, 300),
+            ],
+        };
+        assert!((aborted.cpu_peak() - 42.5).abs() < f64::EPSILON);
+        assert_eq!(aborted.rss_peak(), 300);
+        // No measured-phase sample: the whole series is reported.
+        assert_eq!(aborted.measured_samples().len(), 2);
+
+        let complete = ContainerResourceSeries {
+            role: ContainerRole::Sut,
+            name: "sut".to_owned(),
+            samples: vec![
+                sample(10, ResourcePhase::Warmup, 42.5, 100),
+                sample(20, ResourcePhase::Measured, 11.0, 300),
+            ],
+        };
+        assert_eq!(complete.measured_samples().len(), 1);
+    }
+
+    /// A stage offset renders back to the shape it was authored in, and both
+    /// structured forms refuse the values that describe no schedule: an
+    /// inverted uniform window and a periodic repeat of zero.
+    #[test]
+    fn a_stage_offset_round_trips_and_refuses_an_empty_schedule() {
+        for (yaml, json) in [
+            ("PT30S\n", serde_json::json!("PT30S")),
+            (
+                "uniform: [PT10S, PT30S]\n",
+                serde_json::json!({ "uniform": ["PT10S", "PT30S"] }),
+            ),
+            (
+                "periodic: { interval: PT5M, count: 3 }\n",
+                serde_json::json!({ "periodic": { "interval": "PT5M", "count": 3 } }),
+            ),
+        ] {
+            let offset: StageOffset = serde_saphyr::from_str(yaml).unwrap();
+            assert_eq!(serde_json::to_value(offset).unwrap(), json);
+        }
+        let inverted = serde_saphyr::from_str::<StageOffset>("uniform: [PT30S, PT10S]\n")
+            .expect_err("an inverted window schedules nothing");
+        assert!(inverted.to_string().contains("is inverted"), "{inverted}");
+        let empty =
+            serde_saphyr::from_str::<StageOffset>("periodic: { interval: PT5M, count: 0 }\n")
+                .expect_err("a zero repeat schedules nothing");
+        assert!(
+            empty.to_string().contains("periodic count must be >= 1"),
+            "{empty}"
+        );
+    }
 }

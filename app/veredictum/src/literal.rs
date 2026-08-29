@@ -560,4 +560,84 @@ mod tests {
         assert!(ViolationRef::parse("bogus: nope").is_err());
         assert!(ViolationRef::parse("rm_schema(arg): no args allowed").is_err());
     }
+
+    /// A decision-table cell is a scalar or a grammar string. A composite JSON
+    /// value has no production, so the reader refuses it rather than storing
+    /// a cell nothing can compare against.
+    #[test]
+    fn a_composite_cell_has_no_literal_production() {
+        let error = Literal::from_cell(&serde_json::json!({ "magnitude": 5 }))
+            .expect_err("an object cell has no production");
+        assert!(
+            error
+                .to_string()
+                .contains("cell must be a scalar or grammar string"),
+            "{error}"
+        );
+        let error = Literal::from_cell(&serde_json::json!([1, 2]))
+            .expect_err("an array cell has no production");
+        assert!(
+            error
+                .to_string()
+                .contains("cell must be a scalar or grammar string"),
+            "{error}"
+        );
+    }
+
+    /// A list's items are values, so an empty slot is a typo rather than a
+    /// silently dropped member.
+    #[test]
+    fn an_empty_list_item_is_refused() {
+        let error = Literal::from_text("[cm, , m]").expect_err("an empty item is not a value");
+        assert!(error.to_string().contains("empty list item"), "{error}");
+    }
+
+    /// A terminology code is one word. A multi-word tail after `::` is not a
+    /// code, and accepting it would compare against text no server returns.
+    #[test]
+    fn a_term_code_carries_one_word_for_its_code() {
+        let error =
+            Literal::from_text("openehr::at 0005").expect_err("a two-word code is not a code");
+        assert!(
+            error.to_string().contains("code must be one word"),
+            "{error}"
+        );
+    }
+
+    /// A quantity is a number and ONE unit word. A multi-word tail is plain
+    /// text, so `magnitude`/`units` are never invented from prose.
+    #[test]
+    fn a_multi_word_tail_is_text_rather_than_a_quantity() {
+        assert_eq!(
+            Literal::from_text("100 mg per day").unwrap(),
+            Literal::Text("100 mg per day".to_owned())
+        );
+    }
+
+    /// A violation renders back to the text it parsed from, in both the
+    /// argument-carrying and bare forms, and a head with no description or no
+    /// colon at all is refused.
+    #[test]
+    fn violations_render_back_and_refuse_a_missing_description() {
+        for raw in [
+            "constraint(C_DV_QUANTITY.list): magnitude not in range for unit",
+            "rm_invariant(limits_consistent): lower exceeds upper",
+            "iso8601(duration): the P designator carries no components",
+            "rm_schema: magnitude and units are mandatory",
+        ] {
+            assert_eq!(ViolationRef::parse(raw).unwrap().to_string(), raw);
+        }
+        let error = ViolationRef::parse("rm_schema").expect_err("a head alone is not a violation");
+        assert!(
+            error
+                .to_string()
+                .contains("violation must be <category>[(arg)]: <description>"),
+            "{error}"
+        );
+        let error = ViolationRef::parse("rm_schema:   ").expect_err("an empty description");
+        assert!(
+            error.to_string().contains("violation description is empty"),
+            "{error}"
+        );
+    }
 }

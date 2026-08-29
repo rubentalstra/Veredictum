@@ -980,4 +980,46 @@ mod tests {
         ));
         assert!(serde_json::from_value::<ExpectSpec>(serde_json::json!("http_201")).is_err());
     }
+
+    /// The corpus-keyed preconditions spell "nothing is provisioned" as the
+    /// literal `none`, so a corpus key named `none` can never be provisioned
+    /// by accident and an unparsable key is refused rather than provisioned
+    /// as prose.
+    #[test]
+    fn the_corpus_keyed_preconditions_read_none_as_the_absent_state() {
+        let requires: Requires = serde_json::from_value(serde_json::json!({
+            "directory": "none",
+            "party": "none"
+        }))
+        .unwrap();
+        assert_eq!(requires.directory, Some(DirectoryRequirement::None));
+        assert_eq!(requires.party, Some(PartyRequirement::None));
+
+        let provisioned: Requires = serde_json::from_value(serde_json::json!({
+            "directory": "cnf.folder.tree.v1",
+            "party": "cnf.demographic.person.v1"
+        }))
+        .unwrap();
+        assert_eq!(
+            provisioned.directory,
+            Some(DirectoryRequirement::Tree(
+                CorpusKey::parse("cnf.folder.tree.v1").unwrap()
+            ))
+        );
+        assert_eq!(
+            provisioned.party,
+            Some(PartyRequirement::Exists(
+                CorpusKey::parse("cnf.demographic.person.v1").unwrap()
+            ))
+        );
+
+        assert!(
+            serde_json::from_value::<Requires>(serde_json::json!({ "directory": "Not.A.Key" }))
+                .is_err()
+        );
+        assert!(
+            serde_json::from_value::<Requires>(serde_json::json!({ "party": "Not.A.Key" }))
+                .is_err()
+        );
+    }
 }

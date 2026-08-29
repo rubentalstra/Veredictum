@@ -445,6 +445,87 @@ mod tests {
         assert!(covered.check_invariants().is_ok());
     }
 
+    /// An element carrying BOTH a covering case and an exception claims the
+    /// behaviour is exercised and excused at once, so the register would read
+    /// as covered while the exception silently excused it.
+    #[test]
+    fn an_element_may_not_be_both_covered_and_excepted() {
+        let both: WireElement = serde_json::from_value(serde_json::json!({
+            "id": "etag-on-create", "description": "d", "source": "s",
+            "covered_by": ["CASE-1"],
+            "exception": { "reason": "coverage_gap" }
+        }))
+        .unwrap();
+        assert_eq!(
+            both.check_invariants(),
+            Err(
+                "wire-surface element etag-on-create carries both covered_by and an exception"
+                    .to_owned()
+            )
+        );
+    }
+
+    /// The register reports every shape violation it finds in one pass — a
+    /// malformed branch, a malformed element and a duplicated element id all
+    /// surface together, so one run names the whole repair list.
+    #[test]
+    fn the_register_reports_every_shape_violation_in_one_pass() {
+        let surface: WireSurface = serde_json::from_value(serde_json::json!({
+            "branches": [
+                { "binding": "I_EHR_SERVICE.create_ehr", "reason": "coverage_gap", "source": "s" }
+            ],
+            "elements": [
+                { "id": "dup", "description": "d", "source": "s" },
+                { "id": "dup", "description": "d", "source": "s", "covered_by": ["CASE-1"] }
+            ]
+        }))
+        .unwrap();
+        let findings = surface
+            .check_invariants()
+            .expect_err("three violations are authored");
+        assert_eq!(
+            findings,
+            [
+                "branch exception for I_EHR_SERVICE.create_ehr must carry exactly one of outcome | format",
+                "wire-surface element dup has neither a covering case nor an exception",
+                "wire-surface element id dup is not unique",
+            ]
+        );
+    }
+
+    /// The per-entry gates of a served-extension family are independent: an
+    /// unnamed family with no routes, no config gate and no spec-silence
+    /// citation reports all four, and the unnamed one is labelled rather than
+    /// left blank in the message.
+    #[test]
+    fn a_served_extension_states_its_name_routes_gate_and_silence() {
+        let empty: ServedExtension = serde_json::from_value(serde_json::json!({
+            "family": "  ", "routes": [], "config_gate": " ",
+            "spec_silence": "", "never_gates": true
+        }))
+        .unwrap();
+        assert_eq!(
+            empty.check_invariants(),
+            [
+                "served_extensions entry has an empty family name",
+                "served extension <unnamed> declares no routes",
+                "served extension <unnamed> states no config gate",
+                "served extension <unnamed> states no spec-silence citation",
+            ]
+        );
+    }
+
+    /// Every reason token is distinct: the register's exception vocabulary is
+    /// what a certificate reader sees beside an unexercised behaviour.
+    #[test]
+    fn every_surface_reason_carries_a_distinct_token() {
+        let tokens: std::collections::BTreeSet<&str> =
+            SurfaceReason::ALL.iter().map(|r| r.token()).collect();
+        assert_eq!(tokens.len(), SurfaceReason::ALL.len());
+        assert!(tokens.contains("variant_of"));
+        assert!(tokens.contains("accessor"));
+    }
+
     fn served(never_gates: bool, routes: &[&str]) -> ServedExtension {
         serde_json::from_value(serde_json::json!({
             "family": "management",

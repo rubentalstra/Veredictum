@@ -228,6 +228,11 @@ impl SelectorsVocab {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "the selector fixtures are independently authored JSON, which is how a drifted \
+              vocabulary reaches the comparator the way an artifact would"
+)]
 mod tests {
     use super::*;
 
@@ -252,5 +257,135 @@ mod tests {
         let short: OutcomesVocab =
             serde_saphyr::from_str("created: { class: success, meaning: m }\n").unwrap();
         assert!(short.check_against_enum().is_err());
+    }
+
+    /// The equality runs in both directions: a kind the compiled taxonomy
+    /// does not know is drift, and so is a class the file spells differently
+    /// from the taxonomy. Both are reported by row, not merged into one
+    /// "files differ" line.
+    #[test]
+    fn an_unknown_kind_and_a_disagreeing_class_are_both_drift() {
+        let vocab: OutcomesVocab = serde_saphyr::from_str(
+            "created: { class: error, meaning: m }\nteapot: { class: error, meaning: m }\n",
+        )
+        .unwrap();
+        assert_eq!(vocab.entries().len(), 2);
+        let findings = vocab
+            .check_against_enum()
+            .expect_err("a wrong class and an unknown kind");
+        assert!(
+            findings.contains(
+                &"outcomes.yaml class for \"created\" disagrees with the compiled taxonomy"
+                    .to_owned()
+            ),
+            "{findings:?}"
+        );
+        assert!(
+            findings.contains(&"outcomes.yaml lists unknown kind \"teapot\"".to_owned()),
+            "{findings:?}"
+        );
+    }
+
+    fn selectors(
+        body: &[&str],
+        header: &[&str],
+        ignore_sets: &serde_json::Value,
+    ) -> SelectorsVocab {
+        serde_json::from_value(serde_json::json!({
+            "body_selectors": body,
+            "header_matchers": header,
+            "ignore_sets": ignore_sets
+        }))
+        .unwrap()
+    }
+
+    fn sound_ignore_sets() -> serde_json::Value {
+        serde_json::json!({
+            "server_assigned": { "per_binding": true, "source": "s" },
+            "ctx_defaults": { "paths": ["/context/health_care_facility"], "source": "s" }
+        })
+    }
+
+    /// The published selector file and the compiled vocabularies are held
+    /// equal, and each named ignore-set keeps the shape its membership rule
+    /// implies: `server_assigned` is enumerated per binding, `ctx_defaults`
+    /// enumerates its own paths.
+    #[test]
+    fn selector_drift_and_ignore_set_shape_are_both_reported() {
+        let sound = selectors(
+            BODY_SELECTOR_TOKENS,
+            HEADER_MATCHER_FORMS,
+            &sound_ignore_sets(),
+        );
+        assert!(sound.check_against_enum().is_ok());
+
+        let drifted = selectors(
+            &["present"],
+            &["absent"],
+            &serde_json::json!({
+                "server_assigned": { "paths": ["/uid"], "per_binding": false, "source": "s" },
+                "ctx_defaults": { "per_binding": true, "source": "s" }
+            }),
+        );
+        let findings = drifted
+            .check_against_enum()
+            .expect_err("both vocabularies and both ignore-set shapes drifted");
+        assert_eq!(findings.len(), 4, "{findings:?}");
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.starts_with("selectors.yaml body_selectors")),
+            "{findings:?}"
+        );
+        assert!(
+            findings
+                .iter()
+                .any(|f| f.starts_with("selectors.yaml header_matchers")),
+            "{findings:?}"
+        );
+        assert!(
+            findings.contains(
+                &"server_assigned must be per_binding with no enumerated paths".to_owned()
+            ),
+            "{findings:?}"
+        );
+        assert!(
+            findings
+                .contains(&"ctx_defaults must enumerate its paths (not per_binding)".to_owned()),
+            "{findings:?}"
+        );
+    }
+
+    /// An ignore-set the file omits is drift too: the comparator resolves the
+    /// set by name, so a missing declaration silently ignores nothing.
+    #[test]
+    fn a_missing_ignore_set_is_drift() {
+        let partial = selectors(
+            BODY_SELECTOR_TOKENS,
+            HEADER_MATCHER_FORMS,
+            &serde_json::json!({
+                "server_assigned": { "per_binding": true, "source": "s" }
+            }),
+        );
+        assert_eq!(
+            partial.check_against_enum(),
+            Err(vec![
+                "selectors.yaml is missing ignore-set CtxDefaults".to_owned()
+            ])
+        );
+    }
+
+    /// The ignore-set key renders back to its published token, and a name
+    /// outside the registry is refused rather than keyed to a default.
+    #[test]
+    fn an_ignore_set_key_round_trips_its_published_token() {
+        for token in ["server_assigned", "ctx_defaults"] {
+            let key: IgnoreSetKey = token.parse().unwrap();
+            assert_eq!(key.to_string(), token);
+        }
+        assert_eq!(
+            "audit_defaults".parse::<IgnoreSetKey>(),
+            Err("\"audit_defaults\" is not a named ignore-set".to_owned())
+        );
     }
 }

@@ -557,6 +557,11 @@ fn hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 #[expect(
+    clippy::disallowed_types,
+    reason = "the forged manifest is authored as raw JSON, which is the only way a tampered \
+              bundle's bytes reach the reader the way a real one would"
+)]
+#[expect(
     clippy::panic_in_result_fn,
     reason = "nine Result-returning tests in the Book ch11 shape, each asserting; \
               clippy offers no allow-in-tests knob for this lint"
@@ -796,6 +801,135 @@ mod tests {
             verify(rendered.as_bytes(), &armored, "not a key"),
             Err(RecordError::PublicKey { .. })
         ));
+        Ok(())
+    }
+
+    /// Malformed key material and malformed signature armor are typed ERRORS,
+    /// never a `Rejected` outcome: a bundle whose inputs could not be read at
+    /// all was never checked, and saying "rejected" would claim it was.
+    #[test]
+    fn malformed_signing_inputs_are_typed_errors() -> Result<(), Box<dyn std::error::Error>> {
+        let rendered = manifest(&documents())?;
+        assert!(matches!(
+            sign(rendered.as_bytes(), "not a secret key", None),
+            Err(RecordError::SigningKey { .. })
+        ));
+        assert!(matches!(
+            verify(rendered.as_bytes(), "not a signature", &public_key()?),
+            Err(RecordError::Signature { .. })
+        ));
+        Ok(())
+    }
+
+    /// A certificate with no signing SUBKEY signs with its primary key, and
+    /// the resulting signature verifies against the matching public key — the
+    /// fingerprint reported is the key that actually signed.
+    #[test]
+    fn a_certificate_without_a_signing_subkey_signs_with_its_primary_key()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use pgp::composed::{KeyType, SecretKeyParamsBuilder};
+
+        let params = SecretKeyParamsBuilder::default()
+            .key_type(KeyType::Ed25519)
+            .can_sign(true)
+            .can_certify(true)
+            .primary_user_id("Veredictum Primary Only <primary@test.invalid>".to_owned())
+            .build()?;
+        let generated = params.generate(rand::rngs::OsRng)?;
+        let secret = generated.to_armored_string(None.into())?;
+        let public = generated.to_public_key().to_armored_string(None.into())?;
+
+        let rendered = manifest(&documents())?;
+        let armored = sign(rendered.as_bytes(), &secret, None)?;
+        let SignatureOutcome::Accepted(record) = verify(rendered.as_bytes(), &armored, &public)?
+        else {
+            panic!("a primary-key signature must verify against its own certificate")
+        };
+        assert!(!record.signer_fingerprint.is_empty());
+        Ok(())
+    }
+
+    /// A bundle file that exists but cannot be read is `unreadable`, kept
+    /// distinct from `absent`: the two say different things to whoever has to
+    /// reproduce the record.
+    #[test]
+    fn an_unreadable_bundle_file_is_its_own_finding() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = assert_fs::TempDir::new()?;
+        seal_into(dir.path())?;
+        std::fs::remove_file(dir.path().join("verdicts.json"))?;
+        std::fs::create_dir_all(dir.path().join("verdicts.json"))?;
+        let verification = verify_bundle(dir.path(), &key_dir().join("cnf-signing.pub.asc"))?;
+        let findings = verification.findings();
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings
+                .first()
+                .is_some_and(|f| f.starts_with("verdicts.json: unreadable: ")),
+            "{findings:?}"
+        );
+        Ok(())
+    }
+
+    /// A bundle with no manifest at all names the path it could not read,
+    /// rather than reporting an empty clean verification.
+    #[test]
+    fn a_bundle_without_a_manifest_names_the_path() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = assert_fs::TempDir::new()?;
+        let error = verify_bundle(dir.path(), &key_dir().join("cnf-signing.pub.asc"))
+            .expect_err("an empty directory carries no manifest");
+        assert!(
+            matches!(&error, RecordError::Read { path, .. } if path.ends_with(MANIFEST_FILE)),
+            "{error}"
+        );
+        Ok(())
+    }
+
+    /// Writes `manifest_bytes` as the bundle's manifest, signed by the
+    /// committed key, so verification reaches the manifest READER with a
+    /// signature that verifies.
+    fn seal_bytes(dir: &Path, manifest_bytes: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+        std::fs::write(dir.join(MANIFEST_FILE), manifest_bytes)?;
+        let armored = sign(manifest_bytes, &secret_key()?, None)?;
+        std::fs::write(dir.join(SIGNATURE_FILE), armored)?;
+        Ok(())
+    }
+
+    /// A manifest that is not the manifest shape is a typed parse error
+    /// naming the file, never a silently empty file list.
+    #[test]
+    fn a_manifest_that_is_not_the_manifest_shape_is_a_parse_error()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = assert_fs::TempDir::new()?;
+        seal_bytes(dir.path(), b"not a manifest\n")?;
+        let error = verify_bundle(dir.path(), &key_dir().join("cnf-signing.pub.asc"))
+            .expect_err("the manifest does not parse");
+        assert!(
+            matches!(&error, RecordError::ManifestParse { path, .. } if path.ends_with(MANIFEST_FILE)),
+            "{error}"
+        );
+        Ok(())
+    }
+
+    /// The escaping-name refusal holds on the READ side too: a hand-forged
+    /// manifest naming a path outside the bundle is refused before any file
+    /// is opened, so verification can never be made to read the wider file
+    /// system.
+    #[test]
+    fn a_forged_manifest_entry_escaping_the_bundle_is_refused_at_verify()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = assert_fs::TempDir::new()?;
+        let forged = serde_json::json!({
+            "instrument": { "name": INSTRUMENT_NAME, "version": env!("CARGO_PKG_VERSION") },
+            "digest_algorithm": "sha256",
+            "files": { "../outside.json": hex(&Sha256::digest(b"{}")) }
+        });
+        seal_bytes(dir.path(), format!("{forged}\n").as_bytes())?;
+        let error = verify_bundle(dir.path(), &key_dir().join("cnf-signing.pub.asc"))
+            .expect_err("an escaping name is refused");
+        assert!(
+            matches!(&error, RecordError::UnsafeFileName { name } if name == "../outside.json"),
+            "{error}"
+        );
         Ok(())
     }
 }
