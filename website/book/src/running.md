@@ -13,11 +13,9 @@ Before a server is involved, check the catalogue you are about to grade with:
 veredictum validate --root artifacts --specs specs/openehr
 ```
 
-This is every machine check over the artifact tree: identifier uniqueness,
-citation resolution against the vendored specification text, binding
-completeness, coverage of the enumerated wire surface, and claim completeness
-against the committed party statements. Zero findings is the only passing
-result, and the command exits `1` when there is even one.
+Zero findings is the only passing result, and the command exits `1` when there
+is even one. [The command reference](commands.md#validate) lists the gates it
+runs.
 
 Pass `--specs` every time. Without it the citation and Service-Model
 resolution gates do not run, and the case count still prints, which looks like
@@ -111,12 +109,10 @@ on any machine, and you get the same bytes out. It writes:
 Nothing in these documents is asserted by hand. A number that appears in them
 was computed from the record in the same run that printed it.
 
-## Measured performance and stress
+## Measured performance, stress and speed
 
-Those four steps cover functional conformance. Two more instruments produce the
-other kinds of evidence, and both need the `environment` block in your IXIT file
-filled in, because a throughput number without the deployment described says
-nothing.
+Those four steps cover functional conformance. Three more instruments produce
+the other kinds of evidence.
 
 - `veredictum perf` earns a volumetric class (POC, S, L or R) with an open-loop
   measured run and merges the measurement record into an existing
@@ -126,8 +122,15 @@ nothing.
 - `veredictum stress` climbs geometric load steps to find where the deployment
   breaks and writes `stress.json`. It is exploration only and is never a
   conformance record, which is why it is class-free by design.
+- `veredictum bench` measures comparative speed against any reachable CDR and
+  writes a `bench-result` document. It needs no artifact root, no IXIT and no
+  statement, and it is a speed record and never a conformance record. The
+  [benchmark board](https://veredictum.eu/benchmarks.html) ranks the submitted
+  ones.
 
-Both want an idle machine and a deployment whose resource limits match the
+`perf` and `stress` both need the `environment` block in your IXIT file filled
+in, because a throughput number without the deployment described says nothing.
+All three want an idle machine and a deployment whose resource limits match the
 envelope you are claiming. A measured run on a laptop that is also running a
 browser measures the browser.
 

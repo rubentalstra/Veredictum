@@ -1,9 +1,8 @@
 # Installation
 
-There are four ways to get the command, and all four end at the same place: a
-`veredictum` you can point at a catalogue. Pick by what you already have
-installed. Whichever you pick, you also want a clone of the repository, and the
-first section says why.
+Four ways end at the same place: a `veredictum` you can point at a catalogue.
+Pick by what you already have installed. Whichever you pick, you also want a
+clone of the repository, and the next section says why.
 
 <!-- toc -->
 
@@ -25,8 +24,7 @@ git clone https://github.com/rubentalstra/Veredictum
 cd Veredictum
 ```
 
-Pick one of the three ways of getting the command below. All of them then run
-the same subcommands against that clone.
+The four ways below all run the same subcommands against that clone.
 
 ## With cargo
 
@@ -38,11 +36,10 @@ cargo install veredictum --locked
 veredictum validate --root artifacts --specs specs/openehr
 ```
 
-Two flags are worth understanding rather than copying:
-
-- `--locked` builds against the `Cargo.lock` the release was tested with. Leave
-  it off and cargo resolves fresh versions of every dependency, which is a
-  different build from the one the project's gates ran.
+`--locked` is worth understanding rather than copying: it builds against the
+`Cargo.lock` the release was tested with. Leave it off and cargo resolves fresh
+versions of every dependency, which is a different build from the one the
+project's gates ran.
 
 The library target is published with the binary, so you can consume the typed
 artifact model and the published JSON Schemas directly rather than
@@ -52,8 +49,8 @@ reimplementing the format.
 
 The container image is the web console: a browser frontend over the same
 instrument, served by its own binary. The CLI is deliberately not distributed
-as an image — a static binary needs no container, and the release binaries
-below are its no-toolchain path.
+as an image: a static binary needs no container, and the release binaries below
+are its no-toolchain path.
 
 The fastest start is the operator compose file, which pins the image to the
 version it shipped with and binds the console to loopback on port 3210:
@@ -79,14 +76,14 @@ for `<tag>`. The image is multi-architecture and is pushed by digest, with its
 tags applied only after a smoke run and a vulnerability scan of that digest have
 passed.
 
-The catalogue and the specification oracle are not baked into the image. That is
-the same over 300 MB reason as above, and it means the data you grade against is the
-data you can see in your own checkout: run compose beside a clone and the
-`/work` mount carries `artifacts/`, `specs/openehr/` and `party/`; run it
-beside an empty directory and the console comes up and says what it is
-missing. The console has no login, so both invocations above bind it to
-loopback; exposing it further is the operator's decision, behind their own
-gate. [The console chapter](console.md) shows what it does today.
+The catalogue and the specification oracle are not baked into the image either,
+so the data you grade against is the data you can see in your own checkout: run
+compose beside a clone and the `/work` mount carries `artifacts/`,
+`specs/openehr/` and `party/`; run it beside an empty directory and the console
+comes up and says what it is missing. The console has no login, so both
+invocations above bind it to loopback; exposing it further is the operator's
+decision, behind their own gate. [The console chapter](console.md) shows what it
+does today.
 
 ## From a release binary
 

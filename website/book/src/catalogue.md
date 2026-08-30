@@ -109,18 +109,11 @@ gate.
 ## The corpus, and why invalid fixtures stay
 
 A corpus entry carries its own adjudicated verdict: valid, or invalid with the
-defect it carries and the specification reference that makes it invalid.
-
-Every invalid shape has a valid twin. The valid twin proves acceptance; the
-invalid twin pins the refusal, so a lenient server fails it. Removing an invalid
-fixture narrows the claim without changing any visible count, which is why it
-does not happen.
-
-Invalid fixtures are raw bytes. A missing mandatory attribute, an empty list
-where the Reference Model requires a member, an undeclared key: none of those
-can be constructed through a typed model, because a typed model refuses them.
-Raw bytes are the only way to author what a reader must reject, and they catch
-codec defects a construct-then-serialize fixture cannot reach.
+defect it carries and the specification reference that makes it invalid. Every
+invalid shape has a valid twin and is authored as raw bytes, for the reasons
+[the conformance method](methodology.md) sets out. Removing an invalid fixture
+narrows the claim without changing any visible count, which is why it does not
+happen.
 
 Vendored breadth packs carry the same discipline. A pack is exercised in full,
 with any skip adjudicated and recorded, so a pack never sits in the tree
@@ -152,10 +145,8 @@ implying coverage it does not have.
 veredictum validate --root artifacts --specs specs/openehr
 ```
 
-Zero findings is the only passing result. The command checks identifier
-uniqueness, citation resolution, binding completeness, coverage of the
-enumerated wire surface, and claim completeness against the committed party
-statements, and it exits non-zero if any of them has something to say.
+Zero findings is the only passing result, and the gates behind that line are in
+[the command reference](commands.md#validate).
 
 Run it before you drive anything against a server. A catalogue defect found by a
 server run costs a great deal more to diagnose than the same defect found by
