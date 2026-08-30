@@ -248,7 +248,8 @@ impl Engine {
     /// # Errors
     /// [`Error::Execute`] when the process cannot run, and
     /// [`Error::Judgement`] carrying the engine's own diagnostic when it
-    /// exits non-zero.
+    /// exits at 2 or above, or exits at 1 without writing the verdicts
+    /// document.
     pub fn verdicts(&self, spec: &VerdictsSpec) -> Result<(), Error> {
         let mut command = std::process::Command::new(&self.binary);
         command
@@ -259,6 +260,14 @@ impl Engine {
         }
         let output = command.output().map_err(Error::Execute)?;
         if output.status.success() {
+            return Ok(());
+        }
+        // The same tolerance as the reproduction lane (#269): a judgement
+        // carrying review findings (exit 1) is a legitimate record whose
+        // verdicts document states the findings, while a judge error (exit 2)
+        // is not a judgement at all. A sealed bundle the public lane
+        // publishes must also seal here.
+        if output.status.code() == Some(1) && spec.out_dir.join("verdicts.json").is_file() {
             return Ok(());
         }
         // stderr first, because the engine's refusals print there; stdout is
