@@ -30,8 +30,11 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use leptos::server_fn::ServerFn;
 use thirtyfour::ChromiumLikeCapabilities;
 use thirtyfour::prelude::{By, DesiredCapabilities, ElementQueryable, WebDriver, WebElement};
+use veredictum_console::run_api::StartOutcome;
+use veredictum_console::run_api::fns::{CancelRun, ProbeAndSave, SaveScope, StartRun};
 
 /// The budget every ordinary element or URL wait allows.
 const WAIT: Duration = Duration::from_secs(15);
@@ -547,10 +550,11 @@ async fn e2e_unknown_route_renders_the_fallback() {
 /// and the auth control exist, and Scope carries its own selection controls.
 ///
 /// Scope is asserted by its OWN structure, never by the absence of a draft
-/// (#135): the console holds one draft and one job slot, so an assertion on
-/// the empty-draft copy passes or fails by which journey nextest happened to
-/// run first. The heading, the claim box, the filter and the two controls are
-/// on the page whatever the draft holds.
+/// (#135). The console now keeps a draft per submitter (#389), and every
+/// journey drives the SAME browser, so they are one submitter sharing one
+/// draft: an assertion on the empty-draft copy would still pass or fail by
+/// which journey nextest happened to run first. The heading, the claim box,
+/// the filter and the two controls are on the page whatever the draft holds.
 #[tokio::test(flavor = "multi_thread")]
 async fn e2e_run_wizard_reaches_connect_and_scope() {
     let Some(h) = Harness::start("run-wizard").await else {
@@ -949,9 +953,10 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
     h.wait_xpath("//span[contains(., 'finished')]").await;
     h.wait_xpath("//a[starts-with(@href, '/run/live/')]").await;
 
-    // S8 and S9 ride this journey rather than a second driven one: the console
-    // holds ONE run draft and ONE job slot, so a second wizard-driving journey
-    // would leave a draft behind for whichever journey nextest runs next.
+    // S8 and S9 ride this journey rather than a second driven one. The console
+    // now holds a draft and a run per SUBMITTER (#389), and every journey
+    // drives the same browser, which is one submitter: it has one draft, and
+    // the per-submitter cap gives it one run in flight at a time.
     let clean_url = export_and_verify(&h).await;
 
     // The dark pass re-walks the finished run's surfaces: the job state
@@ -1298,4 +1303,326 @@ async fn e2e_wizard_grades_the_real_cdrs() {
 
     h.assert_console_clean(&[]).await;
     h.finish().await;
+}
+/// A fixture SUT that answers `500` after `delay`, so a run driven against it
+/// is still in flight while a journey navigates.
+///
+/// The concurrency journey asserts that two runs are executing AT THE SAME
+/// TIME, and a run that ends before the next navigation cannot show that.
+fn slow_fixture_sut(delay: Duration) -> Result<u16, std::io::Error> {
+    use std::io::{Read as _, Write as _};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            std::thread::spawn(move || {
+                let mut scratch = [0_u8; 4096];
+                let _bytes_read = stream.read(&mut scratch);
+                std::thread::sleep(delay);
+                let _write = stream.write_all(
+                    b"HTTP/1.1 500 Internal Server Error\r\ncontent-length: 2\r\nconnection: close\r\n\r\nno",
+                );
+            });
+        }
+    });
+    Ok(port)
+}
+
+/// A visitor beside the browser: the same public server-function endpoints
+/// the browser posts to, called under a client address of this journey's own.
+///
+/// The console reads a forwarded address only from the header its operator
+/// named, so this identity exists only because `scripts/ui-e2e.sh` names one.
+/// The browser sends no such header and keeps its socket peer, which is what
+/// makes these calls a different submitter on one process.
+struct ApiVisitor {
+    /// The console's host-side origin (the browser's own origin may name a
+    /// host only the browser container can resolve).
+    origin: String,
+    /// The header the console trusts for the client address.
+    header: String,
+    /// The address this visitor claims.
+    address: &'static str,
+    /// The HTTP client.
+    client: reqwest::Client,
+}
+
+impl ApiVisitor {
+    /// Builds a visitor claiming `address`, or returns `None` with a printed
+    /// reason when the harness did not configure a trusted header.
+    fn new(address: &'static str) -> Option<Self> {
+        let (Some(origin), Some(header)) = (env("UI_E2E_HOST_URL"), env("UI_E2E_CLIENT_IP_HEADER"))
+        else {
+            eprintln!(
+                "SKIP two-visitors: UI_E2E_HOST_URL/UI_E2E_CLIENT_IP_HEADER unset (run scripts/ui-e2e.sh)"
+            );
+            return None;
+        };
+        Some(Self {
+            origin,
+            header,
+            address,
+            client: reqwest::Client::new(),
+        })
+    }
+
+    /// Posts one URL-encoded server-function call and returns its JSON body.
+    ///
+    /// # Panics
+    /// On any transport failure or non-success status — a journey that
+    /// silently skipped its second visitor would assert nothing.
+    async fn call(&self, path: &str, form: &str) -> String {
+        let url = format!("{}{path}", self.origin);
+        let response = self
+            .client
+            .post(&url)
+            .header(self.header.as_str(), self.address)
+            .header("accept", "application/json")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(form.to_owned())
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("POST {url}: {e}"));
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        assert!(status.is_success(), "POST {url} answered {status}: {body}");
+        body
+    }
+
+    /// Drives connect, scope and start as this visitor, returning the run's
+    /// own address.
+    ///
+    /// # Panics
+    /// When the console does not accept the run — the second visitor has no
+    /// run in flight, so anything but an acceptance is a real failure.
+    async fn start_a_run(&self, sut_base_url: &str, sut_name: &str, filter: &str) -> String {
+        self.call(
+            <ProbeAndSave as ServerFn>::PATH,
+            &format!(
+                "base_url={}&sut_name={sut_name}&sut_version=0.0.0-gate&auth=None&user=&password=&token=",
+                encode(sut_base_url)
+            ),
+        )
+        .await;
+        self.call(
+            <SaveScope as ServerFn>::PATH,
+            &format!("filter={}&record_exchanges=false", encode(filter)),
+        )
+        .await;
+        let answer = self.call(<StartRun as ServerFn>::PATH, "").await;
+        let outcome: StartOutcome = serde_json::from_str(&answer)
+            .unwrap_or_else(|e| panic!("start answered `{answer}`: {e}"));
+        match outcome {
+            StartOutcome::Accepted(id) => format!("/run/live/{id}"),
+            StartOutcome::AlreadyInFlight(id) => {
+                panic!("the second visitor already had run {id} in flight")
+            }
+        }
+    }
+
+    /// Cancels the run at `address`, so the journey leaves no slot occupied.
+    ///
+    /// Cancel addresses a run by id and is not scoped to whoever started it,
+    /// which is the same property that lets anyone holding a run's URL read
+    /// it — so this ends both visitors' runs.
+    async fn stop(&self, address: &str) {
+        let Some(id) = address.rsplit('/').next() else {
+            return;
+        };
+        drop(
+            self.client
+                .post(format!("{}{}", self.origin, <CancelRun as ServerFn>::PATH))
+                .header(self.header.as_str(), self.address)
+                .header("accept", "application/json")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(format!("id={id}"))
+                .send()
+                .await,
+        );
+    }
+}
+
+/// Percent-encodes a form value's reserved characters.
+///
+/// Only what these calls actually carry: a URL and a case-id filter. Anything
+/// outside the unreserved set becomes `%XX`, which is always correct even
+/// where it was not required.
+fn encode(value: &str) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            out.push(char::from(byte));
+        } else {
+            let _ = write!(out, "%{byte:02X}");
+        }
+    }
+    out
+}
+
+/// Reads the whole rendered page as text.
+///
+/// # Panics
+/// When the body cannot be read.
+async fn page_text(h: &Harness) -> String {
+    h.wait_css("body")
+        .await
+        .text()
+        .await
+        .expect("the page's text")
+}
+
+/// Several cases against a two-second SUT: both runs of the concurrency
+/// journey stay in flight for its whole length, and both are cancelled before
+/// it ends.
+const TWO_VISITOR_FILTER: &str = "I_EHR_SERVICE.create_ehr";
+
+/// The #389 journey: two runs drive at once on ONE console, each followed by
+/// its own URL, neither screen showing the other's progress or outcome, and a
+/// third start waiting in a queue that states its place.
+///
+/// The three visitors are the browser (its socket peer) and two sets of HTTP
+/// calls under forwarded addresses the harness told the console to trust. The
+/// screens are compared by the SUT display name and by the served URL, never
+/// by the run id the page prints: documentation capture mode pins that id, so
+/// every live screen displays the same one.
+#[tokio::test(flavor = "multi_thread")]
+async fn e2e_two_visitors_drive_two_runs_at_once() {
+    let Some(h) = Harness::start("two-visitors").await else {
+        return;
+    };
+    let (Some(second), Some(third)) = (
+        ApiVisitor::new("203.0.113.77"),
+        ApiVisitor::new("203.0.113.78"),
+    ) else {
+        h.finish().await;
+        return;
+    };
+    let Ok(port) = slow_fixture_sut(Duration::from_secs(2)) else {
+        panic!("the fixture SUT could not bind");
+    };
+    let base_url = format!("http://127.0.0.1:{port}");
+
+    // Visitor one is the browser, driving the wizard.
+    let first = drive_to_live(&h, &base_url, "first-visitor", TWO_VISITOR_FILTER).await;
+    h.wait_xpath("//span[contains(., 'running')]").await;
+
+    // Visitor two is this journey, over the same public endpoints.
+    let other = second
+        .start_a_run(&base_url, "second-visitor", TWO_VISITOR_FILTER)
+        .await;
+    assert_ne!(other, first, "two runs, two addresses");
+
+    // Each address answers about its own run and says nothing of the other.
+    h.goto(&other).await;
+    assert_eq!(h.current_path().await, other, "the URL is the run served");
+    h.wait_xpath("//h2[contains(., 'second-visitor')]").await;
+    h.wait_xpath("//span[contains(., 'running')]").await;
+    let second_page = page_text(&h).await;
+    assert!(
+        !second_page.contains("first-visitor"),
+        "the second run's screen showed the first run:\n{second_page}"
+    );
+
+    h.goto(&first).await;
+    assert_eq!(h.current_path().await, first, "the URL is the run served");
+    h.wait_xpath("//h2[contains(., 'first-visitor')]").await;
+    h.wait_xpath("//span[contains(., 'running')]").await;
+    let first_page = page_text(&h).await;
+    assert!(
+        !first_page.contains("second-visitor"),
+        "the first run's screen showed the second run:\n{first_page}"
+    );
+    // The permalink is asserted by its href SHAPE and the served address by
+    // the URL: capture mode pins the id the page displays, and it pins the
+    // same one for both runs.
+    h.wait_xpath("//a[starts-with(@href, '/run/live/')]").await;
+
+    // Visitor three arrives at a full instance: accepted, addressable at once,
+    // and told its place rather than left on a spinner.
+    let waiting = third
+        .start_a_run(&base_url, "third-visitor", TWO_VISITOR_FILTER)
+        .await;
+    h.goto(&waiting).await;
+    assert_eq!(h.current_path().await, waiting, "the URL is the run served");
+    h.wait_xpath("//h2[contains(., 'third-visitor')]").await;
+    h.wait_xpath("//span[contains(., 'queued') and contains(., 'position 1')]")
+        .await;
+    h.wait_xpath("//button[contains(., 'Leave the queue')]")
+        .await;
+
+    // No run may outlive the journey: the instance has two slots, and the
+    // queued one is dropped first so freeing a slot promotes nothing. Every
+    // run is ended by ADDRESS rather than through the screen's own control,
+    // because documentation capture mode pins the id the live view carries
+    // and that control would dispatch the pinned one.
+    h.wait_xpath("//h1[contains(., 'Live run')]").await;
+    third.stop(&waiting).await;
+    second.stop(&first).await;
+    second.stop(&other).await;
+
+    h.assert_console_clean(&[]).await;
+    h.finish().await;
+}
+
+/// Drives connect → probe → scope → start → live in the browser, returning
+/// the run's own address with the run still driving.
+///
+/// A lean sibling of [`drive_wizard`]: no claim is composed and nothing is
+/// waited on to finish, because what this journey needs is a run that is
+/// still executing.
+///
+/// # Panics
+/// On any control the wizard does not offer, or an address carrying no id.
+async fn drive_to_live(h: &Harness, base_url: &str, sut_name: &str, filter: &str) -> String {
+    h.goto("/run/connect").await;
+    let base = h.wait_css("input#base-url").await;
+    base.clear().await.expect("clear the base URL");
+    base.send_keys(base_url).await.expect("type the base URL");
+    let name_field = h.wait_css("input#sut-name").await;
+    name_field.clear().await.expect("clear the name");
+    name_field.send_keys(sut_name).await.expect("type the name");
+    h.wait_xpath("//button[contains(., 'Probe connection')]")
+        .await
+        .click()
+        .await
+        .expect("probe");
+    h.wait_xpath("//body[contains(., 'HTTP 500')]").await;
+    h.wait_xpath("//a[contains(., 'Continue anyway')]")
+        .await
+        .click()
+        .await
+        .expect("continue");
+
+    h.wait_xpath("//h1[contains(., 'Scope')]").await;
+    let filter_field = h.wait_css("input#filter").await;
+    filter_field.clear().await.expect("clear the filter");
+    filter_field
+        .send_keys(filter)
+        .await
+        .expect("type the filter");
+    h.wait_xpath("//button[contains(., 'Save scope')]")
+        .await
+        .click()
+        .await
+        .expect("save");
+    h.wait_xpath("//body[contains(., 'Scope saved')]").await;
+    h.wait_xpath("//button[contains(., 'Start the run')]")
+        .await
+        .click()
+        .await
+        .expect("start");
+    h.wait_xpath("//a[contains(., 'Watch it live')]")
+        .await
+        .click()
+        .await
+        .expect("to live");
+    h.wait_xpath("//h1[contains(., 'Live run')]").await;
+    let address = h.current_path().await;
+    assert!(
+        address.starts_with("/run/live/") && address.len() > "/run/live/".len(),
+        "the live link must carry the run's id: {address}"
+    );
+    address
 }

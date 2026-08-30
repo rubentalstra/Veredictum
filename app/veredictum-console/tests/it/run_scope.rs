@@ -49,7 +49,10 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
         ),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(
+            veredictum_console::run_api::Drafts::new(),
+        )),
+        client_ip_header: None,
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
@@ -123,7 +126,10 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
         party: "party".into(),
         out: "out".into(),
         catalogue: std::sync::Arc::new(Err(String::from("unused"))),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(
+            veredictum_console::run_api::Drafts::new(),
+        )),
+        client_ip_header: None,
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
@@ -131,6 +137,7 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
     };
     veredictum_console::run_api::read::save_connection(
         &state,
+        engine_gate::gate_submitter(),
         RunDraft {
             base_url: String::from("http://cdr.example"),
             sut_name: String::from("x"),
@@ -148,8 +155,8 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
         },
     )
     .map_err(|e| format!("save: {e}"))?;
-    let view =
-        veredictum_console::run_api::read::draft_view(&state).ok_or("the draft must read back")?;
+    let view = veredictum_console::run_api::read::draft_view(&state, engine_gate::gate_submitter())
+        .ok_or("the draft must read back")?;
     let serialized = serde_json::to_string(&view)?;
     assert!(
         !serialized.contains("hunter2"),
@@ -176,7 +183,7 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
         ),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(Some(RunDraft {
+        draft: std::sync::Arc::new(std::sync::Mutex::new(engine_gate::drafts_of(RunDraft {
             base_url: String::from("http://unused"),
             sut_name: String::from("claim-gate"),
             sut_version: String::from("0.0.0-gate"),
@@ -191,6 +198,7 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        client_ip_header: None,
         capture: false,
     }
 }
@@ -208,9 +216,15 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
     let state = drafted_state();
     let body =
         std::fs::read_to_string(engine_gate::repo_root().join("party/ehrbase/statement.json"))?;
-    let summary = veredictum_console::run_api::read::save_scope(&state, Some(body), None, false)
-        .map_err(|e| format!("a committed example must pass: {e}"))?
-        .ok_or("a pasted claim must yield a summary")?;
+    let summary = veredictum_console::run_api::read::save_scope(
+        &state,
+        engine_gate::gate_submitter(),
+        Some(body),
+        None,
+        false,
+    )
+    .map_err(|e| format!("a committed example must pass: {e}"))?
+    .ok_or("a pasted claim must yield a summary")?;
     assert_eq!(summary.product, "EHRbase 2.34.0");
     assert!(
         !summary.profiles.is_empty(),
@@ -221,6 +235,7 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
     // published schema refuses it.
     let stray = veredictum_console::run_api::read::save_scope(
         &state,
+        engine_gate::gate_submitter(),
         Some(String::from(
             r#"{"product":{"name":"x","version":"1","vendor":"v","identifier":"urn:x"},"schedule_release":"cnf-2.0-w2","claims":{},"stray_key":true}"#,
         )),
@@ -234,6 +249,7 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
 
     let not_json = veredictum_console::run_api::read::save_scope(
         &state,
+        engine_gate::gate_submitter(),
         Some(String::from("not json")),
         None,
         false,
@@ -241,8 +257,14 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
     assert!(not_json.is_err(), "non-JSON must be refused");
 
     // The honest no-claim run stays legal: nothing pasted, no summary.
-    let none = veredictum_console::run_api::read::save_scope(&state, None, None, false)
-        .map_err(|e| format!("no-claim save: {e}"))?;
+    let none = veredictum_console::run_api::read::save_scope(
+        &state,
+        engine_gate::gate_submitter(),
+        None,
+        None,
+        false,
+    )
+    .map_err(|e| format!("no-claim save: {e}"))?;
     assert_eq!(none, None);
     Ok(())
 }
@@ -338,8 +360,12 @@ fn a_composed_core_claim_is_judged_as_the_core_profile() -> Result<(), Box<dyn s
     let engine = Engine::verified(&binary)?;
 
     let state = drafted_state();
-    let document = veredictum_console::run_api::read::compose_claim(&state, &[ScopeTier::Core])
-        .map_err(|e| format!("compose: {e}"))?;
+    let document = veredictum_console::run_api::read::compose_claim(
+        &state,
+        engine_gate::gate_submitter(),
+        &[ScopeTier::Core],
+    )
+    .map_err(|e| format!("compose: {e}"))?;
 
     let scratch = assert_fs::TempDir::new()?;
     let port = engine_gate::fixture_sut()?;
@@ -424,13 +450,19 @@ fn a_composed_tier_claim_saves_through_the_pasted_claim_path()
     let state = drafted_state();
     let document = veredictum_console::run_api::read::compose_claim(
         &state,
+        engine_gate::gate_submitter(),
         &[ScopeTier::Core, ScopeTier::SecBasic],
     )
     .map_err(|e| format!("compose: {e}"))?;
-    let summary =
-        veredictum_console::run_api::read::save_scope(&state, Some(document.clone()), None, false)
-            .map_err(|e| format!("the composed claim must pass its own schema: {e}"))?
-            .ok_or("a composed claim must yield a summary")?;
+    let summary = veredictum_console::run_api::read::save_scope(
+        &state,
+        engine_gate::gate_submitter(),
+        Some(document.clone()),
+        None,
+        false,
+    )
+    .map_err(|e| format!("the composed claim must pass its own schema: {e}"))?
+    .ok_or("a composed claim must yield a summary")?;
     assert_eq!(summary.product, "claim-gate 0.0.0-gate");
     assert_eq!(summary.profiles, vec!["CORE", "SEC-BASIC"]);
 
@@ -447,7 +479,14 @@ fn a_composed_tier_claim_saves_through_the_pasted_claim_path()
 
     // The empty selection certifies nothing, so it is refused rather than
     // composed into a claim with no profile.
-    assert!(veredictum_console::run_api::read::compose_claim(&state, &[]).is_err());
+    assert!(
+        veredictum_console::run_api::read::compose_claim(
+            &state,
+            engine_gate::gate_submitter(),
+            &[]
+        )
+        .is_err()
+    );
     Ok(())
 }
 

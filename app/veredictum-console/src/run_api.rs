@@ -3,10 +3,12 @@
 
 //! The run wizard's server seam for S3 Connect and S4 Scope (#65).
 //!
-//! The wizard's memory is one server-side draft: the connection facts, the
-//! credential VALUES (memory only — never persisted, never rendered back,
-//! never logged), the statement pick and the filter. What the client can read
-//! back is [`DraftView`], which carries no secret by construction.
+//! The wizard's memory is a server-side draft PER SUBMITTER (#389): the
+//! connection facts, the credential VALUES (memory only — never persisted,
+//! never rendered back, never logged), the statement pick and the filter. Two
+//! visitors composing a connection at once each have their own, and what the
+//! client can read back is [`DraftView`], which carries no secret by
+//! construction.
 //!
 //! The reachability probe is the ONE console-originated request to a CDR: a
 //! diagnostic rendered verbatim and never judged, so conformance traffic
@@ -64,6 +66,64 @@ pub struct RunDraft {
     /// Whether the run persists its wire exchanges as `transcript.json`
     /// beside the results (#96). Off unless the operator asks for it.
     pub record_exchanges: bool,
+}
+
+/// Every visitor's connection draft, one per submitter.
+///
+/// Bounded and evicted oldest-first exactly as the job map is
+/// (`run_job::DRAFTS_KEPT`): these entries hold credential VALUES, so an
+/// unbounded map of them is not an option. A draft lives in memory and in the
+/// spawned run's environment, and reaches no file, no log line and no
+/// client-visible state.
+#[cfg(feature = "ssr")]
+#[derive(Debug, Default)]
+pub struct Drafts {
+    entries: std::collections::BTreeMap<crate::submitter::Submitter, (u64, RunDraft)>,
+    next: u64,
+}
+
+#[cfg(feature = "ssr")]
+impl Drafts {
+    /// An empty set of drafts.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// This submitter's draft, when they have one.
+    #[must_use]
+    pub fn get(&self, submitter: crate::submitter::Submitter) -> Option<&RunDraft> {
+        self.entries.get(&submitter).map(|(_, draft)| draft)
+    }
+
+    /// This submitter's draft, to be edited in place.
+    pub fn get_mut(&mut self, submitter: crate::submitter::Submitter) -> Option<&mut RunDraft> {
+        self.entries.get_mut(&submitter).map(|(_, draft)| draft)
+    }
+
+    /// Stores this submitter's draft, replacing any prior one, and evicts the
+    /// oldest drafts past the cap.
+    pub fn insert(&mut self, submitter: crate::submitter::Submitter, draft: RunDraft) {
+        let seq = self.next;
+        self.next = self.next.saturating_add(1);
+        self.entries.insert(submitter, (seq, draft));
+        let excess = self
+            .entries
+            .len()
+            .saturating_sub(crate::run_job::DRAFTS_KEPT);
+        if excess == 0 {
+            return;
+        }
+        let mut ages: Vec<(u64, crate::submitter::Submitter)> = self
+            .entries
+            .iter()
+            .map(|(who, (seq, _))| (*seq, *who))
+            .collect();
+        ages.sort_unstable();
+        for (_, who) in ages.into_iter().take(excess) {
+            self.entries.remove(&who);
+        }
+    }
 }
 
 /// What the client may read back of the draft: no secret, by construction.
@@ -219,6 +279,22 @@ pub enum RunScreen {
     NoRunNamed,
 }
 
+/// What a start request answered (#389).
+///
+/// The per-submitter refusal travels as an ANSWER rather than as a transport
+/// error, because it carries the run the visitor already has and the screen's
+/// whole job is to link them to it. The typed refusal at the boundary that
+/// branches is `run_job::JobError::Busy`; this is how it reaches a browser.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StartOutcome {
+    /// The run was accepted under this id, driving or queued. Its own live
+    /// screen states which.
+    Accepted(crate::run_job::RunId),
+    /// This submitter already has a run in flight, so nothing was started;
+    /// the field is the run they already have.
+    AlreadyInFlight(crate::run_job::RunId),
+}
+
 /// A run read back from its own directory, never from this process's memory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordedRun {
@@ -253,10 +329,11 @@ pub mod read {
 
     use super::{
         ClaimSummary, DraftView, RecordedResults, RecordedRun, RunDraft, RunScreen, ScopePreview,
-        ScopeTier, StatementRow, TierRow,
+        ScopeTier, StartOutcome, StatementRow, TierRow,
     };
-    use crate::run_job::RunId;
+    use crate::run_job::{Latest, RunId};
     use crate::state::ConsoleState;
+    use crate::submitter::Submitter;
 
     /// The pasted-claim size cap: far above any real ICS, far below abuse.
     const STATEMENT_CAP_BYTES: usize = 1_048_576;
@@ -270,11 +347,11 @@ pub mod read {
         u64::try_from(n).unwrap_or(u64::MAX)
     }
 
-    /// The client-safe view of the draft.
+    /// The client-safe view of this submitter's draft.
     #[must_use]
-    pub fn draft_view(state: &ConsoleState) -> Option<DraftView> {
+    pub fn draft_view(state: &ConsoleState, submitter: Submitter) -> Option<DraftView> {
         let guard = state.draft.lock().ok()?;
-        guard.as_ref().map(|draft| DraftView {
+        guard.get(submitter).map(|draft| DraftView {
             base_url: draft.base_url.clone(),
             sut_name: draft.sut_name.clone(),
             sut_version: draft.sut_version.clone(),
@@ -286,13 +363,21 @@ pub mod read {
         })
     }
 
-    /// Stores the connection half of the draft, replacing any prior one.
+    /// Stores this submitter's connection draft, replacing any prior one.
+    ///
+    /// Another visitor's draft is untouched: the map is keyed by submitter,
+    /// so two people composing a connection at once do not overwrite each
+    /// other.
     ///
     /// # Errors
     /// The poisoned-lock diagnostic, verbatim.
-    pub fn save_connection(state: &ConsoleState, draft: RunDraft) -> Result<(), String> {
+    pub fn save_connection(
+        state: &ConsoleState,
+        submitter: Submitter,
+        draft: RunDraft,
+    ) -> Result<(), String> {
         let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
-        *guard = Some(draft);
+        guard.insert(submitter, draft);
         Ok(())
     }
 
@@ -311,6 +396,7 @@ pub mod read {
     )]
     pub fn save_scope(
         state: &ConsoleState,
+        submitter: Submitter,
         statement_json: Option<String>,
         filter: Option<String>,
         record_exchanges: bool,
@@ -352,7 +438,9 @@ pub mod read {
             })
             .transpose()?;
         let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
-        let draft = guard.as_mut().ok_or_else(|| String::from(NO_DRAFT))?;
+        let draft = guard
+            .get_mut(submitter)
+            .ok_or_else(|| String::from(NO_DRAFT))?;
         draft.statement_product = summary.as_ref().map(|claim| claim.product.clone());
         draft.statement_json = statement_json;
         draft.filter = filter;
@@ -641,7 +729,11 @@ pub mod read {
     /// An empty selection, a missing connection draft or product identity,
     /// the catalogue's load failure, and the schedule-release and
     /// spec-version derivations above, each verbatim.
-    pub fn compose_claim(state: &ConsoleState, tiers: &[ScopeTier]) -> Result<String, String> {
+    pub fn compose_claim(
+        state: &ConsoleState,
+        submitter: Submitter,
+        tiers: &[ScopeTier],
+    ) -> Result<String, String> {
         // Normalized against the vocabulary itself, so a repeated or reordered
         // list from a public endpoint composes the same claim.
         let selected: Vec<ScopeTier> = ScopeTier::ALL
@@ -657,7 +749,7 @@ pub mod read {
         let matrix = capability_matrix(validation)?;
         let (name, version) = {
             let guard = state.draft.lock().map_err(|e| e.to_string())?;
-            let draft = guard.as_ref().ok_or_else(|| String::from(NO_DRAFT))?;
+            let draft = guard.get(submitter).ok_or_else(|| String::from(NO_DRAFT))?;
             (
                 draft.sut_name.trim().to_owned(),
                 draft.sut_version.trim().to_owned(),
@@ -737,24 +829,30 @@ pub mod read {
         )
     }
 
-    /// Starts the drafted run.
+    /// Starts this submitter's drafted run.
     ///
     /// Locates and verifies the engine, then hands the drafted spec to
     /// [`start_run_with`].
     ///
     /// # Errors
     /// "no connection draft" before S3, the engine's own locate/spawn
-    /// refusals, the slot's busy refusal, and the filesystem's verbatim
-    /// failures.
-    pub fn start_run(state: &ConsoleState) -> Result<RunId, String> {
+    /// refusals, and the filesystem's verbatim failures. The per-submitter
+    /// refusal is an ANSWER ([`StartOutcome::AlreadyInFlight`]), not an
+    /// error, because it names the run the screen must link to.
+    pub fn start_run(state: &ConsoleState, submitter: Submitter) -> Result<StartOutcome, String> {
         // The no-draft refusal precedes engine discovery, so an unconnected
         // wizard is refused for what it is on a host with no engine mounted.
-        let connected = state.draft.lock().map_err(|e| e.to_string())?.is_some();
+        let connected = state
+            .draft
+            .lock()
+            .map_err(|e| e.to_string())?
+            .get(submitter)
+            .is_some();
         if !connected {
             return Err(String::from(NO_DRAFT));
         }
         let engine = crate::engine::locate().map_err(|e| e.to_string())?;
-        start_run_with(state, &engine)
+        start_run_with(state, submitter, &engine)
     }
 
     /// Starts the drafted run through an already-located engine.
@@ -771,14 +869,30 @@ pub mod read {
     /// `PATH`.
     ///
     /// # Errors
-    /// "no connection draft" before S3, the engine's own spawn refusals, the
-    /// slot's busy refusal, and the filesystem's verbatim failures.
+    /// "no connection draft" before S3, the engine's own spawn refusals, and
+    /// the filesystem's verbatim failures. A submitter who already has a run
+    /// in flight gets [`StartOutcome::AlreadyInFlight`], which is an answer
+    /// naming that run rather than an error.
     pub fn start_run_with(
         state: &ConsoleState,
+        submitter: Submitter,
         engine: &crate::engine::Engine,
-    ) -> Result<RunId, String> {
+    ) -> Result<StartOutcome, String> {
+        // The pre-flight, so nothing is written for a run that will be
+        // refused. The AUTHORITATIVE check is inside the job map's own lock;
+        // if a second start from this submitter wins the race in between, its
+        // answer still names their run and the cost is a re-probe.
+        if let Some(existing) = state
+            .jobs
+            .in_flight_of(submitter)
+            .map_err(|e| e.to_string())?
+        {
+            return Ok(StartOutcome::AlreadyInFlight(existing));
+        }
         let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
-        let draft = guard.as_mut().ok_or_else(|| String::from(NO_DRAFT))?;
+        let draft = guard
+            .get_mut(submitter)
+            .ok_or_else(|| String::from(NO_DRAFT))?;
         let id = state.jobs.allocate_id();
         let out_dir = crate::run_job::job_dir(&state.out, id);
         std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
@@ -815,29 +929,43 @@ pub mod read {
         };
         let sut_name = draft.sut_name.clone();
         drop(guard);
-        state
-            .jobs
-            .start(id, engine, &spec, sut_name)
-            .map_err(|e| e.to_string())
+        match state.jobs.start(id, submitter, engine, spec, sut_name) {
+            Ok(accepted) => Ok(StartOutcome::Accepted(accepted)),
+            Err(crate::run_job::JobError::Busy(existing)) => {
+                Ok(StartOutcome::AlreadyInFlight(existing))
+            }
+            Err(e) => Err(e.to_string()),
+        }
     }
 
     /// What the live screen is looking at, for the run the URL names.
     ///
     /// A named run this process is driving streams; anything else falls back
     /// to the run's own directory under the mounted output tree, which is the
-    /// durable half. `None` asks about the run this process holds, and with
-    /// nothing in flight the answer is [`RunScreen::NoRunNamed`].
+    /// durable half. `None` — the bare `/run/live` — asks about the run THIS
+    /// SUBMITTER most recently started, never about somebody else's, and with
+    /// none the answer is [`RunScreen::NoRunNamed`].
     ///
     /// The id is a parsed UUID, so the derived directory stays under the
-    /// mounted output root by construction.
+    /// mounted output root by construction. A run this process never drove is
+    /// still readable by id: the artifacts are the durable half, and nothing
+    /// here is gated on who started it.
     ///
     /// # Errors
-    /// The slot's verbatim refusal, and the verbatim read or parse failure of
+    /// The map's verbatim refusal, and the verbatim read or parse failure of
     /// a results document that exists but cannot be read.
-    pub fn run_screen(state: &ConsoleState, id: Option<RunId>) -> Result<RunScreen, String> {
+    pub fn run_screen(
+        state: &ConsoleState,
+        submitter: Submitter,
+        id: Option<RunId>,
+    ) -> Result<RunScreen, String> {
         let named = match id {
             Some(named) => named,
-            None => match state.jobs.current().map_err(|e| e.to_string())? {
+            None => match state
+                .jobs
+                .latest_of(submitter, Latest::Any)
+                .map_err(|e| e.to_string())?
+            {
                 Some(current) => current,
                 None => return Ok(RunScreen::NoRunNamed),
             },
@@ -957,7 +1085,7 @@ pub mod fns {
 
     use super::{
         AuthChoice, ClaimSummary, DraftView, ProbeAnswer, RunScreen, ScopePreview, ScopeTier,
-        StatementRow, TierRow,
+        StartOutcome, StatementRow, TierRow,
     };
     use crate::run_job::RunId;
 
@@ -1003,6 +1131,7 @@ pub mod fns {
         }
         super::read::save_connection(
             &state,
+            crate::submitter::current(&state),
             super::RunDraft {
                 base_url,
                 sut_name,
@@ -1020,14 +1149,15 @@ pub mod fns {
         Ok(answer)
     }
 
-    /// The client-safe draft, when one exists.
+    /// The client-safe draft this submitter has, when they have one.
     ///
     /// # Errors
     /// The server-fn transport only.
     #[server]
     pub async fn fetch_draft() -> Result<Option<DraftView>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        Ok(super::read::draft_view(&state))
+        let who = crate::submitter::current(&state);
+        Ok(super::read::draft_view(&state, who))
     }
 
     /// The pickable party statements.
@@ -1050,31 +1180,36 @@ pub mod fns {
         super::read::scope_preview(&state, &filter).map_err(ServerFnError::new)
     }
 
-    /// Starts the drafted run and answers with the run's id, which is the
-    /// address `/run/live/{run_id}` carries.
+    /// Starts this submitter's drafted run and answers with the run's id,
+    /// which is the address `/run/live/{run_id}` carries.
+    ///
+    /// A submitter who already has a run in flight is answered with THAT
+    /// run's id and nothing is started, so the screen can send them to it.
     ///
     /// # Errors
-    /// "no connection draft" before S3, the engine's refusals, the busy
-    /// slot, and filesystem failures — each verbatim.
+    /// "no connection draft" before S3, the engine's refusals, and
+    /// filesystem failures — each verbatim.
     #[server]
-    pub async fn start_run() -> Result<RunId, ServerFnError> {
+    pub async fn start_run() -> Result<StartOutcome, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::read::start_run(&state).map_err(ServerFnError::new)
+        let who = crate::submitter::current(&state);
+        super::read::start_run(&state, who).map_err(ServerFnError::new)
     }
 
     /// What the live screen is looking at, for the run the URL names.
     ///
-    /// `None` asks about the run this process holds. The id is untrusted
-    /// input, and a parsed UUID keeps the derived directory under the
-    /// mounted output root.
+    /// `None` asks about the run THIS SUBMITTER most recently started. The id
+    /// is untrusted input, and a parsed UUID keeps the derived directory
+    /// under the mounted output root.
     ///
     /// # Errors
-    /// The slot's poisoned-state diagnostic, or a results document that
+    /// The map's poisoned-state diagnostic, or a results document that
     /// exists and cannot be read.
     #[server]
     pub async fn fetch_run(id: Option<RunId>) -> Result<RunScreen, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        let screen = super::read::run_screen(&state, id).map_err(ServerFnError::new)?;
+        let who = crate::submitter::current(&state);
+        let screen = super::read::run_screen(&state, who, id).map_err(ServerFnError::new)?;
         Ok(crate::capture::run_screen(&state, screen))
     }
 
@@ -1102,8 +1237,10 @@ pub mod fns {
         record_exchanges: bool,
     ) -> Result<Option<ClaimSummary>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
+        let who = crate::submitter::current(&state);
         super::read::save_scope(
             &state,
+            who,
             statement_json.filter(|s| !s.trim().is_empty()),
             filter.filter(|f| !f.is_empty()),
             record_exchanges,
@@ -1142,7 +1279,9 @@ pub mod fns {
     #[server]
     pub async fn compose_claim(tiers: Option<Vec<ScopeTier>>) -> Result<String, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::read::compose_claim(&state, &tiers.unwrap_or_default()).map_err(ServerFnError::new)
+        let who = crate::submitter::current(&state);
+        super::read::compose_claim(&state, who, &tiers.unwrap_or_default())
+            .map_err(ServerFnError::new)
     }
 
     /// One committed statement's body, for the example fillers.

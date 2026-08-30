@@ -12,6 +12,54 @@ use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 
 use veredictum_console::engine::{self, Credential, Engine, RunSpec, Secret};
+use veredictum_console::run_api::Drafts;
+use veredictum_console::submitter::Submitter;
+
+/// The peer address every gate's requests arrive from.
+///
+/// One fixed address, so a gate driving an axum handler and a gate calling a
+/// per-submitter reader are the same visitor.
+pub(crate) fn gate_peer() -> std::net::SocketAddr {
+    std::net::SocketAddr::from(([198, 51, 100, 1], 40_000))
+}
+
+/// The submitter [`gate_peer`] resolves to, derived through the console's own
+/// one reader rather than spelled a second time.
+pub(crate) fn gate_submitter() -> Submitter {
+    veredictum_console::submitter::of_request(None, Some(gate_peer().ip()))
+}
+
+/// The drafts map holding exactly one draft, for [`gate_submitter`].
+pub(crate) fn drafts_of(draft: veredictum_console::run_api::RunDraft) -> Drafts {
+    let mut drafts = Drafts::new();
+    drafts.insert(gate_submitter(), draft);
+    drafts
+}
+
+/// A minimal fixture SUT that answers slowly, so a run lasts long enough for
+/// a gate to observe it in flight.
+///
+/// The same deterministic `500` [`fixture_sut`] gives, delayed per request:
+/// the console's caps are about time and concurrency, and a run that finishes
+/// instantly can prove neither.
+pub(crate) fn slow_fixture_sut(delay: std::time::Duration) -> Result<u16, std::io::Error> {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+    let port = listener.local_addr()?.port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            std::thread::spawn(move || {
+                let mut scratch = [0_u8; 4096];
+                let _bytes_read = stream.read(&mut scratch);
+                std::thread::sleep(delay);
+                let _write = stream.write_all(
+                    b"HTTP/1.1 500 Internal Server Error\r\ncontent-length: 2\r\nconnection: close\r\n\r\nno",
+                );
+            });
+        }
+    });
+    Ok(port)
+}
 
 /// The repository root, two levels above this crate (#55): the catalogue the
 /// gate drives lives there.

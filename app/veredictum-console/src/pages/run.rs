@@ -29,7 +29,7 @@ use crate::run_api::fns::{
 };
 use crate::run_api::{
     AuthChoice, ClaimSummary, ProbeAnswer, RecordedRun, RunScreen, ScopePreview, ScopeTier,
-    StatementRow, TierRow,
+    StartOutcome, StatementRow, TierRow,
 };
 use crate::run_job::{JobStatus, JobView, RunId};
 
@@ -393,15 +393,26 @@ pub fn Scope() -> impl IntoView {
             }
         }
     });
-    let started = RwSignal::new(None::<Result<RunId, String>>);
+    let started = RwSignal::new(None::<Result<StartOutcome, String>>);
     let start = Action::new(move |(): &()| async move {
         match start_run().await {
-            Ok(id) => {
+            Ok(StartOutcome::Accepted(id)) => {
                 toast::success(
-                    "Run started",
-                    &format!("Run {id} is driving; watch it on the Live screen."),
+                    "Run accepted",
+                    &format!(
+                        "Run {id} has its own address; the Live screen says whether it is driving or queued."
+                    ),
                 );
-                started.set(Some(Ok(id)));
+                started.set(Some(Ok(StartOutcome::Accepted(id))));
+            }
+            Ok(StartOutcome::AlreadyInFlight(id)) => {
+                toast::error(
+                    "You already have a run in flight",
+                    &format!(
+                        "Nothing was started: run {id} is still going. Watch it, or cancel it and start again."
+                    ),
+                );
+                started.set(Some(Ok(StartOutcome::AlreadyInFlight(id))));
             }
             Err(e) => {
                 let body = e.to_string();
@@ -571,14 +582,29 @@ pub fn Scope() -> impl IntoView {
                     started
                         .get()
                         .map(|result| match result {
-                            Ok(id) => {
+                            Ok(StartOutcome::Accepted(id)) => {
                                 view! {
                                     <div class="flex items-center gap-2">
                                         <p class="text-sm text-ink">
-                                            {format!("Run started ({id}).")}
+                                            {format!("Run accepted ({id}).")}
                                         </p>
                                         <A href=live_path(id) attr:class=BTN_SECONDARY>
                                             "Watch it live"
+                                        </A>
+                                    </div>
+                                }
+                                    .into_any()
+                            }
+                            Ok(StartOutcome::AlreadyInFlight(id)) => {
+                                view! {
+                                    <div class="flex items-center gap-2">
+                                        <p class="text-sm text-ink">
+                                            {format!(
+                                                "Nothing was started: run {id} is already in flight from this address.",
+                                            )}
+                                        </p>
+                                        <A href=live_path(id) attr:class=BTN_SECONDARY>
+                                            "Go to that run"
                                         </A>
                                     </div>
                                 }
@@ -1083,13 +1109,20 @@ fn live_view(job: &JobView, cancel: Action<RunId, ()>) -> impl IntoView + use<> 
     } else {
         String::from("progress stream not available from this engine build")
     };
-    let eta = job
-        .eta_ms
-        .map(|ms| format!("~{} remaining (estimate)", mmss(ms)));
+    let eta = job.eta_ms.map(|ms| match job.status {
+        JobStatus::Queued { .. } => format!("~{} until a slot frees (estimate)", mmss(ms)),
+        _ => format!("~{} remaining (estimate)", mmss(ms)),
+    });
     let current = job.current_case.clone().map(
         |case| view! { <p class="font-mono text-xs text-ink-muted">{format!("now: {case}")}</p> },
     );
     let status_line = match &job.status {
+        JobStatus::Queued { position } => view! {
+            <span class="rounded-control bg-warn-subtle px-2 py-0.5 text-xs font-medium text-ink">
+                {format!("queued · position {position}")}
+            </span>
+        }
+        .into_any(),
         JobStatus::Running => view! {
             <span class="rounded-control bg-run-subtle px-2 py-0.5 text-xs font-medium text-run-ink">
                 "running"
@@ -1108,6 +1141,12 @@ fn live_view(job: &JobView, cancel: Action<RunId, ()>) -> impl IntoView + use<> 
             </span>
         }
         .into_any(),
+        JobStatus::Expired => view! {
+            <span class="rounded-control bg-warn-subtle px-2 py-0.5 text-xs font-medium text-ink">
+                "ended by the 30-minute cap"
+            </span>
+        }
+        .into_any(),
         JobStatus::Failed(reason) => view! {
             <span class="rounded-control bg-danger-subtle px-2 py-0.5 text-xs font-medium text-ink">
                 {format!("failed: {reason}")}
@@ -1115,7 +1154,18 @@ fn live_view(job: &JobView, cancel: Action<RunId, ()>) -> impl IntoView + use<> 
         }
         .into_any(),
     };
-    let running = job.status == JobStatus::Running;
+    let queued = matches!(job.status, JobStatus::Queued { .. });
+    let note = match &job.status {
+        JobStatus::Queued { .. } => Some(
+            "The instance is full, so this run is waiting its turn. The address above is already the run's own: leave it open, or come back to it.",
+        ),
+        JobStatus::Expired => Some(
+            "This run passed the wall clock a hosted instance allows, so the console ended it and discarded what it had written. Narrow the filter and run it again.",
+        ),
+        _ => None,
+    }
+    .map(|line| view! { <p class="mt-2 text-sm text-ink-muted">{line}</p> });
+    let stoppable = queued || job.status == JobStatus::Running;
     let tail = job.tail.join("\n");
     let finished = job.finished.clone().map(|summary| {
         view! {
@@ -1153,7 +1203,7 @@ fn live_view(job: &JobView, cancel: Action<RunId, ()>) -> impl IntoView + use<> 
                     </h2>
                     {status_line}
                 </div>
-                {running
+                {stoppable
                     .then(|| {
                         view! {
                             <button
@@ -1163,12 +1213,13 @@ fn live_view(job: &JobView, cancel: Action<RunId, ()>) -> impl IntoView + use<> 
                                     cancel.dispatch(id);
                                 }
                             >
-                                "Cancel run"
+                                {if queued { "Leave the queue" } else { "Cancel run" }}
                             </button>
                         }
                     })}
             </div>
             <Permalink path=live_path(id) />
+            {note}
             <div class="mt-3 h-2 w-full overflow-hidden rounded-control bg-sunken">
                 <div
                     class="h-full rounded-control bg-run transition-all"

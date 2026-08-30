@@ -55,16 +55,22 @@ fn state_over(out: &Path, jobs: JobSlot) -> ConsoleState {
         sign_key: Some(key("cnf-signing.sec.asc")),
         verify_key: Some(key("cnf-signing.pub.asc")),
         catalogue: std::sync::Arc::new(catalogue),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(
+            veredictum_console::run_api::Drafts::new(),
+        )),
+        client_ip_header: None,
         jobs,
         capture: false,
     }
 }
 
-/// Polls the slot until the job leaves `Running`, bounded.
-fn wait_terminal(slot: &JobSlot) -> Option<veredictum_console::run_job::JobView> {
+/// Polls the map until the NAMED job leaves `Running`, bounded.
+fn wait_terminal(
+    slot: &JobSlot,
+    id: veredictum_console::run_job::RunId,
+) -> Option<veredictum_console::run_job::JobView> {
     for _ in 0..600 {
-        let view = slot.view().ok()??;
+        let view = slot.view_of(id).ok()??;
         if view.status != JobStatus::Running {
             return Some(view);
         }
@@ -106,8 +112,9 @@ fn driven(out: &Path) -> Result<Option<(ConsoleState, Engine)>, Box<dyn std::err
 
     slot.start(
         id,
+        engine_gate::gate_submitter(),
         &engine,
-        &RunSpec {
+        RunSpec {
             root: state.root.clone(),
             ixit,
             out_dir: job_dir,
@@ -121,7 +128,7 @@ fn driven(out: &Path) -> Result<Option<(ConsoleState, Engine)>, Box<dyn std::err
         },
         String::from("export-gate"),
     )?;
-    let terminal = wait_terminal(&slot).ok_or("the job never left Running")?;
+    let terminal = wait_terminal(&slot, id).ok_or("the job never left Running")?;
     assert_eq!(
         terminal.status,
         JobStatus::Finished,
@@ -143,9 +150,12 @@ fn an_export_seals_the_record_and_the_lib_verifies_it() -> Result<(), Box<dyn st
     };
 
     // Before preparing, the section offers the step rather than a bundle.
-    assert_eq!(prepare::screen(&state)?, ExportScreen::Ready);
+    assert_eq!(
+        prepare::screen(&state, engine_gate::gate_submitter())?,
+        ExportScreen::Ready
+    );
 
-    let summary = prepare::run_with(&state, &engine)?;
+    let summary = prepare::run_with(&state, engine_gate::gate_submitter(), &engine)?;
     assert_eq!(summary.digest_prefix.len(), 12, "{}", summary.digest);
     assert!(
         summary.digest.starts_with(&summary.digest_prefix),
@@ -159,7 +169,7 @@ fn an_export_seals_the_record_and_the_lib_verifies_it() -> Result<(), Box<dyn st
 
     // The manifest covers the ENGINE's documents, and the console's three
     // presentation files stay deliberately outside it.
-    let bundle = prepare::job_dir(&state)?
+    let bundle = prepare::job_dir(&state, engine_gate::gate_submitter())?
         .ok_or("no job dir")?
         .join(prepare::EXPORT_DIR);
     let verification = veredictum::record::verify_bundle(&bundle, &key("cnf-signing.pub.asc"))?;
@@ -206,7 +216,8 @@ fn an_export_seals_the_record_and_the_lib_verifies_it() -> Result<(), Box<dyn st
     );
 
     // A second read of the same bundle is the same answer.
-    let ExportScreen::Prepared(again) = prepare::screen(&state)? else {
+    let ExportScreen::Prepared(again) = prepare::screen(&state, engine_gate::gate_submitter())?
+    else {
         panic!("a sealed bundle must read back as prepared");
     };
     assert_eq!(again.digest, summary.digest);
@@ -242,14 +253,28 @@ async fn the_download_route_serves_the_sealed_bytes() -> Result<(), Box<dyn std:
 
     // Before anything is sealed the route answers 404 with the reason, so a
     // premature download never serves a stale or half-written archive.
-    let empty = route::record_zip(axum::Extension(state.clone())).await;
+    let empty = route::record_zip(
+        axum::Extension(state.clone()),
+        Some(axum::Extension(axum::extract::ConnectInfo(
+            engine_gate::gate_peer(),
+        ))),
+        axum::http::HeaderMap::new(),
+    )
+    .await;
     assert_eq!(empty.status(), axum::http::StatusCode::NOT_FOUND);
     let reason = String::from_utf8(body_of(empty).await?)?;
     assert!(reason.contains("no prepared export"), "{reason}");
 
-    prepare::run_with(&state, &engine)?;
+    prepare::run_with(&state, engine_gate::gate_submitter(), &engine)?;
 
-    let response = route::record_zip(axum::Extension(state.clone())).await;
+    let response = route::record_zip(
+        axum::Extension(state.clone()),
+        Some(axum::Extension(axum::extract::ConnectInfo(
+            engine_gate::gate_peer(),
+        ))),
+        axum::http::HeaderMap::new(),
+    )
+    .await;
     assert_eq!(response.status(), axum::http::StatusCode::OK);
     let headers = response.headers().clone();
     assert_eq!(
@@ -273,7 +298,10 @@ async fn the_download_route_serves_the_sealed_bytes() -> Result<(), Box<dyn std:
     let archive = body_of(response).await?;
     // What the route serves IS what the preparation helper packs; the route
     // adds a status and headers and nothing else.
-    assert_eq!(archive, prepare::archive(&state)?);
+    assert_eq!(
+        archive,
+        prepare::archive(&state, engine_gate::gate_submitter())?
+    );
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(archive.as_slice()))?;
     let names: Vec<String> = (0..zip.len())
         .map(|index| Ok(zip.by_index(index)?.name().to_owned()))
@@ -321,8 +349,8 @@ fn a_tampered_document_fails_naming_that_file() -> Result<(), Box<dyn std::error
     let Some((state, engine)) = driven(scratch.path())? else {
         return Ok(());
     };
-    prepare::run_with(&state, &engine)?;
-    let bundle = prepare::job_dir(&state)?
+    prepare::run_with(&state, engine_gate::gate_submitter(), &engine)?;
+    let bundle = prepare::job_dir(&state, engine_gate::gate_submitter())?
         .ok_or("no job dir")?
         .join(prepare::EXPORT_DIR);
 
@@ -369,7 +397,8 @@ fn no_key_mounted_is_an_honest_state_rather_than_a_failure()
     state.sign_key = None;
     state.verify_key = None;
 
-    let ExportScreen::NoKey { missing } = prepare::screen(&state)? else {
+    let ExportScreen::NoKey { missing } = prepare::screen(&state, engine_gate::gate_submitter())?
+    else {
         panic!("an unmounted key is a first-class state, not an error");
     };
     assert_eq!(
@@ -380,7 +409,8 @@ fn no_key_mounted_is_an_honest_state_rather_than_a_failure()
         ]
     );
     // And the mutation refuses with copy that names the variables to set.
-    let refusal = prepare::run_with(&state, &engine).expect_err("no key must refuse");
+    let refusal = prepare::run_with(&state, engine_gate::gate_submitter(), &engine)
+        .expect_err("no key must refuse");
     assert!(refusal.contains("VEREDICTUM_SIGN_KEY"), "{refusal}");
     Ok(())
 }
@@ -415,7 +445,7 @@ fn the_signing_posture_never_reaches_a_file_or_the_wire() -> Result<(), Box<dyn 
     let Some((state, engine)) = driven(scratch.path())? else {
         return Ok(());
     };
-    let summary = prepare::run_with(&state, &engine)?;
+    let summary = prepare::run_with(&state, engine_gate::gate_submitter(), &engine)?;
     // The SECRET KEY MATERIAL itself must never appear in anything published.
     let secret = std::fs::read_to_string(key("cnf-signing.sec.asc"))?;
     let marker = secret
@@ -425,7 +455,7 @@ fn the_signing_posture_never_reaches_a_file_or_the_wire() -> Result<(), Box<dyn 
         .trim();
     assert!(marker.len() > 20, "a weak marker proves nothing: {marker}");
 
-    let bundle = prepare::job_dir(&state)?
+    let bundle = prepare::job_dir(&state, engine_gate::gate_submitter())?
         .ok_or("no job dir")?
         .join(prepare::EXPORT_DIR);
     for entry in std::fs::read_dir(&bundle)? {
@@ -479,8 +509,8 @@ fn an_uploaded_bundle_verifies_clean_and_a_tampered_one_names_the_file()
     let Some((state, engine)) = driven(scratch.path())? else {
         return Ok(());
     };
-    prepare::run_with(&state, &engine)?;
-    let bundle = prepare::job_dir(&state)?
+    prepare::run_with(&state, engine_gate::gate_submitter(), &engine)?;
+    let bundle = prepare::job_dir(&state, engine_gate::gate_submitter())?
         .ok_or("no job dir")?
         .join(prepare::EXPORT_DIR);
 
@@ -646,13 +676,14 @@ fn a_run_into_a_directory_invalidates_an_older_export_of_it()
     let Some((state, engine)) = driven(scratch.path())? else {
         return Ok(());
     };
-    let summary = prepare::run_with(&state, &engine)?;
-    let job = prepare::job_dir(&state)?.ok_or("no job dir")?;
+    let summary = prepare::run_with(&state, engine_gate::gate_submitter(), &engine)?;
+    let job = prepare::job_dir(&state, engine_gate::gate_submitter())?.ok_or("no job dir")?;
     let bundle = job.join(prepare::EXPORT_DIR);
     assert!(bundle.join(veredictum::record::MANIFEST_FILE).is_file());
     // The surface reports it, which is exactly what must NOT survive a
     // re-run into the same directory.
-    let ExportScreen::Prepared(before) = prepare::screen(&state)? else {
+    let ExportScreen::Prepared(before) = prepare::screen(&state, engine_gate::gate_submitter())?
+    else {
         panic!("the sealed bundle must read back as prepared");
     };
     assert_eq!(before.digest, summary.digest);
@@ -661,7 +692,7 @@ fn a_run_into_a_directory_invalidates_an_older_export_of_it()
 
     assert!(!bundle.exists(), "the stale bundle survived the new run");
     assert_eq!(
-        prepare::screen(&state)?,
+        prepare::screen(&state, engine_gate::gate_submitter())?,
         ExportScreen::Ready,
         "a run whose export was invalidated must offer the step again, never another run's record"
     );
@@ -685,7 +716,7 @@ fn the_card_states_claimed_verdicts_and_not_unclaimed_tiers()
     let Some((state, engine)) = driven(scratch.path())? else {
         return Ok(());
     };
-    let summary = prepare::run_with(&state, &engine)?;
+    let summary = prepare::run_with(&state, engine_gate::gate_submitter(), &engine)?;
     assert!(
         !summary.profile_summary.contains("not_claimed"),
         "an unclaimed tier reached the card: {}",
@@ -699,7 +730,7 @@ fn the_card_states_claimed_verdicts_and_not_unclaimed_tiers()
         summary.profile_summary
     );
     let card = std::fs::read_to_string(
-        prepare::job_dir(&state)?
+        prepare::job_dir(&state, engine_gate::gate_submitter())?
             .ok_or("no job dir")?
             .join(prepare::EXPORT_DIR)
             .join("seal-card.svg"),
@@ -728,7 +759,7 @@ fn capture_mode_pins_the_answer_and_never_the_seal() -> Result<(), Box<dyn std::
     let Some((mut state, engine)) = driven(scratch.path())? else {
         return Ok(());
     };
-    let sealed = prepare::run_with(&state, &engine)?;
+    let sealed = prepare::run_with(&state, engine_gate::gate_submitter(), &engine)?;
     assert_ne!(sealed.digest, PINNED_DIGEST);
     assert_ne!(sealed.signed_at, PINNED_TIME);
 
@@ -742,7 +773,7 @@ fn capture_mode_pins_the_answer_and_never_the_seal() -> Result<(), Box<dyn std::
     assert_eq!(shown.sealed_files, sealed.sealed_files);
 
     // The bundle on disk is the run's own record, unpinned and still valid.
-    let bundle = prepare::job_dir(&state)?
+    let bundle = prepare::job_dir(&state, engine_gate::gate_submitter())?
         .ok_or("no job dir")?
         .join(prepare::EXPORT_DIR);
     let card = std::fs::read_to_string(bundle.join("seal-card.svg"))?;

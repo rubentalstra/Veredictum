@@ -45,6 +45,14 @@
 # The journeys themselves read UI_E2E_BASE_URL, UI_E2E_WEBDRIVER_URL,
 # UI_E2E_SHOTS_DIR and UI_E2E_DOCS_SHOTS, and skip with a printed reason when
 # the first two are unset — so a plain `cargo nextest run` stays green.
+#
+# The console is served with VEREDICTUM_CLIENT_IP_HEADER set (#389), which is
+# how a proxied deployment names the real client address. It is what lets the
+# concurrency journey be a SECOND visitor beside the browser: the browser
+# sends no such header and keeps its socket peer, while the journey's own HTTP
+# calls claim an address of their own. The journeys learn the header's name
+# and the console's host-side URL from UI_E2E_CLIENT_IP_HEADER and
+# UI_E2E_HOST_URL, and skip the concurrency journey when either is unset.
 set -Eeuo pipefail
 
 FILTER="${1:-}"
@@ -56,6 +64,11 @@ cd "$ROOT"
 # Ubuntu 24.04 carrying Chromium 151.0.7922.108 and its matching driver.
 readonly SELENIUM_IMAGE="selenium/standalone-chromium@sha256:1d3d834a2ce93f26cc0d0ae3c61abd189755b32649f5c356c6c5cf9502aa397e"
 readonly SELENIUM_NAME="veredictum-ui-e2e"
+
+# The forwarded-client-address header this harness trusts. Any name works; the
+# hosted deployment sets Fly-Client-IP, and the console reads only the header
+# the operator names.
+readonly CLIENT_IP_HEADER="X-Console-Client-Ip"
 
 PORT="${UI_E2E_PORT:-3300}"
 DRIVER_PORT=9515
@@ -192,6 +205,7 @@ VEREDICTUM_ENGINE="$ENGINE_BIN" \
 VEREDICTUM_SIGN_KEY="artifacts/corpus/keys/cnf-signing.sec.asc" \
 VEREDICTUM_VERIFY_KEY="artifacts/corpus/keys/cnf-signing.pub.asc" \
 VEREDICTUM_CAPTURE_MODE="${UI_E2E_DOCS_SHOTS:-}" \
+VEREDICTUM_CLIENT_IP_HEADER="$CLIENT_IP_HEADER" \
   "$CONSOLE_BIN" &
 CONSOLE_PID=$!
 wait_http "$PROBE_URL/healthz" 90 "the console"
@@ -296,6 +310,8 @@ UI_E2E_FERROEHR_URL="$FERROEHR_SUT_URL" \
 UI_E2E_EHRBASE_URL="$EHRBASE_SUT_URL" \
 UI_E2E_UPLOAD_DIR="$UPLOAD_DIR" \
 UI_E2E_UPLOAD_REMOTE="$UPLOAD_DIR_REMOTE" \
+UI_E2E_CLIENT_IP_HEADER="$CLIENT_IP_HEADER" \
+UI_E2E_HOST_URL="$PROBE_URL" \
   cargo nextest run --locked -p veredictum-console --features ssr \
     -j 1 --no-fail-fast "${NEXTEST_FILTER[@]}"
 

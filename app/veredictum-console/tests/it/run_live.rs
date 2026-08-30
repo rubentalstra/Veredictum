@@ -4,18 +4,26 @@
 //! The #66 acceptance gates: the job supervises a real engine run to a
 //! finished view, cancel kills the subprocess, and the generated ixit
 //! carries env-var names only.
+//!
+//! Plus the #389 cap gates: two runs drive at once, a third queues with its
+//! place, one address gets one run in flight, and a run past the wall clock
+//! is ended by the console with its partial record discarded.
 
 use veredictum_console::engine::{Credential, Engine, RunSpec, Secret};
-use veredictum_console::run_api::{AuthChoice, RunDraft, RunScreen, read};
-use veredictum_console::run_job::{JobSlot, JobStatus};
+use veredictum_console::run_api::{AuthChoice, RunDraft, RunScreen, StartOutcome, read};
+use veredictum_console::run_job::{JobSlot, JobStatus, JobView, Latest, Limits, RunId};
+use veredictum_console::submitter::{Submitter, of_request};
 
 use crate::engine_gate;
 
-/// Polls the slot until the job leaves `Running`, bounded.
-fn wait_terminal(slot: &JobSlot) -> Option<veredictum_console::run_job::JobView> {
+/// Polls the map until the NAMED job leaves `Running`, bounded.
+///
+/// Addressed by id because several runs share the map (#389): "the job" is no
+/// longer a thing this suite can ask about.
+fn wait_terminal(slot: &JobSlot, id: RunId) -> Option<JobView> {
     for _ in 0..600 {
-        let view = slot.view().ok()??;
-        if view.status != JobStatus::Running {
+        let view = slot.view_of(id).ok()??;
+        if view.status.is_terminal() {
             return Some(view);
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -49,8 +57,9 @@ fn a_job_supervises_a_run_to_its_finished_view() -> Result<(), Box<dyn std::erro
     let id = slot.allocate_id();
     slot.start(
         id,
+        engine_gate::gate_submitter(),
         &engine,
-        &RunSpec {
+        RunSpec {
             root: engine_gate::repo_root().join("artifacts"),
             ixit,
             out_dir: out.clone(),
@@ -74,7 +83,7 @@ fn a_job_supervises_a_run_to_its_finished_view() -> Result<(), Box<dyn std::erro
         String::from("job-gate"),
     )?;
 
-    let terminal = wait_terminal(&slot).ok_or("the job never left Running")?;
+    let terminal = wait_terminal(&slot, id).ok_or("the job never left Running")?;
     assert_eq!(
         terminal.status,
         JobStatus::Finished,
@@ -174,7 +183,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
         ),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(Some(RunDraft {
+        draft: std::sync::Arc::new(std::sync::Mutex::new(engine_gate::drafts_of(RunDraft {
             base_url: String::from("http://unused"),
             sut_name: String::from("record-gate"),
             sut_version: String::from("0.0.0-gate"),
@@ -189,6 +198,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
         sign_key: None,
         verify_key: None,
         jobs: JobSlot::default(),
+        client_ip_header: None,
         capture: false,
     };
     let id = state.jobs.allocate_id();
@@ -196,8 +206,9 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
         .jobs
         .start(
             id,
+            engine_gate::gate_submitter(),
             &engine,
-            &RunSpec {
+            RunSpec {
                 root,
                 ixit,
                 out_dir: out,
@@ -212,7 +223,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
             String::from("record-gate"),
         )
         .map_err(|e| e.to_string())?;
-    let terminal = wait_terminal(&state.jobs).ok_or("the job never left Running")?;
+    let terminal = wait_terminal(&state.jobs, id).ok_or("the job never left Running")?;
     assert_eq!(
         terminal.status,
         JobStatus::Finished,
@@ -223,18 +234,40 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
 
     // The run this process drove streams under its own address, and the bare
     // address resolves to the same run (#386).
-    let RunScreen::Live(streamed) = read::run_screen(&state, Some(id))? else {
+    let who = engine_gate::gate_submitter();
+    let RunScreen::Live(streamed) = read::run_screen(&state, who, Some(id))? else {
         panic!("the process holding the run streams it");
     };
     assert_eq!(streamed.id, id);
-    assert_eq!(state.jobs.current().map_err(|e| e.to_string())?, Some(id));
-    let RunScreen::Live(bare) = read::run_screen(&state, None)? else {
-        panic!("a bare /run/live is the run this process holds");
+    assert_eq!(
+        state
+            .jobs
+            .latest_of(who, Latest::Any)
+            .map_err(|e| e.to_string())?,
+        Some(id)
+    );
+    let RunScreen::Live(bare) = read::run_screen(&state, who, None)? else {
+        panic!("a bare /run/live is this submitter's most recent run");
     };
     assert_eq!(bare.id, id);
+    // #389: the bare address is per-submitter, and an ADDRESSED run stays
+    // readable by anyone holding its id.
+    let stranger = of_request(Some("203.0.113.5"), None);
+    assert_eq!(
+        read::run_screen(&state, stranger, None)?,
+        RunScreen::NoRunNamed,
+        "a bare /run/live never shows another visitor's run"
+    );
+    assert!(
+        matches!(
+            read::run_screen(&state, stranger, Some(id))?,
+            RunScreen::Live(_)
+        ),
+        "a run's own address answers whoever holds it"
+    );
 
     // S6: the results screen reads the record red-first.
-    let results = veredictum_console::record_api::read::results_screen(&state)
+    let results = veredictum_console::record_api::read::results_screen(&state, who)
         .map_err(|e| format!("results: {e}"))?
         .ok_or("a finished run must yield a results screen")?;
     assert!(!results.rows.is_empty());
@@ -247,6 +280,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
     // The drawer joins the catalogue.
     let detail = veredictum_console::record_api::read::result_detail(
         &state,
+        who,
         &first.case,
         first.format.as_deref(),
     )
@@ -263,7 +297,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
     );
 
     // S7: the judgement runs through the lib and carries the documents.
-    match veredictum_console::record_api::read::verdicts_screen(&state)
+    match veredictum_console::record_api::read::verdicts_screen(&state, who)
         .map_err(|e| format!("verdicts: {e}"))?
     {
         veredictum_console::record_api::VerdictsScreen::Judged {
@@ -321,7 +355,7 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
         ),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(Some(RunDraft {
+        draft: std::sync::Arc::new(std::sync::Mutex::new(engine_gate::drafts_of(RunDraft {
             base_url: String::from("http://unused"),
             sut_name: String::from("wire-gate"),
             sut_version: String::from("0.0.0-gate"),
@@ -336,14 +370,17 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
         sign_key: None,
         verify_key: None,
         jobs: JobSlot::default(),
+        client_ip_header: None,
         capture: false,
     };
 
     // The Scope step with the box ticked: the save is what carries the choice
     // onto the draft that start_run then reads.
-    let saved = read::save_scope(&state, None, None, true).map_err(|e| format!("scope: {e}"))?;
+    let who = engine_gate::gate_submitter();
+    let saved =
+        read::save_scope(&state, who, None, None, true).map_err(|e| format!("scope: {e}"))?;
     assert_eq!(saved, None, "no claim was pasted, so there is no summary");
-    let view = read::draft_view(&state).ok_or("the draft exists after the scope save")?;
+    let view = read::draft_view(&state, who).ok_or("the draft exists after the scope save")?;
     assert!(view.record_exchanges, "the ticked box reached the draft");
 
     let id = state.jobs.allocate_id();
@@ -351,8 +388,9 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
         .jobs
         .start(
             id,
+            engine_gate::gate_submitter(),
             &engine,
-            &RunSpec {
+            RunSpec {
                 root,
                 ixit,
                 out_dir: out.clone(),
@@ -379,7 +417,7 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
             String::from("wire-gate"),
         )
         .map_err(|e| e.to_string())?;
-    let terminal = wait_terminal(&state.jobs).ok_or("the job never left Running")?;
+    let terminal = wait_terminal(&state.jobs, id).ok_or("the job never left Running")?;
     assert_eq!(
         terminal.status,
         JobStatus::Finished,
@@ -391,12 +429,13 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
         out.join("transcript.json").is_file(),
         "the recorded run wrote its transcript beside the record"
     );
-    let results = veredictum_console::record_api::read::results_screen(&state)
+    let results = veredictum_console::record_api::read::results_screen(&state, who)
         .map_err(|e| format!("results: {e}"))?
         .ok_or("a finished run must yield a results screen")?;
     let first = results.rows.first().ok_or("the run recorded rows")?;
     let detail = veredictum_console::record_api::read::result_detail(
         &state,
+        who,
         &first.case,
         first.format.as_deref(),
     )
@@ -429,7 +468,10 @@ fn state_over(out: &std::path::Path) -> veredictum_console::state::ConsoleState 
         party: engine_gate::repo_root().join("party"),
         out: out.to_path_buf(),
         catalogue: std::sync::Arc::new(Err(String::from("unused by the live screen"))),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(
+            veredictum_console::run_api::Drafts::new(),
+        )),
+        client_ip_header: None,
         sign_key: None,
         verify_key: None,
         jobs: JobSlot::default(),
@@ -478,16 +520,20 @@ fn the_live_screen_answers_for_a_run_this_process_never_drove()
     let id = state.jobs.allocate_id();
 
     // Nothing named, nothing in flight: the one place that sentence is true.
-    assert_eq!(read::run_screen(&state, None)?, RunScreen::NoRunNamed);
+    let who = engine_gate::gate_submitter();
+    assert_eq!(read::run_screen(&state, who, None)?, RunScreen::NoRunNamed);
 
     // A named run with no directory: this instance knows nothing of it, and
     // says so about the run rather than about itself.
-    assert_eq!(read::run_screen(&state, Some(id))?, RunScreen::Unknown(id));
+    assert_eq!(
+        read::run_screen(&state, who, Some(id))?,
+        RunScreen::Unknown(id)
+    );
 
     // A directory with no results document is a recorded run that left none.
     let dir = veredictum_console::run_job::job_dir(scratch.path(), id);
     std::fs::create_dir_all(&dir)?;
-    let RunScreen::Recorded(empty) = read::run_screen(&state, Some(id))? else {
+    let RunScreen::Recorded(empty) = read::run_screen(&state, who, Some(id))? else {
         panic!("a job directory is a recorded run");
     };
     assert_eq!(empty.id, id);
@@ -497,7 +543,7 @@ fn the_live_screen_answers_for_a_run_this_process_never_drove()
     // With the record beside it, the tally is the engine's own, read through
     // the published lib.
     std::fs::write(dir.join("results.json"), RECORD)?;
-    let RunScreen::Recorded(recorded) = read::run_screen(&state, Some(id))? else {
+    let RunScreen::Recorded(recorded) = read::run_screen(&state, who, Some(id))? else {
         panic!("a job directory is a recorded run");
     };
     let results = recorded.results.ok_or("the record parses into a tally")?;
@@ -515,5 +561,366 @@ fn the_live_screen_answers_for_a_run_this_process_never_drove()
         results.results_path,
         dir.join("results.json").display().to_string()
     );
+    Ok(())
+}
+/// One visitor, by the last octet of their address.
+fn visitor(octet: u8) -> Submitter {
+    of_request(
+        None,
+        Some(std::net::IpAddr::V4(std::net::Ipv4Addr::new(
+            203, 0, 113, octet,
+        ))),
+    )
+}
+
+/// One run against the fixture SUT, writing into its own directory.
+fn spec_for(
+    root: &std::path::Path,
+    ixit: &std::path::Path,
+    out_dir: std::path::PathBuf,
+) -> RunSpec {
+    RunSpec {
+        root: root.to_path_buf(),
+        ixit: ixit.to_path_buf(),
+        out_dir,
+        sut_name: String::from("cap-gate"),
+        sut_version: String::from("0.0.0-gate"),
+        statement: None,
+        filter: Some(String::from("I_EHR_SERVICE.create_ehr-main")),
+        credentials: vec![
+            Credential {
+                name: String::from("GATE_SUT_USER"),
+                value: Secret::new(String::from("gate-user")),
+            },
+            Credential {
+                name: String::from("GATE_SUT_PASS"),
+                value: Secret::new(String::from("gate-pass")),
+            },
+        ],
+        progress: true,
+        record_exchanges: false,
+    }
+}
+
+/// Polls until the NAMED job leaves `Running`, within `budget`.
+fn wait_terminal_for(slot: &JobSlot, id: RunId, budget: std::time::Duration) -> Option<JobView> {
+    let deadline = std::time::Instant::now() + budget;
+    while std::time::Instant::now() < deadline {
+        let view = slot.view_of(id).ok()??;
+        if view.status.is_terminal() {
+            return Some(view);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    None
+}
+
+/// The #389 concurrency gate, driven at the caps the console ships: two
+/// engine processes drive at once, each addressed by its own id and showing
+/// only its own facts, and the start past the ceiling is QUEUED with its
+/// place stated rather than refused or left spinning.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn two_runs_drive_at_once_and_the_third_is_queued() -> Result<(), Box<dyn std::error::Error>> {
+    let binary = engine_gate::gate_binary();
+    if !binary.exists() {
+        eprintln!(
+            "SKIPPED(no engine binary at {}): build the workspace first",
+            binary.display()
+        );
+        return Ok(());
+    }
+    let engine = Engine::verified(&binary)?;
+    let scratch = assert_fs::TempDir::new()?;
+    // A slow SUT, so the runs are still in flight when the assertions read
+    // them: a cap about concurrency cannot be observed on a run that ends
+    // before the next line executes.
+    let port = engine_gate::slow_fixture_sut(std::time::Duration::from_millis(400))?;
+    let ixit = engine_gate::write_ixit(scratch.path(), port)?;
+    let root = engine_gate::repo_root().join("artifacts");
+
+    let slot = JobSlot::default();
+    let limits = slot.limits();
+    let mut started: Vec<RunId> = Vec::new();
+    for seat in 0..=u8::try_from(limits.max_concurrent).unwrap_or(2) {
+        let id = slot.allocate_id();
+        let dir = veredictum_console::run_job::job_dir(scratch.path(), id);
+        std::fs::create_dir_all(&dir)?;
+        slot.start(
+            id,
+            visitor(seat),
+            &engine,
+            spec_for(&root, &ixit, dir),
+            format!("cap-gate-{seat}"),
+        )?;
+        started.push(id);
+    }
+
+    assert_eq!(
+        slot.running()?,
+        limits.max_concurrent,
+        "the ceiling is what drives at once"
+    );
+    let mut queued = 0_usize;
+    for (seat, id) in started.iter().enumerate() {
+        let view = slot
+            .view_of(*id)?
+            .ok_or("every started run is in the map")?;
+        assert_eq!(view.id, *id, "a run's view is its own");
+        assert_eq!(
+            view.sut_name,
+            format!("cap-gate-{seat}"),
+            "one run's view never carries another's facts"
+        );
+        if let JobStatus::Queued { position } = view.status {
+            queued += 1;
+            assert_eq!(
+                position,
+                u32::try_from(queued).unwrap_or(0),
+                "a queued run states its place"
+            );
+        }
+    }
+    assert_eq!(
+        queued, 1,
+        "the start past the ceiling is queued, not refused"
+    );
+
+    // Cancelling the queued run removes it without ever spawning a process,
+    // and the runs that were driving are untouched.
+    let queued_run = started
+        .iter()
+        .copied()
+        .find(|id| {
+            slot.view_of(*id)
+                .ok()
+                .flatten()
+                .is_some_and(|view| matches!(view.status, JobStatus::Queued { .. }))
+        })
+        .ok_or("the queued run was located above")?;
+    slot.cancel(queued_run)?;
+    assert_eq!(
+        slot.view_of(queued_run)?,
+        None,
+        "a cancelled queue entry leaves no run behind"
+    );
+    assert_eq!(slot.running()?, limits.max_concurrent);
+
+    for id in started {
+        if id != queued_run {
+            drop(slot.cancel(id));
+        }
+    }
+    Ok(())
+}
+
+/// The #389 per-submitter cap: one address gets one run in flight, and the
+/// second start is refused NAMING the run they already have. Another visitor
+/// is unaffected.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn a_second_start_from_one_address_names_the_run_it_already_has()
+-> Result<(), Box<dyn std::error::Error>> {
+    let binary = engine_gate::gate_binary();
+    if !binary.exists() {
+        eprintln!(
+            "SKIPPED(no engine binary at {}): build the workspace first",
+            binary.display()
+        );
+        return Ok(());
+    }
+    let engine = Engine::verified(&binary)?;
+    let scratch = assert_fs::TempDir::new()?;
+    let port = engine_gate::slow_fixture_sut(std::time::Duration::from_millis(400))?;
+    let ixit = engine_gate::write_ixit(scratch.path(), port)?;
+    let root = engine_gate::repo_root().join("artifacts");
+
+    let slot = JobSlot::default();
+    let mine = visitor(1);
+    let first = slot.allocate_id();
+    let dir = veredictum_console::run_job::job_dir(scratch.path(), first);
+    std::fs::create_dir_all(&dir)?;
+    slot.start(
+        first,
+        mine,
+        &engine,
+        spec_for(&root, &ixit, dir),
+        String::from("cap-gate-first"),
+    )?;
+
+    let second = slot.allocate_id();
+    let second_dir = veredictum_console::run_job::job_dir(scratch.path(), second);
+    std::fs::create_dir_all(&second_dir)?;
+    let refusal = slot
+        .start(
+            second,
+            mine,
+            &engine,
+            spec_for(&root, &ixit, second_dir),
+            String::from("cap-gate-second"),
+        )
+        .expect_err("one address gets one run in flight");
+    assert!(
+        matches!(refusal, veredictum_console::run_job::JobError::Busy(named) if named == first),
+        "the refusal names the run they already have: {refusal:?}"
+    );
+    assert_eq!(
+        slot.view_of(second)?,
+        None,
+        "the refused start left nothing in the map"
+    );
+    assert_eq!(
+        slot.in_flight_of(mine)?,
+        Some(first),
+        "the pre-flight and the enforced check agree"
+    );
+    assert_eq!(
+        slot.in_flight_of(visitor(2))?,
+        None,
+        "another visitor is unaffected"
+    );
+
+    drop(slot.cancel(first));
+    Ok(())
+}
+
+/// The #389 wall-clock cap: a run that outlives its budget is ended by the
+/// console, says so rather than blaming the operator, and its partial record
+/// is discarded.
+///
+/// Driven at an injected two seconds. Thirty minutes is the value the server
+/// ships and no test may take that long, so what is proven here is the
+/// mechanism that number feeds.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn the_wall_clock_cap_ends_a_run_and_discards_its_record() -> Result<(), Box<dyn std::error::Error>>
+{
+    let binary = engine_gate::gate_binary();
+    if !binary.exists() {
+        eprintln!(
+            "SKIPPED(no engine binary at {}): build the workspace first",
+            binary.display()
+        );
+        return Ok(());
+    }
+    let engine = Engine::verified(&binary)?;
+    let scratch = assert_fs::TempDir::new()?;
+    let port = engine_gate::slow_fixture_sut(std::time::Duration::from_secs(3))?;
+    let ixit = engine_gate::write_ixit(scratch.path(), port)?;
+    let root = engine_gate::repo_root().join("artifacts");
+
+    let slot = JobSlot::with_limits(Limits {
+        wall_clock: std::time::Duration::from_secs(2),
+        watchdog_tick: std::time::Duration::from_millis(200),
+        ..Limits::default()
+    });
+    let id = slot.allocate_id();
+    let dir = veredictum_console::run_job::job_dir(scratch.path(), id);
+    std::fs::create_dir_all(&dir)?;
+    slot.start(
+        id,
+        visitor(1),
+        &engine,
+        spec_for(&root, &ixit, dir.clone()),
+        String::from("cap-gate-slow"),
+    )?;
+
+    let terminal = wait_terminal_for(&slot, id, std::time::Duration::from_mins(2))
+        .ok_or("the capped run never stopped")?;
+    assert_eq!(
+        terminal.status,
+        JobStatus::Expired,
+        "the cap ended it, so the screen must not read `cancelled`: {:?}",
+        terminal.tail
+    );
+    assert!(
+        terminal.finished.is_none(),
+        "a capped run states no outcome"
+    );
+    // The partial record is discarded: what the run wrote graded nothing.
+    for _ in 0..50 {
+        if !dir.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(
+        !dir.exists(),
+        "the capped run's directory survived: {}",
+        dir.display()
+    );
+    Ok(())
+}
+
+/// The wizard's own start seam refuses a second run from one address with an
+/// ANSWER naming that run, which is what lets the screen link to it.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn the_start_seam_answers_with_the_run_already_in_flight() -> Result<(), Box<dyn std::error::Error>>
+{
+    let binary = engine_gate::gate_binary();
+    if !binary.exists() {
+        eprintln!(
+            "SKIPPED(no engine binary at {}): build the workspace first",
+            binary.display()
+        );
+        return Ok(());
+    }
+    let engine = Engine::verified(&binary)?;
+    let scratch = assert_fs::TempDir::new()?;
+    let port = engine_gate::slow_fixture_sut(std::time::Duration::from_millis(400))?;
+
+    let root = engine_gate::repo_root().join("artifacts");
+    let state = veredictum_console::state::ConsoleState {
+        root,
+        specs: engine_gate::repo_root().join("specs/openehr"),
+        party: engine_gate::repo_root().join("party"),
+        out: scratch.path().to_path_buf(),
+        catalogue: std::sync::Arc::new(Err(String::from("unused by the start seam"))),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(engine_gate::drafts_of(RunDraft {
+            base_url: format!("http://127.0.0.1:{port}"),
+            sut_name: String::from("busy-gate"),
+            sut_version: String::from("0.0.0-gate"),
+            auth: AuthChoice::None,
+            credentials: vec![],
+            probed_ok: true,
+            statement_json: None,
+            statement_product: None,
+            filter: Some(String::from("I_EHR_SERVICE.create_ehr-main")),
+            record_exchanges: false,
+        }))),
+        sign_key: None,
+        verify_key: None,
+        jobs: JobSlot::default(),
+        client_ip_header: None,
+        capture: false,
+    };
+
+    let who = engine_gate::gate_submitter();
+    let StartOutcome::Accepted(first) =
+        read::start_run_with(&state, who, &engine).map_err(|e| format!("start: {e}"))?
+    else {
+        panic!("the first start from an idle address is accepted");
+    };
+    let again = read::start_run_with(&state, who, &engine).map_err(|e| format!("start: {e}"))?;
+    assert_eq!(
+        again,
+        StartOutcome::AlreadyInFlight(first),
+        "the second start names the run they already have"
+    );
+
+    drop(state.jobs.cancel(first));
     Ok(())
 }
