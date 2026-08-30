@@ -19,6 +19,8 @@ mod engine_gate;
 #[cfg(feature = "ssr")]
 mod export_gate;
 #[cfg(feature = "ssr")]
+mod github_client;
+#[cfg(feature = "ssr")]
 mod read_surfaces;
 #[cfg(feature = "ssr")]
 mod run_live;
@@ -28,5 +30,7 @@ mod run_scope;
 mod run_start;
 #[cfg(feature = "ssr")]
 mod server_fns;
+#[cfg(feature = "ssr")]
+mod submission_gate;
 #[cfg(feature = "ssr")]
 mod verify_surfaces;

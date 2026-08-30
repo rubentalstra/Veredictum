@@ -45,7 +45,7 @@ pub fn Run() -> impl IntoView {
 
 /// The step indicator: one row, the active step accented — a URL per step.
 pub(crate) fn steps(active: &'static str) -> impl IntoView + use<> {
-    ["connect", "scope", "live", "results", "verdicts"]
+    ["connect", "scope", "live", "results", "verdicts", "submit"]
         .into_iter()
         .map(|step| {
             let class = if step == active {

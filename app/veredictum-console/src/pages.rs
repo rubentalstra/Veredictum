@@ -12,6 +12,7 @@ pub mod not_found;
 pub mod results;
 pub mod run;
 pub mod shell;
+pub mod submit;
 pub mod verdicts;
 pub mod verify;
 

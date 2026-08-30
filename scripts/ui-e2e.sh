@@ -53,6 +53,11 @@
 # calls claim an address of their own. The journeys learn the header's name
 # and the console's host-side URL from UI_E2E_CLIENT_IP_HEADER and
 # UI_E2E_HOST_URL, and skip the concurrency journey when either is unset.
+#
+# It is also served with a FICTIONAL registry App identity (#391), so the
+# submission screen renders its ready state instead of the unconfigured one.
+# The key is this repository's committed RSA test key, which holds no account,
+# and no journey opens a submission.
 set -Eeuo pipefail
 
 FILTER="${1:-}"
@@ -206,6 +211,10 @@ VEREDICTUM_SIGN_KEY="artifacts/corpus/keys/cnf-signing.sec.asc" \
 VEREDICTUM_VERIFY_KEY="artifacts/corpus/keys/cnf-signing.pub.asc" \
 VEREDICTUM_CAPTURE_MODE="${UI_E2E_DOCS_SHOTS:-}" \
 VEREDICTUM_CLIENT_IP_HEADER="$CLIENT_IP_HEADER" \
+VEREDICTUM_GITHUB_APP_ID="1234567" \
+VEREDICTUM_GITHUB_APP_KEY="party/smart/cnf-smart-test.key.pem" \
+VEREDICTUM_GITHUB_INSTALLATION_ID="89012345" \
+VEREDICTUM_REGISTRY_REPO="rubentalstra/Veredictum" \
   "$CONSOLE_BIN" &
 CONSOLE_PID=$!
 wait_http "$PROBE_URL/healthz" 90 "the console"

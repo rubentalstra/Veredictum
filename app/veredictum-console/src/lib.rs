@@ -43,6 +43,8 @@ pub mod components;
 pub mod engine;
 pub mod export;
 pub mod export_api;
+#[cfg(feature = "ssr")]
+pub mod github;
 pub mod pages;
 #[cfg(feature = "ssr")]
 pub mod posture;
@@ -54,6 +56,7 @@ pub mod run_api;
 pub mod run_job;
 #[cfg(feature = "ssr")]
 pub mod state;
+pub mod submit_api;
 pub mod submitter;
 #[cfg(feature = "ssr")]
 pub mod target_safety;
