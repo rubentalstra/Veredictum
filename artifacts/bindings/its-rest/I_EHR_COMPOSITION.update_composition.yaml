@@ -65,7 +65,10 @@ outcomes:
     body: prefer_conditional
   precondition_failed:
     status: 412                           # 412_COMPOSITION.yaml, MUST
-    headers: { ETag: latest-version-uid }
+    headers:
+      ETag:
+        - latest-version-uid
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
   precondition_missing: { status: 400 }   # If-Match absent -> SHOULD 400 (Requests_and_responses)
   not_found: { status: 404 }              # unknown ehr_id or uid
   # DECISION (#557, 2026-07-28): version_not_found and precondition_failed
@@ -80,7 +83,10 @@ outcomes:
                                           # evaluates FALSE => MUST 412 (overview
                                           # Requests_and_responses §If-Match); the 404 family
                                           # is for unknown PATH ids only
-    headers: { ETag: latest-version-uid }
+    headers:
+      ETag:
+        - latest-version-uid
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
   validation_failed: { status: 422, body: error_loose }
   template_mismatch: { status: 422, body: error_loose }   # wrong-template update (master07)
   conflict:

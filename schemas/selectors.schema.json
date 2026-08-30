@@ -25,6 +25,7 @@
       "const": [
         "present",
         "present?",
+        "present-with-body",
         "absent",
         "negotiated",
         "latest-version-uid",

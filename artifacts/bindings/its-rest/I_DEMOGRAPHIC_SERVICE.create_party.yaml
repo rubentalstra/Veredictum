@@ -20,6 +20,28 @@ formats: [canonical-json, canonical-xml]
 outcomes:
   bad_request:
     status: 400                             # overview §HTTP status codes, the 400 row — "could not be parsed or is invalid": the parse class (typed construction refuses missing mandatories, empty 1..* lists, foreign _type; owner ruling 2026-08-03)
+    # THE ERROR BODY'S TRANSPORT HEADER. The body itself is a MAY (overview
+    # §HTTP status codes: "For 4xx and 5xx status codes, services MAY return
+    # additional error details if the Prefer: return=representation header is
+    # present in the request"), and this binding's request sends that
+    # preference. DOCS TEXT for the header, Resources.md §JSON Format: "Proper
+    # header `Content-Type: application/json` MUST be present in the response
+    # of the service unless the response has no content body (HTTP status code
+    # `204`)". The MUST is exempted for a body-less response, so the presence
+    # criterion is `present-with-body` — a bodyless 400 stays conformant and a
+    # body that came back must declare its type. Register AMB-217 is untouched:
+    # it forbids pinning the error body's MEMBERS, not the transport header of
+    # a body that exists.
+    # The MEDIA TYPE is the OAS's, cited AS the OAS because the docs text names
+    # no media type for an error body — specifications/responses/400.yaml,
+    # `content: application/json` (the response object person_create.yaml
+    # $refs for its 400), whose only declared representation of the 400 body is
+    # application/json. Judged only when the header is there, so it never
+    # doubles the presence criterion.
+    headers:
+      Content-Type:
+        - present-with-body
+        - { match: 'pattern:(?i)application/json(?:\s*;.*)?', optional: true }
     body: error_loose
   created:
     status: 201                           # 201_PERSON.yaml

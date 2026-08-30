@@ -109,9 +109,9 @@ fn applies_def() -> Value {
     })
 }
 
-/// The `outcomes.*.headers` value: a bare matcher string, or the mapping form
+/// One `outcomes.*.headers` entry: a bare matcher string, or the mapping form
 /// carrying the presence-strength and version-dating modifiers.
-fn header_expectation_def() -> Value {
+fn one_header_expectation_def() -> Value {
     json!({
         "oneOf": [
             { "type": "string",
@@ -125,6 +125,21 @@ fn header_expectation_def() -> Value {
                                 "description": "Presence is SHOULD/MAY-strength: an absent or blank header satisfies the expectation, a present one is judged in full by `match` (ITS-REST overview §ETag and Last-Modified makes presence a SHOULD while §Deprecated headers makes the form a MUST)" },
                   "applies": applies_def()
               } }
+        ]
+    })
+}
+
+/// The `outcomes.*.headers` value for one header: a single expectation, or a
+/// sequence of them judged conjunctively (used where the released text puts
+/// rules of different strength or different dating on the same header).
+fn header_expectation_def() -> Value {
+    json!({
+        "oneOf": [
+            one_header_expectation_def(),
+            { "type": "array",
+              "minItems": 1,
+              "items": one_header_expectation_def(),
+              "description": "Several expectations on one header, all judged: each carries its own `optional` and `applies`, so an undated identity rule and a release-dated form rule keep their own grounds" }
         ]
     })
 }

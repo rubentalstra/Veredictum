@@ -114,29 +114,32 @@ fn every_release_dated_header_rule_carries_the_same_floor() {
             continue;
         }
         for (kind, expectation) in binding.outcomes.as_deref().unwrap_or_default() {
-            for (header, declared) in expectation.headers.as_deref().unwrap_or_default() {
-                // The affected set, derived from the matcher itself: the
-                // weak-ETag FORM pin, and the `Location` absent-restriction.
-                let release_dated = match &declared.matcher {
-                    HeaderMatcher::Pattern(pattern) => pattern.starts_with("W/"),
-                    HeaderMatcher::Absent => header.eq_ignore_ascii_case("Location"),
-                    _ => false,
-                };
-                if !release_dated {
-                    continue;
-                }
-                dated += 1;
-                let floored = declared.applies.as_ref().is_some_and(|applies| {
-                    applies
-                        .its_rest
-                        .as_ref()
-                        .is_some_and(|range| range.raw() == ">=1.1.0")
-                });
-                if !floored {
-                    unscoped.push(format!(
-                        "{}: outcome {kind} header {header}",
-                        path.display()
-                    ));
+            for (header, declarations) in expectation.headers.as_deref().unwrap_or_default() {
+                for declared in declarations.all() {
+                    // The affected set, derived from the matcher itself: the
+                    // weak-ETag FORM pin, and the `Location`
+                    // absent-restriction.
+                    let release_dated = match &declared.matcher {
+                        HeaderMatcher::Pattern(pattern) => pattern.starts_with("W/"),
+                        HeaderMatcher::Absent => header.eq_ignore_ascii_case("Location"),
+                        _ => false,
+                    };
+                    if !release_dated {
+                        continue;
+                    }
+                    dated += 1;
+                    let floored = declared.applies.as_ref().is_some_and(|applies| {
+                        applies
+                            .its_rest
+                            .as_ref()
+                            .is_some_and(|range| range.raw() == ">=1.1.0")
+                    });
+                    if !floored {
+                        unscoped.push(format!(
+                            "{}: outcome {kind} header {header}",
+                            path.display()
+                        ));
+                    }
                 }
             }
         }

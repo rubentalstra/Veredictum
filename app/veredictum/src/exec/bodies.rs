@@ -286,7 +286,7 @@ fn return_preference(prefer: Option<&str>) -> Option<ReturnPreference> {
 /// The body's carried content: `None` when the response carried nothing to
 /// judge (no body, JSON `null`, or an all-whitespace non-JSON payload — the
 /// driver already maps an empty response text to no body).
-fn content(body: Option<&Value>) -> Option<&Value> {
+pub(crate) fn content(body: Option<&Value>) -> Option<&Value> {
     match body {
         None | Some(Value::Null) => None,
         Some(Value::String(s)) if s.trim().is_empty() => None,

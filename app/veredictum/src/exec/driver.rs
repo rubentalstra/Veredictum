@@ -878,7 +878,7 @@ impl<'a> HttpDriver<'a> {
                     vars,
                 ),
                 // unique is aggregate (law e); message_exemplar/state are
-                // informative (AMB-1 / the `verified_by` machinery).
+                // informative (AMB-217 / the `verified_by` machinery).
                 Assertion::Unique { .. }
                 | Assertion::MessageExemplar { .. }
                 | Assertion::State { .. } => Ok(()),
@@ -2487,8 +2487,13 @@ impl HttpDriver<'_> {
             ),
             spec_versions: self.spec_versions,
         };
-        let mut failures =
-            crate::exec::headers::evaluate(expectation, &exchange.headers, &header_ctx, vars);
+        let mut failures = crate::exec::headers::evaluate(
+            expectation,
+            &exchange.headers,
+            exchange.body.as_ref(),
+            &header_ctx,
+            vars,
+        );
         let body_ctx = crate::exec::bodies::RequestContext {
             accept: sent_headers.get("Accept").map(String::as_str),
             prefer: sent_headers.get("Prefer").map(String::as_str),
@@ -5908,7 +5913,13 @@ mod tests {
                 last_version_uid: latest_version_uid_for(slots, &identities, &BTreeMap::new()),
                 ..crate::exec::headers::RequestContext::default()
             };
-            crate::exec::headers::evaluate(&expectation, &response, &ctx, &VarStore::default())
+            crate::exec::headers::evaluate(
+                &expectation,
+                &response,
+                None,
+                &ctx,
+                &VarStore::default(),
+            )
         };
         let a_only = slots(&[OBJECT_A_V2]);
         assert!(

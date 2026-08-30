@@ -38,7 +38,9 @@ outcomes:
   precondition_failed:
     status: 412                           # condition false → MUST NOT perform (§If-Match and accidental overwrites)
     headers:
-      ETag: latest-version-uid            # "SHOULD return also latest version_uid in the ETag response headers"
+      ETag:
+        - latest-version-uid            # "SHOULD return also latest version_uid in the ETag response headers"
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
       Location: { match: absent, applies: { its_rest: ">=1.1.0" } }  # error response — overview §Location (creation/redirect only)
 captures:
   version_uid:

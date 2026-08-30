@@ -145,7 +145,7 @@ mod tests {
 
     fn selectors() -> SelectorsVocab {
         serde_saphyr::from_str(
-            "body_selectors: [prefer_conditional, error_loose, result_set_body, negotiated, present, absent]\nheader_matchers: [\"present\", \"present?\", \"absent\", \"negotiated\", \"latest-version-uid\", \"pattern:<regex>\", \"<literal>\"]\nignore_sets:\n  server_assigned: { per_binding: true, source: s }\n  ctx_defaults: { paths: [context/start_time], source: s }\nuniversal_outcomes:\n  unauthenticated: { status: 401, source: s }\n  forbidden: { status: 403, source: s }\n",
+            "body_selectors: [prefer_conditional, error_loose, result_set_body, negotiated, present, absent]\nheader_matchers: [\"present\", \"present?\", \"present-with-body\", \"absent\", \"negotiated\", \"latest-version-uid\", \"pattern:<regex>\", \"<literal>\"]\nignore_sets:\n  server_assigned: { per_binding: true, source: s }\n  ctx_defaults: { paths: [context/start_time], source: s }\nuniversal_outcomes:\n  unauthenticated: { status: 401, source: s }\n  forbidden: { status: 403, source: s }\n",
         )
         .unwrap()
     }

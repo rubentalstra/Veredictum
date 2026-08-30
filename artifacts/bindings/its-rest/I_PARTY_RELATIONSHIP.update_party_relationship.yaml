@@ -52,7 +52,9 @@ outcomes:
   precondition_failed:
     status: 412
     headers:
-      ETag: latest-version-uid
+      ETag:
+        - latest-version-uid
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
       Location: absent
   validation_failed:
     status: 422

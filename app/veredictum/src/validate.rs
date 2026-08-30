@@ -3485,30 +3485,32 @@ fn check_matcher_placeholders(set: &ArtifactSet, findings: &mut Vec<Finding>) {
                     let Some(expectation) = binding.outcome(kind) else {
                         continue; // reported by binding-completeness
                     };
-                    for (header, declared) in expectation.headers.iter().flatten() {
-                        let HeaderMatcher::Pattern(pattern) = &declared.matcher else {
-                            continue;
-                        };
-                        for name in placeholder_names(pattern) {
-                            if structural_token(name).is_some() || in_scope.contains(name) {
+                    for (header, declarations) in expectation.headers.iter().flatten() {
+                        for declared in declarations.all() {
+                            let HeaderMatcher::Pattern(pattern) = &declared.matcher else {
                                 continue;
+                            };
+                            for name in placeholder_names(pattern) {
+                                if structural_token(name).is_some() || in_scope.contains(name) {
+                                    continue;
+                                }
+                                push(
+                                    findings,
+                                    CheckId::MatcherPlaceholder,
+                                    &who,
+                                    format!(
+                                        "step {}: the {} `{}` outcome matches header {header} \
+                                         with <{name}>, which is neither a structural token nor \
+                                         in the template scope at that step (requires-minted \
+                                         handles + earlier captures + this step's `with:` \
+                                         arguments) — the matcher refuses instead of judging, so \
+                                         the row reddens on the runner's own resolution failure",
+                                        step.step,
+                                        binding.sm_operation,
+                                        kind.token(),
+                                    ),
+                                );
                             }
-                            push(
-                                findings,
-                                CheckId::MatcherPlaceholder,
-                                &who,
-                                format!(
-                                    "step {}: the {} `{}` outcome matches header {header} with \
-                                     <{name}>, which is neither a structural token nor in the \
-                                     template scope at that step (requires-minted handles + \
-                                     earlier captures + this step's `with:` arguments) — the \
-                                     matcher refuses instead of judging, so the row reddens on \
-                                     the runner's own resolution failure",
-                                    step.step,
-                                    binding.sm_operation,
-                                    kind.token(),
-                                ),
-                            );
                         }
                     }
                 }

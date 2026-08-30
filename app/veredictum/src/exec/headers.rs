@@ -32,6 +32,12 @@
 //! Matcher semantics (the closed [`HeaderMatcher`] vocabulary):
 //!
 //! - `present` — the header exists with a non-empty value.
+//! - `present-with-body` — the header exists with a non-empty value WHEN the
+//!   response carries a content body, and carries no criterion when it does
+//!   not: `Resources.md` §JSON Format "Proper header `Content-Type:
+//!   application/json` MUST be present in the response of the service unless
+//!   the response has no content body (HTTP status code `204`)" (§XML Format
+//!   and §Simplified Formats carry the identical sentence).
 //! - `absent` — the header must not exist (e.g. `Location` on reads —
 //!   overview §Location "MUST NOT be used to indicate an alternate
 //!   representation").
@@ -84,10 +90,14 @@ pub struct RequestContext<'a> {
 
 /// Evaluate every declared header expectation of `expectation` against the
 /// response headers; returns one failure line per violated expectation.
+///
+/// `body` is the observed response body, which the `present-with-body` matcher
+/// needs: its criterion exists only when the response carries content.
 #[must_use]
 pub fn evaluate(
     expectation: &WireExpectation,
     response_headers: &BTreeMap<String, String>,
+    body: Option<&serde_json::Value>,
     ctx: &RequestContext<'_>,
     vars: &VarStore,
 ) -> Vec<String> {
@@ -95,19 +105,21 @@ pub fn evaluate(
         return Vec::new();
     };
     let mut failures = Vec::new();
-    for (name, header) in declared {
-        if !in_scope(header, ctx) {
-            continue;
-        }
-        let observed = header_value(response_headers, name);
-        // A SHOULD/MAY-strength presence: nothing to judge when the server
-        // exercised its latitude and omitted the header. A header that IS
-        // there still faces the matcher in full.
-        if header.optional && observed.is_none_or(|v| v.trim().is_empty()) {
-            continue;
-        }
-        if let Some(failure) = judge(name, &header.matcher, observed, ctx, vars) {
-            failures.push(failure);
+    for (name, declarations) in declared {
+        for header in declarations.all() {
+            if !in_scope(header, ctx) {
+                continue;
+            }
+            let observed = header_value(response_headers, name);
+            // A SHOULD/MAY-strength presence: nothing to judge when the server
+            // exercised its latitude and omitted the header. A header that IS
+            // there still faces the matcher in full.
+            if header.optional && observed.is_none_or(|v| v.trim().is_empty()) {
+                continue;
+            }
+            if let Some(failure) = judge(name, &header.matcher, observed, body, ctx, vars) {
+                failures.push(failure);
+            }
         }
     }
     failures
@@ -138,6 +150,7 @@ fn judge(
     name: &str,
     matcher: &HeaderMatcher,
     observed: Option<&str>,
+    body: Option<&serde_json::Value>,
     ctx: &RequestContext<'_>,
     vars: &VarStore,
 ) -> Option<String> {
@@ -146,6 +159,17 @@ fn judge(
             Some(v) if !v.trim().is_empty() => None,
             _ => Some(format!("header {name}: expected present, got none")),
         },
+        HeaderMatcher::PresentWithBody => {
+            // The MUST is exempted for a response with no content body, so a
+            // body-less response carries no criterion at all.
+            crate::exec::bodies::content(body)?;
+            match observed {
+                Some(v) if !v.trim().is_empty() => None,
+                _ => Some(format!(
+                    "header {name}: the response carries a content body, so the header must be present, got none"
+                )),
+            }
+        }
         HeaderMatcher::Absent => observed.map(|v| {
             format!("header {name}: expected absent, got {v:?} (the binding's cited spec sentence forbids it on this outcome)")
         }),
@@ -386,10 +410,10 @@ mod tests {
     fn present_and_absent_are_enforced() {
         let e = expectation(&serde_json::json!({ "ETag": "present", "Location": "absent" }));
         let ok = response(&[("etag", "W/\"x::sys::1\"")]);
-        assert!(evaluate(&e, &ok, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &ok, None, &ctx(), &VarStore::default()).is_empty());
 
         let bad = response(&[("location", "/somewhere")]);
-        let failures = evaluate(&e, &bad, &ctx(), &VarStore::default());
+        let failures = evaluate(&e, &bad, None, &ctx(), &VarStore::default());
         assert_eq!(failures.len(), 2, "{failures:?}");
         assert!(failures[0].contains("ETag"));
         assert!(failures[1].contains("Location"));
@@ -398,7 +422,136 @@ mod tests {
     #[test]
     fn present_optional_never_fails() {
         let e = expectation(&serde_json::json!({ "Preference-Applied": "present?" }));
-        assert!(evaluate(&e, &response(&[]), &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &response(&[]), None, &ctx(), &VarStore::default()).is_empty());
+    }
+
+    /// `present-with-body` is the exact shape of the `Resources.md` §JSON
+    /// Format sentence: the `Content-Type` MUST binds a response that carries
+    /// content, and the "unless the response has no content body" clause makes
+    /// a body-less response carry no criterion at all.
+    #[test]
+    fn present_with_body_binds_only_a_response_that_carries_content() {
+        let e = expectation(&serde_json::json!({ "Content-Type": "present-with-body" }));
+        let detail = serde_json::json!({ "message": "Error message" });
+
+        // A body came back and the header declares its type: satisfied.
+        let typed = response(&[("content-type", "application/json")]);
+        assert!(evaluate(&e, &typed, Some(&detail), &ctx(), &VarStore::default()).is_empty());
+
+        // The same body with no `Content-Type` at all is the violation.
+        let untyped = evaluate(
+            &e,
+            &response(&[]),
+            Some(&detail),
+            &ctx(),
+            &VarStore::default(),
+        );
+        assert_eq!(untyped.len(), 1, "{untyped:?}");
+        assert!(untyped[0].contains("carries a content body"), "{untyped:?}");
+        // A blank value is no declaration either.
+        let blank = response(&[("content-type", "  ")]);
+        assert_eq!(
+            evaluate(&e, &blank, Some(&detail), &ctx(), &VarStore::default()).len(),
+            1
+        );
+
+        // No body: no criterion, whether or not the header is there.
+        assert!(evaluate(&e, &response(&[]), None, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &typed, None, &ctx(), &VarStore::default()).is_empty());
+        // The same three shapes the body selectors treat as no content.
+        for empty in [serde_json::Value::Null, serde_json::json!("   ")] {
+            assert!(
+                evaluate(
+                    &e,
+                    &response(&[]),
+                    Some(&empty),
+                    &ctx(),
+                    &VarStore::default()
+                )
+                .is_empty(),
+                "{empty} is not a content body"
+            );
+        }
+    }
+
+    /// The media-type half of the error-body criterion accepts every spelling
+    /// RFC 9110 §8.3 permits for one declared type — the parameter list and the
+    /// case of the type name are both the sender's choice — and refuses a
+    /// different type. A pattern that failed on `charset` would redden every
+    /// conformant 400 row it is declared on.
+    #[test]
+    fn the_error_body_media_type_pattern_accepts_the_declared_type_only() {
+        let e = expectation(&serde_json::json!({
+            "Content-Type": { "match": "pattern:(?i)application/json(?:\\s*;.*)?", "optional": true }
+        }));
+        for value in [
+            "application/json",
+            "application/json; charset=utf-8",
+            "application/json;charset=UTF-8",
+            "Application/JSON",
+        ] {
+            let ok = response(&[("content-type", value)]);
+            assert!(
+                evaluate(&e, &ok, None, &ctx(), &VarStore::default()).is_empty(),
+                "{value} is the declared type"
+            );
+        }
+        for value in ["application/xml", "text/plain", "application/jsonx"] {
+            let bad = response(&[("content-type", value)]);
+            assert_eq!(
+                evaluate(&e, &bad, None, &ctx(), &VarStore::default()).len(),
+                1,
+                "{value} is not the declared type"
+            );
+        }
+        // Optional presence: an absent header is the presence criterion's
+        // business, never this one's.
+        assert!(evaluate(&e, &response(&[]), None, &ctx(), &VarStore::default()).is_empty());
+    }
+
+    /// Several expectations on ONE header are all judged, each keeping its own
+    /// strength and its own dating: the 412 `ETag` carries the latest
+    /// `version_uid` for every release (overview §"If-Match and accidental
+    /// overwrites") and the `W/` weakness indicator from Release 1.1.0
+    /// (§"Deprecated headers").
+    #[test]
+    fn a_header_sequence_judges_every_declared_expectation() {
+        let e = expectation(&serde_json::json!({
+            "ETag": [
+                "latest-version-uid",
+                { "match": "pattern:W/\"[^\"]+\"", "applies": { "its_rest": ">=1.1.0" } }
+            ]
+        }));
+        let v11 = versions("1.1.0");
+        let judged = RequestContext {
+            last_version_uid: Some("abc::sys::2"),
+            spec_versions: Some(&v11),
+            ..RequestContext::default()
+        };
+
+        let weak = response(&[("etag", "W/\"abc::sys::2\"")]);
+        assert!(evaluate(&e, &weak, None, &judged, &VarStore::default()).is_empty());
+
+        // The bare form carries the right identity and still fails the dated
+        // form rule — one failure line, from the second expectation only.
+        let bare = response(&[("etag", "\"abc::sys::2\"")]);
+        let failures = evaluate(&e, &bare, None, &judged, &VarStore::default());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0].contains("does not match"), "{failures:?}");
+
+        // A 1.0.3 declarant is out of scope for the dated form rule, and the
+        // undated identity rule still bites on a stale tag.
+        let v103 = versions("1.0.3");
+        let dated_out = RequestContext {
+            last_version_uid: Some("abc::sys::2"),
+            spec_versions: Some(&v103),
+            ..RequestContext::default()
+        };
+        assert!(evaluate(&e, &bare, None, &dated_out, &VarStore::default()).is_empty());
+        let stale = response(&[("etag", "\"abc::sys::1\"")]);
+        let failures = evaluate(&e, &stale, None, &dated_out, &VarStore::default());
+        assert_eq!(failures.len(), 1, "{failures:?}");
+        assert!(failures[0].contains("latest version uid"), "{failures:?}");
     }
 
     #[test]
@@ -409,9 +562,12 @@ mod tests {
             ..RequestContext::default()
         };
         let ok = response(&[("content-type", "application/json; charset=utf-8")]);
-        assert!(evaluate(&e, &ok, &ctx, &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &ok, None, &ctx, &VarStore::default()).is_empty());
         let bad = response(&[("content-type", "application/openehr.wt+json")]);
-        assert_eq!(evaluate(&e, &bad, &ctx, &VarStore::default()).len(), 1);
+        assert_eq!(
+            evaluate(&e, &bad, None, &ctx, &VarStore::default()).len(),
+            1
+        );
     }
 
     #[test]
@@ -424,11 +580,17 @@ mod tests {
         // The weak wrapper strips; case differences are the same identifier
         // (BASE master05 §Composite Identifiers and Case).
         let ok = response(&[("etag", "W/\"ABC::SYS::2\"")]);
-        assert!(evaluate(&e, &ok, &ctx, &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &ok, None, &ctx, &VarStore::default()).is_empty());
         let stale = response(&[("etag", "W/\"abc::sys::1\"")]);
-        assert_eq!(evaluate(&e, &stale, &ctx, &VarStore::default()).len(), 1);
+        assert_eq!(
+            evaluate(&e, &stale, None, &ctx, &VarStore::default()).len(),
+            1
+        );
         let missing = response(&[]);
-        assert_eq!(evaluate(&e, &missing, &ctx, &VarStore::default()).len(), 1);
+        assert_eq!(
+            evaluate(&e, &missing, None, &ctx, &VarStore::default()).len(),
+            1
+        );
     }
 
     #[test]
@@ -444,17 +606,17 @@ mod tests {
             Captured::Scalar("abc-123".to_owned()),
         );
         let ok = response(&[("etag", "W/\"abc-123::any.system::2\"")]);
-        assert!(evaluate(&e, &ok, &ctx(), &vars).is_empty());
+        assert!(evaluate(&e, &ok, None, &ctx(), &vars).is_empty());
         // A different resolved uid fails; the structural tokens (<system_id>,
         // <n>) resolve to their grammars, not to a `.*` wildcard (FerroEHR#1852).
         let bad = response(&[("etag", "W/\"other-uid::any.system::2\"")]);
-        assert_eq!(evaluate(&e, &bad, &ctx(), &vars).len(), 1);
+        assert_eq!(evaluate(&e, &bad, None, &ctx(), &vars).len(), 1);
         // The structural grammars are real constraints: an empty system
         // segment and a zero-led tree ordinal both fail.
         let empty_system = response(&[("etag", "W/\"abc-123::::2\"")]);
-        assert_eq!(evaluate(&e, &empty_system, &ctx(), &vars).len(), 1);
+        assert_eq!(evaluate(&e, &empty_system, None, &ctx(), &vars).len(), 1);
         let zero_led = response(&[("etag", "W/\"abc-123::any.system::02\"")]);
-        assert_eq!(evaluate(&e, &zero_led, &ctx(), &vars).len(), 1);
+        assert_eq!(evaluate(&e, &zero_led, None, &ctx(), &vars).len(), 1);
     }
 
     /// The `object_id` segment is the BASE `base_types` master05 §Syntaxes
@@ -475,7 +637,7 @@ mod tests {
             let etag = format!("W/\"{uid}::ferroehr.local::1\"");
             let ok = response(&[("etag", etag.as_str())]);
             assert!(
-                evaluate(&e, &ok, &ctx(), &VarStore::default()).is_empty(),
+                evaluate(&e, &ok, None, &ctx(), &VarStore::default()).is_empty(),
                 "{uid} is a released uid form"
             );
         }
@@ -485,7 +647,7 @@ mod tests {
             let etag = format!("W/\"{payload}\"");
             let bad = response(&[("etag", etag.as_str())]);
             assert_eq!(
-                evaluate(&e, &bad, &ctx(), &VarStore::default()).len(),
+                evaluate(&e, &bad, None, &ctx(), &VarStore::default()).len(),
                 1,
                 "{payload} is not a released uid form"
             );
@@ -508,7 +670,7 @@ mod tests {
             let etag = format!("W/\"{system_id}\"");
             let ok = response(&[("etag", etag.as_str())]);
             assert!(
-                evaluate(&e, &ok, &ctx(), &VarStore::default()).is_empty(),
+                evaluate(&e, &ok, None, &ctx(), &VarStore::default()).is_empty(),
                 "{system_id} is a released uid form"
             );
         }
@@ -518,7 +680,7 @@ mod tests {
             let etag = format!("W/\"{payload}\"");
             let bad = response(&[("etag", etag.as_str())]);
             assert_eq!(
-                evaluate(&e, &bad, &ctx(), &VarStore::default()).len(),
+                evaluate(&e, &bad, None, &ctx(), &VarStore::default()).len(),
                 1,
                 "{payload} is not a released uid form"
             );
@@ -544,7 +706,7 @@ mod tests {
             "etag",
             "W/\"019fcd6c-d514-7703-9491-b2c8d8413408::ferroehr.local::1\"",
         )]);
-        assert!(evaluate(&e, &ok, &ctx(), &vars).is_empty());
+        assert!(evaluate(&e, &ok, None, &ctx(), &vars).is_empty());
     }
 
     /// `<template_hrid>` is the AM Identification master03 §Human-readable
@@ -562,13 +724,16 @@ mod tests {
             let etag = format!("W/\"{hrid}\"");
             let ok = response(&[("etag", etag.as_str())]);
             assert!(
-                evaluate(&e, &ok, &ctx(), &VarStore::default()).is_empty(),
+                evaluate(&e, &ok, None, &ctx(), &VarStore::default()).is_empty(),
                 "{hrid} is a released HRID"
             );
         }
         // The ADDRESSED prefix is not the resolved HRID: no release version.
         let prefix = response(&[("etag", "W/\"openEHR-EHR-COMPOSITION.cnf_minimal.v1\"")]);
-        assert_eq!(evaluate(&e, &prefix, &ctx(), &VarStore::default()).len(), 1);
+        assert_eq!(
+            evaluate(&e, &prefix, None, &ctx(), &VarStore::default()).len(),
+            1
+        );
     }
 
     /// FerroEHR#1852 seeded defect: a placeholder naming neither a case variable nor
@@ -582,7 +747,7 @@ mod tests {
         // The observed value would MATCH a `.*` degradation — the failure
         // must come from the refusal, not from a mismatch.
         let would_pass = response(&[("etag", "W/\"anything::x\"")]);
-        let failures = evaluate(&e, &would_pass, &ctx(), &VarStore::default());
+        let failures = evaluate(&e, &would_pass, None, &ctx(), &VarStore::default());
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(
             failures[0].contains("no_such_capture") && failures[0].contains("FerroEHR#1852"),
@@ -594,16 +759,19 @@ mod tests {
     fn literal_renders_the_template() {
         let e = expectation(&serde_json::json!({ "Preference-Applied": "return=minimal" }));
         let ok = response(&[("preference-applied", "return=minimal")]);
-        assert!(evaluate(&e, &ok, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &ok, None, &ctx(), &VarStore::default()).is_empty());
         let bad = response(&[("preference-applied", "return=representation")]);
-        assert_eq!(evaluate(&e, &bad, &ctx(), &VarStore::default()).len(), 1);
+        assert_eq!(
+            evaluate(&e, &bad, None, &ctx(), &VarStore::default()).len(),
+            1
+        );
     }
 
     #[test]
     fn header_lookup_is_case_insensitive() {
         let e = expectation(&serde_json::json!({ "Last-Modified": "present" }));
         let ok = response(&[("LAST-MODIFIED", "Wed, 22 Jul 2009 19:15:56 GMT")]);
-        assert!(evaluate(&e, &ok, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &ok, None, &ctx(), &VarStore::default()).is_empty());
     }
 
     /// `optional: true` splits SHOULD-strength PRESENCE from MUST-strength
@@ -616,13 +784,16 @@ mod tests {
         let e = expectation(&serde_json::json!({
             "ETag": { "match": "pattern:W/\"[^\"]+\"", "optional": true }
         }));
-        assert!(evaluate(&e, &response(&[]), &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &response(&[]), None, &ctx(), &VarStore::default()).is_empty());
         let blank = response(&[("etag", "   ")]);
-        assert!(evaluate(&e, &blank, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &blank, None, &ctx(), &VarStore::default()).is_empty());
         let weak = response(&[("etag", "W/\"rs-1\"")]);
-        assert!(evaluate(&e, &weak, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &weak, None, &ctx(), &VarStore::default()).is_empty());
         let bare = response(&[("etag", "\"rs-1\"")]);
-        assert_eq!(evaluate(&e, &bare, &ctx(), &VarStore::default()).len(), 1);
+        assert_eq!(
+            evaluate(&e, &bare, None, &ctx(), &VarStore::default()).len(),
+            1
+        );
     }
 
     /// A version-dated rule binds only the parties that declare the release
@@ -645,18 +816,21 @@ mod tests {
             spec_versions: Some(&v11),
             ..RequestContext::default()
         };
-        assert_eq!(evaluate(&e, &bare, &judged, &VarStore::default()).len(), 1);
+        assert_eq!(
+            evaluate(&e, &bare, None, &judged, &VarStore::default()).len(),
+            1
+        );
 
         let v103 = versions("1.0.3");
         let dated_out = RequestContext {
             spec_versions: Some(&v103),
             ..RequestContext::default()
         };
-        assert!(evaluate(&e, &bare, &dated_out, &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &bare, None, &dated_out, &VarStore::default()).is_empty());
 
         // Undeclared behaves exactly as the case-level filter does: out of
         // scope, never a silently-applied requirement.
-        assert!(evaluate(&e, &bare, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &bare, None, &ctx(), &VarStore::default()).is_empty());
     }
 
     /// The two modifiers are independent: dating gates whether the rule is
@@ -676,9 +850,12 @@ mod tests {
             spec_versions: Some(&v11),
             ..RequestContext::default()
         };
-        assert!(evaluate(&e, &response(&[]), &judged, &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &response(&[]), None, &judged, &VarStore::default()).is_empty());
         let bare = response(&[("etag", "\"rs-1\"")]);
-        assert_eq!(evaluate(&e, &bare, &judged, &VarStore::default()).len(), 1);
+        assert_eq!(
+            evaluate(&e, &bare, None, &judged, &VarStore::default()).len(),
+            1
+        );
     }
 
     /// `negotiated` has nothing sound to compare against when the driver sent
@@ -688,7 +865,7 @@ mod tests {
     fn negotiated_without_an_accept_asserts_nothing() {
         let e = expectation(&serde_json::json!({ "Content-Type": "negotiated" }));
         let any = response(&[("content-type", "application/xml")]);
-        assert!(evaluate(&e, &any, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &any, None, &ctx(), &VarStore::default()).is_empty());
 
         // With an `Accept` sent, a MISSING content type is its own failure line
         // distinct from the mismatch one, so a red row says which happened.
@@ -696,7 +873,7 @@ mod tests {
             accept: Some("application/xml"),
             ..RequestContext::default()
         };
-        let failures = evaluate(&e, &response(&[]), &negotiating, &VarStore::default());
+        let failures = evaluate(&e, &response(&[]), None, &negotiating, &VarStore::default());
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(failures[0].ends_with("got none"), "{failures:?}");
     }
@@ -713,15 +890,18 @@ mod tests {
             last_version_uid: Some("abc::sys::2"),
             ..RequestContext::default()
         };
-        let failures = evaluate(&e, &empty, &with_uid, &VarStore::default());
+        let failures = evaluate(&e, &empty, None, &with_uid, &VarStore::default());
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(failures[0].contains("empty entity tag"), "{failures:?}");
 
         // Nothing tracked to compare against: presence and non-emptiness are
         // all the runner can soundly assert, so any non-empty tag passes.
         let anything = response(&[("etag", "\"whatever\"")]);
-        assert!(evaluate(&e, &anything, &ctx(), &VarStore::default()).is_empty());
-        assert_eq!(evaluate(&e, &empty, &ctx(), &VarStore::default()).len(), 1);
+        assert!(evaluate(&e, &anything, None, &ctx(), &VarStore::default()).is_empty());
+        assert_eq!(
+            evaluate(&e, &empty, None, &ctx(), &VarStore::default()).len(),
+            1
+        );
     }
 
     /// A `pattern:` and a literal expectation both report their own
@@ -729,12 +909,12 @@ mod tests {
     #[test]
     fn a_missing_value_is_reported_by_pattern_and_literal_alike() {
         let pattern = expectation(&serde_json::json!({ "ETag": "pattern:W/\"[^\"]+\"" }));
-        let failures = evaluate(&pattern, &response(&[]), &ctx(), &VarStore::default());
+        let failures = evaluate(&pattern, &response(&[]), None, &ctx(), &VarStore::default());
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(failures[0].contains("got none"), "{failures:?}");
 
         let literal = expectation(&serde_json::json!({ "Location": "/ehr/x" }));
-        let failures = evaluate(&literal, &response(&[]), &ctx(), &VarStore::default());
+        let failures = evaluate(&literal, &response(&[]), None, &ctx(), &VarStore::default());
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert_eq!(failures[0], "header Location: expected a value, got none");
     }
@@ -746,7 +926,7 @@ mod tests {
     fn an_unresolvable_literal_template_is_reported_as_uncheckable() {
         let e = expectation(&serde_json::json!({ "Location": "/ehr/${ehr_id}" }));
         let observed = response(&[("location", "/ehr/anything")]);
-        let failures = evaluate(&e, &observed, &ctx(), &VarStore::default());
+        let failures = evaluate(&e, &observed, None, &ctx(), &VarStore::default());
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(
             failures[0].contains("literal template unresolvable"),
@@ -759,7 +939,7 @@ mod tests {
             CaptureName::parse("ehr_id").unwrap(),
             Captured::Scalar("anything".to_owned()),
         );
-        assert!(evaluate(&e, &observed, &ctx(), &vars).is_empty());
+        assert!(evaluate(&e, &observed, None, &ctx(), &vars).is_empty());
     }
 
     /// An unterminated `<` is not a placeholder: it stays in the pattern
@@ -769,10 +949,10 @@ mod tests {
     fn an_unterminated_placeholder_stays_in_the_pattern() {
         let e = expectation(&serde_json::json!({ "ETag": "pattern:W/\"<n\"" }));
         let literal_tail = response(&[("etag", "W/\"<n\"")]);
-        assert!(evaluate(&e, &literal_tail, &ctx(), &VarStore::default()).is_empty());
+        assert!(evaluate(&e, &literal_tail, None, &ctx(), &VarStore::default()).is_empty());
         let resolved_as_grammar = response(&[("etag", "W/\"2\"")]);
         assert_eq!(
-            evaluate(&e, &resolved_as_grammar, &ctx(), &VarStore::default()).len(),
+            evaluate(&e, &resolved_as_grammar, None, &ctx(), &VarStore::default()).len(),
             1,
             "an unterminated `<n` never resolves to the version-tree grammar"
         );

@@ -1,0 +1,55 @@
+# THE TRANSPORT HEADER OF AN ERROR BODY THAT EXISTS.
+#
+# The error DETAIL is a MAY. ITS-REST specifications/docs/overview/
+# Requests_and_responses.md §HTTP status codes: "For `4xx` and `5xx` status
+# codes, services MAY return additional error details if the
+# `Prefer: return=representation` header is present in the request." So a
+# bodyless 400 is conformant and nothing about the body's MEMBERS is pinnable
+# (register AMB-217 carries that adjudication and stays intact).
+#
+# What the release DOES pin, once a body came back, is how it is typed.
+# DECISIVE DOCS TEXT (Resources.md §JSON Format, verbatim): "Proper header
+# `Content-Type: application/json` MUST be present in the response of the
+# service unless the response has no content body (HTTP status code `204`)."
+# The exemption names the no-content case, so the MUST binds every response
+# that DOES carry content — an error response among them. The binding declares
+# that as `present-with-body`, which carries no criterion at all when the body
+# is absent.
+#
+# The MEDIA TYPE half is grounded on the OAS and cited as the OAS, because the
+# docs text names no media type for an error body: specifications/responses/
+# 400.yaml declares `content: application/json` as the only representation of
+# the 400 body, and specifications/operations/person_create.yaml `$ref`s that
+# response object for its `'400'`. 38 released operations share it.
+#
+# ONE BEHAVIOUR PER CASE: the refusal itself is already pinned by the sibling
+# `create_party-bbbb` over the same corpus entry. This row exists
+# for the error response's transport, so a red row here names the header and
+# nothing else. The request carries `Prefer: return=representation` from the
+# binding, which is what makes both the body selector and this criterion live.
+id: I_DEMOGRAPHIC_SERVICE.create_party-error_body_content_type
+kind: functional
+component: DEMOGRAPHIC
+sm_operation: I_DEMOGRAPHIC_SERVICE.create_party
+capabilities: [PartyOperations, DemographicApi]
+profiles: [OPTIONS]
+guards:
+  - "DEMOGRAPHIC API is DEVELOPMENT-stage in ITS-REST 1.1.0 — CNF profiles (Demographic Persistence, OPTIONS); ITS-REST demographic (DEVELOPMENT lifecycle)"
+  - "the presence half is docs text (Resources.md §JSON Format) — the media-type half is OAS-grounded and cited as the OAS (specifications/responses/400.yaml, content: application/json), because the docs text names no media type for an error body"
+test_purpose: >-
+  A 400 refusal that carries an error body declares that body's media type,
+  and a 400 that carries no body is judged by no header criterion at all.
+description: "A 400 error body carries its Content-Type (application/json)"
+spec_refs:
+  - "ITS-REST overview Resources.md §JSON Format (Content-Type MUST be present unless the response has no content body)"
+  - "ITS-REST overview Requests_and_responses.md §HTTP status codes (4xx/5xx MAY carry additional error details under Prefer: return=representation)"
+  - "ITS-REST specifications/responses/400.yaml (OAS: content application/json — the docs text names no media type for an error body)"
+  - "SM openehr_platform §I_DEMOGRAPHIC_SERVICE.create_party"
+applies: { rm: ">=1.0.2", its_rest: ">=1.1.0" }   # the Demographic API arrived in Release-1.1.0 — ITS-REST overview Amendment_record.md §Release-1.1.0 (SPECITS-70)
+requires: { server: any }
+data_sets: [cnf.demographic.person.invalid]
+flow:
+  - step: 1
+    call: create_party
+    with: { party: "${ds:cnf.demographic.person.invalid}" }
+    expect: bad_request                  # the 400 parse class (overview Requests_and_responses §HTTP status codes, the 400 row)
