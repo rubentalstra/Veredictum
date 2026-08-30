@@ -14,9 +14,10 @@
 # stage, which only that local path pays — the CI target COPYs bin/ and site/
 # alone, and BuildKit transfers lazily.
 #
-# Everything else stays out. No source file uses `include_str!` or
-# `include_bytes!` on the excluded trees, and a smaller context keeps COPY
-# layers stable across edits to what images never read.
+# Everything else stays out, with ONE re-included directory: a smaller context
+# keeps COPY layers stable across edits to what images never read, and
+# excluding a tree the console compiles against breaks the from-source build
+# with a missing-file error nothing else catches.
 #
 # What must NOT be excluded, so a future edit does not quietly break a build:
 # `app/*/src/`, the manifests, `Cargo.lock`, `rust-toolchain.toml` (the builder stage
@@ -39,9 +40,16 @@ target/
 # no image. The catalogue (artifacts/), the vendored oracle (specs/) and the
 # party declarations (party/) are NOT listed: Dockerfile.vercel bakes them
 # (header above), and the operator image simply never COPYs them.
+#
+# `assets/brand/` is the one exception, because it is a COMPILE input twice
+# over: the console's `public/` entries are symlinks into it, and its export
+# module reads the seal-card master through `include_str!`. Excluding it fails
+# the builder stage (https://docs.docker.com/build/concepts/context — a `!`
+# line re-includes a path an earlier pattern excluded).
 schemas/
 verification-pack/
 assets/
+!assets/brand/
 
 # Tests and their fixtures: nothing in the image runs them.
 app/veredictum/tests/

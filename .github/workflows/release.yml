@@ -484,13 +484,28 @@ jobs:
           cargo auditable build --release --locked -p veredictum-console
           --bin veredictum-console --no-default-features --features ssr
 
-      - name: Strip
-        run: strip target/release/veredictum-console
+      # The image is the console OVER the pinned engine, so the engine binary
+      # is built in the same container, from the same tagged tree, and travels
+      # in the same per-architecture artifact. Built here rather than reused
+      # from the `binaries` lane: that lane is a separate reusable workflow
+      # whose tarballs are release assets, and a second download path would be
+      # a second thing to keep in step.
+      - name: Build the engine (release, native)
+        run: >-
+          cargo auditable build --release --locked -p veredictum
+          --bin veredictum
 
+      - name: Strip
+        run: strip target/release/veredictum-console target/release/veredictum
+
+      # Both binaries under one artifact name, so build-image.yml's single
+      # download per platform stages bin/<arch>/ complete.
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: veredictum-console-${{ matrix.platform }}
-          path: target/release/veredictum-console
+          path: |
+            target/release/veredictum-console
+            target/release/veredictum
           if-no-files-found: error
           retention-days: 1
 
@@ -588,7 +603,7 @@ jobs:
   # it. This drives the very digest this run pushed, before any tag names it.
   image-smoke:
     name: image smoke (amd64)
-    needs: image
+    needs: [plan, image]
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
@@ -635,6 +650,24 @@ jobs:
             fi
             echo "${a} -> 200"
           done
+
+      # The console spawns the engine to drive every run, and refuses a binary
+      # answering anything but `veredictum <pin>` (engine.rs, Engine::verified),
+      # where the pin equals the released version — check-console-pin.sh holds
+      # those two to one string. A published image whose engine is absent or
+      # mismatched serves a console that cannot start a single run (#375).
+      - name: The pushed image carries the engine the console is pinned to
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/veredictum
+          DIGEST: ${{ needs.image.outputs.digest }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          reported="$(docker run --rm --entrypoint /usr/local/bin/veredictum "${IMAGE}@${DIGEST}" --version)"
+          echo "engine reports: ${reported}"
+          if [ "$reported" != "veredictum ${VERSION}" ]; then
+            echo "::error::the in-image engine reports '${reported}', not 'veredictum ${VERSION}' — the console refuses it and every run in this image fails"; exit 1
+          fi
 
   # ── The gate that makes the pushed digest referencable ──────────────────────
   scan-and-tag:

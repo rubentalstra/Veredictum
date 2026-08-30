@@ -80,6 +80,23 @@ version on.
   and a local quickstart is legitimately `http://localhost` (#296).
 
 ### Fixed
+- **The image carries the engine (#375).** Every published image so far held
+  only `/usr/local/bin/veredictum-console`, and the console spawns the pinned
+  `veredictum` binary to drive a run — so the compose quickstart's console
+  served its screens and failed every run it started. Both build paths now
+  ship the engine beside the console at `/usr/local/bin/veredictum`, the
+  runtime names it in `VEREDICTUM_ENGINE`, and the release smoke asks the
+  pulled image for `veredictum --version` and refuses anything but the
+  released version. Proving that on the from-source path exposed a second
+  break in the same build: `.dockerignore` excluded `assets/`, which the
+  console compiles against twice over — its `public/` entries are symlinks
+  into `assets/brand/`, and its export module reads the seal-card master
+  through `include_str!` — so `--target runtime-from-source` had been failing
+  to compile at all. `assets/brand/` is re-included. The hosted console at
+  `console.veredictum.eu` gains the engine with it (owner ruling): a visitor
+  can drive a real run against a CDR they control, writing into a `/work/out`
+  the overlay creates for the console's own uid, and that output is gone at
+  the next deploy.
 - **The published image hydrates (#369).** The per-architecture ssr binary
   was compiled without `LEPTOS_OUTPUT_NAME` in the compiler's environment, so
   leptos's `option_env!` probe baked a `_bg` wasm URL into it while the site

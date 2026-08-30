@@ -23,10 +23,16 @@ pull plus data layers: the exact release bytes, with `artifacts/`,
 builds. The compose stack mounts the same paths; the hosted instance bakes
 them because Vercel has no persistent filesystem.
 
-Runs write the instance's ephemeral filesystem (`/work/out`, created
-65532-writable by the overlay) and vanish on the next redeploy — the
-sandbox's honest lifecycle. A record worth keeping is produced on the
-operator's own machine with the same image.
+The engine ships in the image at `/usr/local/bin/veredictum`, named by
+`VEREDICTUM_ENGINE`, and the overlay leaves that inherited, which is what
+makes the run screens work here. What the overlay adds for it is `/work/out`:
+the baked `/work` tree is root-owned and the distroless base has no shell, so
+the directory is created in a `busybox` helper stage and copied in owned by
+uid 65532.
+
+Runs write that directory on the instance's ephemeral filesystem and vanish
+on the next redeploy — the sandbox's honest lifecycle. A record worth keeping
+is produced on the operator's own machine with the same image.
 
 ## How a deploy happens
 
