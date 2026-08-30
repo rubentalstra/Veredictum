@@ -15,10 +15,12 @@ performance schedule's cases reference (`cnf.scale.10k` / `cnf.scale.100k` /
   order; commit t (global 0-based task order, t = e·100 + j) carries the
   `bp_series(t mod 10)` payload (contract: `corpus/recipes/bp_series.md`)
   against the `cnf.blood_pressure` template (`cnf.opt.blood_pressure`).
-- The seeded index (EHR ids + committed version uids, in order) is the
-  measured run's addressing pool: reads and per-EHR queries cycle it
-  deterministically (stride 2,654,435,761 — the 32-bit Fibonacci-hashing
-  multiplier — over the pool, by arrival index).
+- The seeded index is the measured run's addressing pool: the EHR ids in
+  creation order, and the committed version uids sorted by EHR index then
+  uid, so the pool is identical whatever order the parallel seeding workers
+  finished in. Reads and per-EHR queries cycle it deterministically (stride
+  2,654,435,761 — the 32-bit Fibonacci-hashing multiplier — over the pool, by
+  arrival index).
 - The ad-hoc query the `adhoc_query` workload operation executes over this
   corpus is the blood-pressure read scoped to one EHR:
   `SELECT c/uid/value, o/data[at0001]/events[at0006]/data[at0003]/items[at0004]/value/magnitude

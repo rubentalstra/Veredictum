@@ -1,0 +1,5 @@
+cnf.defect.stale_recipe_digest:
+  generated_by: { recipe: bp_series, digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000" }
+  format: canonical-json
+  validity: { verdict: valid }
+  provenance: "seeded defect: the pinned recipe digest does not match the committed recipe contract"

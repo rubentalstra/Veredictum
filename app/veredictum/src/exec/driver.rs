@@ -89,10 +89,14 @@ pub struct HttpDriver<'a> {
     /// The last flow step completed this row (the postcondition target).
     last_step: Option<LastStep<'a>>,
     /// The latest `version_uid` a SUCCESS outcome's binding capture yielded
-    /// this row — the comparison source of the `latest-version-uid` header
-    /// matcher (overview §"If-Match and accidental overwrites": the 412
-    /// "SHOULD return also latest `version_uid` in the `ETag`").
-    last_version_uid: Option<String>,
+    /// this row, in ONE SLOT PER VERSIONED OBJECT keyed by
+    /// [`versioned_object_key`] — the comparison source of the
+    /// `latest-version-uid` header matcher (overview §"If-Match and
+    /// accidental overwrites": the 412 "SHOULD return also latest
+    /// `version_uid` in the `ETag`"). One slot per object is what keeps a row
+    /// that writes object A and then provokes an error on object B from
+    /// grading B's entity tag against A's uid.
+    latest_version_uids: BTreeMap<String, String>,
     /// The `restapi_specs_version` member the System OPTIONS manifest served,
     /// when the campaign drove that exchange (released OAS
     /// `system.openapi.yaml` `Options` schema — every member optional). An
@@ -152,7 +156,7 @@ impl<'a> HttpDriver<'a> {
             resolver: Resolver::new(manifest, corpus_dir, Some(ixit)),
             committed: Vec::new(),
             last_step: None,
-            last_version_uid: None,
+            latest_version_uids: BTreeMap::new(),
             observed_restapi_specs_version: None,
             wire_reads: BTreeMap::new(),
             recording: Recording::Off,
@@ -1060,6 +1064,19 @@ fn committed_uids_handle() -> CaptureName {
     CaptureName::parse("committed_uids").expect("`committed_uids` should be a valid capture name")
 }
 
+/// The value a path `{param}` takes: the step's own resolved `with` value
+/// first, then a bound capture of the same name.
+fn path_param_value(name: &str, with: &BTreeMap<String, Value>, vars: &VarStore) -> Option<String> {
+    with.get(name)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            CaptureName::parse(name)
+                .ok()
+                .and_then(|c| vars.scalar(&c).map(ToOwned::to_owned))
+        })
+}
+
 /// Substitute the binding path's `{param}` templates from the step's
 /// resolved `with` values, then the captures, percent-encoding each value.
 fn render_path(
@@ -1077,21 +1094,75 @@ fn render_path(
             .find('}')
             .ok_or_else(|| format!("path {raw}: unterminated param"))?;
         let name = tail.get(1..end).unwrap_or_default();
-        let value = with
-            .get(name)
-            .and_then(Value::as_str)
-            .map(ToOwned::to_owned)
-            .or_else(|| {
-                CaptureName::parse(name)
-                    .ok()
-                    .and_then(|c| vars.scalar(&c).map(ToOwned::to_owned))
-            })
+        let value = path_param_value(name, with, vars)
             .ok_or_else(|| format!("path param {{{name}}} unresolved"))?;
         path.push_str(&urlencoding::encode(&value));
         rest = tail.get(end + 1..).unwrap_or_default();
     }
     path.push_str(rest);
     Ok(path)
+}
+
+/// The identifiers the binding path spells for this step, in path order:
+/// what names the request's target resource (RFC 9110 §7.1).
+///
+/// Read from the parsed `{param}` list and the step's own resolution rather
+/// than from the built URL, whose path segments are percent-encoded. A param
+/// nothing resolves never reaches the wire — `render_path` refuses the
+/// request first — so it names no addressed object here either.
+fn path_identities(
+    request: &RequestSpec,
+    with: &BTreeMap<String, Value>,
+    vars: &VarStore,
+) -> Vec<String> {
+    request
+        .path
+        .params()
+        .iter()
+        .filter_map(|name| path_param_value(name.as_str(), with, vars))
+        .collect()
+}
+
+/// The `object_id` of an `OBJECT_VERSION_ID`, lower-cased: the versioned
+/// container the version belongs to (BASE `base_types` master05 §Syntaxes,
+/// `object_version_id = object_id, '::', creating_system_id, '::',
+/// version_tree_id`, and §Identifying Versions within openEHR Versioned
+/// Containers: "multiple versions in the same container all have the same
+/// value for `object_id`"). Lower-cased because §Composite Identifiers and
+/// Case makes two identifiers differing only in case the same thing; a token
+/// carrying no `::` is already its own object id.
+fn versioned_object_key(uid: &str) -> String {
+    let trimmed = uid.trim();
+    trimmed
+        .split_once("::")
+        .map_or(trimmed, |(object_id, _)| object_id)
+        .to_ascii_lowercase()
+}
+
+/// The latest version uid this row committed for the versioned object the
+/// request addresses, or `None` when the row committed none for it.
+///
+/// The target resource is what the path names (RFC 9110 §7.1), so the path's
+/// own identifiers decide the object; a route whose object travels only in
+/// the precondition — the `directory` and `ehr_status` PUTs carry no uid
+/// segment — falls back to the `If-Match` the request sent.
+fn latest_version_uid_for<'s>(
+    slots: &'s BTreeMap<String, String>,
+    identities: &[String],
+    sent_headers: &BTreeMap<String, String>,
+) -> Option<&'s str> {
+    let if_match = sent_headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("If-Match"))
+        .map_or("", |(_, value)| value.as_str());
+    identities
+        .iter()
+        .map(String::as_str)
+        .chain(if_match.split(','))
+        .find_map(|token| {
+            let key = versioned_object_key(crate::exec::headers::strip_entity_tag(token));
+            slots.get(&key).map(String::as_str)
+        })
 }
 
 /// Compose the query pairs the binding declares: template rendering with the
@@ -2403,12 +2474,17 @@ impl HttpDriver<'_> {
         &self,
         expectation: &crate::model::binding::WireExpectation,
         exchange: &Exchange,
+        identities: &[String],
         sent_headers: &BTreeMap<String, String>,
         vars: &VarStore,
     ) -> Vec<String> {
         let header_ctx = crate::exec::headers::RequestContext {
             accept: sent_headers.get("Accept").map(String::as_str),
-            last_version_uid: self.last_version_uid.as_deref(),
+            last_version_uid: latest_version_uid_for(
+                &self.latest_version_uids,
+                identities,
+                sent_headers,
+            ),
             spec_versions: self.spec_versions,
         };
         let mut failures =
@@ -2427,9 +2503,10 @@ impl HttpDriver<'_> {
     }
 
     /// Remember the newest `version_uid` a SUCCESS outcome's binding capture
-    /// yields on this row — the `latest-version-uid` header matcher's
-    /// comparison source. Only success-class outcomes advance it (an error
-    /// commits no version — RM common master06 §Committal and Audits).
+    /// yields on this row, in the slot of the VERSIONED OBJECT it names — the
+    /// `latest-version-uid` header matcher's comparison source. Only
+    /// success-class outcomes advance a slot (an error commits no version —
+    /// RM common master06 §Committal and Audits).
     fn track_latest_version_uid(
         &mut self,
         binding: &OperationBinding,
@@ -2454,7 +2531,8 @@ impl HttpDriver<'_> {
             return;
         };
         if let Some(uid) = Self::extract_capture(exchange, binding, spec, vars) {
-            self.last_version_uid = Some(uid);
+            self.latest_version_uids
+                .insert(versioned_object_key(&uid), uid);
         }
     }
 
@@ -3370,6 +3448,8 @@ impl StepDriver for HttpDriver<'_> {
             Ok(url) => url,
             Err(e) => return Ok(StepObservation::transport(e)),
         };
+        // What the path names is the object this step's ETag matcher is about.
+        let target = path_identities(request_spec, &with, &header_vars);
         let body_is_json = !matches!(body, Some(Value::String(_)));
         pace_commit_capture(step, vars);
         let sent_ms = now_ms();
@@ -3419,7 +3499,7 @@ impl StepDriver for HttpDriver<'_> {
             // that scope — ITS-REST `operations/composition_get.yaml` lets a
             // `uid_based_id` argument be spelled two ways, so it is not an identity.
             assertions.failures.extend(
-                self.eval_wire_expectation(expectation, &exchange, &headers, &header_vars)
+                self.eval_wire_expectation(expectation, &exchange, &target, &headers, &header_vars)
                     .into_iter()
                     .map(AssertionOutcome::Mismatch),
             );
@@ -3437,7 +3517,7 @@ impl StepDriver for HttpDriver<'_> {
         self.row = u32::try_from(row).unwrap_or(u32::MAX);
         self.committed.clear();
         self.last_step = None;
-        self.last_version_uid = None;
+        self.latest_version_uids.clear();
         // server: empty — isolation is the runner's tenancy concern; against
         // a shared SUT the run is recorded as scoped (never destructive).
         // templates: upload each via the upload_opt binding.
@@ -5706,5 +5786,140 @@ mod tests {
             None
         );
         assert_eq!(of(serde_json::json!({})), None);
+    }
+
+    /// The two version uids a cross-object row commits: composition A, then
+    /// composition B, each an `OBJECT_VERSION_ID` over its own container
+    /// (BASE `base_types` master05 §Syntaxes).
+    const OBJECT_A_V2: &str = "aaaaaaaa-1111-4111-8111-111111111111::sut.example::2";
+    const OBJECT_B_V1: &str = "bbbbbbbb-2222-4222-8222-222222222222::sut.example::1";
+
+    /// One slot per versioned object, filled the way a success capture fills
+    /// it.
+    fn slots(uids: &[&str]) -> BTreeMap<String, String> {
+        uids.iter()
+            .map(|uid| (versioned_object_key(uid), (*uid).to_owned()))
+            .collect()
+    }
+
+    /// Every version of one container shares its `object_id` (BASE
+    /// `base_types` master05 §Identifying Versions within openEHR Versioned
+    /// Containers), and §Composite Identifiers and Case makes the comparison
+    /// case-insensitive — so both versions key the same slot.
+    #[test]
+    fn versioned_object_key_is_the_case_folded_object_id() {
+        assert_eq!(
+            versioned_object_key("ABC::sut.example::1"),
+            versioned_object_key("abc::sut.example::7")
+        );
+        assert_eq!(versioned_object_key("abc"), "abc");
+        assert_eq!(versioned_object_key("  ABC::sys::1  "), "abc");
+    }
+
+    /// The cross-object regression (#235): a row writes object A, then
+    /// provokes the error branch on object B, whose uid segment travels in
+    /// the PATH. B's honest entity tag must not be graded against A's uid —
+    /// with nothing committed to B, there is nothing to compare and the
+    /// matcher degrades to `present`.
+    #[test]
+    fn the_etag_comparison_names_the_object_the_path_addressed() {
+        let binding: OperationBinding = serde_json::from_value(serde_json::json!({
+            "sm_operation": "I_EHR_COMPOSITION.delete_composition",
+            "its": "its-rest",
+            "request": { "method": "DELETE", "path": "/ehr/{ehr_id}/composition/{preceding_version_uid}" },
+            "outcomes": { "conflict": { "status": 409, "headers": { "ETag": "latest-version-uid" } } }
+        }))
+        .unwrap();
+        let request = binding.request.as_ref().unwrap();
+        let with: BTreeMap<String, Value> = [
+            ("ehr_id".to_owned(), Value::String("EHR-1".to_owned())),
+            (
+                "preceding_version_uid".to_owned(),
+                Value::String(OBJECT_B_V1.to_owned()),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let identities = path_identities(request, &with, &VarStore::default());
+        assert_eq!(identities, vec!["EHR-1".to_owned(), OBJECT_B_V1.to_owned()]);
+
+        // Row committed A only: B is not tracked, so nothing is compared.
+        let a_only = slots(&[OBJECT_A_V2]);
+        assert_eq!(
+            latest_version_uid_for(&a_only, &identities, &BTreeMap::new()),
+            None
+        );
+        // Row committed both: B's own latest is what B's reply is judged on.
+        let both = slots(&[OBJECT_A_V2, OBJECT_B_V1]);
+        assert_eq!(
+            latest_version_uid_for(&both, &identities, &BTreeMap::new()),
+            Some(OBJECT_B_V1)
+        );
+    }
+
+    /// The `directory` and `ehr_status` routes carry no uid path segment, so
+    /// the object they address is the one their `If-Match` precondition names
+    /// (ITS-REST overview `Requests_and_responses.md` §If-Match).
+    #[test]
+    fn the_etag_comparison_falls_back_to_the_sent_if_match() {
+        let binding: OperationBinding = serde_json::from_value(serde_json::json!({
+            "sm_operation": "I_EHR_DIRECTORY.update_directory",
+            "its": "its-rest",
+            "request": { "method": "PUT", "path": "/ehr/{ehr_id}/directory" },
+            "outcomes": { "precondition_failed": { "status": 412, "headers": { "ETag": "latest-version-uid" } } }
+        }))
+        .unwrap();
+        let request = binding.request.as_ref().unwrap();
+        let with: BTreeMap<String, Value> =
+            [("ehr_id".to_owned(), Value::String("EHR-1".to_owned()))]
+                .into_iter()
+                .collect();
+        let identities = path_identities(request, &with, &VarStore::default());
+        let sent: BTreeMap<String, String> =
+            [("If-Match".to_owned(), format!("\"{OBJECT_B_V1}\""))]
+                .into_iter()
+                .collect();
+        assert_eq!(
+            latest_version_uid_for(&slots(&[OBJECT_A_V2]), &identities, &sent),
+            None
+        );
+        assert_eq!(
+            latest_version_uid_for(&slots(&[OBJECT_A_V2, OBJECT_B_V1]), &identities, &sent),
+            Some(OBJECT_B_V1)
+        );
+    }
+
+    /// The judged half of the same regression: the resolved slot drives the
+    /// matcher, so B's honest `ETag` passes on a row that wrote only A, while
+    /// a stale tag on an object the row DID write still fails.
+    #[test]
+    fn the_matcher_judges_the_addressed_objects_slot() {
+        let expectation: crate::model::binding::WireExpectation =
+            serde_json::from_value(serde_json::json!({
+                "status": 409,
+                "headers": { "ETag": "latest-version-uid" }
+            }))
+            .unwrap();
+        let identities = vec![OBJECT_B_V1.to_owned()];
+        let judge = |slots: &BTreeMap<String, String>, etag: &str| {
+            let response: BTreeMap<String, String> =
+                [("etag".to_owned(), etag.to_owned())].into_iter().collect();
+            let ctx = crate::exec::headers::RequestContext {
+                last_version_uid: latest_version_uid_for(slots, &identities, &BTreeMap::new()),
+                ..crate::exec::headers::RequestContext::default()
+            };
+            crate::exec::headers::evaluate(&expectation, &response, &ctx, &VarStore::default())
+        };
+        let a_only = slots(&[OBJECT_A_V2]);
+        assert!(
+            judge(&a_only, &format!("W/\"{OBJECT_B_V1}\"")).is_empty(),
+            "B's own latest uid must not be graded against A's"
+        );
+        let both = slots(&[OBJECT_A_V2, OBJECT_B_V1]);
+        assert_eq!(
+            judge(&both, &format!("W/\"{OBJECT_A_V2}\"")).len(),
+            1,
+            "A's uid served on B's reply is still a failure"
+        );
     }
 }

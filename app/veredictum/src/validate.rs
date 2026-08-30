@@ -25,6 +25,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use sha2::{Digest as _, Sha256};
+
 use crate::artifacts::ArtifactSet;
 use crate::exec::headers::structural_token;
 use crate::ids::{CapabilityName, CaseId, CorpusKey, SmOperationRef, ViewName};
@@ -149,6 +151,13 @@ pub enum CheckId {
     /// gate is at validate time, before any SUT is composed, because a
     /// synthesis refusal otherwise surfaces only mid-run as an errored row.
     ContentSynthesis,
+    /// Every recipe digest the corpus manifest pins matches the committed
+    /// recipe contract it names (issue #235). The manifest binds a generated
+    /// set to its generator by content digest, which is what makes the named
+    /// contract load-bearing catalogue data instead of prose: edit the
+    /// contract and the pin must move with it. An unverified pin claims a
+    /// provenance no committed file backs.
+    RecipeDigest,
 }
 
 impl CheckId {
@@ -182,6 +191,7 @@ impl CheckId {
             Self::RealizationScope => "realization-scope",
             Self::SurfaceCoverage => "surface-coverage",
             Self::ContentSynthesis => "content-synthesis",
+            Self::RecipeDigest => "recipe-digest",
         }
     }
 }
@@ -295,6 +305,7 @@ pub fn validate(ctx: &Context<'_>) -> Vec<Finding> {
     check_realization_scope(ctx.set, &mut findings);
     check_surface_coverage(ctx.set, spec.as_ref(), &mut findings);
     check_content_synthesis(ctx.set, &mut findings);
+    check_recipe_digests(ctx.set, &mut findings);
 
     findings
 }
@@ -4026,6 +4037,105 @@ fn check_corpus_integrity(set: &ArtifactSet, findings: &mut Vec<Finding>) {
                     format!("{key}: view {view} has no registered evaluator (exec::resolve)"),
                 );
             }
+        }
+    }
+}
+
+// ── recipe digests ──────────────────────────────────────────────────────────
+
+/// The one digest form the manifest may pin, so an unknown algorithm token is
+/// a loud finding instead of a comparison nobody performed.
+const SHA256_PREFIX: &str = "sha256:";
+
+/// The committed contract a recipe name resolves to, relative to the corpus
+/// directory.
+fn recipe_contract(corpus_dir: &Path, recipe: &str) -> PathBuf {
+    corpus_dir.join("recipes").join(format!("{recipe}.md"))
+}
+
+/// Compare one pinned digest against the recipe contract it names.
+fn check_one_digest(
+    corpus_dir: &Path,
+    who: &str,
+    key: &str,
+    recipe: &str,
+    pinned: &str,
+    findings: &mut Vec<Finding>,
+) {
+    let contract = recipe_contract(corpus_dir, recipe);
+    let Some(want) = pinned.strip_prefix(SHA256_PREFIX) else {
+        push(
+            findings,
+            CheckId::RecipeDigest,
+            who,
+            format!(
+                "{key}: recipe {recipe} pins {pinned:?}, which names no supported digest \
+                 algorithm (expected a {SHA256_PREFIX}… value)"
+            ),
+        );
+        return;
+    };
+    let bytes = match std::fs::read(&contract) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            push(
+                findings,
+                CheckId::RecipeDigest,
+                who,
+                format!(
+                    "{key}: recipe {recipe} pins a digest but its contract {} is unreadable: {e}",
+                    contract.display()
+                ),
+            );
+            return;
+        }
+    };
+    let got = crate::record::hex(&Sha256::digest(&bytes));
+    if !got.eq_ignore_ascii_case(want) {
+        push(
+            findings,
+            CheckId::RecipeDigest,
+            who,
+            format!(
+                "{key}: recipe {recipe} pins {SHA256_PREFIX}{want} but its contract {} \
+                 digests to {SHA256_PREFIX}{got}",
+                contract.display()
+            ),
+        );
+    }
+}
+
+/// Every `generated_by` and `recipes` digest the corpus manifest pins is
+/// recomputed from the committed recipe contract it names.
+///
+/// The digest is what turns the named contract into load-bearing catalogue
+/// data: a set's provenance claim is only worth the pin behind it, and an
+/// unverified pin drifts silently the first time the contract is edited.
+fn check_recipe_digests(set: &ArtifactSet, findings: &mut Vec<Finding>) {
+    let (Some((path, corpus)), Some(corpus_dir)) = (&set.corpus, &set.corpus_dir) else {
+        return;
+    };
+    let who = path.display().to_string();
+    for (key, entry) in corpus.entries() {
+        if let Some(generated) = &entry.generated_by {
+            check_one_digest(
+                corpus_dir,
+                &who,
+                key.as_str(),
+                generated.recipe.as_str(),
+                &generated.digest,
+                findings,
+            );
+        }
+        for (recipe, decl) in entry.recipes.iter().flatten() {
+            check_one_digest(
+                corpus_dir,
+                &who,
+                key.as_str(),
+                recipe.as_str(),
+                &decl.digest,
+                findings,
+            );
         }
     }
 }

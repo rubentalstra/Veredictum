@@ -19,6 +19,22 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+- **The `latest-version-uid` ETag comparison names the object it is about
+  (#235).** The driver kept one `last_version_uid` slot for the whole row, so
+  a row that wrote object A and then provoked an error on object B graded B's
+  entity tag against A's uid. The slots are now per versioned object, keyed by
+  the `object_id` of the committed `OBJECT_VERSION_ID` (BASE `base_types`
+  master05 §Syntaxes), and the object a step addresses is read from the path
+  parameters the request was built from, falling back to the `If-Match` the
+  request sent for the `directory` and `ehr_status` routes that carry no uid
+  segment. A cross-object regression test pins it.
+- **`validate` recomputes every recipe digest the corpus manifest pins
+  (#235).** The new `recipe-digest` gate hashes each `generated_by` and
+  `recipes` contract and fails on a mismatch or on a digest algorithm it
+  cannot compute, so a generated set's provenance claim is worth the pin
+  behind it. The gate immediately caught the `scale_ladder` pin, which had
+  never matched its committed contract, and the `bp_series` contract's "all
+  other fields fixed" claim while the generator varies the COMPOSITION name.
 - `CONT-DV_URI-validate_list` drives the list constraint it declares: the case
   rode the pattern-baking template, so both rows passed under the pattern by
   coincidence; a script-generated `cnf.tpl.dv_uri_list` twin (the
