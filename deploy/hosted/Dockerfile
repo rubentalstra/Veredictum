@@ -22,6 +22,11 @@
 FROM busybox@sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0 AS mkdirs
 RUN mkdir -p /empty/out
 
+# The moving tag is the mechanism rather than an oversight: `:latest` is the
+# release pointer `scan-and-tag` moves on a real release tag, so the hosted
+# instrument follows releases without a hand-edited version here. A digest
+# would have to be bumped at every cut, in a file the cut does not touch.
+# hadolint ignore=DL3007
 FROM ghcr.io/rubentalstra/veredictum:latest
 
 # The base image already runs as uid 65532 (distroless nonroot); stated
