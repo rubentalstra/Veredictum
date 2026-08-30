@@ -128,11 +128,9 @@ impl<'a> Resolver<'a> {
     /// Bind the resolver to a case row (matrix or fixture iteration).
     pub fn bind_row(&mut self, case: &CaseCore, row: usize) {
         self.case_id = case.id.to_string();
-        // A content case whose constraint_context declares constraint-axis
-        // columns is committed against a PER-ROW synthesized OPT (issue FerroEHR#228):
-        // the carrier stamps the deterministic per-row template id, matching the
-        // OPT the driver synthesizes+uploads for this row. Otherwise the carrier
-        // uses the single baked template from `requires.templates`.
+        // A content case declaring constraint-axis columns commits against a
+        // PER-ROW synthesized OPT, so the carrier stamps the deterministic
+        // per-row template id matching the OPT the driver uploads for this row.
         self.content_template_id = if case
             .constraint_context
             .as_ref()
@@ -235,7 +233,6 @@ impl<'a> Resolver<'a> {
                 | crate::vocab::CorpusFormat::RawJson => Value::String(text),
             }
         } else if let Some(generated) = &entry.generated_by {
-            // Generated sets: the whole set as a JSON array via the recipe.
             let name = generated.recipe.as_str();
             let series: Result<Vec<Value>, recipes::RecipeError> = match name {
                 "bp_series" => (0..10).map(recipes::bp_series).collect(),
@@ -258,18 +255,11 @@ impl<'a> Resolver<'a> {
         Ok(value)
     }
 
-    /// Evaluate a named view over a data set. The committed views are
-    /// declarative; the registered evaluators here implement the exact
-    /// projections the manifest declares (each is part of the recipe
-    /// contract and listed as a registered exception).
+    /// Every view name [`Self::view`] can answer.
     ///
-    /// # Errors
-    /// [`ResolveError`] when the view is undeclared or its evaluator is
-    /// not registered.
-    /// Every view name the evaluator match in [`Self::view`] can answer — the
-    /// single list the `corpus-integrity` validate gate cross-checks the
-    /// manifest's DECLARED views against, so a declared view without an
-    /// evaluator fails at validate time instead of at run time (FerroEHR#971).
+    /// The `corpus-integrity` validate gate cross-checks a manifest's declared
+    /// views against this list, so a declared view with no evaluator fails at
+    /// validate time rather than at run time.
     pub const REGISTERED_VIEWS: &'static [&'static str] = &[
         "current_state_code",
         "signature",
@@ -284,6 +274,9 @@ impl<'a> Resolver<'a> {
     ];
 
     /// Resolve a declared corpus view to its selection-spec value.
+    ///
+    /// The committed views are declarative; the evaluators here implement the
+    /// exact projections the manifest declares.
     ///
     /// # Errors
     /// [`ResolveError`] when the view is undeclared or its evaluator is
@@ -321,10 +314,8 @@ impl<'a> Resolver<'a> {
                     view: view.clone(),
                     message: "signature attribute missing".to_owned(),
                 }),
-            // cnf.set.bp-10#magnitude_ge_140_by_uid and friends resolve at
-            // query time against committed uids — the driver substitutes the
-            // captured uid list; here we return the SELECTION SPEC the
-            // driver evaluates.
+            // These resolve at query time against committed uids, so what comes
+            // back here is the SELECTION SPEC the driver evaluates.
             "magnitude_ge_140_by_uid" | "magnitude_ge_140" | "systolic_ge_140_uids_asc" => {
                 Ok(serde_json::json!({ "systolic_min": 140, "order": "uid" }))
             }
@@ -334,10 +325,9 @@ impl<'a> Resolver<'a> {
             "top3_systolic_desc_uids" => {
                 Ok(serde_json::json!({ "systolic_min": 0, "order": "systolic_desc", "limit": 3 }))
             }
-            // cnf.directory.folder_containment_tree#… — the folder-containment
-            // selection specs over the committed set. The (folder, index)
-            // topology is the fixture's provenance contract; the driver maps
-            // each index to the committed uid it captured (AMB-218/AMB-219).
+            // The (folder, index) topology is the fixture's provenance
+            // contract; the driver maps each index to the committed uid it
+            // captured (AMB-218/AMB-219).
             "folder_composition_pairs" => Ok(serde_json::json!({
                 "select": "pairs",
                 "pairs": [
@@ -378,13 +368,10 @@ impl<'a> Resolver<'a> {
                     // `absent` means omit — distinguished by the Map resolver
                     // via `row_cell`, which sees the sentinel itself.
                     Some(MatrixCell::Null | MatrixCell::Absent) | None => Ok(Value::Null),
-                    Some(MatrixCell::Provided) => {
-                        // `provided` in an id column: deterministic synthesis.
-                        Ok(Value::String(recipes::deterministic_ehr_id(
-                            &self.case_id,
-                            self.row_index,
-                        )))
-                    }
+                    Some(MatrixCell::Provided) => Ok(Value::String(recipes::deterministic_ehr_id(
+                        &self.case_id,
+                        self.row_index,
+                    ))),
                 }
             }
             ValueRef::Fixture(field) => {
@@ -566,9 +553,6 @@ impl<'a> Resolver<'a> {
             TemplatedValue::Map(entries) => {
                 let mut map = serde_json::Map::new();
                 for (k, v) in entries {
-                    // absent-means-omit: an `absent` row sentinel, an absent
-                    // recipe product, or an unresolved optional drops the
-                    // field entirely; a `null` cell stays a literal null.
                     if self.omits_field(v, vars) {
                         continue;
                     }
@@ -637,12 +621,12 @@ mod tests {
         assert_eq!(format_instant_ms(999), "1970-01-01T00:00:00.999Z");
     }
 
-    /// A `raw-json` data set reaches the driver as the file's BYTES (issue
-    /// FerroEHR#1725): `canonical-json` round-trips through `serde_json::Value` and
-    /// silently repairs the very defects a byte-level negative case exists to
-    /// deliver — a repeated member, member ordering, an exotic number lexeme.
-    /// The `Value::String` carrier is what makes `driver::send` write the
-    /// body verbatim (`body_is_json == false`).
+    /// A `raw-json` data set reaches the driver as the file's bytes.
+    /// `canonical-json` round-trips through `serde_json::Value` and silently
+    /// repairs the very defects a byte-level negative case exists to deliver: a
+    /// repeated member, member ordering, an exotic number lexeme. The
+    /// `Value::String` carrier is what makes `driver::send` write the body
+    /// verbatim (`body_is_json == false`).
     #[test]
     fn a_raw_json_data_set_is_delivered_byte_for_byte() {
         let defective = "{\n  \"_type\": \"COMPOSITION\",\n  \"name\": {\"value\": \"a\"},\n  \
@@ -879,7 +863,6 @@ mod tests {
         assert_eq!(r.row_index(), 1);
         assert_eq!(r.row_cell("ehr_status"), Some(&MatrixCell::Absent));
         assert_eq!(r.row_cell("no_such_column"), None);
-        // The debug rendering names the bound row and hides the rest.
         assert!(format!("{r:?}").contains("row_index: 1"), "{r:?}");
     }
 
@@ -958,11 +941,8 @@ mod tests {
         );
     }
 
-    /// Every way a corpus entry can fail to yield a data set is a TYPED
-    /// resolution error naming the key: an unknown key, an unreadable source,
-    /// a source that is not the JSON its format declares, a generated set with
-    /// no registered generator, and an entry declaring neither source nor
-    /// recipe. None of them may resolve to an empty payload.
+    /// Every way a corpus entry can fail to yield a data set is a typed
+    /// resolution error naming the key, never an empty payload.
     #[test]
     fn every_unresolvable_corpus_entry_is_a_typed_error() {
         let dir = assert_fs::TempDir::new().unwrap();
@@ -1032,9 +1012,8 @@ mod tests {
     }
 
     /// The AQL-chapter generated set is its own manifest key with its own
-    /// digest pin, and a view the manifest does not DECLARE is refused before
-    /// any evaluator runs — a case cannot reach a projection the corpus never
-    /// promised.
+    /// digest pin, and a view the manifest does not declare is refused before
+    /// any evaluator runs.
     #[test]
     fn a_generated_set_resolves_and_an_undeclared_view_is_refused() {
         let m: CorpusManifest = serde_saphyr::from_str(
@@ -1070,7 +1049,6 @@ mod tests {
             Err(ResolveError::UnknownCorpusKey(_))
         ));
 
-        // A whole data set reaches a step through `${ds:<key>}` with no view.
         let vars = VarStore::default();
         let whole = r
             .resolve_ref(&ValueRef::parse("ds:cnf.query.bp").unwrap(), &vars)
@@ -1110,8 +1088,8 @@ mod tests {
     }
 
     /// The two attribute-addressed views read their attribute off the loaded
-    /// data set, and a set that does not carry it is a typed view failure —
-    /// never a silently absent expectation.
+    /// data set, and a set that does not carry it is a typed view failure
+    /// rather than a silently absent expectation.
     #[test]
     fn attribute_views_report_the_attribute_they_could_not_find() {
         let dir = assert_fs::TempDir::new().unwrap();
@@ -1161,9 +1139,10 @@ mod tests {
         }
     }
 
-    /// `${row.…}` is bound to the CURRENT row and nothing else: an unbound
+    /// `${row.…}` is bound to the current row and nothing else: an unbound
     /// resolver and a column the matrix does not carry are both typed errors,
-    /// while `null` stays a first-class literal null in the payload.
+    /// while a `null` cell stays a first-class literal null in the payload and
+    /// an `absent` one drops the field.
     #[test]
     fn row_references_resolve_only_against_the_bound_row() {
         let m = manifest();
@@ -1199,8 +1178,6 @@ mod tests {
             Value::Bool(false)
         );
 
-        // A `null` CELL is a literal null in the payload, distinct from the
-        // `absent` sentinel the map resolver drops.
         let nulled: CaseCore = serde_json::from_value(serde_json::json!({
             "id": "I_EHR_SERVICE.create_ehr-nulled", "kind": "functional", "component": "EHR",
             "sm_operation": "I_EHR_SERVICE.create_ehr",

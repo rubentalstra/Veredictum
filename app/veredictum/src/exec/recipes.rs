@@ -155,16 +155,14 @@ pub fn deterministic_ehr_id(case: &str, row_index: usize) -> String {
 
 /// The deterministic per-row constraint-template id for a content case.
 ///
-/// For a case declaring `constraint_context.constraint_columns` (issue FerroEHR#228)
-/// the runner
-/// synthesizes one OPT per decision-table row and uploads it under this id, and
-/// the row's committed carrier stamps the same id into
-/// `archetype_details.template_id`. Pure function of (case id, row, row
-/// cells) — two runners mint identical ids, and a re-adjudicated row (or a
-/// synthesis change) mints a NEW id, so a 409-tolerant re-upload against a
-/// dirty server can never silently reuse a stale OPT with different
-/// constraints. (No openEHR spec governs the corpus template packaging —
-/// our own corpus-authoring design.)
+/// For a case declaring `constraint_context.constraint_columns` the runner
+/// synthesizes one OPT per decision-table row, uploads it under this id, and
+/// stamps the same id into the carrier's `archetype_details.template_id`. It is
+/// a pure function of (case id, row, row cells), so two runners mint identical
+/// ids while a re-adjudicated row mints a new one; a 409-tolerant re-upload
+/// against a dirty server therefore cannot reuse a stale OPT carrying different
+/// constraints. (No openEHR spec governs the corpus template packaging — our
+/// own corpus-authoring design.)
 #[must_use]
 pub fn synth_template_id(case_id: &str, row: usize, cells: &[MatrixCell]) -> String {
     const NS: uuid::Uuid = uuid::Uuid::from_bytes([
@@ -181,8 +179,6 @@ pub fn synth_template_id(case_id: &str, row: usize, cells: &[MatrixCell]) -> Str
             }
         })
         .collect();
-    // Content digest of the row cells: UUIDv5 (deterministic) over the
-    // encoded cells, truncated for readability.
     let encoded = cells
         .iter()
         .map(|cell| match cell {
@@ -304,20 +300,16 @@ impl RowView<'_> {
 
 /// `content_instance` — the content-chapter generation recipe.
 ///
-/// Builds the
-/// spec-correct RM data-value instance for one decision-table row, injects it
-/// at the case's constrained ELEMENT.value in the minimal-event carrier
-/// composition, and hands the result to the ordinary commit flow — one
-/// executor serves functional and content cases alike.
+/// Builds the spec-correct RM data-value instance for one decision-table row
+/// and injects it at the case's constrained ELEMENT.value in the minimal-event
+/// carrier composition, so the ordinary commit flow serves content cases too.
 ///
-/// A decision table carries two column axes: the *instance* axis (the genuine
-/// RM attributes of the value under test) and the *constraint* axis (columns
-/// that describe the template's baked constraint, e.g. `C_STRING.pattern`,
+/// A decision table carries two column axes: the *instance* axis, the genuine
+/// RM attributes of the value under test, and the *constraint* axis, columns
+/// describing the template's baked constraint (`C_STRING.pattern`,
 /// `range.lower`, `cardinality`). Only the instance axis is projected into the
-/// committed value; the constraint axis is the template's job. Each `DV_*`
-/// class is built at its correct RM shape (RM `data_types` — `DV_CODED_TEXT`,
-/// `DV_ORDINAL`/`DV_SCALE`, `DV_INTERVAL<T>`, `DV_MULTIMEDIA`, `DV_IDENTIFIER`,
-/// and the simple leaf types), never as a flat 1:1 column→attribute map.
+/// committed value. Each `DV_*` class is built at its correct RM shape (RM
+/// `data_types`), never as a flat 1:1 column-to-attribute map.
 #[must_use]
 pub fn content_instance(
     rm_class: &str,
@@ -331,8 +323,7 @@ pub fn content_instance(
     }
     let value = build_value(rm_class, template_id, &row);
     let mut composition = base_carrier_composition();
-    // The committed carrier resolves its template from
-    // archetype_details.template_id — stamp the case's constraint template.
+    // The committed carrier resolves its template from this member.
     if let Some(tid) = composition.pointer_mut("/archetype_details/template_id/value") {
         *tid = Value::String(template_id.to_owned());
     }
@@ -416,15 +407,13 @@ fn build_simple(rm_class: &str, row: &RowView<'_>) -> Value {
 /// RM `data_types` §`DV_CODED_TEXT` — `value` (the display text, mandatory) plus a
 /// `defining_code` `CODE_PHRASE` (`terminology_id` + `code_string`, both mandatory).
 ///
-/// The `value` axis is a genuine instance column: when the decision table
-/// carries a `value` column it drives `DV_CODED_TEXT.value` verbatim — including
-/// an empty string, which must fire the sole value invariant (RM
-/// `dv_text.adoc` §Invariants — `Valid_value: not value.is_empty`). No RM
-/// invariant requires `value` to equal the coded rubric (the "value must be the
-/// rubric" text is `dv_coded_text.adoc` Description prose, not an invariant —
-/// see AMB-55), so an arbitrary non-empty value is accepted. Absent the column,
-/// value defaults to a non-empty placeholder so the value dimension is not
-/// exercised on cases that do not test it.
+/// A `value` column drives `DV_CODED_TEXT.value` verbatim, an empty string
+/// included, which must fire the sole value invariant (RM `dv_text.adoc`
+/// §Invariants, `Valid_value: not value.is_empty`). No RM invariant requires
+/// `value` to equal the coded rubric — the "value must be the rubric" text is
+/// `dv_coded_text.adoc` Description prose (register AMB-55) — so an arbitrary
+/// non-empty value is accepted. Absent the column, the value defaults to a
+/// placeholder so the dimension stays unexercised.
 fn build_coded_text(row: &RowView<'_>) -> Value {
     let code = row.text("code_string");
     let term = row.text("terminology_id");
@@ -648,12 +637,9 @@ fn terminology_id(value: &str) -> Value {
     json!({ "_type": "TERMINOLOGY_ID", "value": value })
 }
 
-// ---------------------------------------------------------------------------
-// Structural content instances — per-row carrier SHAPE (content counts, event
-// slot/subtype, existence-committed attributes), committed against the matching
-// per-row synthesized OPT (`crate::exec::content_synth`). RM shapes per RM
-// `ehr`/`data_structures`/`data_types`; node ids mirror the synthesized OPT.
-// ---------------------------------------------------------------------------
+// Structural content instances build per-row carrier SHAPE against the
+// matching synthesized OPT (`crate::exec::content_synth`). RM shapes come from
+// RM `ehr`/`data_structures`/`data_types`; node ids mirror that OPT.
 
 /// A committed/absent flag column: `present` ⇒ true, anything else ⇒ false.
 fn committed(row: &RowView<'_>, column: &str) -> bool {
@@ -1284,10 +1270,6 @@ mod tests {
 
     #[test]
     fn coded_text_value_column_drives_value_verbatim() {
-        // The `value` column, when present, drives DV_CODED_TEXT.value verbatim
-        // (RM dv_text.adoc §Attributes value) — an arbitrary non-empty label,
-        // and an empty string (which must fire Valid_value); absent the column
-        // it defaults to a non-empty placeholder.
         let c = cols(&["code_string", "terminology_id", "value", "expected"]);
         let with_value = |v: Value| {
             value_of(&content_instance(
@@ -1308,9 +1290,8 @@ mod tests {
             json!("Rubric for ABC")
         );
         assert_eq!(with_value(json!("ABC"))["value"], json!("ABC"));
-        // Empty value is committed verbatim so the SUT's Valid_value check fires.
+        // Committed verbatim so the SUT's Valid_value check fires.
         assert_eq!(with_value(json!(""))["value"], json!(""));
-        // A null value cell defaults to the non-empty placeholder.
         let defaulted = value_of(&content_instance(
             "DV_CODED_TEXT",
             "t",
@@ -1420,9 +1401,8 @@ mod tests {
 
     #[test]
     fn structural_rm_class_builds_per_row_carrier() {
-        // Issue FerroEHR#228: a structural rm_class no longer injects an ELEMENT.value —
-        // it builds a per-row-shaped carrier (here `content_count` content items)
-        // committed against the per-row synthesized cardinality OPT.
+        // A structural rm_class builds a per-row-shaped carrier committed
+        // against the per-row synthesized cardinality OPT.
         let c = cols(&["cardinality", "content_count", "expected"]);
         let cells = vec![
             MatrixCell::Literal(json!("3to5")),
@@ -1458,10 +1438,9 @@ mod tests {
         assert_ne!(deterministic_ehr_id("a", 1), deterministic_ehr_id("b", 1));
     }
 
-    /// A recipe must be TOTAL over its declared rows, so a row outside the
-    /// declared shape is a typed error naming the offending column — never a
-    /// silently defaulted payload, which would manufacture a passing row out
-    /// of an authoring typo.
+    /// A recipe must be total over its declared rows, so a row outside the
+    /// declared shape is a typed error naming the offending column. A silently
+    /// defaulted payload would manufacture a passing row out of a typo.
     #[test]
     fn ehr_status_refuses_a_row_outside_its_declared_shape() {
         let columns = cols(&["ehr_status", "is_queryable", "is_modifiable"]);
@@ -1569,9 +1548,8 @@ mod tests {
     }
 
     /// The per-row constraint-template id is a pure function of the case id,
-    /// the row index and the row's cells: two runners mint the same id, and a
-    /// re-adjudicated row mints a NEW one, so a 409-tolerant re-upload can
-    /// never silently reuse a stale OPT carrying different constraints.
+    /// the row index and the row's cells, so two runners mint the same id while
+    /// a re-adjudicated row mints a new one.
     #[test]
     fn synth_template_ids_are_pure_and_change_with_the_row() {
         let cells = [MatrixCell::Literal(json!("ABC")), MatrixCell::Provided];

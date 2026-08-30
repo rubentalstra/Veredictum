@@ -20,11 +20,9 @@ use crate::vocab::{Family, Tier};
 /// Where a capability's verdict-bearing cases drive: the openEHR release's
 /// own wire, or a route the product serves of its own design.
 ///
-/// Wire-level ITS-REST conformance is always judged on `released-wire`
-/// operations; an `extension` row says the CAPABILITY is verified over a
-/// surface no openEHR specification governs (our own design/extension), so
-/// it may never gate an openEHR profile tier — `check_realization_scoping`
-/// makes that a machine finding rather than a convention.
+/// An `extension` row is verified over a surface no openEHR specification
+/// governs, so it may never gate an openEHR profile tier;
+/// [`CapabilityMatrix::check_realization_scoping`] enforces that.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Realization {
@@ -76,27 +74,20 @@ pub struct CapabilityEntry {
     /// Where the capability's cases drive (default: the released wire).
     #[serde(default)]
     pub realization: Realization,
-    /// The verdict-bearing case-count FLOOR: one token case never certifies
-    /// a capability, so the row records the depth its battery must keep.
-    /// Floors ratchet UP only — a battery that shrinks below its floor is a
-    /// `capability-depth` finding naming the shortfall.
-    ///
-    /// The model defaults to 0 so in-code fixtures stay terse; the published
-    /// schema lists `min_cases` as REQUIRED, so every authored matrix row
-    /// must state its floor (the load-time failing check).
+    /// The verdict-bearing case-count floor its battery must keep. Floors
+    /// ratchet up only; a battery below its floor is a `capability-depth`
+    /// finding. The model defaults to 0 so in-code fixtures stay terse, while
+    /// the published schema lists `min_cases` as required.
     #[serde(default)]
     pub min_cases: usize,
-    /// The adjudication for a capability EVERY one of whose catalogue cases
-    /// resolves excused or deselected (an unrealized wire, an undeclared
-    /// option branch): declaring a capability is the obligation to run the
-    /// framework against it, so a row that can never carry executed evidence
-    /// must name the register entry that decided that is acceptable.
+    /// The adjudication for a capability every one of whose catalogue cases
+    /// resolves excused or deselected. A row that can never carry executed
+    /// evidence names the register entry that decided that is acceptable.
     #[serde(default)]
     pub evidence_exception: Option<RegisterAdjudication>,
     /// The adjudication for a claimed capability the measured
-    /// hospital-simulation workload does not exercise. Without it, a
-    /// workload gap is a `workload-coverage` finding — the certificate may
-    /// never carry an undecided `NO — catalogue gap` row.
+    /// hospital-simulation workload does not exercise. Without it the gap is
+    /// a `workload-coverage` finding.
     #[serde(default)]
     pub workload_exclusion: Option<RegisterAdjudication>,
     /// The Profiles-book (or proposal) anchor for the row.
@@ -142,12 +133,11 @@ impl CapabilityMatrix {
         if bad.is_empty() { Ok(()) } else { Err(bad) }
     }
 
-    /// Realization scoping: an `extension` row is verified over a surface no
-    /// openEHR specification governs, so it may never be `required` — a
-    /// required capability gates an openEHR profile tier, and no profile
-    /// verdict may rest on our own extension routes (owner ruling
-    /// 2026-07-28; no openEHR spec governs the extension surface — our own
-    /// design/extension, declared in `vocab/wire_surface.yaml`).
+    /// Checks that no `extension` row is `required`.
+    ///
+    /// A required capability gates an openEHR profile tier, and no openEHR
+    /// spec governs the extension surface — our own design, declared in
+    /// `vocab/wire_surface.yaml`.
     ///
     /// # Errors
     /// Returns the offending capability names.
@@ -194,9 +184,9 @@ mod tests {
         assert!(m.check_tier_scoping().is_err());
     }
 
-    /// The row's new columns: `realization` defaults to the released wire,
-    /// `min_cases` parses as the depth floor, and both adjudication blocks
-    /// resolve to a register id + reason.
+    /// `realization` defaults to the released wire, `min_cases` parses as the
+    /// depth floor, and both adjudication blocks resolve to a register id and
+    /// reason.
     #[test]
     fn row_carries_realization_floor_and_adjudications() {
         let m: CapabilityMatrix = serde_json::from_value(serde_json::json!({

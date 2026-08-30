@@ -28,15 +28,12 @@ pub struct AmbiguityEntry {
     pub ambiguity: String,
     /// Where it was verified (spec file/section).
     ///
-    /// Field-format convention (issue FerroEHR#2545, machine-gated by the validate
-    /// `spec-ref` check): the field splits into `;`/` + ` fragments; every
-    /// fragment opening with a spec component token (`RM`, `BASE`, `AM`,
-    /// `QUERY`, `TERM`, `LANG`, `SM`, `CNF`, `ITS-REST`, `ITS-XML`,
-    /// `ITS-JSON`) is a citation clause and must machine-resolve (document +
-    /// `§` sections; `{a,b}` brace shorthands expand, every variant must
-    /// resolve); any other fragment is adjudication prose and passes. A
-    /// source with no citation clause at all fails — a silence claim must
-    /// ground on at least one resolvable citation.
+    /// The field splits into `;` / ` + ` fragments. A fragment opening with a
+    /// component token (`RM`, `BASE`, `AM`, `QUERY`, `TERM`, `LANG`, `SM`,
+    /// `CNF`, `ITS-REST`, `ITS-XML`, `ITS-JSON`) is a citation clause and must
+    /// machine-resolve (document + `§` sections, `{a,b}` shorthands expanded);
+    /// any other fragment is adjudication prose. At least one citation clause
+    /// is required, so a silence claim always grounds on resolvable text.
     pub source: String,
     /// The normative handling a runner must apply.
     pub handling: String,
@@ -46,28 +43,21 @@ pub struct AmbiguityEntry {
     /// (the ICS `options` declaration selects among them).
     #[serde(default)]
     pub options: Vec<OptionTag>,
-    /// The GitHub issue number of the `upstream-report` issue this ambiguity
-    /// was raised as (the tracker issue labeled `upstream-report` carries the
-    /// full report — what the released spec says, what this implementation
-    /// does, the resolution sought; an openEHR channel key, once filed, is
-    /// recorded on that issue). REQUIRED for `report_only` and `editorial`
-    /// entries — a divergence the framework carries must be reported back so
-    /// openEHR can fix the spec; optional but expected for the other
-    /// dispositions that flag an upstream candidate. The register never hides
-    /// a divergence: it documents it and points at the report that pushes the
-    /// fix upstream.
+    /// The tracker issue carrying the outbound `upstream-report`.
+    ///
+    /// Required for `report_only` and `editorial` entries, so a divergence the
+    /// framework carries is always reported back rather than absorbed;
+    /// optional for the dispositions that only flag an upstream candidate.
     #[serde(default)]
     pub upstream_issue: Option<u64>,
 }
 
 impl AmbiguityEntry {
-    /// Disposition-shape invariants:
-    /// - `option_select` entries enumerate ≥ 2 option tags; other dispositions
-    ///   carry none.
-    /// - `report_only` and `editorial` entries MUST carry an `upstream_issue`
-    ///   — a divergence the framework carries (a gating suspension, or a spec/
-    ///   schedule defect the catalogue corrects) is reported back to openEHR,
-    ///   never silently absorbed.
+    /// Checks the disposition-shape invariants.
+    ///
+    /// `option_select` entries enumerate at least two option tags and other
+    /// dispositions carry none; `report_only` and `editorial` entries carry an
+    /// `upstream_issue`.
     ///
     /// # Errors
     /// Returns a message naming the violated invariant.

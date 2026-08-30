@@ -99,11 +99,10 @@ pub struct CaseRecord {
     pub rows_total: usize,
     /// Non-gating observations the rows produced, in execution order.
     ///
-    /// A recorded observation is a spec sentence of SHOULD strength that the
-    /// SUT did not follow while satisfying every MUST the row gates on, so it
-    /// changes no verdict. It stays out of `results.json` for exactly that
-    /// reason: the results document carries what a verdict is computed from,
-    /// and the run prints these beside the tally instead.
+    /// A recorded observation is a SHOULD-strength sentence the SUT did not
+    /// follow while satisfying every MUST the row gates on, so it changes no
+    /// verdict and stays out of `results.json`, which carries only what a
+    /// verdict is computed from. The run prints these beside the tally.
     pub advisories: Vec<String>,
 }
 
@@ -251,8 +250,6 @@ pub enum Provisioned {
 /// Resolve the expected kind for a step in a given row (the per-fixture
 /// `${fixture.expected}` override).
 fn expected_kind(case: &CaseCore, step: &FlowStep, row: usize) -> Option<OutcomeKind> {
-    // The reserved matrix `expected` column is the normative per-row
-    // override; rows without it inherit the flow's expectation.
     if let Some(matrix) = case.parameters.as_ref().and_then(|p| p.matrix.as_ref())
         && let Some(col) = matrix.columns.iter().position(|c| c == "expected")
         && let Some(crate::model::case::MatrixCell::Literal(serde_json::Value::String(s))) =
@@ -341,9 +338,7 @@ pub fn run_case<D: StepDriver>(
     for row in 0..total {
         if reset_per_row || row == 0 {
             vars = VarStore::default();
-            // Law a; an unrealizable per-row ground records the row N/A,
-            // and a REFUSED provisioning exchange records it inconclusive
-            // (step 0 = the precondition, before any flow step drove).
+            // Law a. Step 0 is the precondition, before any flow step drove.
             match driver.provision(case, row, &mut vars)? {
                 Provisioned::Ready => {}
                 Provisioned::RowNotApplicable { citation } => {
@@ -516,8 +511,6 @@ mod tests {
     #[test]
     fn law_a_reprovisions_per_row_and_law_b_aborts() {
         let case = two_row_case();
-        // Row 0: step 1 ok, step 2 observes created (mapped, unexpected) -> FAILED, step 2 aborts row.
-        // Row 1: both steps ok -> PASSED.
         let mut driver = Scripted {
             provisioned: 0,
             script: vec![
@@ -551,7 +544,7 @@ mod tests {
             cursor: 0,
         };
         let record = run_case(&case, None, &mut driver).unwrap();
-        // aggregate failure lands on the LAST row (law e: evaluated once, after all rows)
+        // Law e: the aggregate failure lands on the LAST row.
         assert!(matches!(record.rows[1], RowOutcome::Failed { step: 0, .. }));
 
         let mut errored = Scripted {
@@ -654,11 +647,10 @@ mod tests {
         }
     }
 
-    /// Law a's two non-Ready verdicts are kept apart, because they mean
-    /// opposite things about the server: an unrealizable ground records the
-    /// row NOT-APPLICABLE with its register citation, while a REFUSED
-    /// provisioning exchange records it inconclusive at step 0 — never a SUT
-    /// failure of the behaviour the case is about.
+    /// Law a's two non-Ready verdicts mean opposite things about the server:
+    /// an unrealizable ground records the row not-applicable with its register
+    /// citation, a refused provisioning exchange records it inconclusive at
+    /// step 0, and neither is a SUT failure of the behaviour under test.
     #[test]
     fn an_unprovisionable_row_is_excused_or_inconclusive_and_never_driven() {
         let case = two_row_case();
@@ -731,8 +723,7 @@ mod tests {
     #[test]
     fn a_failed_step_assertion_fails_the_row_at_its_own_step() {
         let case = two_row_case();
-        // Row 0: step 1's assertion fails, so step 2 never runs (2 performs
-        // total: row 0 step 1, then row 1 steps 1 and 2 — 3 in all).
+        // Row 0's step 2 never runs, so the drive count is 1 + 2 = 3.
         let mut driver = Provisioning::ready(vec![
             vec!["body/uid did not match".to_owned()],
             Vec::new(),
@@ -749,8 +740,6 @@ mod tests {
         assert!(matches!(record.rows[1], RowOutcome::Passed));
         assert_eq!(driver.performed, 3, "row 0 aborted after its first step");
 
-        // With every assertion holding, the case passes and law e's aggregate
-        // pass runs over the collected row states.
         let mut clean = Provisioning::ready(vec![Vec::new(); 4]);
         let record = run_case(&case, None, &mut clean).unwrap();
         assert!(record.passed());
@@ -806,11 +795,10 @@ mod tests {
             "row 1's own column, not the flow's `created`"
         );
 
-        // A row index past the matrix has no per-row override, so the flow's
-        // expectation is what it inherits.
         assert_eq!(
             expected_kind(&case, &case.flow[0], 9),
-            Some(OutcomeKind::Created)
+            Some(OutcomeKind::Created),
+            "a row past the matrix inherits the flow expectation"
         );
     }
 
@@ -850,8 +838,8 @@ mod tests {
             "a row the fixture set does not carry resolves to no expectation"
         );
 
-        // Driven, the unresolvable row is INCONCLUSIVE: the interpreter never
-        // substitutes a default outcome for a row it cannot resolve.
+        // The interpreter never substitutes a default outcome for a row it
+        // cannot resolve, so driving it is inconclusive.
         let mut truncated = case.clone();
         if let Some(parameters) = &mut truncated.parameters
             && let Some(fixtures) = &mut parameters.fixture_set

@@ -38,9 +38,9 @@ pub struct AssertionFailure(pub String);
 /// it takes the inconclusive channel beside a transport fault (ISO/IEC 9646
 /// *inconclusive*; interpreter law (c), [`crate::exec`]).
 ///
-/// The two are distinguished as TYPES rather than by reading the message: a
-/// classification that branches on a substring changes the moment a message
-/// is reworded.
+/// The two are distinguished as types rather than by reading the message,
+/// because a classification branching on a substring changes the moment a
+/// message is reworded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssertionOutcome {
     /// The SUT served a value, and it differs from the asserted one — a
@@ -348,16 +348,14 @@ fn simplified_as_flat(value: &Value) -> Option<BTreeMap<String, Value>> {
 }
 
 /// FLAT round-trip equivalence: fold the committed side's ctx keys onto the
-/// read-back's RM-path forms (master06), drop ignore-set keys from both
-/// sides, then require every committed entry to appear in the read-back
-/// with an equal value (keys compared in their `:0`-elided canonical form,
-/// master04 §Field Identifiers). Read-back surplus (template-derived
-/// defaults such as `category|*`, terminology qualifiers, server-assigned
-/// ids) is tolerated: the export is the full RM projection of the committed
-/// data (`simplified_formats` master04), so the round-trip guarantee is
-/// that no committed datum is lost or altered. (No openEHR spec defines a
-/// round-trip comparator — our own design over the master04/master06
-/// semantics.)
+/// read-back's RM-path forms (master06), drop ignore-set keys from both sides,
+/// then require every committed entry to appear in the read-back with an equal
+/// value (keys compared in their `:0`-elided canonical form, master04 §Field
+/// Identifiers). Read-back surplus is tolerated, because the export is the full
+/// RM projection of the committed data (`simplified_formats` master04), so the
+/// round-trip guarantee is that no committed datum is lost or altered. (No
+/// openEHR spec defines a round-trip comparator — our own design over the
+/// master04 and master06 semantics.)
 fn flat_equivalent(
     actual: &BTreeMap<String, Value>,
     committed: &BTreeMap<String, Value>,
@@ -383,11 +381,10 @@ fn flat_equivalent(
 
 /// The `equivalent` comparison.
 ///
-/// Structural equality after stripping the
-/// resolved ignore paths from BOTH sides (numeric leaves by value, via the
-/// result-set cell rule — canonical JSON carries RM numbers), with canonical
-/// `_type` self-tag PRESENCE normalized (see this module's `rm_cells_equal`). FLAT bodies
-/// take the master06-aware round-trip rule (`flat_equivalent`).
+/// Structural equality after stripping the resolved ignore paths from both
+/// sides, with numeric leaves compared by value through the result-set cell
+/// rule and canonical `_type` self-tag presence normalized (`rm_cells_equal`).
+/// FLAT bodies take the master06-aware round-trip rule (`flat_equivalent`).
 #[must_use]
 pub fn equivalent(actual: &Value, expected: &Value, ignored_paths: &[String]) -> bool {
     if let (Some(a), Some(e)) = (simplified_as_flat(actual), simplified_as_flat(expected)) {
@@ -398,16 +395,15 @@ pub fn equivalent(actual: &Value, expected: &Value, ignored_paths: &[String]) ->
     rm_cells_equal(&a, &b)
 }
 
-/// Canonical-RM structural equality for `equivalent`: the result-set cell
-/// rule everywhere, EXCEPT that a `_type` self-tag present on only one side
-/// of an object is not a content difference. ITS-REST overview Resources.md
-/// §JSON Format makes `_type` presence conditional ("should be used to
-/// specify the RM type whenever polymorphism is involved, or when the
-/// underlying definition in RM type is abstract") while the MUST governs its
-/// VALUE — so a decode→re-encode path that self-tags every object (the
-/// canonical codec) and a sparsely-tagged committed twin describe the same
-/// RM content. Present on BOTH sides, the tags must be equal (a genuine
-/// polymorphic-type substitution stays detectable).
+/// Canonical-RM structural equality for `equivalent`: the result-set cell rule
+/// everywhere, except that a `_type` self-tag present on only one side of an
+/// object is not a content difference. ITS-REST overview Resources.md §JSON
+/// Format makes `_type` presence conditional ("should be used to specify the RM
+/// type whenever polymorphism is involved, or when the underlying definition in
+/// RM type is abstract") while the MUST governs its value, so a codec that
+/// self-tags every object and a sparsely tagged committed twin describe the same
+/// RM content. Present on both sides, the tags must be equal, which keeps a
+/// genuine polymorphic-type substitution detectable.
 fn rm_cells_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Object(x), Value::Object(y)) => {
@@ -987,9 +983,9 @@ pub enum Judgement {
 /// The judgement the driver gives an assertion.
 ///
 /// The match is exhaustive on purpose: a new assertion variant cannot be added
-/// without classifying it here, and a variant classified [`Judgement::PerStep`]
-/// that no evaluator reaches would be an assertion authored in the catalogue
-/// and never judged — the silent-pass class this instrument refuses.
+/// without classifying it here, and a [`Judgement::PerStep`] variant no
+/// evaluator reaches would be an assertion authored in the catalogue and never
+/// judged, which is the silent-pass class this instrument refuses.
 #[must_use]
 pub fn judgement_of(assertion: &Assertion) -> Judgement {
     match assertion {
@@ -1037,12 +1033,11 @@ pub enum ReplayJudgement {
 /// How a transcript replay may treat one assertion.
 ///
 /// The match is exhaustive on purpose, exactly as [`judgement_of`] is: a new
-/// assertion variant cannot be added without saying whether a recorded
-/// exchange decides it, so no family can slip into a replay unevaluated.
-/// Two families split per assertion rather than per family — a `field`
-/// comparand carrying a `${…}` reference needs the resolver, and
-/// `result_set rows.from` names a corpus view over the committed-set uids
-/// provisioning bound.
+/// assertion variant cannot be added without saying whether a recorded exchange
+/// decides it, so no family slips into a replay unevaluated. Two families split
+/// per assertion rather than per family, because a `field` comparand carrying a
+/// `${…}` reference needs the resolver, and `result_set rows.from` names a
+/// corpus view over the committed-set uids provisioning bound.
 #[must_use]
 pub fn replay_judgement(assertion: &Assertion) -> ReplayJudgement {
     match assertion {
@@ -1079,9 +1074,8 @@ pub fn replay_judgement(assertion: &Assertion) -> ReplayJudgement {
 ///
 /// Returns the non-gating divergences a passing assertion tolerated. An
 /// assertion [`replay_judgement`] classifies [`ReplayJudgement::Unrecorded`]
-/// answers [`AssertionOutcome::Unjudgeable`], never a pass: a replay that
-/// answered such an assertion `Ok` would reproduce a verdict over something
-/// nobody evaluated.
+/// answers [`AssertionOutcome::Unjudgeable`], never a pass, so no replay
+/// reproduces a verdict over something nobody evaluated.
 ///
 /// # Errors
 /// [`AssertionOutcome::Mismatch`] for a served value that contradicts the
@@ -1254,9 +1248,8 @@ mod tests {
     /// Every assertion variant's replay classification, pinned by name.
     ///
     /// A family silently reclassified `FromExchange` would let a
-    /// verification-pack entry reproduce a verdict over an assertion the
-    /// replay never evaluated, which is the silent pass the refusal exists to
-    /// prevent — so the classification is a test, not a convention.
+    /// verification-pack entry reproduce a verdict over an assertion the replay
+    /// never evaluated, so the classification is a test, not a convention.
     #[test]
     fn every_assertion_variant_declares_what_a_recorded_exchange_decides() {
         let cases: &[(Value, ReplayJudgement)] = &[
@@ -1334,7 +1327,7 @@ mod tests {
     }
 
     /// The recorded-exchange dispatch judges what it classified judgeable and
-    /// answers UNJUDGEABLE for the rest — never a pass. An unjudgeable outcome
+    /// answers unjudgeable for the rest, never a pass. An unjudgeable outcome
     /// errors its row (law c), while a contradicted assertion fails it (law b).
     #[test]
     fn the_recorded_dispatch_judges_or_refuses_but_never_passes_silently() {
@@ -1599,14 +1592,12 @@ mod tests {
         assert!(eval_xml_root(&malformed, "composition", None, None).is_err());
     }
 
-    /// The abstract-root half: `ALL/Version.xsd` publishes
-    /// `<xs:element name="version" type="VERSION"/>` over
-    /// `<xs:complexType name="VERSION" abstract="true">`, and XML Schema Part 1
-    /// §2.6.1 + §3.4.6 (<https://www.w3.org/TR/xmlschema-1/#xsi_type>) forbid an
-    /// instance from using an abstract type directly — it must select a
-    /// non-abstract derived type with `xsi:type`. So on that root the concrete
-    /// class is a judged fact, and it is what tells an `ORIGINAL_VERSION`
-    /// response apart from an `IMPORTED_VERSION` one.
+    /// `ALL/Version.xsd` publishes `<xs:element name="version" type="VERSION"/>`
+    /// over `<xs:complexType name="VERSION" abstract="true">`, and XML Schema
+    /// Part 1 §2.6.1 + §3.4.6 (<https://www.w3.org/TR/xmlschema-1/#xsi_type>)
+    /// forbid an instance from using an abstract type directly. On that root the
+    /// concrete class is a judged fact, and it is what tells an
+    /// `ORIGINAL_VERSION` response apart from an `IMPORTED_VERSION` one.
     #[test]
     fn xml_root_judges_the_concrete_type_of_an_abstract_root() {
         use crate::vocab::XmlNamespace;

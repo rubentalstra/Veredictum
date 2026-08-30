@@ -195,15 +195,13 @@ pub enum Assertion {
         /// A regex the field's serialized value must match.
         #[serde(default)]
         matches: Option<String>,
-        /// The OPTIONAL-member predicate: the field is absent, or its
-        /// serialized value matches this regex. It exists because a released
-        /// schema can declare a member's shape while leaving its presence to
-        /// the service — the ITS-REST `RESULT_SET` metadata is the case that
-        /// forced it (`specifications/docs/query/Response.md` §Metadata:
-        /// "`RESULT_SET` metadata comprise a set of optional (implementation
-        /// dependent) attributes, useful for debugging"). Requiring such a
-        /// member fails a conformant service; ignoring it lets a malformed one
-        /// pass, so the shape is asserted exactly when the member is served.
+        /// The optional-member predicate: the field is absent, or its
+        /// serialized value matches this regex. A released schema can declare a
+        /// member's shape while leaving its presence to the service — ITS-REST
+        /// `specifications/docs/query/Response.md` §Metadata: "`RESULT_SET`
+        /// metadata comprise a set of optional (implementation dependent)
+        /// attributes, useful for debugging" — so the shape is asserted exactly
+        /// when the member is served.
         #[serde(default)]
         absent_or_matches: Option<String>,
     },
@@ -240,11 +238,10 @@ pub enum Assertion {
         /// storage rule for imported/committed signed versions).
         #[serde(default)]
         equals: Option<TemplatedValue>,
-        /// The stored signature differs from a known (non-empty) value — the
-        /// distinct-signature-per-version fact: the signature is computed over
-        /// the version's canonical form, which includes `uid`, so two distinct
-        /// versions necessarily carry distinct signatures (RM common
-        /// `master06-change_control_package.adoc` §Digital Signature — "the
+        /// The stored signature differs from a known (non-empty) value. The
+        /// signature covers the version's canonical form, which includes `uid`,
+        /// so two distinct versions carry distinct signatures (RM common
+        /// `master06-change_control_package.adoc` §Digital Signature: "the
         /// entire Version object (… the signature attribute will be Void …)"
         /// is serialised and hashed; `version.adoc` `canonical_form`: "all
         /// attributes except signature").
@@ -278,16 +275,15 @@ pub enum Assertion {
         #[serde(rename = "match")]
         match_mode: ResultSetMatch,
         /// How a scalar cell is compared. Absent is
-        /// [`CellComparison::Lexeme`], the exact-lexeme comparison every row
-        /// gets by default; a row reading date/time values back through a
-        /// QUERY declares `cells: instant`, because ITS-REST
-        /// `specifications/docs/overview/Resources.md` §Datetime format puts
-        /// the query-side SPELLING at SHOULD-strength — "Retrieval or
-        /// querying those resources SHOULD return date, datetime, or time
-        /// values in the (original) format provided by underlying backend
-        /// engine, avoiding any format change" — while the instant itself
-        /// stays a fact. The mode never widens past the instant, and a
-        /// tolerated respelling is recorded rather than swallowed.
+        /// [`CellComparison::Lexeme`], the exact-lexeme default; a row reading
+        /// date/time values back through a QUERY declares `cells: instant`,
+        /// because ITS-REST `specifications/docs/overview/Resources.md`
+        /// §Datetime format puts the query-side spelling at SHOULD-strength
+        /// ("Retrieval or querying those resources SHOULD return date,
+        /// datetime, or time values in the (original) format provided by
+        /// underlying backend engine, avoiding any format change") while the
+        /// instant stays a fact. A tolerated respelling is recorded, never
+        /// swallowed.
         #[serde(default)]
         cells: Option<CellComparison>,
         /// The expected rows (inline, or a reference to a corpus row set).
@@ -326,41 +322,35 @@ pub enum Assertion {
     /// published ITS-XML schemas: its local name and the namespace it is
     /// qualified with.
     ///
-    /// The released ground is one sentence, ITS-REST overview `Resources.md`
-    /// §"XML Format": "When resources are serialized in **canonical XML**
-    /// format, both request payloads and responses MUST conform to the
-    /// [published XSDs]". Conformance to a schema is not satisfied by matching
-    /// a complexType: the instance's root must be a globally declared element
-    /// of the schema set, and since every ITS-XML schema declares
-    /// `elementFormDefault="qualified"` over a `targetNamespace`, that element
-    /// is namespace-qualified. So the two facts this assertion carries are the
-    /// two the MUST fixes for a resource the schemas DO publish an element for
-    /// — nothing more. A resource with no published element is out of scope by
-    /// construction (register AMB-167), and no case may assert a root for one.
+    /// The released ground is ITS-REST overview `Resources.md` §"XML Format":
+    /// "When resources are serialized in **canonical XML** format, both request
+    /// payloads and responses MUST conform to the [published XSDs]". Matching a
+    /// complexType does not satisfy that: the root must be a globally declared
+    /// element of the schema set, and every ITS-XML schema declares
+    /// `elementFormDefault="qualified"` over a `targetNamespace`, so that
+    /// element is namespace-qualified. A resource with no published element is
+    /// out of scope by construction (register AMB-167).
     ///
-    /// `matches`-style regex over the raw body cannot express this: it cannot
+    /// A `matches`-style regex over the raw body cannot express this: it cannot
     /// tell the root element from a descendant, and it cannot resolve a prefix
-    /// to its namespace URI, so a `<oe:composition xmlns:oe="…">` document and
-    /// an unqualified `<composition>` document are indistinguishable to it.
+    /// to its namespace URI.
     ///
-    /// Where the published element's declared type is ABSTRACT, the same MUST
+    /// Where the published element's declared type is abstract, the same MUST
     /// fixes a third fact: `xsi:type`. XML Schema Part 1 forbids an element
-    /// instance from using an abstract type directly — the instance must
-    /// select a non-abstract derived type with `xsi:type`
+    /// instance from using an abstract type directly — the instance selects a
+    /// non-abstract derived type with `xsi:type`
     /// (<https://www.w3.org/TR/xmlschema-1/#xsi_type>, §2.6.1 + §3.4.6). Two
-    /// published document elements are declared that way, identically in both
-    /// vendored lineages: `<xs:element name="version" type="VERSION"/>` over
+    /// published document elements are declared that way in both vendored
+    /// lineages: `<xs:element name="version" type="VERSION"/>` over
     /// `<xs:complexType name="VERSION" abstract="true">`
-    /// (`crates/openehr-its/schemas/xml/its-xml-1.0.2-nsv1/ALL/Version.xsd`,
+    /// (`specs/its-xml-schemas/its-xml-1.0.2-nsv1/ALL/Version.xsd`,
     /// `its-xml-2.0.0-nsv2/RM/latest/documents/Version.xsd` +
-    /// `RM/latest/Common.xsd`) and `<xs:element name="items"
+    /// `RM/latest/Common.xsd`), and `<xs:element name="items"
     /// type="LOCATABLE"/>` over the abstract `LOCATABLE` (`ALL/Structure.xsd`,
-    /// `RM/latest/documents/Structure.xsd` + `RM/latest/Common.xsd`). On such a
-    /// root the concrete class is the ONLY thing that distinguishes, say, an
-    /// `ORIGINAL_VERSION` response from an `IMPORTED_VERSION` one, so `xsi_type`
-    /// is how a row judges it. It is asserted only where the schemas declare
-    /// the type abstract — on a concretely-typed element the attribute is
-    /// decoration, not dispatch, and no released sentence requires it.
+    /// `RM/latest/documents/Structure.xsd` + `RM/latest/Common.xsd`). There the
+    /// concrete class is the only thing separating an `ORIGINAL_VERSION`
+    /// response from an `IMPORTED_VERSION` one. On a concretely-typed element
+    /// the attribute is decoration and no released sentence requires it.
     XmlRoot {
         /// The expected root element's local name (a globally declared element
         /// of the published XSDs).
@@ -369,15 +359,15 @@ pub enum Assertion {
         /// row deliberately judges the name alone.
         #[serde(default)]
         namespace: Option<XmlNamespace>,
-        /// The LOCAL name of the concrete type the root must name with
-        /// `xsi:type` — asserted only on a published element whose declared
-        /// type is abstract (see the form's doc comment). The attribute value
-        /// is a `QName`, so the assertion resolves its prefix through the
-        /// document's in-scope bindings (an unprefixed `QName` resolves against
-        /// the DEFAULT namespace — the `QName`-in-content rule) and compares the
-        /// local part; when the row also asserts `namespace`, the type's own
-        /// namespace must satisfy the same expectation, because the ITS-XML
-        /// complexTypes are declared in each schema's `targetNamespace`.
+        /// The local name of the concrete type the root must name with
+        /// `xsi:type`, asserted only on a published element whose declared type
+        /// is abstract. The attribute value is a `QName`, so the assertion
+        /// resolves its prefix through the document's in-scope bindings (an
+        /// unprefixed `QName` resolves against the default namespace, the
+        /// `QName`-in-content rule) and compares the local part. When the row
+        /// also asserts `namespace`, the type's own namespace must satisfy the
+        /// same expectation, because the ITS-XML complexTypes are declared in
+        /// each schema's `targetNamespace`.
         #[serde(default)]
         xsi_type: Option<String>,
     },
@@ -537,8 +527,8 @@ impl Assertion {
                     if count.is_none() {
                         return Err("result_set match:count requires `count`".to_owned());
                     }
-                    // A cell mode nothing consults is a declaration that
-                    // silently does nothing — match:count compares no cell.
+                    // match:count compares no cell, so a `cells` mode here
+                    // would be a declaration that silently does nothing.
                     if cells.is_some() {
                         return Err(
                             "result_set match:count compares no cell, so it takes no `cells` mode"
@@ -574,10 +564,8 @@ impl Assertion {
                 matches,
                 omits,
             } => {
-                // Exactly one positive predicate (equals | matches); `omits`
-                // is the composable negative side (alone or beside matches,
-                // never beside equals — whole-value equality already pins the
-                // body).
+                // `omits` composes with `matches` but never with `equals`,
+                // which already pins the whole body.
                 match (equals.is_some(), matches.is_some(), omits.is_some()) {
                     (true, false, false) | (false, true, _) | (false, false, true) => {}
                     _ => {
@@ -814,8 +802,8 @@ mod tests {
     }
 
     /// A bare code parses as YAML and can never match the full coded term the
-    /// evaluator compares, so it is refused at the invariant, not at drive
-    /// time (RM common `original_version.adoc` §Attributes; issue #264).
+    /// evaluator compares, so it is refused at the invariant rather than at
+    /// drive time (RM common `original_version.adoc` §Attributes).
     #[test]
     fn a_lifecycle_state_outside_the_term_grammar_is_refused() {
         let term = parse(serde_json::json!({
@@ -849,9 +837,6 @@ mod tests {
 
     #[test]
     fn signature_distinct_from_is_a_fact() {
-        // `distinct_from` alone satisfies the carries-a-fact invariant, and its
-        // reference participates in reference collection (the capture feeding
-        // it is validated like any other).
         let a = parse(serde_json::json!({
             "assert": "signature", "of": "${v2_uid}", "distinct_from": "${sig_first}"
         }));
@@ -862,7 +847,6 @@ mod tests {
             )
         );
 
-        // A signature assertion with no fact at all still bites.
         let a = parse(serde_json::json!({ "assert": "signature", "of": "${v}" }));
         assert!(a.check_invariants().is_err());
     }
@@ -879,14 +863,13 @@ mod tests {
         let a = parse(serde_json::json!({ "assert": "xml_root", "name": "composition" }));
         assert!(a.check_invariants().is_ok());
 
-        // A prefixed name is a document's own choice, never the assertion's.
+        // A prefix is a document's own choice, never the assertion's.
         let a = parse(serde_json::json!({ "assert": "xml_root", "name": "oe:composition" }));
         assert!(a.check_invariants().is_err());
 
         let a = parse(serde_json::json!({ "assert": "xml_root", "name": "  " }));
         assert!(a.check_invariants().is_err());
 
-        // The namespace vocabulary is closed.
         assert!(
             serde_json::from_value::<Assertion>(serde_json::json!({
                 "assert": "xml_root", "name": "composition", "namespace": "http://example.org"
@@ -895,11 +878,11 @@ mod tests {
         );
     }
 
-    /// The `xsi_type` half — for a published element declared over an ABSTRACT
-    /// type (`<xs:element name="version" type="VERSION"/>` over
+    /// For a published element declared over an abstract type
+    /// (`<xs:element name="version" type="VERSION"/>` over
     /// `<xs:complexType name="VERSION" abstract="true">`, `ALL/Version.xsd`),
-    /// where XML Schema Part 1 §2.6.1 + §3.4.6 make naming the concrete type
-    /// part of conforming to the schema.
+    /// XML Schema Part 1 §2.6.1 + §3.4.6 make naming the concrete type part of
+    /// conforming to the schema.
     #[test]
     fn xml_root_takes_the_concrete_type_of_an_abstract_root() {
         let a = parse(serde_json::json!({
@@ -909,7 +892,6 @@ mod tests {
         assert!(a.check_invariants().is_ok());
         assert!(assertion_refs(&a).is_empty());
 
-        // The QName's prefix is the document's own choice, like the root's.
         let a = parse(serde_json::json!({
             "assert": "xml_root", "name": "version", "xsi_type": "oe:ORIGINAL_VERSION"
         }));
@@ -943,8 +925,8 @@ mod tests {
     }
 
     /// The `cells:` vocabulary is closed and opt-in: absent is the exact
-    /// comparison, `instant` is the declared one, an unknown token is a parse
-    /// refusal, and `match: count` refuses the modifier outright.
+    /// comparison, an unknown token is a parse refusal, and `match: count`
+    /// refuses the modifier outright.
     #[test]
     fn cells_mode_is_a_closed_opt_in_vocabulary() {
         let a = parse(serde_json::json!({
@@ -1001,13 +983,13 @@ mod tests {
                 "assert": "equivalent", "to": "${row.thing}"
             }))
             .is_err()
-        ); // equivalent target must be ds/capture
+        );
 
         assert!(
             serde_json::from_value::<Assertion>(serde_json::json!({
                 "assert": "totally_new", "x": 1
             }))
             .is_err()
-        ); // closed vocabulary
+        );
     }
 }

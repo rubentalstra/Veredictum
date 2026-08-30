@@ -4,13 +4,12 @@
 //! Per-row OPT synthesis for the *structural* content families, plus the
 //! single dispatch entry the driver calls for every synthesized content row.
 //!
-//! Issue FerroEHR#228: a content decision table whose `constraint_context.constraint_columns`
-//! name constraint-axis columns needs one OPT per row (the archetype/template
-//! constraint varies per row, so no single baked template makes every row's
-//! verdict correct). This module owns the STRUCTURAL families — the ones whose
-//! constraint is carrier *shape* (container cardinality, attribute existence,
-//! object type narrowing), not an ELEMENT.value domain constraint — and routes
-//! the value/interval families to [`crate::exec::opt_synth`].
+//! A content decision table whose `constraint_context.constraint_columns` name
+//! constraint-axis columns needs one OPT per row, because the constraint varies
+//! per row and no single baked template makes every row's verdict correct. This
+//! module owns the *structural* families, whose constraint is carrier shape
+//! (container cardinality, attribute existence, object type narrowing), and
+//! routes the value and interval families to [`crate::exec::opt_synth`].
 //!
 //! Constraint shapes are grounded in AM AOM1.4 (`specs/openehr/AM/docs/AOM1.4/`):
 //! `C_MULTIPLE_ATTRIBUTE.cardinality`, `C_ATTRIBUTE.existence`, and
@@ -90,17 +89,16 @@ fn axis_refusal(column: &str, detail: &str) -> SynthError {
 
 /// AMB-42 realizability gate.
 ///
-/// A rejected-expected row whose EVERY violated
-/// constraint axis is unserializable on the OPT 1.4 wire (ITS-XML
-/// `Archetype.xsd`, identical in both published lineages:
-/// `C_TIME`/`C_DATE_TIME` carry no `millisecond_validity`
-/// element; `C_DURATION` carries only pattern+range, so the AOM-1.4
-/// `seconds_allowed` vs `fractional_seconds_allowed` distinction collapses
-/// into the single pattern `S` slot) cannot be driven — its ground OPT
-/// cannot exist. Returns the excusing citation, or `None` when the row is
-/// realizable. (AOM-1.4 UML defines the fields — `c_time.adoc`,
-/// `c_duration.adoc` — and CNF master17.4 tests them; the serialization gap
-/// is the register entry's subject.)
+/// A rejected-expected row whose every violated constraint axis is
+/// unserializable on the OPT 1.4 wire cannot be driven, because its ground OPT
+/// cannot exist. ITS-XML `Archetype.xsd` is identical in both published
+/// lineages: `C_TIME`/`C_DATE_TIME` carry no `millisecond_validity` element,
+/// and `C_DURATION` carries only pattern plus range, so the AOM-1.4
+/// `seconds_allowed` versus `fractional_seconds_allowed` distinction collapses
+/// into the single pattern `S` slot. AOM-1.4 defines the fields (`c_time.adoc`,
+/// `c_duration.adoc`) and CNF master17.4 tests them; the serialization gap is
+/// the register entry's subject. Returns the excusing citation, or `None` when
+/// the row is realizable.
 #[must_use]
 pub fn unrealizable_row(
     rm_class: &str,
@@ -119,10 +117,9 @@ pub fn unrealizable_row(
             .position(|c| c == name)
             .and_then(|i| cells.get(i))
     };
-    // Only rejected-expected rows can be unrealizable this way. The loader
-    // (`run::synthesize_content_case`) normalizes the authored `rejected`
-    // token to the refusal outcome kind the row's `violates` list implies
-    // before the driver sees the matrix — accept every spelling.
+    // `run::synthesize_content_case` normalizes the authored `rejected` token
+    // to the refusal kind the row's `violates` list implies before the driver
+    // sees the matrix, so every spelling is accepted here.
     match cell("expected") {
         Some(MatrixCell::Literal(serde_json::Value::String(s)))
             if s == "rejected" || s == "validation_failed" || s == "bad_request" => {}
@@ -228,9 +225,7 @@ pub fn synthesize_opt(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Low-level cADL/OPT XML builders (mirror generate_content_opts.py exactly).
-// ---------------------------------------------------------------------------
+// Low-level cADL/OPT XML builders, mirroring generate_content_opts.py exactly.
 
 fn xesc(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -438,9 +433,7 @@ fn c_code_phrase(term: &str, codes: &[&str]) -> String {
     )
 }
 
-// ---------------------------------------------------------------------------
 // OBSERVATION carrier assemblers (parameterized structural variants).
-// ---------------------------------------------------------------------------
 
 /// The value ELEMENT (at0004) with a valid `DV_TEXT` value slot.
 fn value_element() -> String {
@@ -487,9 +480,7 @@ fn observation_history(
     c_single_attr("data", &history, (1, 1))
 }
 
-// ---------------------------------------------------------------------------
 // Structural family builders.
-// ---------------------------------------------------------------------------
 
 /// The `cardinality` cell vocabulary: the closed set of
 /// `C_MULTIPLE_ATTRIBUTE.cardinality` intervals the structural content cases
@@ -547,16 +538,16 @@ impl CardinalityToken {
     }
 
     /// The container attribute's `C_ATTRIBUTE.existence`, which follows the
-    /// cardinality token: `any`/`opt` leave the attribute optional (0..1) so an
-    /// omitted or zero-count container is admitted and the RM invariant decides
-    /// — e.g. `HISTORY.Events_valid` (`(events /= Void and then not
+    /// cardinality token. `any` and `opt` leave the attribute optional (0..1)
+    /// so an omitted or zero-count container is admitted and the RM invariant
+    /// decides: `HISTORY.Events_valid` (`(events /= Void and then not
     /// events.is_empty) or summary /= Void`, RM `data_structures` §HISTORY
-    /// Invariants) accepts a zero-events HISTORY via its summary disjunct;
-    /// `1plus`/`3plus`/`mand`/`3to5` make the attribute mandatory (1..1). The
-    /// cardinality alone never fires on an omitted container (AOM1.4
-    /// §`C_MULTIPLE_ATTRIBUTE` + §`C_ATTRIBUTE`), and on the canonical wire an
-    /// empty list serializes as absent, so mandating existence 1..1 would
-    /// wrongly reject the zero-count row.
+    /// Invariants) accepts a zero-events HISTORY through its summary disjunct.
+    /// The rest make the attribute mandatory (1..1). Cardinality alone never
+    /// fires on an omitted container (AOM1.4 §`C_MULTIPLE_ATTRIBUTE` +
+    /// §`C_ATTRIBUTE`), and an empty list serializes as absent on the canonical
+    /// wire, so mandating existence 1..1 would wrongly reject the zero-count
+    /// row.
     fn existence(self) -> (i64, i64) {
         match self {
             Self::OnePlus | Self::ThreePlus | Self::Mand | Self::ThreeToFive => (1, 1),
@@ -755,9 +746,8 @@ fn composition_content_cardinality_context(
     row: &Cells<'_>,
 ) -> Result<String, SynthError> {
     let token = CardinalityToken::read(row, "cardinality")?;
-    // Same existence-follows-the-token rule as the single-axis family (see
-    // `CardinalityToken::existence`): the cardinality alone never fires on an
-    // omitted container.
+    // The same rule as [`CardinalityToken::existence`]: cardinality alone never
+    // fires on an omitted container.
     let content_exist = token.existence();
     let context_exist = ExistenceToken::read(row, "context_existence")?.pair();
     let obs = observation_root(&item_tree_data_observation_history(), &[]);
@@ -775,11 +765,8 @@ fn composition_content_cardinality(
     row: &Cells<'_>,
 ) -> Result<String, SynthError> {
     let token = CardinalityToken::read(row, "cardinality")?;
-    // The COMPOSITION.content existence follows the cardinality token so an
-    // absent/zero-count content is accepted for `any`/`opt` and rejected by
-    // existence for the mandatory families; the instance omits content when the
-    // count is 0 (an empty present list is rejected at the RM level regardless
-    // of cardinality).
+    // The same existence-follows-the-token rule as above, on
+    // COMPOSITION.content.
     let content_exist = token.existence();
     let obs = observation_root(&item_tree_data_observation_history(), &[]);
     Ok(composition(

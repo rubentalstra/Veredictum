@@ -3,26 +3,22 @@
 
 //! Response-header assertion evaluation.
 //!
-//! This is the executed half of the
-//! catalogue's `outcomes.*.headers` declarations (issue FerroEHR#403: the matchers
-//! were parsed by the binding model but never evaluated, so every header
-//! declaration was documentation, not an assertion).
+//! The executed half of the catalogue's `outcomes.*.headers` declarations.
 //!
-//! Evaluation runs ONLY when the step's observation matched the EXPECTED
-//! outcome kind (the declared headers belong to that outcome's wire
-//! expectation); a failed matcher is a conformance FAILURE of the row (law
-//! (b) — the same channel as the body/RM assertion failures), never an
-//! inconclusive error: the exchange completed, and the spec sentence the
-//! binding cites assigns the header.
+//! Evaluation runs only when the step's observation matched the expected
+//! outcome kind, since the declared headers belong to that outcome's wire
+//! expectation. A failed matcher is a conformance failure of the row (law (b)),
+//! never an inconclusive error: the exchange completed, and the spec sentence
+//! the binding cites assigns the header.
 //!
 //! Two declaration-level modifiers gate whether a matcher is judged at all
 //! (both defined on [`crate::model::binding::HeaderExpectation`], which
 //! carries the decisive spec sentences):
 //!
-//! - `optional: true` (authored bare as `present?`) — the PRESENCE of the
-//!   header is a SHOULD/MAY, so an absent or blank header satisfies the
-//!   expectation outright; a header that IS there is judged in full by the
-//!   matcher, so a MUST-strength FORM still bites.
+//! - `optional: true` (authored bare as `present?`) — the presence of the
+//!   header is a SHOULD or MAY, so an absent or blank header satisfies the
+//!   expectation outright while a header that is there is judged in full, which
+//!   keeps a MUST-strength form biting.
 //! - `applies: { its_rest: ">=1.1.0" }` — the rule is dated by the released
 //!   text itself (the `W/` weakness indicator and the read/DELETE `Location`
 //!   deprecation are both "Prior to Release 1.1.0" changes). A party whose
@@ -111,9 +107,8 @@ pub fn evaluate(
                 continue;
             }
             let observed = header_value(response_headers, name);
-            // A SHOULD/MAY-strength presence: nothing to judge when the server
-            // exercised its latitude and omitted the header. A header that IS
-            // there still faces the matcher in full.
+            // Nothing to judge when the server exercised a SHOULD/MAY latitude
+            // and omitted the header; one that IS there still faces the matcher.
             if header.optional && observed.is_none_or(|v| v.trim().is_empty()) {
                 continue;
             }
@@ -175,8 +170,8 @@ fn judge(
         }),
         HeaderMatcher::Negotiated => {
             let Some(accept) = ctx.accept.map(media_token) else {
-                // No Accept was sent — the endpoint default was negotiated;
-                // nothing sound to compare against.
+                // The endpoint default was negotiated, so nothing here is
+                // sound to compare against.
                 return None;
             };
             match observed {
@@ -208,9 +203,8 @@ fn judge(
                     Some(latest) => Some(format!(
                         "header {name}: expected the latest version uid {latest:?}, got {payload:?}"
                     )),
-                    // Nothing committed on this row to the object this
-                    // request addressed — presence + non-emptiness is all
-                    // the runner can soundly assert.
+                    // The row committed nothing to the addressed object, so
+                    // presence is all the runner can soundly assert.
                     None => None,
                 }
             }
@@ -237,9 +231,8 @@ fn judge(
                 Ok(_) => Some(format!(
                     "header {name}: value {v:?} does not match {pattern:?} (resolved: {resolved:?})"
                 )),
-                // The parse-time probe compiled the wildcarded form; a
-                // resolved form that no longer compiles is a runner bug —
-                // surface it loudly as a failure line.
+                // The parse-time probe compiled the wildcarded form, so a
+                // resolved form that no longer compiles is a runner bug.
                 Err(e) => Some(format!(
                     "header {name}: resolved pattern {resolved:?} does not compile: {e}"
                 )),
@@ -338,12 +331,11 @@ pub fn structural_token(name: &str) -> Option<&'static str> {
 
 /// Substitute `<name>` placeholders in a matcher pattern.
 ///
-/// A STRUCTURAL token ([`structural_token`]) inserts its released grammar; any
-/// other name inserts the regex-escaped scalar of the same-named case
-/// variable. Any placeholder that is neither is a LOUD error, never a silent
-/// `.*` wildcard: a matcher like `W/"<versioned_object_uid>::…"` degrading to
-/// a near-tautology is the vacuous-assertion class of FerroEHR#1830, on the
-/// expectation side (FerroEHR#1852).
+/// A structural token ([`structural_token`]) inserts its released grammar; any
+/// other name inserts the regex-escaped scalar of the same-named case variable.
+/// A placeholder that is neither is a loud error, never a silent `.*` wildcard,
+/// because a matcher like `W/"<versioned_object_uid>::…"` degrading to a
+/// near-tautology asserts nothing.
 ///
 /// # Errors
 /// The name of the first placeholder that is neither a case variable nor a
@@ -434,11 +426,9 @@ mod tests {
         let e = expectation(&serde_json::json!({ "Content-Type": "present-with-body" }));
         let detail = serde_json::json!({ "message": "Error message" });
 
-        // A body came back and the header declares its type: satisfied.
         let typed = response(&[("content-type", "application/json")]);
         assert!(evaluate(&e, &typed, Some(&detail), &ctx(), &VarStore::default()).is_empty());
 
-        // The same body with no `Content-Type` at all is the violation.
         let untyped = evaluate(
             &e,
             &response(&[]),
@@ -533,7 +523,7 @@ mod tests {
         assert!(evaluate(&e, &weak, None, &judged, &VarStore::default()).is_empty());
 
         // The bare form carries the right identity and still fails the dated
-        // form rule — one failure line, from the second expectation only.
+        // form rule, so only the second expectation reports.
         let bare = response(&[("etag", "\"abc::sys::2\"")]);
         let failures = evaluate(&e, &bare, None, &judged, &VarStore::default());
         assert_eq!(failures.len(), 1, "{failures:?}");
@@ -577,8 +567,8 @@ mod tests {
             last_version_uid: Some("abc::sys::2"),
             ..RequestContext::default()
         };
-        // The weak wrapper strips; case differences are the same identifier
-        // (BASE master05 §Composite Identifiers and Case).
+        // BASE master05 §Composite Identifiers and Case: case differences name
+        // the same identifier.
         let ok = response(&[("etag", "W/\"ABC::SYS::2\"")]);
         assert!(evaluate(&e, &ok, None, &ctx, &VarStore::default()).is_empty());
         let stale = response(&[("etag", "W/\"abc::sys::1\"")]);
@@ -595,8 +585,8 @@ mod tests {
 
     #[test]
     fn pattern_resolves_placeholders_from_vars() {
-        // `contribution_uid` is an IDENTITY name (not a structural token), so
-        // the case variable is what the matcher pins.
+        // `contribution_uid` is an identity name, so the case variable is what
+        // the matcher pins.
         let e = expectation(&serde_json::json!({
             "ETag": "pattern:W/\"<contribution_uid>::<system_id>::<n>\""
         }));
@@ -607,12 +597,10 @@ mod tests {
         );
         let ok = response(&[("etag", "W/\"abc-123::any.system::2\"")]);
         assert!(evaluate(&e, &ok, None, &ctx(), &vars).is_empty());
-        // A different resolved uid fails; the structural tokens (<system_id>,
-        // <n>) resolve to their grammars, not to a `.*` wildcard (FerroEHR#1852).
+        // A different resolved uid fails; the structural tokens resolve to
+        // their grammars, never to a `.*` wildcard.
         let bad = response(&[("etag", "W/\"other-uid::any.system::2\"")]);
         assert_eq!(evaluate(&e, &bad, None, &ctx(), &vars).len(), 1);
-        // The structural grammars are real constraints: an empty system
-        // segment and a zero-led tree ordinal both fail.
         let empty_system = response(&[("etag", "W/\"abc-123::::2\"")]);
         assert_eq!(evaluate(&e, &empty_system, None, &ctx(), &vars).len(), 1);
         let zero_led = response(&[("etag", "W/\"abc-123::any.system::02\"")]);
@@ -620,9 +608,9 @@ mod tests {
     }
 
     /// The `object_id` segment is the BASE `base_types` master05 §Syntaxes
-    /// `uid` — UUID, ISO OID, or reverse-domain internet id — and nothing
-    /// else, so a create-time `ETag` whose container id is server-assigned is
-    /// still a real assertion rather than a refusal (FerroEHR#1852).
+    /// `uid` (UUID, ISO OID, or reverse-domain internet id) and nothing else,
+    /// so a create-time `ETag` whose container id is server-assigned is still a
+    /// real assertion rather than a refusal.
     #[test]
     fn object_id_token_is_the_released_uid_grammar() {
         let e = expectation(&serde_json::json!({
@@ -641,8 +629,6 @@ mod tests {
                 "{uid} is a released uid form"
             );
         }
-        // Not a uid: an empty segment, a leading hyphen, and a segment that
-        // swallows the `::` separator.
         for payload in ["::ferroehr.local::1", "-bad::ferroehr.local::1"] {
             let etag = format!("W/\"{payload}\"");
             let bad = response(&[("etag", etag.as_str())]);
@@ -674,8 +660,6 @@ mod tests {
                 "{system_id} is a released uid form"
             );
         }
-        // A `::`-carrying segment (the composite, not one part of it), a
-        // quote-carrying one, and text that is no uid at all.
         for payload in ["a::b", "sys\\\"tem", "not a uid!", ""] {
             let etag = format!("W/\"{payload}\"");
             let bad = response(&[("etag", etag.as_str())]);
@@ -687,11 +671,10 @@ mod tests {
         }
     }
 
-    /// A structural token OUTRANKS a same-named case variable: the FerroEHR#1852
-    /// regression is a step passing a FULL version uid as the
-    /// `versioned_object_uid` PATH argument (which
-    /// `operations/composition_get.yaml` expressly permits), which used to be
-    /// substituted into the matcher and produce a doubled `::sys::n` tail.
+    /// A structural token outranks a same-named case variable. A step may pass
+    /// a full version uid as the `versioned_object_uid` path argument, which
+    /// `operations/composition_get.yaml` expressly permits, and substituting it
+    /// into the matcher would produce a doubled `::sys::n` tail.
     #[test]
     fn structural_tokens_outrank_a_same_named_variable() {
         let e = expectation(&serde_json::json!({
@@ -736,9 +719,9 @@ mod tests {
         );
     }
 
-    /// FerroEHR#1852 seeded defect: a placeholder naming neither a case variable nor
-    /// a structural token is a loud failure — never a silent `.*` that turns
-    /// the matcher into a tautology.
+    /// A placeholder naming neither a case variable nor a structural token is a
+    /// loud failure, never a silent `.*` that turns the matcher into a
+    /// tautology.
     #[test]
     fn unresolvable_placeholder_is_a_loud_failure_not_a_wildcard() {
         let e = expectation(&serde_json::json!({
@@ -774,11 +757,10 @@ mod tests {
         assert!(evaluate(&e, &ok, None, &ctx(), &VarStore::default()).is_empty());
     }
 
-    /// `optional: true` splits SHOULD-strength PRESENCE from MUST-strength
-    /// FORM (issue FerroEHR#628): the query `ETag` is a SHOULD to emit (overview
-    /// §"`ETag` and Last-Modified") but a MUST to weaken when emitted
-    /// (§"Deprecated headers"). An omitted header passes; a malformed one
-    /// still fails.
+    /// `optional: true` splits SHOULD-strength presence from MUST-strength
+    /// form: the query `ETag` is a SHOULD to emit (overview §"`ETag` and
+    /// Last-Modified") but a MUST to weaken when emitted (§"Deprecated
+    /// headers"). An omitted header passes; a malformed one still fails.
     #[test]
     fn optional_presence_still_judges_the_form_when_present() {
         let e = expectation(&serde_json::json!({
@@ -797,10 +779,9 @@ mod tests {
     }
 
     /// A version-dated rule binds only the parties that declare the release
-    /// dating it (issue FerroEHR#627): the `W/` MUST is "Prior to Release 1.1.0"
-    /// deprecation text, so a 1.0.3 declarant is not judged on it and a
-    /// 1.1.0 declarant is — the SAME `applies` grammar and the SAME
-    /// `satisfied_by` polarity the case cores use.
+    /// dating it: the `W/` MUST is "Prior to Release 1.1.0" deprecation text,
+    /// so a 1.0.3 declarant is not judged on it and a 1.1.0 declarant is, under
+    /// the same `applies` grammar and `satisfied_by` polarity the case cores use.
     #[test]
     fn a_dated_expectation_binds_only_the_declaring_releases() {
         let e = expectation(&serde_json::json!({
@@ -828,8 +809,7 @@ mod tests {
         };
         assert!(evaluate(&e, &bare, None, &dated_out, &VarStore::default()).is_empty());
 
-        // Undeclared behaves exactly as the case-level filter does: out of
-        // scope, never a silently-applied requirement.
+        // Undeclared behaves as the case-level filter does: out of scope.
         assert!(evaluate(&e, &bare, None, &ctx(), &VarStore::default()).is_empty());
     }
 
@@ -867,8 +847,8 @@ mod tests {
         let any = response(&[("content-type", "application/xml")]);
         assert!(evaluate(&e, &any, None, &ctx(), &VarStore::default()).is_empty());
 
-        // With an `Accept` sent, a MISSING content type is its own failure line
-        // distinct from the mismatch one, so a red row says which happened.
+        // A missing content type is its own failure line, distinct from the
+        // mismatch one, so a red row says which happened.
         let negotiating = RequestContext {
             accept: Some("application/xml"),
             ..RequestContext::default()
@@ -894,8 +874,7 @@ mod tests {
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(failures[0].contains("empty entity tag"), "{failures:?}");
 
-        // Nothing tracked to compare against: presence and non-emptiness are
-        // all the runner can soundly assert, so any non-empty tag passes.
+        // With nothing tracked to compare against, any non-empty tag passes.
         let anything = response(&[("etag", "\"whatever\"")]);
         assert!(evaluate(&e, &anything, None, &ctx(), &VarStore::default()).is_empty());
         assert_eq!(

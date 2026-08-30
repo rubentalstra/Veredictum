@@ -43,20 +43,17 @@ pub fn classify_status(
     status: u16,
     expected: OutcomeKind,
 ) -> Observation {
-    // Several kinds may map to one wire status on an operation (e.g.
-    // validation_failed and template_not_found both 422; the two version
-    // preconditions both 412 — "kind distinguished by fixture" per the
-    // binding comments). On a tie the EXPECTED kind wins: the wire cannot
-    // distinguish the members, so an expected member's status match
-    // satisfies the expectation, and a non-member match still reports the
-    // first mapped kind (a mismatch).
+    // Several kinds may map to one wire status (validation_failed and
+    // template_not_found both 422, the two version preconditions both 412), so
+    // on a tie the EXPECTED kind wins: the wire cannot distinguish the members.
+    // A non-member match still reports the first mapped kind, a mismatch.
     if let Some(expectation) = binding.outcome(expected)
         && expectation_matches(expectation, status)
     {
         return Observation::Kind(expected);
     }
-    // Binding-mapped outcomes first (an operation-specific mapping wins over
-    // a universal one for the same status).
+    // An operation-specific mapping wins over a universal one on the same
+    // status, so the binding's outcomes are tried first.
     for kind in OutcomeKind::ALL {
         if let Some(expectation) = binding.outcome(*kind)
             && expectation_matches(expectation, status)
@@ -162,7 +159,6 @@ mod tests {
             classify_status(&b, Some(&s), 409, OutcomeKind::Created),
             Observation::Kind(OutcomeKind::AlreadyExists)
         );
-        // universal outcome reachable on any operation
         assert_eq!(
             classify_status(&b, Some(&s), 401, OutcomeKind::Created),
             Observation::Kind(OutcomeKind::Unauthenticated)

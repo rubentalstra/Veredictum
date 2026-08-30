@@ -109,8 +109,7 @@ impl CellComparator {
             },
             // void equals only void (\[legislated\])
             (Value::Null, Value::Null) => true,
-            // RM objects and everything else: canonical structural equality,
-            // with numeric leaves compared by value recursively
+            // structural equality, numeric leaves by value, recursively
             (Value::Array(x), Value::Array(y)) => {
                 if x.len() != y.len() {
                     return false;
@@ -147,11 +146,9 @@ impl CellComparator {
         if self.mode != CellComparison::Instant {
             return false;
         }
-        // Both lexemes must carry an explicit UTC designator or numeric
-        // offset: `Timestamp` is an instant, so it refuses an offset-less
-        // string, which is exactly the case ITS-REST Resources.md §Datetime
-        // format leaves to "the local timezone" and no comparison here can
-        // resolve.
+        // `Timestamp` refuses an offset-less string, which is the case
+        // ITS-REST Resources.md §Datetime format leaves to "the local
+        // timezone" and no comparison here can resolve.
         let (Ok(left), Ok(right)) = (
             served.parse::<jiff::Timestamp>(),
             expected.parse::<jiff::Timestamp>(),
@@ -461,7 +458,6 @@ mod tests {
                 "{mismatch:?}"
             );
         }
-        // A rows member of the wrong JSON type is the same mismatch.
         assert!(compare_count(&json!({ "rows": 3 }), 0).is_err());
     }
 
@@ -524,8 +520,6 @@ mod tests {
         let shorter = json!([{ "_type": "DV_COUNT", "magnitude": 1 }]);
         assert!(!cells_equal(&a, &shorter));
 
-        // An object missing a member the other carries is a difference, and so
-        // is a member present under a different key.
         assert!(!cells_equal(
             &json!({ "a": 1, "b": 2 }),
             &json!({ "a": 1, "c": 2 })
@@ -613,8 +607,8 @@ mod tests {
             )
             .is_ok()
         );
-        // Exactly one pairing diverges lexically; the probe against the
-        // already-matching row is rolled back rather than double-counted.
+        // The probe against the already-matching row is rolled back, so only
+        // the one lexically diverging pairing is counted.
         assert_eq!(cmp.divergences().len(), 1, "{:?}", cmp.divergences());
         assert_eq!(
             cmp.divergences().first().map(|d| d.expected.as_str()),

@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Per-row OPT 1.4 XML synthesis for the *value* and *interval* content
-//! families (issue FerroEHR#228).
+//! families.
 //!
-//! A content decision table whose `constraint_context.constraint_columns`
-//! name constraint-axis columns needs one OPT per row (the ELEMENT.value
-//! domain constraint varies per row). This module builds those OPTs from the
+//! A content decision table whose `constraint_context.constraint_columns` name
+//! constraint-axis columns needs one OPT per row, because the ELEMENT.value
+//! domain constraint varies per row. This module builds those OPTs from the
 //! row's constraint cells; the structural families live in
-//! [`crate::exec::content_synth`], which dispatches value + interval rows
+//! [`crate::exec::content_synth`], which dispatches value and interval rows
 //! here.
 //!
 //! The constraint XML shapes are grounded in AM AOM1.4
@@ -20,15 +20,15 @@
 //! `corpus/templates/generate_content_opts.py` (built on the vendored CNF Robot
 //! `minimal_observation.opt`).
 //!
-//! NOTE: no openEHR spec governs the corpus template packaging — our own
-//! corpus-authoring design; the constraint SHAPES are the AOM1.4 ones cited.
-//! NOTE: the `timezone_validity` columns are emitted as the Archetype.xsd
-//! `<timezone_validity>` element (`VALIDITY_KIND` 1001/1003 — the ITS-XML
-//! 1.0.2 wire serializes exactly this one validity axis); the
-//! `millisecond_validity` columns and the `C_DURATION` seconds-vs-fractional
-//! distinction have NO wire form (no XSD element; the ADL1.4 pattern ends at
-//! the seconds slot) — rows whose expected rejection rests solely on those
-//! axes are gated per-row N/A upstream (AMB-42,
+//! No openEHR spec governs the corpus template packaging — our own
+//! corpus-authoring design; the constraint shapes are the AOM1.4 ones cited.
+//!
+//! The `timezone_validity` columns are emitted as the Archetype.xsd
+//! `<timezone_validity>` element (`VALIDITY_KIND` 1001/1003), which is the one
+//! validity axis the ITS-XML 1.0.2 wire serializes. The `millisecond_validity`
+//! columns and the `C_DURATION` seconds-versus-fractional distinction have no
+//! wire form at all, so a row whose expected rejection rests solely on those
+//! axes is gated per-row N/A upstream (AMB-42,
 //! [`crate::exec::content_synth::unrealizable_row`]).
 
 #![expect(
@@ -120,9 +120,8 @@ pub fn synthesize_value_opt(
     Ok(value_template(template_id, &value_children, &extra_terms))
 }
 
-// ---------------------------------------------------------------------------
-// Low-level cADL/OPT XML builders (faithful port of generate_content_opts.py).
-// ---------------------------------------------------------------------------
+// Low-level cADL/OPT XML builders, a faithful port of
+// generate_content_opts.py.
 
 fn xesc(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -361,9 +360,7 @@ fn constraint_ref(reference: &str) -> String {
     )
 }
 
-// ---------------------------------------------------------------------------
-// Value builders (each returns the ELEMENT.value <children> block).
-// ---------------------------------------------------------------------------
+// Value builders, each returning the ELEMENT.value <children> block.
 
 fn dv_leaf(rm_type: &str, field: &str, prim: &str, item: Option<&str>) -> String {
     match item {
@@ -405,9 +402,8 @@ fn build_time(row: &Row<'_>) -> String {
         let hi = row.text("range.upper");
         return dv_leaf("DV_TIME", "value", "TIME", Some(&item_c_time_range(lo, hi)));
     }
-    // AOM1.4 pattern base is HH; minute/second from validity. timezone is
-    // the Archetype.xsd `timezone_validity` element; millisecond is
-    // unserializable on this wire (AMB-42) and gated per-row upstream.
+    // AOM1.4 pattern base is HH, with minute and second from validity;
+    // timezone rides the Archetype.xsd `timezone_validity` element.
     let min = date_component(row.text("minute_validity"), "MM");
     let sec = date_component(row.text("second_validity"), "SS");
     let pattern = format!("HH:{min}:{sec}");
@@ -524,15 +520,14 @@ const ORDINAL_LIST_COLUMNS: &[&str] = &[
     "upper_c_dv_ordinal_list",
 ];
 
-/// Refuse a row whose list cells carry a member the lenient parsers would
-/// DROP (issue FerroEHR#1853).
+/// Refuses a row whose list cells carry a member the lenient parsers would drop.
 ///
 /// A dropped member shrinks the synthesized OPT's value set, so the SUT is
-/// judged against a NARROWER constraint than the row declares — a value the
-/// row expects to be rejected can then be accepted, and the red row accuses
-/// the SUT of the interpreter's omission. The parsers stay lenient (their
-/// callers build XML infallibly); this pre-flight is where the defect
-/// becomes a typed error, once, before any building starts.
+/// judged against a narrower constraint than the row declares: a value the row
+/// expects to be rejected can then be accepted, and the red row accuses the SUT
+/// of the interpreter's omission. The parsers stay lenient because their callers
+/// build XML infallibly, so this pre-flight is where the defect becomes a typed
+/// error, once, before any building starts.
 ///
 /// # Errors
 /// [`SynthError::Unsupported`] naming the column and the offending member.
@@ -643,14 +638,12 @@ fn build_coded_text(row: &Row<'_>) -> (String, Vec<(String, String, String)>) {
             "DV_CODED_TEXT",
             &c_single_attr("defining_code", &c_code_phrase(term, &codes), (1, 1)),
         );
-        // Bind a rubric for each constrained code in the component ontology.
-        // Local codes ARE archetype-local terms whose rubric lives in
+        // A local code IS an archetype-local term whose rubric lives in
         // term_definitions (AM ADL1.4 master02 §Terminology; RM dv_text.adoc
-        // §value — "For DV_CODED_TEXT, this is the rubric of the complete
-        // term"), so a value=rubric commit has a bound rubric to match. A
-        // qualified external terminology binds the rubric under the
-        // terminology-qualified code so the same acceptance dimension is
-        // exercisable without pretending the external code is archetype-local.
+        // §value: "For DV_CODED_TEXT, this is the rubric of the complete
+        // term"), so a value=rubric commit has a rubric to match. A qualified
+        // external terminology binds under the terminology-qualified code
+        // instead of pretending the external code is archetype-local.
         let terms = codes
             .iter()
             .map(|c| {
