@@ -9,8 +9,9 @@
 # explicit by construction — the ping happens only AFTER the release image
 # exists, so no skip-until-exists guard and no image race can occur. The
 # pattern is FerroEHR's sandbox lane (FerroEHR#2724/#2846/#2945), minus the
-# database half: this instance is a stateless viewer with everything baked
-# into the image, so no reseed leg exists.
+# database half: this instance keeps no state of its own — the catalogue and
+# the specs are baked in and a run's output is ephemeral — so no reseed leg
+# exists.
 #
 # Triggers:
 #   - workflow_call from the release pipeline (release.yml), after the

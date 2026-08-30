@@ -17,13 +17,18 @@
 # .github/workflows/sandbox-deploy.yml, which a release pings AFTER that leg
 # succeeds — so this reference always resolves and no cut-time bump exists.
 #
-# The hosted posture is VIEW-ONLY BY CONSTRUCTION, not by configuration. The
-# image ships only the console binary; the engine is resolved from
-# VEREDICTUM_ENGINE or PATH and is deliberately absent here, so no visitor
-# can start a run that touches any network from this instance, and the
-# distroless nonroot user cannot write the root-owned baked tree. What a
-# visitor gets is the reading surface: the catalogue, the party statements,
-# and the specification oracle the expectations cite.
+# The hosted instance is FULLY WORKING. The base image carries the engine at
+# /usr/local/bin/veredictum beside the console (#375) and this overlay leaves
+# VEREDICTUM_ENGINE inherited, so a visitor connects their own reachable CDR
+# and drives a real run over the baked catalogue, party statements and
+# specification oracle. A run's output lands on the container's ephemeral
+# filesystem and vanishes on the next deploy, which is what a sandbox is.
+
+# The base runs as uid 65532 and the /work tree COPYed below is root-owned, so
+# the output directory has to arrive already owned by that uid. distroless
+# carries no shell, so no RUN can make it there: this stage has one.
+FROM busybox@sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0 AS mkdirs
+RUN mkdir -p /empty/out
 
 FROM ghcr.io/rubentalstra/veredictum:latest
 
@@ -37,10 +42,13 @@ COPY artifacts/ /work/artifacts/
 COPY specs/openehr/ /work/specs/openehr/
 COPY party/ /work/party/
 
+# The runs directory, owned by the console's own uid so a run can create its
+# job directory. It arrives from the helper stage above and starts empty, the
+# same state a fresh local mount starts from.
+COPY --from=mkdirs --chown=65532:65532 /empty/ /work/
+
 # ROOT and SPECS are already /work-anchored in the base image; PARTY and OUT
-# default to paths relative to /app there, so both are pinned here. /work/out
-# does not exist, which is the same empty-runs posture a fresh local mount
-# starts from.
+# default to paths relative to /app there, so both are pinned here.
 ENV VEREDICTUM_PARTY=/work/party \
     VEREDICTUM_OUT=/work/out
 

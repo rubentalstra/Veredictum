@@ -7,8 +7,10 @@
 # own distribution channels are `cargo install veredictum` and the prebuilt
 # binaries attached to each release — a terminal user never needed Docker for
 # a static binary. The console binary serves the UI; it carries no catalogue
-# and no judgement of its own — runs execute through the pinned `veredictum`
-# binary once the engine seam lands (#54).
+# and no judgement of its own, and every run executes through the ENGINE that
+# ships beside it at /usr/local/bin/veredictum, named by VEREDICTUM_ENGINE in
+# the runtime stage. The console refuses a binary reporting any version other
+# than its pin, so the two travel as one artifact.
 #
 # The catalogue, the corpora and the vendored specification oracle stay
 # MOUNTED: they are 347 MB the server reads as paths, and a party may point at
@@ -29,10 +31,11 @@
 #
 #   runtime-from-source  the LOCAL path — cargo-leptos compiles the server
 #                        binary, the WASM bundle and the Tailwind CSS
-#                        in-image against persistent BuildKit cache mounts.
-#   runtime-prebuilt     the CI path — COPY-only packaging of a
-#                        context-provided native server binary
-#                        (bin/${TARGETARCH}/veredictum-console) plus the
+#                        in-image against persistent BuildKit cache mounts,
+#                        and cargo compiles the engine binary beside them.
+#   runtime-prebuilt     the CI path — COPY-only packaging of the
+#                        context-provided native server and engine binaries
+#                        (bin/${TARGETARCH}/) plus the
 #                        architecture-independent site bundle (site/). No RUN
 #                        executes, so a multi-architecture buildx needs no
 #                        QEMU.
@@ -105,8 +108,10 @@ COPY . .
 RUN --mount=type=cache,target=/app/target,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     cargo leptos build --release \
+    && cargo build --release --locked -p veredictum --bin veredictum \
     && install -m 0755 target/release/veredictum-console /usr/local/bin/veredictum-console \
-    && strip /usr/local/bin/veredictum-console \
+    && install -m 0755 target/release/veredictum /usr/local/bin/veredictum \
+    && strip /usr/local/bin/veredictum-console /usr/local/bin/veredictum \
     && mkdir -p /srv \
     && cp -r target/site /srv/site
 
@@ -116,7 +121,7 @@ RUN --mount=type=cache,target=/app/target,sharing=locked \
 # Rust binary dynamically links libgcc_s.so.1 for stack unwinding, and
 # base-nossl does not ship it, so the image would fail at load. Both final
 # targets inherit this stage's user, environment, entrypoint and labels, so
-# they differ by exactly two layers.
+# they differ by exactly three layers: the console, the engine, the site.
 FROM gcr.io/distroless/cc-debian13:nonroot@sha256:a77defd6fedbb3392b175ba8ea3d1c22be963c1597c248c3ba987ddd80bfb512 AS runtime-base
 # The `:nonroot` tag already runs as uid 65532, but a scanner reading this
 # file cannot see a base image, and neither can a reader. NUMERIC, not
@@ -129,10 +134,14 @@ WORKDIR /app
 # deployment chapter): where the server finds the site bundle and what it
 # binds. 0.0.0.0 because a container-loopback bind is reachable by nothing;
 # the operator's publish flag decides actual exposure (header comment).
+# VEREDICTUM_ENGINE names the in-image engine by absolute path rather than
+# leaning on PATH resolution, so an overlay can repoint or disable it with one
+# variable and the console never resolves a different binary by accident.
 ENV LEPTOS_OUTPUT_NAME=veredictum-console \
     LEPTOS_SITE_ROOT=/app/site \
     LEPTOS_SITE_PKG_DIR=pkg \
     LEPTOS_SITE_ADDR=0.0.0.0:3000 \
+    VEREDICTUM_ENGINE=/usr/local/bin/veredictum \
     VEREDICTUM_ROOT=/work/artifacts \
     VEREDICTUM_SPECS=/work/specs/openehr
 EXPOSE 3000
@@ -175,13 +184,14 @@ LABEL org.opencontainers.image.title="Veredictum console" \
 # ── runtime-from-source: the local path (COPY the in-image build) ─────────────
 FROM runtime-base AS runtime-from-source
 COPY --from=builder /usr/local/bin/veredictum-console /usr/local/bin/veredictum-console
+COPY --from=builder /usr/local/bin/veredictum /usr/local/bin/veredictum
 COPY --from=builder /srv/site /app/site
 
 # ── runtime-prebuilt: the CI path (COPY the context-provided artifacts) ───────
-# The server binaries are compiled natively per architecture on the CI
-# runners, inside rust:*-slim-trixie so they target the same Debian 13 glibc
+# The server and engine binaries are compiled natively per architecture on the
+# CI runners, inside rust:*-slim-trixie so they target the same Debian 13 glibc
 # this distroless base ships, and land in the build context as
-# bin/amd64/veredictum-console and bin/arm64/veredictum-console. The site
+# bin/<arch>/veredictum-console and bin/<arch>/veredictum. The site
 # bundle (WASM + CSS + the generated bootstrap) is architecture-independent
 # and lands once as site/. Because no RUN executes, a multi-architecture
 # buildx of this target needs no QEMU.
@@ -189,4 +199,5 @@ FROM runtime-base AS runtime-prebuilt
 # amd64 | arm64 — supplied by buildx per platform.
 ARG TARGETARCH
 COPY --chmod=0755 bin/${TARGETARCH}/veredictum-console /usr/local/bin/veredictum-console
+COPY --chmod=0755 bin/${TARGETARCH}/veredictum /usr/local/bin/veredictum
 COPY site/ /app/site/
