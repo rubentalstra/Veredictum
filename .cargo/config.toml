@@ -1,0 +1,18 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Cargo's own `[env]` table, applied to every cargo invocation in this
+# workspace (https://doc.rust-lang.org/cargo/reference/config.html#env).
+
+[env]
+# The server-function path key (#381). server_fn derives each function's URL
+# as `xxh64(env!(KEY) ":" module_path!())`, and KEY is `CARGO_MANIFEST_DIR`
+# unless `SERVER_FN_OVERRIDE_KEY` is set — so a client and a server compiled
+# from different absolute directories disagree about every path. The release
+# pipeline builds exactly that way: the server binary inside a job container
+# (`/__w/…`), the wasm bundle on the host runner (`/home/runner/work/…`), and
+# the 0.1.2 image shipped two halves that could not talk to each other. A
+# fixed key makes the paths a property of the code rather than of the machine
+# that built it. The value is arbitrary and must never change: it is baked
+# into the URLs, so moving it renames every endpoint at once.
+SERVER_FN_OVERRIDE_KEY = "veredictum-console"

@@ -641,6 +641,22 @@ jobs:
           # served its page perfectly while the baked wasm URL 404'd on every
           # load and the console never hydrated (#369). The grep reads both
           # attribute forms (href/src, modulepreload and script alike).
+          # The two halves must agree on every server-function URL. Each path
+          # is `xxh64(env!(SERVER_FN_OVERRIDE_KEY):module_path)`, so a binary
+          # and a wasm bundle compiled with different keys register one set
+          # and request another: the 0.1.2 image shipped exactly that, and
+          # every client call answered the app's own 404 page (#381).
+          docker cp "${cid}:/usr/local/bin/veredictum-console" ./smoke-console
+          docker cp "${cid}:/app/site/pkg/veredictum-console.wasm" ./smoke-client.wasm
+          strings -a ./smoke-console | grep -oE '/api/[a-z_]+[0-9]+' | sort -u > ./paths-server.txt
+          strings -a ./smoke-client.wasm | grep -oE '/api/[a-z_]+[0-9]+' | sort -u > ./paths-client.txt
+          if [ ! -s ./paths-client.txt ] || [ ! -s ./paths-server.txt ]; then
+            echo "::error::one half names no /api/ server-function path at all (server $(wc -l < ./paths-server.txt), client $(wc -l < ./paths-client.txt)) — the extraction is broken, and a check that cannot decide must not pass"; exit 1
+          fi
+          if ! diff -u ./paths-server.txt ./paths-client.txt; then
+            echo "::error::the shipped binary and the shipped wasm disagree about their server-function paths (#381) — every client call would 404. Both halves must build with the same SERVER_FN_OVERRIDE_KEY."; exit 1
+          fi
+          echo "server-function paths agree ($(wc -l < ./paths-client.txt) of them)"
           assets="$(printf '%s' "$body" | grep -oE '(href|src)="/pkg/[^"]+"' | sed -E 's/^[a-z]+="//; s/"$//' | sort -u)"
           [ -n "$assets" ] || { echo "::error::the landing page references no /pkg/ assets — the hydration scripts are missing entirely"; exit 1; }
           for a in $assets; do
