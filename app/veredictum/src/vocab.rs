@@ -79,18 +79,14 @@ outcome_kinds! {
     (AlreadyExists, "already_exists", Error),
     /// Target does not exist ("EHR with `<ehr_id>` does not exist").
     (NotFound, "not_found", Error),
-    /// `preceding_version_uid` does not exist. DECISION (FerroEHR#557, 2026-07-28):
-    /// stays a distinct kind from `precondition_failed` even where ITS-REST
-    /// realizes both as one indistinguishable wire answer (the If-Match PUTs:
-    /// a false-evaluating If-Match "MUST respond with HTTP status code `412
-    /// Precondition Failed`" regardless of whether the named version ever
-    /// existed — overview `Requests_and_responses.md` §"If-Match and accidental
-    /// overwrites"). Case cores speak SM outcomes, and the SM distinguishes
-    /// the causes (an unknown version vs a stale one); the fold is a
-    /// REALIZATION fact recorded on each binding, and the tie-break in
-    /// `exec::outcome` is the documented norm: when the wire genuinely cannot
-    /// distinguish members, the expected member's status match satisfies the
-    /// expectation — the status/header assertions still gate.
+    /// `preceding_version_uid` does not exist. Distinct from
+    /// `precondition_failed` because case cores speak SM outcomes and the SM
+    /// distinguishes an unknown version from a stale one, even where ITS-REST
+    /// folds both into one wire answer (overview `Requests_and_responses.md`
+    /// §"If-Match and accidental overwrites": a false-evaluating If-Match "MUST
+    /// respond with HTTP status code `412 Precondition Failed`"). The fold is a
+    /// realization fact recorded per binding, and `exec::outcome` breaks the tie
+    /// on the expected member's status while the header assertions still gate.
     (VersionNotFound, "version_not_found", Error),
     /// Version precondition evaluated false (stale `preceding_version_uid`).
     (PreconditionFailed, "precondition_failed", Error),
@@ -120,15 +116,13 @@ outcome_kinds! {
     (Unauthenticated, "unauthenticated", Error),
     /// Authenticated principal lacks authorization for the operation (403).
     (Forbidden, "forbidden", Error),
-    /// The request itself is malformed — syntactically invalid content, an
+    /// The request itself is malformed: syntactically invalid content, an
     /// unparseable identifier, a contradictory or missing required argument
-    /// (ITS-REST `Requests_and_responses.md` §HTTP status codes row 400: "the
-    /// service cannot or will not process the request due to something that
-    /// is perceived to be a client error (e.g., malformed request syntax,
-    /// syntactically invalid content)", and below the table: "Status code
-    /// `400` indicates normally a bad request, as well as a generic
-    /// client-side error, used when no other `4xx` error code is
-    /// appropriate"). Distinct from `validation_failed`, which is the
+    /// (ITS-REST `Requests_and_responses.md` §HTTP status codes row 400,
+    /// "malformed request syntax, syntactically invalid content", and below the
+    /// table: "Status code `400` indicates normally a bad request, as well as a
+    /// generic client-side error, used when no other `4xx` error code is
+    /// appropriate"). Distinct from `validation_failed`, the
     /// well-formed-but-semantically-invalid content branch (422).
     (BadRequest, "bad_request", Error),
     /// The method is known to the service but the target resource does not
@@ -144,11 +138,9 @@ outcome_kinds! {
 ///
 /// The schedule defines three kinds (`functional | content | performance`);
 /// the performance case-core schema is a separate artifact revision with its
-/// own model (`perf.rs` — the shipped measured-performance schedule), so the
-/// assertion-machinery model deliberately closes over the two kinds it
-/// validates. NOTE: no openEHR spec governs the runner's internal schema
-/// split — our own design; the once-planned `performance` variant here was
-/// superseded by the separate perf case-core model.
+/// own model (`perf.rs`), so this enum closes over the two kinds the assertion
+/// machinery validates. No openEHR spec governs the runner's internal schema
+/// split — our own design.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CaseKind {
@@ -264,16 +256,12 @@ impl Tier {
 /// The machine-readable handling class of an ambiguity-register entry — the
 /// pipeline branches on this (closed enum).
 ///
-/// The `FixedHandling`/`Editorial` boundary (issue FerroEHR#2546) is decidable by one
-/// question: **did the entry CHOOSE anything?** `Editorial` records a
-/// wording/typography defect with zero behavioural latitude — the corrected
-/// reading is forced by the surrounding released text, and the catalogue
-/// encodes that one reading. `FixedHandling` records real latitude — several
-/// readings were defensible and the entry pins this catalogue's choice.
-/// Neither changes gating (`verdict.rs` branches identically); the split
-/// exists so a reader knows whether re-adjudication could ever move the
-/// behaviour (`fixed_handling`: yes, on a better ground; `editorial`: only if
-/// the text itself changes).
+/// The `FixedHandling`/`Editorial` boundary turns on one question: did the
+/// entry choose anything? `Editorial` records a wording defect with zero
+/// behavioural latitude, the corrected reading forced by the surrounding
+/// released text. `FixedHandling` records real latitude the entry pinned.
+/// Neither changes gating (`verdict.rs` branches identically); the split tells a
+/// reader whether re-adjudication could move the behaviour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Disposition {
@@ -346,13 +334,11 @@ pub enum CorpusFormat {
     /// A JSON payload delivered BYTE-FOR-BYTE, unparsed.
     ///
     /// `canonical-json` round-trips its source through `serde_json::Value`
-    /// before the send, which silently repairs every byte-level defect a JSON
-    /// document can carry — a repeated member, member ordering, an exotic
-    /// number lexeme. Those are wire behaviours the reader must refuse, so
-    /// they need a carrier that does not normalise: this format loads the
-    /// file verbatim and the driver writes those bytes as the request body.
-    /// The media type is unchanged (it is still JSON on the wire) — that
-    /// comes from the case/step `format` axis, not from here.
+    /// before the send, silently repairing every byte-level defect a JSON
+    /// document can carry: a repeated member, member ordering, an exotic number
+    /// lexeme. Those are wire behaviours the reader must refuse, so this format
+    /// loads the file verbatim and the driver writes those bytes as the request
+    /// body. The media type still comes from the case/step `format` axis.
     #[serde(rename = "raw-json")]
     RawJson,
 }
@@ -431,15 +417,13 @@ pub enum PlaceholderPolicy {
 /// The openEHR ITS-XML target namespace a canonical-XML document root must be
 /// qualified with (`namespace:` of the `xml_root` assertion).
 ///
-/// The closed set is the closure of what ITS-XML actually publishes: the
-/// schemas of the `Release-1.0.2` bundle carry
-/// `targetNamespace="http://schemas.openehr.org/v1"` and those of
-/// `Release-2.0.0` carry `.../v2`, and both bundles set
-/// `elementFormDefault="qualified"`, so a conforming instance's root is in one
-/// of exactly these two namespaces — never in none. Which LINEAGE a service
-/// serves is implementation-defined (register AMB-169), so [`Self::Published`]
-/// is the assertion a case normally makes; the two pinned tokens exist for a
-/// row that has already fixed the lineage by other means.
+/// The closed set is what ITS-XML publishes: the `Release-1.0.2` schemas carry
+/// `targetNamespace="http://schemas.openehr.org/v1"` and the `Release-2.0.0`
+/// ones carry `.../v2`, both with `elementFormDefault="qualified"`, so a
+/// conforming instance's root is in one of exactly these two namespaces. Which
+/// lineage a service serves is implementation-defined (register AMB-169), so
+/// [`Self::Published`] is the assertion a case normally makes; the pinned
+/// tokens serve a row that has fixed the lineage by other means.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum XmlNamespace {
@@ -546,17 +530,17 @@ pub enum ResultSetMatch {
 /// How a `result_set` assertion compares a scalar cell (`cells:` of the
 /// `result_set` assertion).
 ///
-/// The default is [`CellComparison::Lexeme`], which is the only comparison
-/// that can test the write-path preservation sentence of ITS-REST
+/// The default is [`CellComparison::Lexeme`], the only comparison that can test
+/// the write-path preservation sentence of ITS-REST
 /// `specifications/docs/overview/Resources.md` §Datetime format: a body
-/// date/time "will be preserved as it was sent by the client, and passed to
-/// the underlying backend engine as is", stated with no RFC 2119 keyword and
-/// no condition. [`CellComparison::Instant`] is declared by a case whose cells
-/// are read back through a QUERY, where the same section drops to
-/// SHOULD-strength — "Retrieval or querying those resources SHOULD return
-/// date, datetime, or time values in the (original) format provided by
-/// underlying backend engine, avoiding any format change" — so the instant is
-/// the fact the row may gate on and the spelling is not.
+/// date/time "will be preserved as it was sent by the client, and passed to the
+/// underlying backend engine as is", stated with no RFC 2119 keyword.
+/// [`CellComparison::Instant`] is declared by a case whose cells are read back
+/// through a QUERY, where the same section drops to SHOULD-strength
+/// ("Retrieval or querying those resources SHOULD return date, datetime, or
+/// time values in the (original) format provided by underlying backend engine,
+/// avoiding any format change"), so the instant is the fact the row may gate on
+/// and the spelling is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CellComparison {
@@ -583,19 +567,16 @@ pub enum ItsName {
 ///
 /// ITS-REST `docs/overview/Resources.md` §Resource representation makes
 /// `_type` a general metadata attribute whose "value … MUST be the uppercase
-/// class name from the RM specification", so a member MAY carry one; the
-/// closed set here is the RM `VERSION` family the commit wire can be addressed
-/// with — the class the released member schema titles
-/// (`schemas/ehr/UpdateVersion.yaml`), the class such a member becomes when
-/// committed (RM common `master06-change_control_package.adoc` §Version and
-/// its Subtypes: `ORIGINAL_VERSION`), and the sibling subtype a copied version
-/// is wrapped in (`IMPORTED_VERSION`), which the commit wire declares no shape
-/// for (register AMB-89) and whose refusal is therefore a case.
+/// class name from the RM specification", so a member may carry one. The closed
+/// set is the RM `VERSION` family the commit wire can be addressed with: the
+/// class the released member schema titles (`schemas/ehr/UpdateVersion.yaml`),
+/// the class such a member becomes when committed (RM common
+/// `master06-change_control_package.adoc` §Version and its Subtypes), and the
+/// sibling subtype a copied version is wrapped in, for which the commit wire
+/// declares no shape (register AMB-89).
 ///
-/// A `_type` naming something OUTSIDE the RM `VERSION` family is not a
-/// schedule value at all: the case would be asserting a refusal of a token no
-/// openEHR class name matches, which the released text does not distinguish
-/// from any other malformed body.
+/// A `_type` outside that family is not a schedule value: the released text
+/// does not distinguish such a token from any other malformed body.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MemberVersionType {
     /// `UPDATE_VERSION` — the class the released commit-wire member schema
@@ -639,13 +620,11 @@ impl MemberVersionType {
 
 /// The `audit_change_type` a CONTRIBUTION member's commit audit reports.
 ///
-/// The closed set is the openEHR `audit_change_type` terminology group
-/// verbatim (TERM `SupportTerminology`, group `audit_change_type`; the
-/// `AUDIT_DETAILS.Change_type_valid` invariant of RM common master04 binds
-/// `change_type.defining_code` to it), so a case cannot author a change kind
-/// the terminology does not carry — and, more importantly, a MISTYPED token
-/// can no longer fall through to `249|creation|` and commit an audit the case
-/// never asked for.
+/// The closed set is the openEHR `audit_change_type` terminology group verbatim
+/// (TERM `SupportTerminology`, group `audit_change_type`; RM common master04's
+/// `AUDIT_DETAILS.Change_type_valid` invariant binds `change_type.defining_code`
+/// to it), so a mistyped token cannot fall through to `249|creation|` and commit
+/// an audit the case never asked for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MemberChangeType {
     /// `249|creation|` — first version of a versioned object.
@@ -737,12 +716,10 @@ impl MemberChangeType {
 /// RM common `master06-change_control_package.adoc` §Version Lifecycle fixes
 /// the group verbatim: "the possible values are `532|complete|`,
 /// `553|incomplete|`, `523|deleted|`, `800|inactive|` and `801|abandoned|`"
-/// (TERM `SupportTerminology` group `version_lifecycle_state`). The closed
-/// enum is that group, so a case cannot author a state the terminology does
-/// not carry — a member deliberately probing the out-of-group refusal
+/// (TERM `SupportTerminology` group `version_lifecycle_state`). The closed enum
+/// is that group; a member probing the out-of-group refusal
 /// (`ORIGINAL_VERSION.Lifecycle_state_valid`) authors the whole
-/// `ORIGINAL_VERSION` member verbatim instead, which is what that seam exists
-/// for.
+/// `ORIGINAL_VERSION` member verbatim instead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum VersionLifecycleState {
@@ -806,11 +783,9 @@ impl VersionLifecycleState {
 /// versioned object a `requires.import` precondition mints its handles from.
 ///
 /// RM `ehr_extract` `master05` types `OPENEHR_CONTENT_ITEM.item` as the
-/// `X_VERSIONED_OBJECT` family, one concrete wrapper per versioned-object kind
-/// an extract can carry; an extract legitimately carries several at once (a
-/// whole-EHR clone carries its `X_VERSIONED_EHR_STATUS` beside its content),
-/// so the precondition names WHICH one the case is about rather than guessing
-/// from position.
+/// `X_VERSIONED_OBJECT` family, one concrete wrapper per versioned-object kind.
+/// An extract legitimately carries several at once, so the precondition names
+/// which one the case is about rather than guessing from position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum XVersionedClass {
     /// `X_VERSIONED_COMPOSITION` — a versioned COMPOSITION.
@@ -874,7 +849,6 @@ mod tests {
         assert_eq!(OutcomeKind::ALL.len(), 26);
         assert_eq!(OutcomeKind::Created.class(), OutcomeClass::Success);
         assert_eq!(OutcomeKind::Timeout.class(), OutcomeClass::Error);
-        // The schedule-release additions of FerroEHR#544.
         assert_eq!(OutcomeKind::Accepted.class(), OutcomeClass::Success);
         assert_eq!(OutcomeKind::BadRequest.class(), OutcomeClass::Error);
         assert_eq!(OutcomeKind::MethodNotAllowed.class(), OutcomeClass::Error);
@@ -907,9 +881,9 @@ mod tests {
         assert_eq!(fmt, FormatName::WtFlat);
     }
 
-    /// Every `audit_change_type` member carries its own token and its own
-    /// openEHR code, and the token parses back. A shared code would commit
-    /// one change type under another's identity.
+    /// Every `audit_change_type` member carries its own token and code, and the
+    /// token parses back. A shared code would commit one change type under
+    /// another's identity.
     #[test]
     fn every_audit_change_type_carries_its_own_code_and_round_trips() {
         let tokens: BTreeSet<&str> = MemberChangeType::ALL.iter().map(|c| c.token()).collect();

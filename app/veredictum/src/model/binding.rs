@@ -105,20 +105,15 @@ pub enum StripRule {
     WeakQuotes,
 }
 
-/// Post-extraction transform over a captured value. The grammar is closed;
-/// every member addresses a component of the value the wire actually carries.
+/// Post-extraction transform over a captured value; the grammar is closed.
 ///
-/// `root-uid` and `creating-system-id` decompose an `OBJECT_VERSION_ID`,
-/// whose lexical form the ITS-REST overview fixes as
-/// `object_id :: creating_system_id :: version_tree_id`
-/// (`Resources.md` §Identifier types: "The `version_uid` uniquely identifies
-/// a VERSION, in the lexical form of `object_id :: creating_system_id ::
-/// version_tree_id`"). `uppercase` exists so a case can author a
-/// case-VARIANT of a captured identifier (e.g. an `If-Match` naming the same
-/// version in different case — BASE `master05` §"Composite Identifiers and
-/// Case" makes two identifiers "identical apart from case … identify the
-/// same thing"), which the reference grammar itself cannot express
-/// (issue FerroEHR#403).
+/// `root-uid` and `creating-system-id` decompose an `OBJECT_VERSION_ID`, whose
+/// lexical form ITS-REST `Resources.md` §Identifier types fixes as "the
+/// lexical form of `object_id :: creating_system_id :: version_tree_id`".
+/// `uppercase` lets a case author a case-variant of a captured identifier,
+/// which the reference grammar cannot express (BASE `master05` §"Composite
+/// Identifiers and Case": two identifiers "identical apart from case …
+/// identify the same thing").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum TransformRule {
     /// The leading `object_id` — the `VERSIONED_OBJECT` identifier.
@@ -183,10 +178,9 @@ pub struct WireCapture {
 /// `present` · `present-with-body` · `absent` · `negotiated` ·
 /// `latest-version-uid` · `pattern:<regex>` · a literal string.
 ///
-/// `present?` is NOT a member: it is the authored shorthand for
-/// [`HeaderExpectation`]'s `{ match: present, optional: true }`, so
-/// presence-optionality is one modifier with one meaning instead of a matcher
-/// that silently means something different from every other one.
+/// `present?` is not a member: it is the authored shorthand for
+/// [`HeaderExpectation`]'s `{ match: present, optional: true }`, which keeps
+/// presence-optionality one modifier with one meaning.
 #[derive(Debug, Clone, PartialEq)]
 pub enum HeaderMatcher {
     /// The header must be present, with any value.
@@ -266,35 +260,26 @@ impl<'de> Deserialize<'de> for HeaderMatcher {
 ///   applies: { its_rest: ">=1.1.0" }   # the release the rule is dated to
 /// ```
 ///
-/// **`optional`** separates the strength of PRESENCE from the strength of
-/// FORM, because the released text assigns them differently. ITS-REST
-/// `specifications/docs/overview/Requests_and_responses.md` §"`ETag` and
-/// Last-Modified": "Both `ETag` and `Last-Modified` SHOULD be included in
-/// responses for VERSION, `VERSIONED_OBJECT`, or other resources that have
-/// versioning or unique state identifiers" — presence is a SHOULD; while
-/// §"Deprecated headers" makes the form a MUST: "all `ETag` headers that hold
-/// a resource identifier MUST include a weakness indicator `W/`". An optional
-/// expectation is skipped entirely when the header is absent (or blank) and
-/// judged in full when it is there, so a SHOULD is never enforced as a MUST
-/// and a MUST is never lost. `present?` is the authored shorthand for
-/// `{ match: present, optional: true }`.
+/// `optional` separates the strength of presence from the strength of form,
+/// because ITS-REST `specifications/docs/overview/Requests_and_responses.md`
+/// assigns them differently: §"`ETag` and Last-Modified" makes presence a
+/// SHOULD ("Both `ETag` and `Last-Modified` SHOULD be included in responses for
+/// VERSION, `VERSIONED_OBJECT`, or other resources that have versioning or
+/// unique state identifiers"), while §"Deprecated headers" makes the form a
+/// MUST ("all `ETag` headers that hold a resource identifier MUST include a
+/// weakness indicator `W/`"). An optional expectation is skipped when the
+/// header is absent or blank and judged in full when it is there.
 ///
-/// **`applies`** carries a version floor for the RULE, because a released
-/// requirement can be dated by its own text. The same overview chapter dates
-/// two of them to Release 1.1.0: §"Deprecated headers" ("The `ETag` response
-/// header was used without a weakness indicator `W/`. This is now deprecated,
-/// all `ETag` headers that hold a resource identifier MUST include a weakness
-/// indicator `W/`") with §"`ETag` and Last-Modified" naming the release
-/// ("DEPRECATION: Prior to Release 1.1.0, the `ETag` header was used without a
-/// weakness indicator `W/`"), and §Location ("DEPRECATION: Prior to Release
-/// 1.1.0, the `Location` header was used to indicate the canonical location of
-/// a representation in a response"). A party declaring an earlier ITS-REST
-/// release conforms to the text of THAT release, so a dated matcher is not
-/// applied to it — while the operation itself is still driven and every other
-/// expectation on the outcome still bites. The floor belongs HERE and not on
-/// the case or on the binding: it is the header rule that the release dates,
-/// not the operation, and putting it a level up would take a party out of
-/// scope for behaviour it does implement.
+/// `applies` carries a version floor for the rule, because a released
+/// requirement can be dated by its own text. The same chapter dates the `W/`
+/// indicator and the `Location` semantics to Release 1.1.0 ("DEPRECATION: Prior
+/// to Release 1.1.0, the `ETag` header was used without a weakness indicator
+/// `W/`"; "DEPRECATION: Prior to Release 1.1.0, the `Location` header was used
+/// to indicate the canonical location of a representation in a response"). A
+/// party declaring an earlier release conforms to the text of that release, so
+/// the dated matcher is not applied while the operation is still driven. The
+/// floor belongs on the matcher rather than the case or the binding: the
+/// release dates the header rule, not the operation.
 #[derive(Debug, Clone)]
 pub struct HeaderExpectation {
     /// The value-side matcher.
@@ -364,16 +349,14 @@ impl<'de> Deserialize<'de> for HeaderExpectation {
 /// Every expectation declared for ONE response header, judged conjunctively.
 ///
 /// The authored form is a single expectation (a bare matcher string or the
-/// mapping form) or a SEQUENCE of them. A sequence exists because the released
-/// text can put two rules of DIFFERENT strength or DIFFERENT dating on the same
-/// header, and one expectation carries one `optional` and one `applies`. The
-/// stale-precondition `ETag` is the case: ITS-REST
-/// `Requests_and_responses.md` §"If-Match and accidental overwrites" makes the
-/// value the latest `version_uid` for every release, while §"Deprecated
+/// mapping form) or a sequence of them. A sequence exists because one
+/// expectation carries one `optional` and one `applies`, while the released
+/// text can date two rules on the same header differently: ITS-REST
+/// `Requests_and_responses.md` §"If-Match and accidental overwrites" makes
+/// `ETag` the latest `version_uid` for every release, while §"Deprecated
 /// headers" makes the `W/` weakness indicator a MUST that §"`ETag` and
-/// Last-Modified" dates to Release 1.1.0. Folding them into one expectation
-/// would either date the identity rule out of scope for a 1.0.3 party or apply
-/// the form rule to it; declared as two, each keeps its own ground.
+/// Last-Modified" dates to Release 1.1.0. Declared as two, each keeps its own
+/// ground.
 #[derive(Debug, Clone)]
 pub struct HeaderExpectations(Vec<HeaderExpectation>);
 
@@ -603,19 +586,17 @@ impl<'de> Deserialize<'de> for RequestBody {
 
 /// One query parameter's authored value.
 ///
-/// A scalar template is the single-valued form: one `name=value` pair, or
-/// none when its optional reference (`${x?}`) is unbound. A YAML **sequence**
-/// of templates is the repeated (RFC 6570 exploded, `{?p*}`) form: each
-/// member contributes its own `name=value` pair, in authored order, and a
-/// member whose optional reference is unbound is simply absent — so one
-/// authored sequence serves every arity up to its length. A member that
-/// resolves to a LIST capture expands element-wise.
+/// A scalar template is the single-valued form: one `name=value` pair, or none
+/// when its optional reference (`${x?}`) is unbound. A YAML sequence of
+/// templates is the repeated (RFC 6570 exploded, `{?p*}`) form: each member
+/// contributes its own pair in authored order, an unbound member is absent, and
+/// a member resolving to a list capture expands element-wise.
 ///
-/// Repeatability is declared HERE, in the wire layer, and never inferred
-/// from what a case happens to bind: a case core speaks SM operations and
-/// outcome kinds only, so it must not be able to change the serialization
-/// form of a request by passing a list. The one released use is the admin
-/// bulk delete's subset selector (`/admin/ehr/all{?ehr_id*}`).
+/// Repeatability is declared here, in the wire layer, and never inferred from
+/// what a case binds: a case core speaks SM operations and outcome kinds, so it
+/// must not be able to change a request's serialization form by passing a list.
+/// The one released use is the admin bulk delete's subset selector
+/// (`/admin/ehr/all{?ehr_id*}`).
 #[derive(Debug, Clone, PartialEq)]
 pub enum QueryValue {
     /// One pair (the single-valued form).
@@ -779,12 +760,11 @@ pub struct UnrealizedDecl {
 /// openEHR specification governs — our own design/extension, declared as a
 /// family of `vocab/wire_surface.yaml` `served_extensions`.
 ///
-/// A binding carrying this block is still a full wire realization (request +
-/// outcomes, executed like any other), but it is fenced off from every
-/// released-wire judgement: the released-path claim check skips it, and the
-/// capabilities its cases carry must be `realization: extension` in the
-/// capability matrix, which may never be `required`. Wire-level ITS-REST
-/// conformance therefore never rests on it; only the CAPABILITY verdict does.
+/// A binding carrying this block is a full wire realization (request +
+/// outcomes, executed like any other) fenced off from every released-wire
+/// judgement: the released-path claim check skips it, and the capabilities its
+/// cases carry must be `realization: extension`, which may never be
+/// `required`. Only the capability verdict rests on it.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExtensionDecl {
@@ -816,18 +796,13 @@ pub struct OperationBinding {
     /// binding. Absent for the sole realization of an operation.
     #[serde(default)]
     pub variant: Option<String>,
-    /// The OPERATION's spec-version floor: the releases on which this wire
-    /// realization exists at all (an endpoint, request header spelling, or
-    /// request shape a later release introduced). ENFORCED at selection time
-    /// (`crate::run`): a case whose flow drives a binding whose floor the
-    /// party's declared versions do not satisfy is not-applicable with that
-    /// citation, never driven against a server the release never asked to
-    /// serve it.
+    /// The operation's spec-version floor: the releases on which this wire
+    /// realization exists at all. Enforced at selection time (`crate::run`): a
+    /// case driving a binding whose floor the party's declared versions do not
+    /// satisfy is not-applicable with that citation.
     ///
-    /// Distinct from [`HeaderExpectation::applies`], which dates one RESPONSE
-    /// expectation rather than the operation: a release that only changed how
-    /// an answer must look leaves the operation itself in scope, so the floor
-    /// goes on the matcher and the case still runs.
+    /// Distinct from [`HeaderExpectation::applies`], which dates one response
+    /// expectation rather than the operation.
     #[serde(default)]
     pub applies: Option<Applies>,
     /// Present instead of `request` when the released ITS publishes no wire
@@ -873,10 +848,9 @@ impl OperationBinding {
         self.extension.is_some()
     }
 
-    /// Realization-shape invariant: exactly one of `unrealized` or the full
-    /// wire form (`request` + `outcomes`), and an `extension` declaration
-    /// only on the realized form (an extension route IS a realization — the
-    /// two blocks are mutually exclusive by construction).
+    /// Checks the realization-shape invariant: exactly one of `unrealized` or
+    /// the full wire form (`request` + `outcomes`), with an `extension`
+    /// declaration only on the realized form.
     ///
     /// # Errors
     /// Returns a message naming the violated invariant.
@@ -991,8 +965,8 @@ mod tests {
             WireFrom::parse("capture version_uid").unwrap(),
             WireFrom::Capture(_)
         ));
-        assert!(WireFrom::parse("body ehr_id.value").is_err()); // unquoted
-        assert!(WireFrom::parse("body-or-location").is_err()); // outside the grammar: express via fallback
+        assert!(WireFrom::parse("body ehr_id.value").is_err());
+        assert!(WireFrom::parse("body-or-location").is_err()); // express via fallback
         assert!(WireFrom::parse("jsonpath $.x").is_err());
     }
 
@@ -1010,8 +984,7 @@ mod tests {
             serde_json::from_value::<HeaderMatcher>(serde_json::json!("pattern:([unclosed"))
                 .is_err()
         );
-        // `present?` is the expectation-level shorthand, never a matcher —
-        // one modifier with one meaning.
+        // `present?` is the expectation-level shorthand, never a matcher.
         assert!(serde_json::from_value::<HeaderMatcher>(serde_json::json!("present?")).is_err());
     }
 
@@ -1023,7 +996,6 @@ mod tests {
         assert!(!short.optional);
         assert!(short.applies.is_none());
 
-        // `present?` = optional presence, no form assertion.
         let sugar: HeaderExpectation =
             serde_json::from_value(serde_json::json!("present?")).unwrap();
         assert_eq!(sugar.matcher, HeaderMatcher::Present);
@@ -1044,7 +1016,6 @@ mod tests {
             Some(">=1.1.0")
         );
 
-        // The mapping form is closed and `match` is mandatory.
         assert!(
             serde_json::from_value::<HeaderExpectation>(serde_json::json!({ "optional": true }))
                 .is_err()
@@ -1167,7 +1138,6 @@ mod tests {
         assert!(!b.is_unrealized());
         assert!(b.check_invariants().is_ok());
 
-        // extension + unrealized is unrepresentable as a coherent binding.
         let mut both: OperationBinding = serde_json::from_value(shape(serde_json::json!({
             "unrealized": {
                 "reason": "r", "source": "s", "ambiguity": "AMB-32"
@@ -1215,17 +1185,14 @@ mod tests {
             Some("A::B::1")
         );
 
-        // No middle segment => NO capture: a bare versioned_object_uid must
-        // never bind as if it were a creating system id.
+        // A bare versioned_object_uid must never bind as a creating system id.
         assert_eq!(
             TransformRule::CreatingSystemId.apply("8849182c-82ad-4088-a07f-48ead4180515"),
             None
         );
         assert_eq!(TransformRule::CreatingSystemId.apply("uid::"), None);
-        // …while root-uid still answers on the same truncated value.
         assert_eq!(TransformRule::RootUid.apply("uid").as_deref(), Some("uid"));
 
-        // The token is the authored form and the grammar stays closed.
         let spec: WireCapture = serde_json::from_value(serde_json::json!({
             "from": "header ETag", "strip": "weak-quotes",
             "transform": "creating-system-id"
@@ -1257,13 +1224,10 @@ mod tests {
         assert!(!single.is_repeated());
         assert_eq!(single.templates().len(), 1);
 
-        // An empty sequence declares nothing; a non-string member is outside
-        // the template grammar; a non-string, non-sequence value is neither.
         for bad in [
             serde_json::json!({ "method": "GET", "path": "/x", "query": { "p": [] } }),
             serde_json::json!({ "method": "GET", "path": "/x", "query": { "p": [1] } }),
             serde_json::json!({ "method": "GET", "path": "/x", "query": { "p": 1 } }),
-            // an illegal reference inside a member is still rejected
             serde_json::json!({ "method": "GET", "path": "/x", "query": { "p": ["${step2.body}"] } }),
         ] {
             assert!(

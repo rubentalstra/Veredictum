@@ -139,14 +139,10 @@ impl<'a> TranscriptPlayer<'a> {
         }
     }
 
-    /// Select the operation binding with the SAME variant discipline as the
+    /// Selects the operation binding under the same variant discipline as the
     /// live driver (`HttpDriver::binding_for_variant`): a step's `variant`
-    /// selects the binding declaring it; a variant-less step (or a variant
-    /// with no dedicated binding) resolves the variant-less binding. Taking
-    /// the first `sm_operation` match regardless of variant let an
-    /// alphabetically-earlier variant file (its outcome map a deliberate
-    /// subset) shadow the base binding and mis-classify replayed statuses
-    /// as unmapped.
+    /// selects the binding declaring it, and a variant-less step — or a variant
+    /// with no dedicated binding — resolves the variant-less binding.
     fn binding_for(
         &self,
         case: &CaseCore,
@@ -173,11 +169,9 @@ impl<'a> TranscriptPlayer<'a> {
     ///
     /// A transcript records the response side of the flow's own exchanges and
     /// nothing else: no payload committed earlier in the row, no corpus, no
-    /// versioned read, no instance posture. An
-    /// [`ReplayJudgement::Unrecorded`] assertion is therefore unevaluable
-    /// here, and answering it `Ok` would let a pack entry claim a reproduced
-    /// verdict over an assertion nobody ran — so the entry is refused, naming
-    /// the case, the step and every family it could not judge.
+    /// versioned read, no instance posture. A [`ReplayJudgement::Unrecorded`]
+    /// assertion is unevaluable here, so the entry is refused by name rather
+    /// than claiming a verdict over an assertion nobody ran.
     fn refuse_unrecorded(case: &CaseCore, step: &FlowStep) -> Result<(), String> {
         let unjudgeable: Vec<&str> = step
             .assertions
@@ -312,10 +306,9 @@ impl StepDriver for TranscriptPlayer<'_> {
         if let outcome::Observation::Kind(kind) = observation {
             self.bind_recorded_captures(step, binding, recorded, kind, vars);
         }
-        // The step's assertions decide the row only when the observation met
-        // the expectation (law b aborts the row otherwise, and `run_case`
-        // never reads the list), so that is exactly when the replay must be
-        // able to judge them.
+        // Law b aborts the row on a mismatch and `run_case` never reads the
+        // assertion list then, so the replay must be able to judge the
+        // assertions exactly when the observation met the expectation.
         if !matches!(
             outcome::judge(expected, &observation),
             StepJudgement::Continue
@@ -356,10 +349,8 @@ impl StepDriver for TranscriptPlayer<'_> {
         _row: usize,
         _vars: &mut VarStore,
     ) -> Result<crate::exec::Provisioned, String> {
-        // Provisioning is pre-recorded state in the pack, and the transcript
-        // records no provisioned handles — so a case that READS one would
-        // resolve against a value the recorded exchanges never used. The
-        // judge-or-refuse contract refuses the entry by name instead.
+        // The transcript records no provisioned handles, so a case that READS
+        // one would resolve against a value the exchanges never used.
         let minted = case.requires.minted_handles();
         if minted.is_empty() {
             return Ok(crate::exec::Provisioned::Ready);
@@ -384,14 +375,11 @@ impl StepDriver for TranscriptPlayer<'_> {
     /// Refuses any judged postcondition instead of reproducing a verdict it
     /// never checked.
     ///
-    /// A transcript records the flow's own exchanges and nothing else: the
-    /// player issues no versioned read, resolves no corpus reference and
-    /// knows no instance posture, so every [`PostconditionRole::Judged`]
-    /// family is unevaluable here. Answering an empty list would let a pack
-    /// entry claim a reproduced verdict over assertions no one ran, so the
-    /// entry is refused by name. The aggregate family is law e (see
-    /// [`TranscriptPlayer::aggregates`]) and the informative families are
-    /// never pass/fail, so neither blocks a replay.
+    /// The player issues no versioned read, resolves no corpus reference and
+    /// knows no instance posture, so every [`PostconditionRole::Judged`] family
+    /// is unevaluable here and the entry is refused by name. The aggregate
+    /// family is law e ([`TranscriptPlayer::aggregates`]) and the informative
+    /// families are never pass/fail, so neither blocks a replay.
     fn postconditions(
         &mut self,
         case: &CaseCore,
@@ -474,9 +462,8 @@ fn extract_scalar(
     ) {
         value = value.trim_start_matches("W/").trim_matches('"').to_owned();
     }
-    // The same closed transform grammar the live driver applies — one
-    // implementation, so a replayed transcript cannot judge a capture
-    // differently from the live run that recorded it.
+    // One implementation of the closed transform grammar, so a replay cannot
+    // judge a capture differently from the live run that recorded it.
     if let Some(transform) = spec.transform {
         value = transform.apply(&value)?;
     }

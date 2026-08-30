@@ -131,12 +131,9 @@ fn verify_pgp(
         .map_err(|e| format!("pgp signature: {e}"))?;
 
     // A signature by a signing-flagged SUBKEY is a signature by the
-    // certificate: RFC 9580 §10.1 defines a transferable public key as a
-    // primary key plus its subkeys, and §5.2.3.29 key flag 0x02 marks a key as
-    // usable to sign data. `rpgp`'s `VerifyingKey for SignedPublicKey` consults
-    // `primary_key` alone, so verifying only against it refuses a signature the
-    // declared certificate legitimately covers — which is a verifier defect,
-    // never a finding about the system under test.
+    // certificate: RFC 9580 §10.1 makes a transferable public key a primary key
+    // plus its subkeys, and §5.2.3.29 key flag 0x02 marks a key usable to sign.
+    // `rpgp`'s `VerifyingKey for SignedPublicKey` consults `primary_key` alone.
     if sig.verify(&key, bytes).is_ok() {
         return Ok(true);
     }
@@ -168,8 +165,7 @@ mod tests {
 
     #[test]
     fn digest_verifies_and_detects_tamper() {
-        // Sign-side: compute the digest of the canonical form the way a
-        // conformant server must, then confirm verify() accepts it.
+        // The sign side, computed the way a conformant server must.
         let env = json!({ "_type": "ORIGINAL_VERSION", "data": { "b": 2, "a": 1 } });
         let canonical = canonical_form(&env).unwrap();
         let good = format!(
@@ -177,20 +173,13 @@ mod tests {
             base64::engine::general_purpose::STANDARD.encode(Sha256::digest(canonical.as_bytes()))
         );
         assert!(verify(&env, &good, &digest_mode()).unwrap());
-        // A tampered signature body must fail.
         assert!(!verify(&env, "sha256:AAAA", &digest_mode()).unwrap());
-        // A tampered envelope (different data) must fail against the old digest.
         let env2 = json!({ "_type": "ORIGINAL_VERSION", "data": { "b": 3, "a": 1 } });
         assert!(!verify(&env2, &good, &digest_mode()).unwrap());
     }
 
-    // A signature made by the certificate's signing SUBKEY must verify.
-    //
-    // The corpus certificate carries one, the server signs with it by
-    // capability, and `rpgp` verifies against the primary key alone — so a
-    // verifier written the obvious way reports a conformant server as
-    // unverifiable. Three CNF rows failed exactly that way, unnoticed because
-    // nothing pinned which key component signs.
+    /// A signature made by the certificate's signing subkey verifies, since the
+    /// corpus certificate carries one and a server signs with it by capability.
     #[test]
     #[expect(
         clippy::panic_in_result_fn,
@@ -212,7 +201,7 @@ mod tests {
         )?)?;
         let public_armored = std::fs::read_to_string(keys.join("cnf-signing.pub.asc"))?;
 
-        // Pick the subkey by CAPABILITY, the way the server does — an
+        // Pick the subkey by CAPABILITY, the way the server does: an
         // encryption subkey signing would be a key-usage violation.
         let subkey = secret
             .secret_subkeys
@@ -234,12 +223,10 @@ mod tests {
             verify_pgp(data, &sig, &public_armored)?,
             "a signature by the certificate's signing subkey must verify"
         );
-        // The negative direction: a different payload must still fail, so the
-        // subkey fallback cannot pass by accepting everything.
+        // A different payload still fails, so the subkey fallback cannot pass
+        // by accepting everything.
         assert!(!verify_pgp(b"tampered", &sig, &public_armored)?);
 
-        // The ordinary direction the subkey fallback sits behind: a signature
-        // by the PRIMARY key verifies against the certificate directly.
         let primary = DetachedSignature::sign_binary_data(
             OsRng,
             &secret.primary_key,
@@ -258,8 +245,6 @@ mod tests {
 
     #[test]
     fn present_is_signature_nonempty() {
-        // `present` is evaluated by the driver as a non-empty signature field;
-        // this pins the canonical-form contract the driver relies on.
         let env = json!({ "signature": "sha256:abc", "data": {} });
         assert!(
             env.get("signature")
@@ -270,9 +255,9 @@ mod tests {
     }
 
     /// The digest posture is the SUT's own declaration, so an algorithm or an
-    /// encoding this verifier does not implement is a LOUD interpreter error
-    /// naming the token — never a `false` that would publish a conformant
-    /// server as failing its signature case.
+    /// encoding this verifier does not implement is a loud interpreter error
+    /// naming the token, never a `false` that would publish a conformant server
+    /// as failing its signature case.
     #[test]
     fn an_undeclarable_digest_posture_is_an_error_not_a_verdict() {
         let env = json!({ "_type": "ORIGINAL_VERSION", "data": { "a": 1 } });
@@ -299,16 +284,13 @@ mod tests {
     }
 
     /// The declared prefix is stripped before the body is compared, and a
-    /// signature that omits it is compared as written — both directions of the
-    /// self-describing wire form the SUT declares.
+    /// signature that omits it is compared as written.
     #[test]
     fn the_declared_prefix_and_the_declared_encoding_both_drive_the_comparison() {
         let env = json!({ "_type": "ORIGINAL_VERSION", "data": { "a": 1 } });
         let canonical = canonical_form(&env).unwrap();
         let digest = Sha256::digest(canonical.as_bytes());
 
-        // base64url is the second declared encoding; its body differs from the
-        // standard alphabet's, so a mode mix-up cannot pass unnoticed.
         let url_safe = SigningMode::Digest {
             algorithm: "sha256".to_owned(),
             encoding: "base64url".to_owned(),
@@ -326,9 +308,8 @@ mod tests {
             "a standard-alphabet body must not satisfy a base64url declaration"
         );
 
-        // The declared prefix is stripped when the signature carries it, and a
-        // signature without it is compared as written — so the digest body,
-        // not the prefix, is what the comparison turns on.
+        // The comparison turns on the digest body, so a signature carrying the
+        // declared prefix and one omitting it both compare the same body.
         let prefixed = SigningMode::Digest {
             algorithm: "sha256".to_owned(),
             encoding: "base64".to_owned(),
@@ -363,7 +344,6 @@ mod tests {
             "{signature_failure}"
         );
 
-        // The same key reached through the public `verify` entry point.
         let mode = SigningMode::Pgp {
             public_key: public_armored,
         };
@@ -397,8 +377,8 @@ mod tests {
             }
         );
 
-        // An unknown mode is refused rather than silently defaulted: a typo in
-        // the declaration must not choose a posture for the deployment.
+        // A typo in the declaration must not choose a posture for the
+        // deployment, so an unknown mode is refused rather than defaulted.
         assert!(
             serde_json::from_value::<SigningMode>(json!({ "mode": "hmac", "key": "k" })).is_err()
         );

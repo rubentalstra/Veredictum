@@ -3,82 +3,64 @@
 
 //! Response-body selector evaluation.
 //!
-//! This is the executed half of the catalogue's
-//! `outcomes.*.body` declarations (issue FerroEHR#415: the selectors were parsed by
-//! the binding model but never evaluated, so every body declaration was
-//! documentation, not an assertion — the same defect issue FerroEHR#403 closed for
-//! the header matchers in [`crate::exec::headers`]).
+//! The executed half of the catalogue's `outcomes.*.body` declarations.
 //!
-//! Evaluation runs ONLY when the step's observation matched the EXPECTED
-//! outcome kind (the declared selector belongs to that outcome's wire
-//! expectation); a violated selector is a conformance FAILURE of the row
-//! (law (b) — the same channel as the RM/header assertion failures), never
-//! an inconclusive error: the exchange completed, and the spec sentence the
-//! binding cites assigns the body.
+//! Evaluation runs only when the step's observation matched the expected
+//! outcome kind, since the declared selector belongs to that outcome's wire
+//! expectation. A violated selector is a conformance failure of the row
+//! (law (b)), never an inconclusive error: the exchange completed, and the spec
+//! sentence the binding cites assigns the body.
 //!
-//! Selector semantics (the closed [`BodySelector`] vocabulary). Each one is
-//! deliberately the FLOOR the ITS-REST docs text (the wire oracle) supports —
-//! a MAY is never turned into an assertion:
+//! Selector semantics of the closed [`BodySelector`] vocabulary, each the floor
+//! the ITS-REST docs text supports, since a MAY is never an assertion:
 //!
-//! - `present` — the response carries content. "Content" is any body other
-//!   than none, JSON `null`, or an all-whitespace string (the driver already
-//!   maps an empty response text to no body); the selector says nothing
-//!   about the body's shape, so it is the one selector that judges a
-//!   non-JSON (canonical-XML, ADL2 text) body too.
-//! - `absent` — the response carries no content, by the same definition.
-//!   Grounded per declaration by the binding's cited sentence (e.g.
-//!   `Requests_and_responses.md` §HTTP status codes, the 204 row: "The
-//!   request has been fulfilled and there is no additional content to send
-//!   in the response payload body").
-//! - `error_loose` — the loose error-detail shape. The detail itself is a
-//!   MAY: "For `4xx` and `5xx` status codes, services MAY return additional
-//!   error details if the `Prefer: return=representation` header is present
-//!   in the request" (`Requests_and_responses.md` §HTTP status codes). So a
-//!   missing body, a non-JSON body, and a non-object JSON body ALL pass, and
-//!   nothing is judged at all unless the request actually sent
-//!   `Prefer: return=representation`. What IS asserted, when the service
-//!   does return a JSON object under that preference, is the one member the
-//!   section's worked example fixes: a non-empty `message` string.
-//! - `result_set_body` — the body is a `RESULT_SET`: a JSON object carrying
-//!   the `rows` array (ITS-REST query `Response.md` §`RESULT_SET` response →
-//!   `schemas/query/ResultSet.yaml`, whose only `required` member is
-//!   `rows`). This is the same discriminator the normative comparator uses
-//!   ([`crate::exec::resultset`]), so a selector pass and a `result_set`
-//!   assertion can never disagree about what a result set is.
-//! - `negotiated` — the body's media type is the negotiated one:
-//!   "Proper header `Content-Type: application/json` MUST be present in the
-//!   response of the service unless the response has no content body (HTTP
-//!   status code `204`)" (`Resources.md` §JSON Format; §XML Format and
-//!   §Simplified Formats carry the identical sentence for their types). The
-//!   MUST is exempted for a no-content body, so a body-less response passes;
-//!   with no `Accept` sent there is nothing sound to compare against (the
-//!   endpoint default was negotiated) and the selector passes; an `Accept`
-//!   offering several media ranges passes on ANY of them, and a wildcard
-//!   range (`*/*`, `type/*`) makes every type acceptable.
+//! - `present` — the response carries content: any body other than none, JSON
+//!   `null`, or an all-whitespace string. Nothing is said about shape, so this
+//!   is the one selector that judges a non-JSON body too.
+//! - `absent` — no content, by the same definition. Grounded per declaration by
+//!   the binding's cited sentence (`Requests_and_responses.md` §HTTP status
+//!   codes, the 204 row: "The request has been fulfilled and there is no
+//!   additional content to send in the response payload body").
+//! - `error_loose` — the loose error-detail shape, a MAY: "For `4xx` and `5xx`
+//!   status codes, services MAY return additional error details if the
+//!   `Prefer: return=representation` header is present in the request"
+//!   (`Requests_and_responses.md` §HTTP status codes). A missing, non-JSON or
+//!   non-object body passes, and nothing is judged unless the request sent
+//!   `Prefer: return=representation`. Under that preference a JSON object must
+//!   carry the one member the section's worked example fixes, a non-empty
+//!   `message` string.
+//! - `result_set_body` — a JSON object carrying the `rows` array (ITS-REST
+//!   query `Response.md` §`RESULT_SET` response → `schemas/query/ResultSet.yaml`,
+//!   whose only `required` member is `rows`). The same discriminator the
+//!   normative comparator uses ([`crate::exec::resultset`]).
+//! - `negotiated` — the body's media type is the negotiated one: "Proper header
+//!   `Content-Type: application/json` MUST be present in the response of the
+//!   service unless the response has no content body (HTTP status code `204`)"
+//!   (`Resources.md` §JSON Format; §XML Format and §Simplified Formats carry
+//!   the identical sentence). A body-less response passes under the stated
+//!   exemption; with no `Accept` sent there is nothing sound to compare
+//!   against; several offered ranges pass on any of them, and a wildcard range
+//!   makes every type acceptable.
 //! - `prefer_conditional` — the §Representation details negotiation contract,
-//!   branched on the `Prefer` the driver actually SENT:
+//!   branched on the `Prefer` the driver sent:
 //!   * `return=representation` — "the response body SHOULD contain the full
 //!     representation of the resource" (§Prefer minimal, identifier or full
 //!     representation response), so an empty body is a violation. Only
-//!     non-emptiness is asserted: "full representation" is not a shape the
-//!     docs text pins format-independently, and the resource assertions on
-//!     the case step are where a body's content is judged.
+//!     non-emptiness is asserted, because the docs text pins no
+//!     format-independent shape for "full representation".
 //!   * `return=identifier` — "This is a variant of preference that implies
 //!     minimal response semantics, but with a non-empty response body (i.e.
-//!     the status will be `201 Created` or `200 OK`, never `204 No
-//!     Content`). … when `application/json` is requested as above, the
-//!     response body will be a single JSON object with a single `uid`
-//!     attribute" (§Prefer only identifier). Asserted conservatively: a
-//!     non-empty body, and — for a JSON body — a `uid` member. The "single
-//!     attribute" half is NOT asserted (a service adding a member is not
-//!     refuted by any MUST), and a non-JSON body is left to the negotiated
-//!     selector.
-//!   * `return=minimal`, an unrecognized preference, or no `Prefer` at all —
-//!     never fails. The released text leaves the minimal branch open on both
-//!     sides: "The HTTP status is typically `201 Created`. If no response
-//!     body is returned, the service SHOULD use `204 No Content`" — neither
-//!     presence nor absence is assigned (the same silence the catalogue
-//!     carries as the `header-prefer-return-minimal` wire-surface element).
+//!     the status will be `201 Created` or `200 OK`, never `204 No Content`). …
+//!     when `application/json` is requested as above, the response body will be
+//!     a single JSON object with a single `uid` attribute" (§Prefer only
+//!     identifier). Asserted conservatively: a non-empty body, plus a `uid`
+//!     member for a JSON body. The "single attribute" half is not asserted, and
+//!     a non-JSON body is left to the negotiated selector.
+//!   * `return=minimal`, an unrecognized preference, or no `Prefer` — never
+//!     fails. The released text leaves the branch open on both sides: "The HTTP
+//!     status is typically `201 Created`. If no response body is returned, the
+//!     service SHOULD use `204 No Content`". The catalogue carries that silence
+//!     as the `header-prefer-return-minimal` wire-surface element.
 
 #![expect(
     clippy::disallowed_types,
@@ -146,8 +128,7 @@ fn judge_error_loose(body: Option<&Value>, ctx: &RequestContext<'_>) -> Option<S
     if return_preference(ctx.prefer) != Some(ReturnPreference::Representation) {
         return None;
     }
-    // A missing / non-JSON / non-object body is the MAY not exercised —
-    // never a failure.
+    // A missing, non-JSON or non-object body is the MAY not exercised.
     let Some(Value::Object(map)) = content(body) else {
         return None;
     };
@@ -197,10 +178,9 @@ fn judge_negotiated(
     response_headers: &BTreeMap<String, String>,
     ctx: &RequestContext<'_>,
 ) -> Option<String> {
-    // No Accept sent — the endpoint default was negotiated; nothing sound to
-    // compare against.
+    // With no Accept the endpoint default was negotiated, so there is nothing
+    // sound to compare against; the MUST is exempted for a body-less response.
     let accept = ctx.accept?;
-    // The MUST is exempted for a response with no content body.
     content(body)?;
     let offered: Vec<&str> = accept.split(',').map(media_token).collect();
     if offered.iter().any(|t| t.ends_with("/*") || *t == "*") {
@@ -242,8 +222,8 @@ fn judge_prefer_conditional(body: Option<&Value>, ctx: &RequestContext<'_>) -> O
                     .to_owned(),
             ),
         },
-        // return=minimal, an unrecognized preference, or none: the released
-        // text assigns neither presence nor absence.
+        // The released text assigns the minimal branch neither presence nor
+        // absence, and an unrecognized preference is not a declaration.
         _ => None,
     }
 }
@@ -260,9 +240,8 @@ enum ReturnPreference {
 fn return_preference(prefer: Option<&str>) -> Option<ReturnPreference> {
     prefer?.split(',').find_map(|part| {
         let token = part.split(';').next().unwrap_or(part).trim();
-        // The preference NAME is case-insensitive (RFC 7240 §2), so the
-        // prefix is matched case-insensitively rather than with a literal
-        // `strip_prefix`.
+        // The preference NAME is case-insensitive (RFC 7240 §2), so a literal
+        // `strip_prefix` would miss `Return=`.
         let name_len = "return=".len();
         if !token
             .get(..name_len)

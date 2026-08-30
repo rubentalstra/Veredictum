@@ -98,18 +98,17 @@ impl VarStore {
             }
         };
         match expr {
-            // strictly before the earliest the commit can have happened
+            // `before` reads `lo` and `after` reads `hi`, so each stays outside
+            // the whole window the commit could have landed in.
             TimeExpr::Before(t) => instant(t)?
                 .0
                 .checked_sub(1)
                 .ok_or_else(|| "instant arithmetic underflow".to_owned()),
-            // strictly after the latest the commit can have happened
             TimeExpr::After(t) => instant(t)?
                 .1
                 .checked_add(1)
                 .ok_or_else(|| "instant arithmetic overflow".to_owned()),
             TimeExpr::Between(t1, t2) => {
-                // midpoint of the gap between the two commit windows
                 let (a, b) = (instant(t1)?.1, instant(t2)?.0);
                 #[expect(
                     clippy::integer_division,
@@ -169,10 +168,8 @@ mod tests {
         );
     }
 
-    /// A LIVE commit is known only to an interval, so `before` resolves from
-    /// the earliest the commit can have happened and `after` from the latest:
-    /// both stay sound against a server whose clock sits anywhere inside the
-    /// window the runner observed.
+    /// A live commit is known only to an interval, so both ends stay sound
+    /// against a server whose clock sits anywhere inside the observed window.
     #[test]
     fn a_commit_window_resolves_from_the_sound_end_of_the_interval() {
         let mut store = VarStore::default();
@@ -196,7 +193,6 @@ mod tests {
             "after is strictly after the latest possible commit"
         );
 
-        // The pacing channel reads the newest upper bound across every window.
         assert_eq!(store.latest_instant_hi(), Some(1_400));
         let u = CaptureName::parse("u").unwrap();
         store.set(
@@ -230,10 +226,9 @@ mod tests {
                 .is_err()
         );
 
-        // A store holding no instant at all has no pacing bound to report.
         assert_eq!(store.latest_instant_hi(), None);
         // The scalar view refuses every non-scalar capture, so a list or a
-        // body can never be substituted where a scalar is required.
+        // body can never stand in where a scalar is required.
         assert_eq!(store.scalar(&uid), Some("abc::sys::1"));
         let list = CaptureName::parse("uids").unwrap();
         store.set(list.clone(), Captured::List(vec!["a".to_owned()]));

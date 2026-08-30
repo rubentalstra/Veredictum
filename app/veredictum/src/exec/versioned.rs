@@ -356,7 +356,7 @@ mod tests {
         assert_eq!(change_class("251"), Some(ChangeType::Modify));
         assert_eq!(change_class("523"), Some(ChangeType::Deleted));
         // 666|attestation| commits no version, so it is no class the family
-        // asserts — and it is a loud failure, never a silent Create.
+        // asserts: a loud failure, never a silent Create.
         assert_eq!(change_class("666"), None);
         assert_eq!(change_class(""), None);
     }
@@ -390,12 +390,10 @@ mod tests {
         assert!(eval_lifecycle_state(&served, "complete").is_err());
     }
 
-    /// An `IMPORTED_VERSION` is judged on the lifecycle state of the version
-    /// it wraps: `lifecycle_state ()` is effected, "derived as
-    /// `_item.lifecycle_state_`" (RM common
-    /// `UML/classes/imported_version.adoc` §Functions), and the released
-    /// ITS-JSON closes the wrapper against carrying one of its own. A wrong
-    /// term still fails, so the resolution judges rather than excuses.
+    /// An `IMPORTED_VERSION` is judged on the lifecycle state of the version it
+    /// wraps: `lifecycle_state ()` is effected, "derived as
+    /// `_item.lifecycle_state_`" (RM common `UML/classes/imported_version.adoc`
+    /// §Functions). A wrong term still fails, so the resolution judges.
     #[test]
     fn an_imported_versions_lifecycle_state_resolves_through_its_item() {
         let imported = json!({
@@ -417,8 +415,7 @@ mod tests {
         assert!(wrong.0.contains("532"), "{}", wrong.0);
         // The wrapper's own audit trail is the one judged, never the item's.
         assert_eq!(eval_change_type(&imported, ChangeType::Create), Ok(()));
-        // A wrapper serving no item has no lifecycle state to resolve, and
-        // that is a loud failure rather than a silent pass.
+        // A wrapper serving no item has no lifecycle state to resolve.
         let itemless = json!({ "_type": "IMPORTED_VERSION" });
         assert!(eval_lifecycle_state(&itemless, "openehr::532|complete|").is_err());
         // A body naming no class keeps the top-level read, which is where a
@@ -469,8 +466,7 @@ mod tests {
         assert_eq!(uid_pattern_token("system"), Some(UID));
         assert_eq!(uid_pattern_token("n"), Some(VERSION_TREE_ID));
         assert_eq!(uid_pattern_token("anything"), None);
-        // An unterminated `<` is a literal run, escaped like any other — the
-        // vocabulary is closed and nothing here widens into a wildcard.
+        // An unterminated `<` is a literal run, escaped like any other.
         assert_eq!(expand_uid_literal("a.b<n")?, regex::escape("a.b<n"));
         assert_eq!(expand_uid_literal("a.b")?, regex::escape("a.b"));
         Ok(())
@@ -495,7 +491,6 @@ mod tests {
             "{}",
             lifecycle.0
         );
-        // A coded term missing its terminology names no term at all.
         assert_eq!(coded_text_term(&json!({ "defining_code": {} })), None);
         assert_eq!(
             coded_text_term(&json!({
@@ -516,8 +511,8 @@ mod tests {
             Some("openehr::532||".to_owned())
         );
 
-        // A code outside the three classes the schedule asserts is named as
-        // outside them, never mapped into the nearest one.
+        // A code outside the three asserted classes is named as outside them,
+        // never mapped into the nearest one.
         let outside = json!({
             "commit_audit": { "change_type": {
                 "defining_code": { "code_string": "816" }

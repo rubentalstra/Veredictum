@@ -278,14 +278,13 @@ impl<'a> HttpDriver<'a> {
     /// The instance the case's PRECONDITIONS are established on — templates,
     /// the minted `${ehr_id}`, the directory tree, the commit sets.
     ///
-    /// The default is `sut`. A flow that addresses an instance on a different
-    /// ORIGIN is driving a different DEPLOYMENT, and a precondition
-    /// established on `sut` simply would not exist there — so provisioning
-    /// follows that instance. Same-origin instances are the same server seen
-    /// through a different principal (`readonly`, `unauthenticated`,
-    /// `smart_app`) or at a different base path (`smart_platform`), and keep
-    /// provisioning on `sut` — which is the point: the ground is laid by the
-    /// party's ordinary principal and only the flow exercises the other one.
+    /// The default is `sut`. A flow addressing an instance on a different
+    /// origin drives a different deployment, where a precondition established
+    /// on `sut` would not exist, so provisioning follows that instance.
+    /// Same-origin instances are the same server seen through a different
+    /// principal or at a different base path, and keep provisioning on `sut`,
+    /// so the ground is laid by the party's ordinary principal and only the
+    /// flow exercises the other one.
     ///
     /// NOTE: no openEHR spec governs this — our own design/extension (test
     /// topology, ISO/IEC 9646 IXIT territory).
@@ -559,10 +558,9 @@ impl<'a> HttpDriver<'a> {
                     }
                 }
                 // A capture-typed source reads a case-bound variable when one
-                // exists; otherwise it derives the referenced BINDING capture
-                // from this same exchange (a case need not name every
-                // intermediate — `versioned_object_uid: from capture
-                // version_uid` works without the case capturing version_uid).
+                // exists, else it derives the referenced BINDING capture from
+                // this same exchange, so a case need not name every
+                // intermediate.
                 WireFrom::Capture(name) => vars.scalar(name).map(ToOwned::to_owned).or_else(|| {
                     let referenced = binding
                         .captures
@@ -668,12 +666,10 @@ impl<'a> HttpDriver<'a> {
             .into());
         }
         if let Some(other) = distinct_from {
-            // Distinct-signature-per-version: the canonical form the signature
-            // is computed over includes `uid`, so two distinct versions carry
-            // distinct signatures (RM common master06 §Digital Signature +
-            // version.adoc `canonical_form`: all attributes except signature).
-            // Both sides must be non-empty — an absent signature satisfies
-            // nothing, and an empty comparand means the earlier capture failed.
+            // The canonical form the signature covers includes `uid`, so two
+            // distinct versions carry distinct signatures (RM common master06
+            // §Digital Signature; version.adoc `canonical_form`: all attributes
+            // except signature). Both sides must be non-empty.
             let want = self
                 .resolver
                 .resolve_value(other, vars)
@@ -727,10 +723,8 @@ impl<'a> HttpDriver<'a> {
             };
             // The mode is a DEPLOYMENT fact the party declares in its ixit (RM
             // common master06 §Digital Signature: a deployment runs digest or
-            // openPGP, one at a time). With no declaration the run holds no
-            // agreed canonical form and no key material, so it never asked the
-            // question — a declaration the party did not make is not evidence
-            // the server violated anything.
+            // openPGP, one at a time). Undeclared, the run holds no agreed
+            // canonical form and no key material, so it never asked.
             let Some(mode) = signing else {
                 return Err(AssertionOutcome::Unjudgeable(
                     "signature: verifiable requested but the ixit declares no `signing` posture \
@@ -815,9 +809,8 @@ impl<'a> HttpDriver<'a> {
                     )
                     .map_err(AssertionOutcome::from),
                 Assertion::Equivalent { to, ignoring } => {
-                    // An unresolvable REFERENCE is a defect of the case, not a
-                    // missing commit (FerroEHR#1853): reporting both as "no committed
-                    // payload" sent triage after the wrong artifact.
+                    // An unresolvable REFERENCE is a defect of the case, and a
+                    // missing commit is a different one, so they report apart.
                     let expected = match to {
                         EquivalentTarget::Committed => Ok(self.committed.last().cloned()),
                         EquivalentTarget::Ref(r) => {
@@ -889,12 +882,10 @@ impl<'a> HttpDriver<'a> {
                 Assertion::InstanceOf { rm_type, .. } => {
                     assertions::eval_instance_of(body, rm_type).map_err(AssertionOutcome::from)
                 }
-                // The signature family is wire-asserted against the
-                // ORIGINAL_VERSION envelope the case's own flow reads (the
-                // version-envelope read step; RM common master06 §Digital
-                // Signature). present/equals are mode-agnostic; verifiable
-                // dispatches on the signing posture of the instance the step
-                // ran on (instance-first, party default second).
+                // Asserted against the ORIGINAL_VERSION envelope the case's own
+                // flow reads (RM common master06 §Digital Signature).
+                // present/equals are mode-agnostic; verifiable dispatches on
+                // the posture of the instance the step ran on, party second.
                 Assertion::Signature {
                     present,
                     verifiable,
@@ -1249,12 +1240,10 @@ fn render_query(
             }
             match assertions::render_template(template, vars) {
                 Ok(rendered) => params.push((name.clone(), rendered)),
-                // An optional ref that is genuinely UNBOUND omits the
-                // parameter — but a name that IS bound (in the step's
-                // `with:` or as an earlier capture in the var store)
-                // and does not render as a scalar is a case-authoring
-                // or capture-shape defect and must be loud, never a
-                // silent drop that masquerades as a SUT failure.
+                // A genuinely UNBOUND optional ref omits the parameter. A
+                // name that IS bound and does not render as a scalar is a
+                // case-authoring or capture-shape defect, and it must be
+                // loud rather than a drop that reads as a SUT failure.
                 Err(e) if template_is_optional(template) => {
                     if let Some(referenced) = template_ref_name(template)
                         && (with.contains_key(referenced)
@@ -1512,9 +1501,9 @@ fn diff_paths(got: &Value, want: &Value, path: &str, out: &mut Vec<String>) {
 /// Parse an IMF-fixdate `Date` header ("Sun, 06 Nov 1994 08:49:37 GMT") to
 /// epoch milliseconds (RFC 9110 §5.6.7); `None` on any other form.
 ///
-/// NOTE: every `None` here is ABSENCE, not a swallowed defect (FerroEHR#1853) — the
-/// caller only WIDENS its own commit window with this value, so an unparsable
-/// `Date` leaves the runner-clock window standing rather than skipping a check.
+/// NOTE: every `None` here is absence, never a swallowed defect — the caller
+/// only widens its own commit window, so an unparsable `Date` leaves the
+/// runner-clock window standing rather than skipping a check.
 fn parse_http_date_ms(value: &str) -> Option<i64> {
     let parts: Vec<&str> = value.split_whitespace().collect();
     let [_, day, month, year, time, zone] = parts.as_slice() else {
@@ -1578,16 +1567,14 @@ pub(crate) fn now_ms() -> i64 {
 /// Mint one RS256 access token against the party's declared static test
 /// issuer, carrying the step's SMART `scope` claim.
 ///
-/// The CDR is a SMART **resource server** — it validates presented tokens and
-/// never issues them (ITS-REST
-/// `docs/smart_app_launch/master06-authentication.adoc` §Supported
-/// Authentication Flows; token issuance is the Authorization Server's duty) —
-/// so the conformance stack runs no Authorization Server and the driver takes
-/// that role for the SMART lane only. The token is deliberately minimal: the
-/// registered `iss`/`aud`/`sub`/`iat`/`exp` claims, the space-delimited
-/// `scope` claim master08 §Resource Scopes defines, and the RBAC role claim
-/// the SUT mines (the SMART gate AND-composes onto RBAC, so a role-less token
-/// would be refused a layer earlier and prove nothing about SMART).
+/// The CDR is a SMART resource server: it validates presented tokens and never
+/// issues them (ITS-REST `docs/smart_app_launch/master06-authentication.adoc`
+/// §Supported Authentication Flows), so the conformance stack runs no
+/// Authorization Server and the driver takes that role for the SMART lane. The
+/// token is deliberately minimal: the registered `iss`/`aud`/`sub`/`iat`/`exp`
+/// claims, the space-delimited `scope` claim master08 §Resource Scopes defines,
+/// and the RBAC role claim the SUT mines, since the SMART gate AND-composes
+/// onto RBAC and a role-less token would be refused a layer earlier.
 pub(crate) fn mint_access_token(
     mint: &crate::ixit::BearerMint,
     subject: Option<&str>,
@@ -1701,17 +1688,16 @@ impl HttpDriver<'_> {
     /// an EXISTING `ORIGINAL_VERSION`.
     ///
     /// RM common `master06-change_control_package.adoc` §Contributions makes
-    /// this member a change that commits NO new version — "all logical changes
+    /// this member a change that commits no new version ("all logical changes
     /// … are achieved by physically committing new Versions, **or for
-    /// attestations, new Attestation objects to existing Versions**" — so it
-    /// carries neither `data` nor a version `lifecycle_state`; it names its
-    /// target with `preceding_version_uid` and its `commit_audit` IS the
-    /// `UPDATE_ATTESTATION` (ITS-REST `specifications/schemas/common/
-    /// UpdateAttestation.yaml`: `UPDATE_AUDIT` + `reason` + `is_pending`,
-    /// both required), supplied verbatim by the case's corpus fixture so an
-    /// invalid attestation shape reaches the wire unrepaired. The runner fills
-    /// only the `UPDATE_AUDIT` parts a client always sends and the fixture
-    /// does not state.
+    /// attestations, new Attestation objects to existing Versions**"), so it
+    /// carries neither `data` nor a version `lifecycle_state`. It names its
+    /// target with `preceding_version_uid`, and its `commit_audit` IS the
+    /// `UPDATE_ATTESTATION` (ITS-REST
+    /// `specifications/schemas/common/UpdateAttestation.yaml`), supplied
+    /// verbatim by the case's corpus fixture so an invalid attestation shape
+    /// reaches the wire unrepaired. The runner fills only the `UPDATE_AUDIT`
+    /// parts a client always sends and the fixture does not state.
     fn attestation_member(member: &Value) -> Value {
         let mut audit = member
             .get(ATTESTATION_TOKEN)
@@ -1751,21 +1737,19 @@ impl HttpDriver<'_> {
     /// `lifecycle_state`; `change_type` tokens map to the openEHR audit
     /// change-type codes — RM common `§change_control`).
     ///
-    /// Two member keys OVERRIDE what the envelope would otherwise derive, each
-    /// a closed vocabulary so an unauthorable value cannot be spelled:
-    /// `_type` ([`crate::vocab::MemberVersionType`]) fixes the member's own
-    /// class self-tag, which ITS-REST `docs/overview/Resources.md` §Resource
-    /// representation permits and the AMB-89 refusal branch needs; and
+    /// Two member keys override what the envelope would otherwise derive, each
+    /// a closed vocabulary so an unauthorable value cannot be spelled. `_type`
+    /// ([`crate::vocab::MemberVersionType`]) fixes the member's own class
+    /// self-tag, which ITS-REST `docs/overview/Resources.md` §Resource
+    /// representation permits and the AMB-89 refusal branch needs.
     /// `lifecycle_state` ([`crate::vocab::VersionLifecycleState`]) fixes the
     /// committed version lifecycle independently of the change kind, which the
     /// master06 §Version Lifecycle transitions need (`incomplete` →
-    /// `abandoned` is a `modification` whose STATE is the point). Both are
-    /// generated into the same member the envelope builds, so a lifecycle case
-    /// no longer has to author the whole `ORIGINAL_VERSION` verbatim.
+    /// `abandoned` is a `modification` whose state is the point).
     ///
     /// # Errors
     /// A message naming the offending member when an override token is outside
-    /// its closed vocabulary — never a silent fallback to the derived value,
+    /// its closed vocabulary, never a silent fallback to the derived value,
     /// which would commit a version the case did not ask for.
     fn contribution_envelope(
         versions: &[Value],
@@ -1773,11 +1757,9 @@ impl HttpDriver<'_> {
     ) -> Result<Value, String> {
         // The envelope audit's aggregate change type. RM common
         // `master06-change_control_package.adoc` §Contributions fixes the
-        // attestation-only value verbatim — "`666|attestation|`: used when the
-        // only changes are attestation of one or more of the member versions"
-        // — so an all-attestation change set reports 666 rather than claiming a
-        // creation nothing performed. Every other combination keeps the
-        // creation default.
+        // attestation-only value verbatim: "`666|attestation|`: used when the
+        // only changes are attestation of one or more of the member versions".
+        // Every other combination keeps the creation default.
         let all_attestations = !versions.is_empty()
             && versions.iter().all(|member| {
                 Self::member_change_type(member) == Ok(MemberChangeType::Attestation)
@@ -1811,19 +1793,19 @@ impl HttpDriver<'_> {
     /// Apply a case's `audit:` override onto the derived commit audit.
     ///
     /// The derived envelope audit is what a conformant commit carries, so a
-    /// case that is ABOUT the audit states only its delta: each key the
+    /// case that is about the audit states only its delta: each key the
     /// override names replaces the derived value verbatim, and the reserved
-    /// `absent` sentinel OMITS the key entirely. Omission is what the
-    /// mandatory-member refusals need — RM common
-    /// `UML/classes/org.openehr.rm.common.audit_details.adoc` §Attributes
-    /// makes `change_type` and `committer` 1..1, and the released OAS
-    /// `specifications/schemas/common/UpdateAudit.yaml` §required lists both
-    /// on the commit DTO — and a verbatim value is what an out-of-group
-    /// `change_type` code needs, since the closed vocabulary cannot spell one
-    /// (§Invariants `Change_type_valid`).
+    /// `absent` sentinel omits the key entirely. Omission is what the
+    /// mandatory-member refusals need, since RM common
+    /// `UML/classes/org.openehr.rm.common.audit_details.adoc` §Attributes makes
+    /// `change_type` and `committer` 1..1 and the released OAS
+    /// `specifications/schemas/common/UpdateAudit.yaml` §required lists both on
+    /// the commit DTO. A verbatim value is what an out-of-group `change_type`
+    /// code needs, since the closed vocabulary cannot spell one (§Invariants
+    /// `Change_type_valid`).
     ///
     /// # Errors
-    /// A message when the override is not an object — never a silent ignore,
+    /// A message when the override is not an object, never a silent ignore,
     /// which would send the derived audit a case deliberately altered.
     fn apply_commit_audit_override(
         audit: &mut Value,
@@ -1928,14 +1910,11 @@ impl HttpDriver<'_> {
                         "code_string": code } }
             }
         });
-        // A case-supplied `commit_audit:` merges OVER the generated
-        // one, attribute by attribute, so a case can state the commit
-        // audit's concrete class and any attribute of it while the
-        // runner still fills the parts every client always sends
-        // (`system_id`, `committer`, and the `change_type` the
-        // member's own token already fixed). The member's
-        // `change_type` token stays authoritative: it is what the case
-        // declares the change to BE.
+        // A case-supplied `commit_audit:` merges OVER the generated one,
+        // attribute by attribute, so the runner still fills the parts
+        // every client always sends. The member's `change_type` token
+        // stays authoritative: it is what the case declares the change
+        // to BE.
         if let Some(supplied) = member.get("commit_audit").and_then(Value::as_object)
             && let Some(audit) = version
                 .get_mut("commit_audit")
@@ -2137,32 +2116,29 @@ impl HttpDriver<'_> {
     /// The read-modify-write body of an SM field-setter binding (AMB-15): the
     /// captured resource with the declared `set:` fields overwritten.
     ///
-    /// A captured body that is not a JSON object CANNOT carry the mutation —
-    /// a canonical-XML capture, for instance, resolves as a `Value::String`.
-    /// Applying nothing and sending the resource back unchanged would be a
-    /// FALSE GREEN: the PUT succeeds while exercising no setter at all. So a
-    /// non-object base is a loud step error, which the caller turns into a
-    /// transport-class (inconclusive, runner-side) observation — never a
-    /// silent no-op.
+    /// A captured body that is not a JSON object cannot carry the mutation: a
+    /// canonical-XML capture resolves as a `Value::String`. Sending the
+    /// resource back unchanged would be a false green, a PUT that succeeds
+    /// while exercising no setter, so a non-object base is a loud step error the
+    /// caller turns into an inconclusive observation.
     ///
     /// Every string leaf of a `set:` value renders through the closed `${…}`
     /// template grammar against `vars`, so a binding may patch in a value the
     /// case supplies. A leaf naming an unbound reference is the same loud step
-    /// error; putting the unrendered `${…}` text on the wire would make the
-    /// exchange vacuous.
+    /// error, because unrendered `${…}` text on the wire makes the exchange
+    /// vacuous.
     fn patched_body(
         from_capture: &CaptureName,
         set: &[(String, Value)],
         vars: &VarStore,
     ) -> Result<Value, String> {
-        // Negatives against a non-existent resource have no captured base body, so
-        // the wire gets a minimal RM-VALID canonical EHR_STATUS (the SUT must reject
-        // on the unknown id, not the body). RM-validity is load-bearing: EHR_STATUS
-        // is an unconditional archetype root (RM ehr `ehr_status.adoc`
-        // `Is_archetype_root`) and a root without ARCHETYPED violates
-        // `Archetyped_valid` (RM common `locatable.adoc`). The fallback applies ONLY
-        // to a capture name the case never declared; a DECLARED capture that failed
-        // to bind is a loud step error, never a substituted body.
+        // A negative against a non-existent resource has no captured base body,
+        // so the wire gets a minimal RM-VALID canonical EHR_STATUS: the SUT
+        // must reject on the unknown id, not the body. EHR_STATUS is an
+        // unconditional archetype root (RM ehr `ehr_status.adoc`
+        // `Is_archetype_root`), and a root without ARCHETYPED violates
+        // `Archetyped_valid` (RM common `locatable.adoc`). The fallback covers
+        // only a capture the case never declared.
         let mut patched = match vars.get(from_capture) {
             Some(Captured::Body(body)) => body.clone(),
             Some(other) => {
@@ -2392,18 +2368,14 @@ fn render_string_leaves(value: Value, vars: &VarStore) -> Result<Value, String> 
 }
 
 impl HttpDriver<'_> {
-    /// **The ONE request-header construction path** (issue FerroEHR#629): binding
-    /// request headers + format headers + auth + instance extras, for every
-    /// request the runner sends — a driven flow step AND precondition
-    /// provisioning alike.
+    /// The one request-header construction path: binding request headers,
+    /// format headers, auth and instance extras, for every request the runner
+    /// sends, a driven flow step and precondition provisioning alike.
     ///
-    /// It is one function because it was two: the step path injected
-    /// `Accept: application/json` while the provisioning path for the SAME
-    /// operation sent none, so one operation went on the wire two different
-    /// ways depending on which code path reached it (the ADL 1.4 template
-    /// upload 406'd as a case and succeeded as a precondition). A binding
-    /// declares the request it intends; nothing else may quietly send a
-    /// different one.
+    /// It is one function so that one operation cannot go on the wire two
+    /// different ways depending on which code path reached it. A binding
+    /// declares the request it intends, and nothing else may send a different
+    /// one.
     ///
     /// `step` is `None` for provisioning. That is the only difference the
     /// caller may express, and it means exactly one thing: no step/case
@@ -2452,13 +2424,12 @@ impl HttpDriver<'_> {
         let format = step.and_then(|step| step.format.or_else(|| case.formats.first().copied()));
         if let Some(format) = format {
             let media = Self::media_type(format);
-            // The step's format has two distinct roles by request shape: on a
-            // body-carrying request (POST/PUT commit) it names the REQUEST body
-            // representation, so it sets Content-Type only and the response stays
-            // negotiated canonical — ETag/Location are representation-independent,
-            // and RFC 7231 §6.3.2 requires Location on a 201 regardless of the
-            // request body format. On a bodyless request (GET read-back) it names
-            // the desired RESPONSE representation and sets Accept.
+            // The step's format has two roles by request shape. On a
+            // body-carrying request it names the REQUEST body representation,
+            // so it sets Content-Type alone and the response stays negotiated
+            // canonical: RFC 7231 §6.3.2 requires Location on a 201 regardless
+            // of the request body format. On a bodyless request it names the
+            // desired RESPONSE representation and sets Accept.
             if request_spec.body.is_some() {
                 headers
                     .entry("Content-Type".to_owned())
@@ -2499,12 +2470,10 @@ impl HttpDriver<'_> {
                 }
             }
         } else {
-            // Format-less request (a provisioning call, or a step whose case
-            // names no format): the canonical JSON default representation.
-            // A body-carrying request MUST label its payload — a strict SUT
-            // rightly 415s an unlabeled body (ITS-REST overview Resources
-            // §Data representation: JSON is the default representation;
-            // HTTP semantics: a sender SHOULD send Content-Type on a body).
+            // A format-less request takes the canonical JSON default
+            // representation (ITS-REST overview Resources §Data
+            // representation), and a body-carrying one must label its payload
+            // or a strict SUT rightly answers 415.
             if request_spec.body.is_some() {
                 headers
                     .entry("Content-Type".to_owned())
@@ -2528,26 +2497,24 @@ impl HttpDriver<'_> {
     /// Select the committal-metadata request-header SPELLING from the
     /// party's declared ITS-REST release.
     ///
-    /// The overview `Requests_and_responses.md` §Deprecated headers dates
-    /// the current spellings to Release 1.1.0 and maps each to its
-    /// pre-1.1.0 counterpart. Field names are case-insensitive (RFC 9110
-    /// §5.1), so three of the five rows — `openEHR-VERSION`, `openEHR-uri`,
-    /// `openEHR-EHR-id` — are literally the SAME field as their
-    /// replacements and need no selection; do not re-split them. Two rows
-    /// change an underscore to a hyphen and are therefore genuinely
-    /// distinct fields: `openEHR-AUDIT_DETAILS` → `openehr-audit-details`
-    /// and `openEHR-TEMPLATE_ID` → `openehr-template-id`. A party declaring
-    /// an ITS-REST release BEFORE 1.1.0 never defined the hyphenated names,
-    /// so a driven request rewrites those two to the pre-1.1.0 spelling —
-    /// otherwise an undated behaviour goes red for a field name the party's
-    /// release does not know, which is not the behaviour under test.
+    /// The overview `Requests_and_responses.md` §Deprecated headers dates the
+    /// current spellings to Release 1.1.0 and maps each to its pre-1.1.0
+    /// counterpart. Field names are case-insensitive (RFC 9110 §5.1), so three
+    /// of the five rows (`openEHR-VERSION`, `openEHR-uri`, `openEHR-EHR-id`)
+    /// are literally the same field as their replacements and need no
+    /// selection; do not re-split them. Two rows change an underscore to a
+    /// hyphen and are genuinely distinct fields: `openEHR-AUDIT_DETAILS` →
+    /// `openehr-audit-details` and `openEHR-TEMPLATE_ID` →
+    /// `openehr-template-id`. A party declaring a release before 1.1.0 never
+    /// defined the hyphenated names, so a driven request rewrites those two,
+    /// which keeps an undated behaviour from going red for a field name the
+    /// party's release does not know.
     ///
-    /// A party declaring 1.1.0+ — or declaring nothing — keeps the
-    /// canonical spellings (scope for undeclared parties is the version
-    /// floors' job, never this function's). Bindings that deliberately
-    /// author the DEPRECATED spellings (the backward-compatibility cases)
-    /// are untouched: their declared names case-fold to the underscore
-    /// forms, which this map does not contain.
+    /// A party declaring 1.1.0 or later, or declaring nothing, keeps the
+    /// canonical spellings; scope for an undeclared party is the version
+    /// floors' job. A binding deliberately authoring the deprecated spellings
+    /// is untouched, because its declared names case-fold to the underscore
+    /// forms this map does not contain.
     fn spell_committal_headers(
         headers: BTreeMap<String, String>,
         spec_versions: Option<&crate::party::SpecVersions>,
@@ -2576,10 +2543,10 @@ impl HttpDriver<'_> {
 }
 
 impl HttpDriver<'_> {
-    /// Execute the wire expectation's declared header matchers (FerroEHR#403,
-    /// `exec/headers.rs`) and body selector (FerroEHR#415, `exec/bodies.rs`) against
-    /// the exchange. `prefer_conditional`/`error_loose` branch on the
-    /// `Prefer` this request actually sent, so the sent value travels with
+    /// Executes the wire expectation's declared header matchers
+    /// ([`crate::exec::headers`]) and body selector ([`crate::exec::bodies`])
+    /// against the exchange. `prefer_conditional` and `error_loose` branch on
+    /// the `Prefer` this request actually sent, so the sent value travels with
     /// the negotiated `Accept`.
     fn eval_wire_expectation(
         &self,
@@ -2795,11 +2762,10 @@ impl HttpDriver<'_> {
     /// `PARTY_REF.type` must be the type of the party provisioned for that end
     /// (a mismatch is a catalogue defect, refused here rather than sent).
     ///
-    /// NOTE: the relationship create itself is driven over the SUT's own
-    /// `party-relationship` extension route — no openEHR spec governs it
-    /// (register AMB-32), the released ITS-REST surfaces no
-    /// `PARTY_RELATIONSHIP` resource — so this precondition is only available
-    /// on a party that serves that family.
+    /// The relationship create itself is driven over the SUT's own
+    /// `party-relationship` extension route, which no openEHR spec governs
+    /// (register AMB-32), so this precondition is available only on a party
+    /// that serves that family.
     fn provision_party_relationship(
         &mut self,
         case: &CaseCore,
@@ -2887,24 +2853,23 @@ impl HttpDriver<'_> {
     /// `${imported_version_uid}` and, when the named container carries one,
     /// `${imported_branch_version_uid}`.
     ///
-    /// The identities come from the EXTRACT itself rather than from a read of
+    /// The identities come from the extract itself rather than from a read of
     /// the SUT, because RM common `master06-change_control_package.adoc`
-    /// §Copying keeps them: "the `ORIGINAL_VERSION` instance is never
-    /// modified", and its `uid` is what the receiving system's
-    /// `IMPORTED_VERSION` is identified by. Reading the SUT to learn what to
-    /// address would make the server's own answer the reference for the
-    /// case's expectation, which is exactly what the attribution law forbids.
+    /// §Copying keeps them ("the `ORIGINAL_VERSION` instance is never
+    /// modified") and its `uid` identifies the receiving system's
+    /// `IMPORTED_VERSION`. Reading the SUT to learn what to address would make
+    /// the server's own answer the reference for the case's expectation, which
+    /// the attribution law forbids.
     ///
     /// Which operation lands it follows master06 §Copying's receiving
-    /// situations: an already-provisioned `${ehr_id}` takes `import_ehr_extract`
-    /// (Cases 2/3), and no EHR at all takes `import_ehr` (Case 1), whose
-    /// answer names the clone it created and mints `${ehr_id}`.
+    /// situations: an already-provisioned `${ehr_id}` takes
+    /// `import_ehr_extract` (Cases 2/3), and no EHR at all takes `import_ehr`
+    /// (Case 1), whose answer names the clone it created and mints `${ehr_id}`.
     ///
-    /// NOTE: the import is driven over the SUT's own `message-extract`
-    /// extension routes — ITS-REST 1.1.0 publishes no MESSAGE / EHR-Extract
-    /// API at all (register AMB-34) — so this precondition is only available
-    /// on a party that serves that family, which `crate::run` enforces at
-    /// SELECTION time.
+    /// The import is driven over the SUT's own `message-extract` extension
+    /// routes, since ITS-REST 1.1.0 publishes no MESSAGE or EHR-Extract API
+    /// (register AMB-34), so this precondition is available only on a party
+    /// that serves that family, which `crate::run` enforces at selection time.
     fn provision_import(
         &mut self,
         case: &CaseCore,
@@ -3082,9 +3047,9 @@ impl HttpDriver<'_> {
     /// §Version Identification): `[n]` on the trunk, `[n, branch, version]` on
     /// a branch.
     ///
-    /// NOTE: `None` is ABSENCE — "this string is not an `OBJECT_VERSION_ID`"
-    /// (FerroEHR#1853); the `Option<Vec<_>>` collect refuses a partly-numeric tree
-    /// outright, and the one caller turns it into a typed, uid-naming error.
+    /// NOTE: `None` is absence, "this string is not an `OBJECT_VERSION_ID`";
+    /// the `Option<Vec<_>>` collect refuses a partly-numeric tree outright, and
+    /// the one caller turns it into a typed, uid-naming error.
     fn version_tree_id(uid: &str) -> Option<Vec<u64>> {
         let (_, tree) = uid.rsplit_once("::")?;
         tree.split('.').map(|s| s.parse::<u64>().ok()).collect()
@@ -3114,13 +3079,12 @@ impl HttpDriver<'_> {
                     }
                 }
                 CaptureField::CommitTime => {
-                    // The live commit WINDOW: [request send, response receipt] in
-                    // runner-clock milliseconds, WIDENED by the SUT's own
-                    // second-resolution `Date` header — the SUT stamped the version
-                    // inside it even when its clock is skewed from the runner's, so
-                    // `before` resolves from the lower bound and `after` from the
-                    // upper. Determinism law (d) governs the `${time:*}` ARITHMETIC
-                    // over this window, not the window itself.
+                    // The live commit WINDOW is [request send, response
+                    // receipt] in runner-clock milliseconds, widened by the
+                    // SUT's own second-resolution `Date` header: the SUT
+                    // stamped the version inside it even when its clock is
+                    // skewed from the runner's. Determinism law (d) governs the
+                    // `${time:*}` arithmetic over the window, not the window.
                     let mut lo = sent_ms;
                     let mut hi = now_ms();
                     if let Some(date_ms) = exchange
@@ -3218,15 +3182,14 @@ impl HttpDriver<'_> {
     /// `scope` asks for: the step-scoped store every `${…}` template of that
     /// step resolves against.
     ///
-    /// A step's `with:` value SHADOWS a same-named capture. The step's
-    /// explicit input is the most specific binding in its own scope, and
-    /// letting the capture win puts a STALE value on the wire: the run-2
-    /// triage (2026-07-28) found a case that captured `preceding_version_uid`
-    /// at step 1 and passed a newer uid under the same name at step 4 having
-    /// its `If-Match` rendered from step 1, so the SUT's correct 412 read as a
-    /// red row. One grammar resolving in one step scope answers one way, so
-    /// the header, URL and body paths all merge through here. The var store
-    /// itself is not mutated; the shadow lives only in the merge.
+    /// A step's `with:` value shadows a same-named capture, because the step's
+    /// explicit input is the most specific binding in its own scope and letting
+    /// the capture win would put a stale value on the wire: a step passing a
+    /// newer `preceding_version_uid` would render its `If-Match` from an
+    /// earlier capture and read the SUT's correct 412 as a red row. The header,
+    /// URL and body paths all merge through here so one grammar in one step
+    /// scope answers one way. The var store itself is not mutated; the shadow
+    /// lives only in the merge.
     fn merge_with_vars(
         vars: &VarStore,
         with: &BTreeMap<String, Value>,
@@ -3238,10 +3201,8 @@ impl HttpDriver<'_> {
                 continue;
             };
             // A number- or boolean-typed value reaches a URL slot as its wire
-            // text (`url_fetch: 4` -> `?fetch=4`; silently skipping non-strings
-            // turned a runner gap into a fake SUT failure, the group-9 triage)
-            // and a JSON body slot as the type the case authored, so the two
-            // scopes promote it differently.
+            // text (`url_fetch: 4` -> `?fetch=4`) and a JSON body slot as the
+            // type the case authored, so the two scopes promote it differently.
             let captured = match (scope, value) {
                 (_, Value::String(s)) => Captured::Scalar(s.clone()),
                 (WithScope::WireText, Value::Number(n)) => Captured::Scalar(n.to_string()),
@@ -3318,10 +3279,11 @@ fn pace_commit_capture(step: &FlowStep, vars: &VarStore) {
 }
 
 impl<'a> HttpDriver<'a> {
-    /// Per-row synthesized OPT (issue FerroEHR#228): a content case whose
-    /// `constraint_context` declares constraint-axis columns commits each row
-    /// against a freshly synthesized OPT baking THAT row's constraint. Build it
-    /// from the row's cells and upload it (409 tolerated) under the deterministic
+    /// Builds and uploads the per-row synthesized OPT.
+    ///
+    /// A content case whose `constraint_context` declares constraint-axis
+    /// columns commits each row against a freshly synthesized OPT baking that
+    /// row's constraint. The upload tolerates 409 and uses the deterministic
     /// per-row template id the carrier stamps (`recipes::synth_template_id`).
     fn provision_synthesized_opt(
         &mut self,
@@ -3390,22 +3352,19 @@ impl<'a> HttpDriver<'a> {
         Ok(Provisioned::Ready)
     }
 
-    /// Judge a PROVISIONING exchange: 2xx establishes the ground and,
-    /// where the caller says so, 409 means it already exists (idempotent
-    /// re-provisioning on a shared world — the deterministic OPT re-upload)
-    /// — anything else is a REFUSAL, and the case's required ground does
-    /// not exist. The refusal is surfaced as an inconclusive row naming
-    /// this exchange (the triage law: an unestablished `requires`
-    /// precondition is a step-resolution failure, never a SUT failure of
-    /// the behaviour under test — the 2026-07-28 java run reported 197
-    /// swallowed template-upload 406s as content-validation failures).
+    /// Judges a provisioning exchange.
     ///
-    /// `conflict_is_ground` is PER-CALL because 409's meaning inverts by
-    /// operation: on the OPT upload it says the ground already holds; on an
-    /// extract import it says the container exists IN ANOTHER EHR (RM
-    /// common master06 §Copying — one received `object_id`, one local
-    /// container), so the ground can never hold and the row is
-    /// inconclusive, not driven.
+    /// 2xx establishes the ground, and, where the caller says so, 409 means it
+    /// already exists (idempotent re-provisioning on a shared world). Anything
+    /// else is a refusal, surfaced as an inconclusive row naming this exchange:
+    /// under the triage law an unestablished `requires` precondition is a
+    /// step-resolution failure, never a SUT failure of the behaviour under test.
+    ///
+    /// `conflict_is_ground` is per-call because 409's meaning inverts by
+    /// operation. On the OPT upload it says the ground already holds; on an
+    /// extract import it says the container exists in another EHR (RM common
+    /// master06 §Copying: one received `object_id`, one local container), so
+    /// the ground can never hold and the row is inconclusive.
     fn provisioning_refusal(
         what: &str,
         exchange: &Exchange,
@@ -3488,11 +3447,9 @@ impl StepDriver for HttpDriver<'_> {
                 "operation unrealized on this ITS".into(),
             ));
         }
-        // A named instance the ixit does not declare (e.g. no `readonly`
-        // principal on a SUT without role separation) is a topology gap of
-        // THIS party, not an interpreter defect: the row is inconclusive
-        // (law c), and the roll-up records the case against the missing
-        // ground instead of aborting the campaign.
+        // A named instance the ixit does not declare is a topology gap of THIS
+        // party rather than an interpreter defect, so the row is inconclusive
+        // (law c) and the campaign continues.
         let instance = match self.instance_for(step) {
             Ok(instance) => instance,
             Err(e) => {
@@ -3502,9 +3459,8 @@ impl StepDriver for HttpDriver<'_> {
             }
         };
 
-        // Resolve the with-payload. A capture the earlier steps never bound
-        // (the SUT did not supply what the binding maps) is an INCONCLUSIVE
-        // observation for this row (law c) — never a run-aborting defect.
+        // A capture the earlier steps never bound is an INCONCLUSIVE
+        // observation for this row (law c), never a run-aborting defect.
         let with = match self.resolve_with(step, vars) {
             Ok(with) => with,
             Err(e) => {
@@ -3583,8 +3539,7 @@ impl StepDriver for HttpDriver<'_> {
         // The signature assertions verify against the posture of the instance
         // THIS step ran on (RM common master06 §Digital Signature: the mode is
         // a deployment fact), so a party running two postures as two instances
-        // is judged per instance, and the party-wide declaration fills in only
-        // where the instance itself declares none.
+        // is judged per instance and the party-wide declaration only fills in.
         let signing = self.ixit.signing_of(instance);
         self.record_exchange_bookkeeping(binding, request_spec, body.as_ref(), &exchange, signing);
 
@@ -3599,21 +3554,20 @@ impl StepDriver for HttpDriver<'_> {
         // aborts otherwise, law b) — evaluate optimistically here.
         let mut assertions =
             self.eval_assertions(case, binding, &step.assertions, &exchange, signing, vars);
-        // The expected outcome's declared header matchers and body selector
-        // are executed assertions too (issues FerroEHR#403 + FerroEHR#415 — both were parsed
-        // but never evaluated). Evaluated only when the observation IS the
-        // expected kind: the declarations belong to that outcome's wire
-        // expectation. Each finding they raise judges what the SUT SERVED,
-        // so each is a conformance mismatch.
+        // The expected outcome's declared header matchers and body selector are
+        // executed assertions too, judged only when the observation IS the
+        // expected kind, since the declarations belong to that outcome's wire
+        // expectation. Each finding judges what the SUT served, so each is a
+        // conformance mismatch.
         if observation == Observation::Kind(expected)
             && let Some(expectation) = binding.outcome(expected)
         {
-            // The SAME merged scope request building used (FerroEHR#1852): a step
-            // that supplies an identity inline (`with:`) instead of capturing
-            // it must be able to pin it in its outcome matchers too.
+            // The matchers resolve in the same merged scope the request built
+            // in, so a step supplying an identity inline through `with:` can
+            // pin it here too.
             // NOTE: a name in `crate::exec::headers::structural_token` outranks
             // that scope — ITS-REST `operations/composition_get.yaml` lets a
-            // `uid_based_id` argument be spelled two ways, so it is not an identity.
+            // `uid_based_id` argument be spelled two ways, so it is no identity.
             assertions.failures.extend(
                 self.eval_wire_expectation(expectation, &exchange, &target, &headers, &header_vars)
                     .into_iter()
@@ -4602,12 +4556,10 @@ mod tests {
         .unwrap()
     }
 
-    /// The run-2 triage regression (2026-07-28): a step's explicit `with:`
-    /// value must SHADOW a same-named earlier capture in the step's template
-    /// scope. The old keep-the-capture guard rendered a STALE
-    /// `preceding_version_uid` into an If-Match header (step 1's capture
-    /// instead of the newer uid step 4 passed), and the SUT's correct 412
-    /// showed up as a red row.
+    /// A step's explicit `with:` value shadows a same-named earlier capture in
+    /// the step's template scope. Keeping the capture would render a stale
+    /// `preceding_version_uid` into an `If-Match` header and turn the SUT's
+    /// correct 412 into a red row.
     #[test]
     fn with_value_shadows_same_named_capture_in_step_scope() {
         let mut vars = VarStore::default();
@@ -4687,15 +4639,14 @@ mod tests {
         }
     }
 
-    /// The group-9 triage regression: a NUMBER-typed `with:` value must
-    /// promote into the template vars and render on an optional URL slot —
-    /// `url_fetch: 4` reaching `${url_fetch?}` emits `?fetch=4`; silently
-    /// skipping non-string scalars dropped the parameter and masqueraded as
-    /// a SUT failure.
-    /// The FerroEHR#594 regression: an optional query slot whose referenced name IS
-    /// bound — in the var store as a non-scalar capture (List/Body) — must be
-    /// a loud error, never a silent omission (the dropped-bound-parameter
-    /// false-green shape). A genuinely unbound optional slot still omits.
+    /// A number-typed `with:` value promotes into the template vars and renders
+    /// on an optional URL slot: `url_fetch: 4` reaching `${url_fetch?}` emits
+    /// `?fetch=4`. Skipping non-string scalars would drop the parameter and
+    /// masquerade as a SUT failure.
+    /// An optional query slot whose referenced name IS bound in the var store
+    /// as a non-scalar capture is a loud error, never a silent omission that
+    /// would drop a bound parameter into a false green. A genuinely unbound
+    /// optional slot still omits.
     #[test]
     fn a_bound_nonscalar_capture_on_an_optional_slot_is_loud() {
         let binding: OperationBinding = serde_json::from_value(serde_json::json!({
@@ -4709,8 +4660,7 @@ mod tests {
             "outcomes": { "ok": { "status": 200 } }
         }))
         .unwrap();
-        // Bound in the VAR STORE (not the step's with:) as a List — the shape
-        // the pre-FerroEHR#594 guard missed.
+        // Bound in the VAR STORE rather than the step's `with:`, as a List.
         let mut vars = VarStore::default();
         vars.set(
             CaptureName::parse("url_fetch").unwrap(),
@@ -4838,12 +4788,9 @@ mod tests {
         let err = HttpDriver::build_url(&binding, "http://sut", &with, &vars).unwrap_err();
         assert!(err.contains("single-valued parameter"), "{err}");
 
-        // …and a list capture never EXPANDS a single-valued declaration:
-        // repeatability is the binding's decision, not the case's. Since
-        // FerroEHR#594 the refusal is LOUD — the pre-FerroEHR#594 behaviour (silently
-        // omitting the bound parameter) was the dropped-bound-parameter
-        // false-green shape; an error preserves this arm's intent (no
-        // expansion) without the silent drop.
+        // …and a list capture never EXPANDS a single-valued declaration,
+        // because repeatability is the binding's decision. The refusal is loud:
+        // silently omitting the bound parameter would be a false green.
         let mut vars = VarStore::default();
         vars.set(
             CaptureName::parse("ehr_id_subset").unwrap(),
@@ -4960,13 +4907,11 @@ mod tests {
     }
 
     /// A `666|attestation|` member is the attestation wire shape RM common
-    /// `master06-change_control_package.adoc` §Contributions describes: it
-    /// commits no new version, so it carries NEITHER `data` NOR a version
-    /// `lifecycle_state`; it names its target with `preceding_version_uid`
-    /// and its `commit_audit` is the fixture's `UPDATE_ATTESTATION`, carried
-    /// verbatim. The envelope audit reports the attestation-only aggregate
-    /// (§Contributions: "`666|attestation|`: used when the only changes are
-    /// attestation of one or more of the member versions").
+    /// `master06-change_control_package.adoc` §Contributions describes: no new
+    /// version, so neither `data` nor a version `lifecycle_state`, its target
+    /// named by `preceding_version_uid` and its `commit_audit` the fixture's
+    /// `UPDATE_ATTESTATION` carried verbatim. The envelope audit reports the
+    /// attestation-only aggregate.
     #[test]
     fn an_attestation_member_commits_no_version_and_carries_the_fixture_audit() {
         let envelope = HttpDriver::contribution_envelope(
@@ -5374,7 +5319,7 @@ mod tests {
         let root = HttpDriver::extract_capture(&exchange, &test_binding(), &spec2, &vars2).unwrap();
         assert_eq!(root, "8849182c-82ad-4088-a07f-48ead4180515");
 
-        // The middle segment — the creating system id (FerroEHR#570).
+        // The middle segment: the creating system id.
         let spec3: WireCapture = serde_json::from_value(serde_json::json!({
             "from": "header ETag", "strip": "weak-quotes",
             "transform": "creating-system-id"
@@ -5477,10 +5422,9 @@ mod tests {
             "/ehr/7d44b88c%20c0ff%20ee00/composition/8849182c%3A%3Asys.example%3A%3A1"
         );
 
-        // A `with:` value that is not a string is no path value: resolution
-        // falls through to the captures, and an unresolved slot is LOUD —
-        // sending the literal `{ehr_id}` would address a resource that does
-        // not exist and turn the whole case into a false red.
+        // A non-string `with:` value is no path value, so resolution falls
+        // through to the captures and an unresolved slot is loud: the literal
+        // `{ehr_id}` on the wire would address nothing and go false red.
         let numeric = BTreeMap::from([("ehr_id".to_owned(), serde_json::json!(7))]);
         let error = render_path(&spec, &numeric, &vars).unwrap_err();
         assert_eq!(error, "path param {ehr_id} unresolved");

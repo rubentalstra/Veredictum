@@ -5,33 +5,23 @@
 //! authored, spec-cited record of the wire surface the CNF catalogue is
 //! measured against for TOTAL coverage.
 //!
-//! Three sections, one per axis the `surface-coverage` gate
+//! Four sections, one per axis the `surface-coverage` gate
 //! (`crate::validate`) enforces:
 //!
 //! - `sm_operations` — Axis 1: SM operations of the platform interfaces that
-//!   carry no `its-rest` binding, each an honest cited boundary (off the
-//!   ITS-REST 1.1.0 wire, realized as another operation's variant, a
-//!   navigation accessor, or a tracked coverage gap). Silence is not
-//!   coverage: an SM operation with neither a binding nor an entry here is a
-//!   finding.
+//!   carry no `its-rest` binding, each a cited boundary. An SM operation with
+//!   neither a binding nor an entry here is a finding.
 //! - `branches` — Axis 2: per-binding outcome/format branches that no case
 //!   exercises, each a cited exception.
 //! - `elements` — Axis 3: the cross-cutting wire behaviours (conditional
 //!   headers, content negotiation, the negotiation/error status families)
 //!   mapped to the cases that exercise them, or an adjudicated exception.
-//! - `served_extensions` — Axis 4, the OUTWARD axis: the route families a SUT
-//!   serves BEYOND the openEHR resource set. The first three axes are all
-//!   spec-inward (what the spec defines and whether a case reaches it); this
-//!   one runs the other way and is a **declaration, never an obligation** —
-//!   every entry carries `never_gates: true` and NO coverage requirement is
-//!   ever derived from it. It exists so an `SDoC` reader learns the extension
-//!   surface exists instead of discovering it on the wire.
+//! - `served_extensions` — Axis 4: the route families a SUT serves beyond the
+//!   openEHR resource set. The first three axes run inward from the spec; this
+//!   one runs outward and is a declaration, never an obligation.
 //!
 //! Every enumeration source is a RELEASED spec component or the ITS-REST docs
-//! text — NEVER the vendored OAS (owner ruling 2026-07-24). This artifact and
-//! its gate never weaken
-//! an expectation; a behaviour genuinely off the wire is recorded here with
-//! its citation, never silently omitted.
+//! text — never the vendored OAS (owner ruling 2026-07-24).
 
 #![allow(
     clippy::disallowed_types,
@@ -212,22 +202,14 @@ impl WireElement {
     }
 }
 
-/// Axis 4: one family of routes the SUT serves OUTSIDE the openEHR resource
-/// set — a **declaration**, never an obligation.
+/// Axis 4: one family of routes the SUT serves outside the openEHR resource
+/// set — a declaration, never an obligation.
 ///
-/// The released ITS-REST text defines a resource set
-/// (`docs/overview/Resources.md` §Resources: "a **resource** is an instance
-/// object of a specific openEHR class (type) that can be identified,
-/// addressed, handled or managed by the service") and never constrains the URI
-/// space around it: no released clause permits, forbids, or bounds additional
-/// routes. So every entry here is spec-silent by construction — our own
-/// design/extension — and `spec_silence` records the verified silence rather
-/// than a permission that does not exist.
-///
-/// The axis is inert by design: the `surface-coverage` gate derives NO
-/// obligation from it (no case is required, no branch is expected, no verdict
-/// depends on it), which [`ServedExtension::never_gates`] states in every
-/// entry and the gate's own tests pin.
+/// ITS-REST `docs/overview/Resources.md` §Resources defines the resource set
+/// and never constrains the URI space around it, so every entry here is
+/// spec-silent by construction and `spec_silence` records that verified
+/// silence. The `surface-coverage` gate derives no obligation from the axis,
+/// which [`ServedExtension::never_gates`] states in every entry.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ServedExtension {
@@ -445,9 +427,8 @@ mod tests {
         assert!(covered.check_invariants().is_ok());
     }
 
-    /// An element carrying BOTH a covering case and an exception claims the
-    /// behaviour is exercised and excused at once, so the register would read
-    /// as covered while the exception silently excused it.
+    /// An element carrying both a covering case and an exception claims the
+    /// behaviour is exercised and excused at once.
     #[test]
     fn an_element_may_not_be_both_covered_and_excepted() {
         let both: WireElement = serde_json::from_value(serde_json::json!({
@@ -465,9 +446,8 @@ mod tests {
         );
     }
 
-    /// The register reports every shape violation it finds in one pass — a
-    /// malformed branch, a malformed element and a duplicated element id all
-    /// surface together, so one run names the whole repair list.
+    /// The register reports every shape violation in one pass, so one run
+    /// names the whole repair list.
     #[test]
     fn the_register_reports_every_shape_violation_in_one_pass() {
         let surface: WireSurface = serde_json::from_value(serde_json::json!({
@@ -493,10 +473,8 @@ mod tests {
         );
     }
 
-    /// The per-entry gates of a served-extension family are independent: an
-    /// unnamed family with no routes, no config gate and no spec-silence
-    /// citation reports all four, and the unnamed one is labelled rather than
-    /// left blank in the message.
+    /// The per-entry gates are independent, and an unnamed family is labelled
+    /// in the message rather than left blank.
     #[test]
     fn a_served_extension_states_its_name_routes_gate_and_silence() {
         let empty: ServedExtension = serde_json::from_value(serde_json::json!({
@@ -542,8 +520,6 @@ mod tests {
         let ok = served(true, &["GET /management/info"]);
         assert!(ok.check_invariants().is_empty());
 
-        // never_gates: false is the one value the axis cannot carry — a
-        // declaration may never become an obligation.
         let gating = served(false, &["GET /management/info"]);
         assert!(
             gating
@@ -554,7 +530,6 @@ mod tests {
             gating.check_invariants()
         );
 
-        // Route grammar: "<METHOD> /<path>", method from the closed vocabulary.
         for bad in ["/management/info", "FETCH /management/info", "GET info"] {
             let e = served(true, &[bad]);
             assert!(

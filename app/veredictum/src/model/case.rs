@@ -71,13 +71,9 @@ impl Applies {
     /// Whether every declared range is satisfied by the party's declared spec
     /// versions.
     ///
-    /// An UNDECLARED or unparsable version fails the filter: the party has
-    /// not claimed the release the range names, so whatever the range gates —
-    /// a case, an operation binding, a version-dated header expectation — is
-    /// out of scope for it. This is one rule with one polarity everywhere it
-    /// is consulted (`crate::verdict` selection, `crate::run` selection,
-    /// `crate::exec::headers` matcher scoping), never an exemption invented
-    /// per call site.
+    /// An undeclared or unparsable version fails the filter: the party has not
+    /// claimed the release the range names, so whatever the range gates is out
+    /// of scope for it. Every call site reads this one polarity.
     #[must_use]
     pub fn satisfied_by(&self, versions: &crate::party::SpecVersions) -> bool {
         self.entries().into_iter().all(|(component, range)| {
@@ -187,13 +183,11 @@ impl<'de> Deserialize<'de> for DirectoryRequirement {
 
 /// The `requires.party` precondition.
 ///
-/// A demographic PARTY is precondition STATE for the cases that operate ON an
-/// existing party without testing its creation — exactly the role
-/// `requires.ehr` plays for EHR-scoped cases. Provisioning it here rather than
-/// as a flow step is what keeps such a case's FLOW pure: an admin case whose
-/// only driven call is `archive_parties` must not also drive the released
-/// `create_party`, or the realization it evidences stops being the one it is
-/// about (`validate::check_realization_markers`).
+/// A demographic PARTY is precondition state for a case that operates on an
+/// existing party without testing its creation, the role `requires.ehr` plays
+/// for EHR-scoped cases. Provisioning it here keeps the flow pure: driving
+/// `create_party` alongside `archive_parties` would change the realization the
+/// case evidences (`validate::check_realization_markers`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PartyRequirement {
     /// No party is provisioned.
@@ -217,24 +211,19 @@ impl<'de> Deserialize<'de> for PartyRequirement {
 
 /// The `requires.party_relationship` precondition.
 ///
-/// A demographic `PARTY_RELATIONSHIP` is precondition STATE exactly as
-/// [`PartyRequirement`] is: the cases that operate ON an existing relationship
-/// — or, like the admin archive's party-only selection, on the boundary
-/// between a relationship and a party — must not drive its creation in the
-/// flow, or the realization they evidence stops being the one they are about.
+/// Precondition state exactly as [`PartyRequirement`] is, for the same reason.
 ///
-/// The relationship is provisioned between two REAL parties. RM demographic
-/// `master02-demographic_package.adoc` §Party Relationships fixes what the
-/// endpoints are: "`PARTY_RELATIONSHIP._source_` and `_target_` are
-/// represented by references … `OBJECT_REFs` containing `HIER_OBJECT_IDs` to
-/// denote the Version container of a Party, rather than `OBJECT_VERSION_IDs`"
-/// — so provisioning creates each endpoint party first and writes its
-/// `VERSIONED_OBJECT` uid into the corresponding `PARTY_REF`, rather than
-/// committing a relationship whose endpoints name nothing on the server.
+/// The relationship is provisioned between two real parties. RM demographic
+/// `master02-demographic_package.adoc` §Party Relationships fixes the
+/// endpoints: "`PARTY_RELATIONSHIP._source_` and `_target_` are represented by
+/// references … `OBJECT_REFs` containing `HIER_OBJECT_IDs` to denote the
+/// Version container of a Party, rather than `OBJECT_VERSION_IDs`" — so
+/// provisioning creates each endpoint party first and writes its
+/// `VERSIONED_OBJECT` uid into the corresponding `PARTY_REF`.
 ///
-/// The relationship create itself has NO released wire (register AMB-32; the
-/// `party-relationship` `served_extensions` family) — no openEHR spec governs
-/// that route, so the requirement is only usable by a party that serves it.
+/// The relationship create itself has no released wire (register AMB-32, the
+/// `party-relationship` `served_extensions` family), so the requirement is
+/// usable only by a party that serves it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PartyRelationshipRequirement {
     /// No party relationship is provisioned.
@@ -285,28 +274,22 @@ impl<'de> Deserialize<'de> for PartyRelationshipRequirement {
 /// The `requires.import` precondition — an EHR-Extract already received from
 /// another system.
 ///
-/// A version this repository did not create is precondition STATE exactly as
-/// [`PartyRequirement`] and [`PartyRelationshipRequirement`] are: the released
-/// reads that serve an `IMPORTED_VERSION` (RM common
-/// `master06-change_control_package.adoc` §Copying: "An `IMPORTED_VERSION`
-/// instance is then created, its `item` set to the received
-/// `ORIGINAL_VERSION`") are the SUBJECT of such a case, and driving the import
-/// in the flow would make the realization it evidences the import route's
-/// rather than the read's (`validate::check_realization_markers`).
+/// Precondition state exactly as [`PartyRequirement`] and
+/// [`PartyRelationshipRequirement`] are: the released reads that serve an
+/// `IMPORTED_VERSION` (RM common `master06-change_control_package.adoc`
+/// §Copying: "An `IMPORTED_VERSION` instance is then created, its `item` set to
+/// the received `ORIGINAL_VERSION`") are the subject of such a case, so driving
+/// the import in the flow would change the realization it evidences.
 ///
-/// The import itself has NO released wire — ITS-REST 1.1.0 publishes no
-/// MESSAGE / EHR-Extract API at all (register AMB-34; the `message-extract`
-/// `served_extensions` family) — so, exactly like
-/// [`PartyRelationshipRequirement`], the requirement is only usable on a party
-/// that serves that family, and `crate::run` records the case
-/// not-applicable-with-citation on one that does not.
+/// The import itself has no released wire — ITS-REST 1.1.0 publishes no
+/// MESSAGE / EHR-Extract API (register AMB-34, the `message-extract`
+/// `served_extensions` family) — so `crate::run` records the case
+/// not-applicable-with-citation on a party that does not serve it.
 ///
-/// Which SM operation provisioning drives follows master06 §Copying's own
-/// receiving situations: with an EHR already provisioned
-/// (`requires.ehr`) the extract lands in it through `import_ehr_extract`
-/// (Cases 2/3 — "an EHR exists" / "previous copies have been made"); with
-/// none, `import_ehr` clones a whole EHR (Case 1) and the clone's id is minted
-/// as `${ehr_id}`.
+/// Which SM operation provisioning drives follows master06 §Copying's
+/// receiving situations: with an EHR already provisioned the extract lands in
+/// it through `import_ehr_extract` (Cases 2/3); with none, `import_ehr` clones
+/// a whole EHR (Case 1) and the clone's id is minted as `${ehr_id}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportRequirement {
     /// Nothing is imported.
@@ -415,9 +398,8 @@ pub struct Requires {
 /// Released ITS-REST 1.1.0 surfaces no terminology resource, so nothing on the
 /// wire tells a runner which terminology servers a deployment is wired to or
 /// what it does with a value set it cannot resolve. Both are IXIT
-/// declarations, and a case that needs one the party does not declare is
-/// not-applicable with that citation (ISO/IEC 9646 test selection) — never
-/// driven against a guess.
+/// declarations, and a case needing one the party does not declare is
+/// not-applicable with that citation (ISO/IEC 9646 test selection).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TerminologyRequirement {
@@ -452,19 +434,16 @@ impl Requires {
         {
             handles.push(handle);
         }
-        // a provisioned FOLDER tree publishes its created VERSION uid
         if self.directory.is_some()
             && let Ok(handle) = CaptureName::parse("directory_version_uid")
         {
             handles.push(handle);
         }
-        // a provisioned PARTY publishes its VERSIONED_OBJECT uid
         if matches!(self.party, Some(PartyRequirement::Exists(_)))
             && let Ok(handle) = CaptureName::parse("party_id")
         {
             handles.push(handle);
         }
-        // a provisioned PARTY_RELATIONSHIP publishes its VERSIONED_OBJECT uid
         if matches!(
             self.party_relationship,
             Some(PartyRelationshipRequirement::Exists { .. })
@@ -472,14 +451,9 @@ impl Requires {
         {
             handles.push(handle);
         }
-        // a received EHR-Extract publishes the identity of the versioned
-        // object it landed and of the versions inside it — all taken from the
-        // extract's own content, since master06 §Copying keeps the received
-        // version container's identity ("the `ORIGINAL_VERSION` instance is
-        // never modified"). The BRANCH handle binds only when the named
-        // container actually carries a branch version; a case referencing it
-        // against a trunk-only extract fails loudly at drive time rather than
-        // silently reading the trunk.
+        // NOTE: RM common master06 §Copying ("the ORIGINAL_VERSION instance is
+        // never modified") — the identities come from the extract's own
+        // content, and the branch handle binds only when it carries a branch.
         if matches!(self.import, Some(ImportRequirement::Received { .. })) {
             for name in [
                 "imported_versioned_object_uid",
@@ -490,8 +464,8 @@ impl Requires {
                     handles.push(handle);
                 }
             }
-            // Case 1 of master06 §Copying: with no EHR provisioned the import
-            // CREATES the EHR, so the clone's id is minted here.
+            // NOTE: master06 §Copying Case 1 — with no EHR provisioned the
+            // import creates one, so the clone's id is minted here.
             if !matches!(self.ehr, Some(EhrRequirement::Exists { .. }))
                 && let Ok(handle) = CaptureName::parse("ehr_id")
             {
@@ -621,16 +595,15 @@ pub struct FlowStep {
     pub format: Option<FormatName>,
     /// The SMART `scope` claim this step's principal presents (ITS-REST
     /// `docs/smart_app_launch/master08-scopes.adoc` §Resource Scopes). The
-    /// addressed instance must be a `bearer_mint` principal: the runner signs
-    /// a fresh access token carrying exactly these scopes, because the CDR is
-    /// a resource server and the conformance stack runs no Authorization
-    /// Server to obtain one from (master06 §Supported Authentication Flows).
+    /// addressed instance must be a `bearer_mint` principal: the runner signs a
+    /// fresh access token carrying exactly these scopes, because the CDR is a
+    /// resource server and the conformance stack runs no Authorization Server
+    /// to obtain one from (master06 §Supported Authentication Flows).
     ///
-    /// **Declaring the key at all** — including as an empty list, which is the
+    /// Declaring the key at all — an empty list included, which is the
     /// scope-less token the fail-closed deny branch needs — marks the step as
     /// SMART-lane, so a party whose ixit declares no `smart` block records the
-    /// case not-applicable instead of driving it (ISO/IEC 9646 test
-    /// selection).
+    /// case not-applicable (ISO/IEC 9646 test selection).
     #[serde(default)]
     pub scopes: Option<Vec<TemplatedValue>>,
     /// The step's named arguments, in declaration order — each value is a
@@ -656,17 +629,13 @@ pub struct ConstraintContext {
     pub template: CorpusKey,
     /// The constrained node's archetype path within that template.
     pub path: String,
-    /// The decision-table columns that are *constraint axis* — cells that
-    /// describe the archetype/template constraint the row bakes (e.g.
-    /// `cardinality`, `month_validity`, `range.lower`, `slot_type`,
-    /// `state_existence`), as opposed to the *instance axis* (the genuine RM
-    /// attributes of the committed value). When non-empty the runner
-    /// synthesizes one OPT per row from these cells (a per-row constraint
-    /// template) rather than committing every row against one baked template;
-    /// the named columns flow into the synthesizer and are excluded from the
-    /// committed instance. Empty (the default) keeps the single-template
-    /// model: the constraint is constant across rows and baked into
-    /// `template`. (No openEHR spec governs this — our own corpus-authoring
+    /// The decision-table columns on the *constraint axis*: cells describing
+    /// the archetype/template constraint the row bakes (`cardinality`,
+    /// `month_validity`, `range.lower`, `slot_type`, `state_existence`), as
+    /// opposed to the *instance axis* of genuine RM attributes. When non-empty
+    /// the runner synthesizes one OPT per row from these cells and excludes
+    /// them from the committed instance; empty keeps one baked `template` for
+    /// every row. (No openEHR spec governs this — our own corpus-authoring
     /// design; the constraint shapes are grounded in AM AOM1.4.)
     #[serde(default)]
     pub constraint_columns: Vec<String>,
@@ -779,9 +748,6 @@ pub struct CaseCore {
     pub data_sets: Vec<CorpusKey>,
 }
 
-// Custom deserialization for `with`/`capture` map fields preserving order:
-// YAML mappings arrive as JSON objects; serde_json's preserve_order keeps
-// authored order, and Vec<(K, V)> makes that explicit in the type.
 impl FlowStep {
     /// The step's capture entries (empty when none).
     #[must_use]
@@ -870,8 +836,8 @@ mod tests {
         ));
         assert!(r.minted_handles().is_empty());
 
-        // Both ends and the relationship itself are mandatory: a partial block
-        // would provision a relationship with an unresolved endpoint.
+        // A partial block would provision a relationship with an unresolved
+        // endpoint, so all three keys are mandatory.
         assert!(
             serde_json::from_value::<Requires>(serde_json::json!({
                 "party_relationship": { "relationship": "cnf.demographic.party_relationship.v1" }
@@ -888,8 +854,7 @@ mod tests {
 
     #[test]
     fn a_received_extract_mints_the_identities_it_carries() {
-        // Cases 2/3 (an EHR is provisioned): the import lands in it, so only
-        // the container/version handles are minted.
+        // master06 §Copying Cases 2/3: the extract lands in the provisioned EHR.
         let into_existing: Requires = serde_json::from_value(serde_json::json!({
             "ehr": { "commits": "any" },
             "import": {
@@ -912,7 +877,7 @@ mod tests {
             ]
         );
 
-        // Case 1 (no EHR provisioned): the clone's id is minted by the import.
+        // master06 §Copying Case 1: the import clones a whole EHR.
         let clone: Requires = serde_json::from_value(serde_json::json!({
             "import": {
                 "extract": "cnf.messaging.ehr_extract.v1",
@@ -933,7 +898,6 @@ mod tests {
         assert_eq!(none.import, Some(ImportRequirement::None));
         assert!(none.minted_handles().is_empty());
 
-        // Both keys are mandatory, and the container class is closed.
         assert!(
             serde_json::from_value::<Requires>(serde_json::json!({
                 "import": { "extract": "cnf.messaging.ehr_extract.v1" }
@@ -988,9 +952,8 @@ mod tests {
     }
 
     /// The corpus-keyed preconditions spell "nothing is provisioned" as the
-    /// literal `none`, so a corpus key named `none` can never be provisioned
-    /// by accident and an unparsable key is refused rather than provisioned
-    /// as prose.
+    /// literal `none`, and an unparsable key is refused rather than
+    /// provisioned as prose.
     #[test]
     fn the_corpus_keyed_preconditions_read_none_as_the_absent_state() {
         let requires: Requires = serde_json::from_value(serde_json::json!({

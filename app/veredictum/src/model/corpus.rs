@@ -126,9 +126,9 @@ impl CorpusEntry {
                 "invalid fixture must carry validity.defect and validity.spec_ref".to_owned(),
             );
         }
-        // A `raw-json` entry exists to deliver SOURCE BYTES unrepaired, so
-        // the two structural ways of having no bytes are refused here rather
-        // than at drive time.
+        // A `raw-json` entry delivers SOURCE BYTES unrepaired, so the two
+        // structural ways of having no bytes are refused at load rather than
+        // at drive time.
         if self.format == CorpusFormat::RawJson {
             if self.generated_by.is_some() {
                 return Err(
@@ -262,9 +262,6 @@ mod tests {
             .is_err()
         );
 
-        // A committed fixture and a generated set are the two ways an entry
-        // gets its bytes; an entry declaring both leaves the source ambiguous,
-        // and one declaring neither has no bytes at all.
         assert_eq!(
             entry(serde_json::json!({
                 "source": "fixtures/raw/dup_member.json",
