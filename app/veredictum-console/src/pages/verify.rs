@@ -27,8 +27,7 @@ use crate::components::page_header::PageHeader;
 use crate::components::surface::{CARD_PAD, CARD_TITLE, WELL};
 use crate::verify_api::fns::fetch_verification;
 use crate::verify_api::{
-    BundleView, CLI_EQUIVALENT, HONESTY_BOUNDS, HONESTY_LINE, NO_KEY_HINT, UPLOAD_PATH,
-    VerifyScreen,
+    BundleView, HONESTY_BOUNDS, HONESTY_LINE, NO_KEY_HINT, UPLOAD_PATH, VerifyScreen,
 };
 
 /// The bundle id and the refusal reason the upload route redirects with.
@@ -77,7 +76,7 @@ pub fn Verify() -> impl IntoView {
                     })}
                 </Transition>
             </div>
-            <div>{honesty_box()} {cli_box()}</div>
+            <div>{honesty_box()}</div>
         </div>
     }
 }
@@ -134,26 +133,6 @@ fn honesty_box() -> impl IntoView {
             <h2 class=CARD_TITLE>"What this proves"</h2>
             <p class="text-sm text-ink">{HONESTY_LINE}</p>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-ink-muted">{bounds}</ul>
-        </section>
-    }
-}
-
-/// The command-line equivalent, so the console is never the only witness.
-fn cli_box() -> impl IntoView {
-    view! {
-        <section class=format!("{CARD_PAD} mt-4")>
-            <h2 class=CARD_TITLE>"Check it without this page"</h2>
-            <p class="mb-2 text-sm text-ink-muted">
-                "The same verification, from a terminal, over the published instrument:"
-            </p>
-            <pre class=format!(
-                "{WELL} overflow-x-auto font-mono text-xs text-ink",
-            )>{CLI_EQUIVALENT}</pre>
-            <p class="mt-2 text-sm text-ink-muted">
-                "The manifest's signature is an ordinary detached OpenPGP signature, so "
-                <span class="font-mono text-xs">"gpg --verify"</span>
-                " accepts the bundle too, without this instrument running at all."
-            </p>
         </section>
     }
 }

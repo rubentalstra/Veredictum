@@ -28,15 +28,15 @@ use leptos_router::hooks::use_query_map;
 
 use crate::bench_api::fns::{fetch_bench_comparison, fetch_bench_screen};
 use crate::bench_api::{
-    BenchComparison, BenchDetail, BenchListing, BenchScreen, CLI_COMPARE, CLI_DETAIL,
-    CompareScreen, HISTOGRAM_NOTE, UPLOAD_PATH, ms, ops, ratio, us,
+    BenchComparison, BenchDetail, BenchListing, BenchScreen, CompareScreen, HISTOGRAM_NOTE,
+    UPLOAD_PATH, ms, ops, ratio, us,
 };
 use crate::components::data_table::{TABLE, TABLE_WRAP, TD, TH};
 use crate::components::empty_state::EmptyState;
 use crate::components::field::BTN_PRIMARY;
 use crate::components::format_view::inline_error;
 use crate::components::page_header::PageHeader;
-use crate::components::surface::{CARD_PAD, CARD_TITLE, WELL};
+use crate::components::surface::{CARD_PAD, CARD_TITLE};
 
 /// The whole surface's state, which lives in the URL and nowhere else.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -241,17 +241,6 @@ fn upload_form() -> impl IntoView {
     }
 }
 
-/// The command-line equivalent, so the console is never the only witness.
-fn cli_box(command: &'static str, what: &'static str) -> impl IntoView {
-    view! {
-        <section class=format!("{CARD_PAD} mt-4")>
-            <h2 class=CARD_TITLE>"The same thing without this page"</h2>
-            <p class="mb-2 text-sm text-ink-muted">{what}</p>
-            <pre class=format!("{WELL} overflow-x-auto font-mono text-xs text-ink")>{command}</pre>
-        </section>
-    }
-}
-
 /// The listing: every record, with a compare toggle and the mount it came
 /// from.
 fn listing_view(listing: BenchListing, selection: &str) -> impl IntoView + use<> {
@@ -284,14 +273,13 @@ fn listing_view(listing: BenchListing, selection: &str) -> impl IntoView + use<>
         {upload_form()}
         {body}
         {unreadable}
-        {cli_box(CLI_DETAIL, "A bench run writes the record this page reads:")}
     }
 }
 
 /// The honest empty state: the mount that was walked, named.
 fn empty_listing(out: &str) -> impl IntoView + use<> {
     let hint = format!(
-        "Nothing under {out} carries a bench-result document. Run `veredictum bench` into that directory, or upload a record above."
+        "Nothing under {out} carries a bench-result document. Upload one above to read it here."
     );
     view! { <EmptyState icon=icondata_lu::LuGauge message="No bench records yet" hint=hint /> }
 }
@@ -440,7 +428,6 @@ fn detail_view(detail: BenchDetail) -> impl IntoView + use<> {
             <h2 class=CARD_TITLE>"Methodology"</h2>
             <p class="text-sm text-ink">{detail.methodology_statement}</p>
         </section>
-        {cli_box(CLI_DETAIL, "A bench run writes this record:")}
     }
 }
 
@@ -1025,7 +1012,6 @@ fn comparison_view(comparison: &BenchComparison) -> impl IntoView + use<> {
             {warnings}
             {columns}
             {body}
-            {cli_box(CLI_COMPARE, "The same alignment, from a terminal:")}
         </section>
     }
 }
