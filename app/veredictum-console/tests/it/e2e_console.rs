@@ -849,9 +849,14 @@ async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>
 /// the page could only ask whether anything was in flight here, and answered
 /// "no run is in flight" about a run that was still executing.
 ///
+/// The permalink is asserted by its href rather than by its text, because
+/// documentation capture mode pins the run id it DISPLAYS so an unchanged
+/// console rewrites no screenshot; the address the page is actually serving
+/// is the URL, and that is what a reload has to preserve.
+///
 /// # Panics
-/// When the live link carries no id, or the reloaded page does not show the
-/// run's address back.
+/// When the live link carries no id, when the reload lands on another run, or
+/// when the screen offers no permalink at all.
 async fn follow_the_run(h: &Harness) -> String {
     h.wait_xpath("//h1[contains(., 'Live run')]").await;
     let address = h.current_path().await;
@@ -860,8 +865,13 @@ async fn follow_the_run(h: &Harness) -> String {
         "the live link must carry the run's id: {address}"
     );
     h.goto(&address).await;
-    h.wait_xpath(&format!("//a[contains(., '{address}')]"))
-        .await;
+    h.wait_xpath("//h1[contains(., 'Live run')]").await;
+    h.wait_xpath("//a[starts-with(@href, '/run/live/')]").await;
+    assert_eq!(
+        h.current_path().await,
+        address,
+        "a reload mid-run follows the same run"
+    );
     address
 }
 
@@ -932,11 +942,12 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
     .await;
 
     // A link to the finished run's own id shows that run, after the reader
-    // walked away to the record surfaces (#386).
+    // walked away to the record surfaces (#386). The permalink is asserted by
+    // its href: capture mode pins the id the screen DISPLAYS, and the address
+    // being served is the URL.
     h.goto(&address).await;
     h.wait_xpath("//span[contains(., 'finished')]").await;
-    h.wait_xpath(&format!("//a[contains(., '{address}')]"))
-        .await;
+    h.wait_xpath("//a[starts-with(@href, '/run/live/')]").await;
 
     // S8 and S9 ride this journey rather than a second driven one: the console
     // holds ONE run draft and ONE job slot, so a second wizard-driving journey
