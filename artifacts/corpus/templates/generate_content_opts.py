@@ -1089,6 +1089,21 @@ def build_all():
     # CONT-DV_URI/DV_EHR_URI-validate_open: open string values (RM invariants only)
     T["dv_uri_open"] = lambda k: value_template(k, dv_string_type("DV_URI", None))
     T["dv_ehr_uri_open"] = lambda k: value_template(k, dv_string_type("DV_EHR_URI", None))
+    # CONT-DV_URI-validate_list: C_STRING.list of the case's URIs (#267 — the
+    # case rode the pattern template, so its declared list constraint never
+    # drove either row)
+    T["dv_uri_list"] = lambda k: value_template(
+        k,
+        dv_string_type(
+            "DV_URI",
+            item_c_string_list(
+                [
+                    "https://cabolabs.com",
+                    "https://cloudehrserver.com",
+                ]
+            ),
+        ),
+    )
     # CONT-DV_EHR_URI-validate_list: C_STRING.list of the case's ehr URIs
     T["dv_ehr_uri_list"] = lambda k: value_template(
     k,
@@ -1238,7 +1253,14 @@ def build_all():
 def manifest_sources():
     """Map cnf.tpl.<suffix> key -> source basename, read from the governed
     MANIFEST (authoritative: several keys use a `dt_`/`cnf.tpl.` filename that
-    differs from the key suffix). The template_id inside each OPT is the KEY."""
+    differs from the key suffix). The template_id inside each OPT is the KEY.
+
+    The regex matches ONLY `cnf.tpl.*` keys, and that exemption is deliberate
+    (#267): every other key family — `cnf.opt.*` above all — is outside this
+    generator's reproducibility contract, because a deliberately INVALID twin
+    committed as raw bytes must never be regenerated into validity. A future
+    `cnf.opt.*` template that SHOULD be generated joins by renaming its key
+    into `cnf.tpl.*`, never by widening this pattern."""
     import re
 
     path = os.path.join(HERE, "..", "MANIFEST.yaml")

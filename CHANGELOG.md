@@ -18,13 +18,13 @@ version on.
 
 ## [Unreleased]
 
-### Added
-- `bench` warns once when a credential rides a plain-`http` base URL that is
-  not loopback; the run proceeds, because the operator names the transport
-  and a local quickstart is legitimately `http://localhost` (#296).
-
-
 ### Fixed
+- `CONT-DV_URI-validate_list` drives the list constraint it declares: the case
+  rode the pattern-baking template, so both rows passed under the pattern by
+  coincidence; a script-generated `cnf.tpl.dv_uri_list` twin (the
+  `dv_ehr_uri_list` split, applied one family over) now bakes the case's own
+  `C_STRING.list`, and the generator's key exemption for the deliberately
+  invalid twins is stated instead of implicit (#267).
 - **The unmatched-container-member posture becomes a declared option
   (#283).** No released AM sentence decides whether a data member matching no
   constraint node is invalid (reported upstream as #307), so the two
@@ -146,6 +146,11 @@ version on.
   a server that serves the audit correctly. The shortcut now also requires the
   `_type` the released ITS-JSON binds a `VERSION` to, and any other body falls
   through to the family's envelope read.
+
+### Added
+- `bench` warns once when a credential rides a plain-`http` base URL that is
+  not loopback; the run proceeds, because the operator names the transport
+  and a local quickstart is legitimately `http://localhost` (#296).
 
 ### Removed
 - The `content_generation` registered-exception kind. Content cases execute
