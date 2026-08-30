@@ -22,6 +22,9 @@ const SLUG_OF: &[(&str, &str)] = &[
     ("run/connect", "connect"),
     ("run/scope", "scope"),
     ("run/live", "live"),
+    // The bare path and the run's own address render the same screen (#386),
+    // so one capture photographs both.
+    ("run/live/:run_id", "live"),
     ("run/results", "results"),
     ("run/verdicts", "verdicts"),
     ("verify", "verify"),

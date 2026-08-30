@@ -107,6 +107,13 @@ pub fn App() -> impl IntoView {
                     <Route path=(StaticSegment("run"), StaticSegment("connect")) view=Connect />
                     <Route path=(StaticSegment("run"), StaticSegment("scope")) view=Scope />
                     <Route path=(StaticSegment("run"), StaticSegment("live")) view=Live />
+                    // A run's own address (#386). The same view: the bare path
+                    // resolves the run this process holds, and this one names
+                    // the run, so a reload or a shared link follows it.
+                    <Route
+                        path=(StaticSegment("run"), StaticSegment("live"), ParamSegment("run_id"))
+                        view=Live
+                    />
                     <Route path=(StaticSegment("run"), StaticSegment("results")) view=Results />
                     <Route path=(StaticSegment("run"), StaticSegment("verdicts")) view=Verdicts />
                     <Route path=StaticSegment("benchmarks") view=Benchmarks />

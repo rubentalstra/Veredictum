@@ -200,13 +200,62 @@ pub struct ScopePreview {
     pub chapters: Vec<(String, u64)>,
 }
 
+/// What the live screen is looking at (#386).
+///
+/// Four honest answers, so a reader can tell "this run is executing here"
+/// from "this instance never heard of that run". A console instance answers
+/// only about itself: it drives a run in its own memory, or it reads the
+/// run's own directory under the mounted output tree, or it knows nothing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RunScreen {
+    /// This process is driving the run: stream it.
+    Live(Box<crate::run_job::JobView>),
+    /// The run is not in this process's memory, and its artifacts answer
+    /// instead.
+    Recorded(Box<RecordedRun>),
+    /// A run was named and this instance knows nothing of it.
+    Unknown(crate::run_job::RunId),
+    /// No run was named, and nothing is in flight here.
+    NoRunNamed,
+}
+
+/// A run read back from its own directory, never from this process's memory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordedRun {
+    /// The run this directory belongs to.
+    pub id: crate::run_job::RunId,
+    /// The artifacts directory, as the screen shows it.
+    pub dir: String,
+    /// What the results document says; `None` when the directory holds none.
+    pub results: Option<RecordedResults>,
+}
+
+/// The tally a recorded run's results document carries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecordedResults {
+    /// The SUT display name the record itself names.
+    pub sut_name: String,
+    /// Passed case records.
+    pub passed: u64,
+    /// Failed case records.
+    pub failed: u64,
+    /// Errored case records.
+    pub errored: u64,
+    /// Not-applicable case records.
+    pub not_applicable: u64,
+    /// Where the results document sits.
+    pub results_path: String,
+}
+
 #[cfg(feature = "ssr")]
 pub mod read {
     //! The component-free ssr readers and writers behind the endpoints.
 
     use super::{
-        ClaimSummary, DraftView, RunDraft, ScopePreview, ScopeTier, StatementRow, TierRow,
+        ClaimSummary, DraftView, RecordedResults, RecordedRun, RunDraft, RunScreen, ScopePreview,
+        ScopeTier, StatementRow, TierRow,
     };
+    use crate::run_job::RunId;
     use crate::state::ConsoleState;
 
     /// The pasted-claim size cap: far above any real ICS, far below abuse.
@@ -697,7 +746,7 @@ pub mod read {
     /// "no connection draft" before S3, the engine's own locate/spawn
     /// refusals, the slot's busy refusal, and the filesystem's verbatim
     /// failures.
-    pub fn start_run(state: &ConsoleState) -> Result<u64, String> {
+    pub fn start_run(state: &ConsoleState) -> Result<RunId, String> {
         // The no-draft refusal precedes engine discovery, so an unconnected
         // wizard is refused for what it is on a host with no engine mounted.
         let connected = state.draft.lock().map_err(|e| e.to_string())?.is_some();
@@ -727,16 +776,15 @@ pub mod read {
     pub fn start_run_with(
         state: &ConsoleState,
         engine: &crate::engine::Engine,
-    ) -> Result<u64, String> {
+    ) -> Result<RunId, String> {
         let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
         let draft = guard.as_mut().ok_or_else(|| String::from(NO_DRAFT))?;
-        let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
+        let id = state.jobs.allocate_id();
         let out_dir = crate::run_job::job_dir(&state.out, id);
         std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
         // A run into this directory invalidates any export of it (#68). The
-        // job counter restarts with the console process while the output mount
-        // persists, so a fresh run CAN land on an older run's directory, where
-        // a sealed bundle left behind certifies the run before it.
+        // seal lives INSIDE the job directory, so the seam that creates a
+        // run's directory is what guarantees no bundle is in it.
         crate::export_api::prepare::invalidate(&out_dir)?;
         let ixit_path = out_dir.join("ixit.json");
         std::fs::write(&ixit_path, ixit_document(draft))
@@ -771,6 +819,72 @@ pub mod read {
             .jobs
             .start(id, engine, &spec, sut_name)
             .map_err(|e| e.to_string())
+    }
+
+    /// What the live screen is looking at, for the run the URL names.
+    ///
+    /// A named run this process is driving streams; anything else falls back
+    /// to the run's own directory under the mounted output tree, which is the
+    /// durable half. `None` asks about the run this process holds, and with
+    /// nothing in flight the answer is [`RunScreen::NoRunNamed`].
+    ///
+    /// The id is a parsed UUID, so the derived directory stays under the
+    /// mounted output root by construction.
+    ///
+    /// # Errors
+    /// The slot's verbatim refusal, and the verbatim read or parse failure of
+    /// a results document that exists but cannot be read.
+    pub fn run_screen(state: &ConsoleState, id: Option<RunId>) -> Result<RunScreen, String> {
+        let named = match id {
+            Some(named) => named,
+            None => match state.jobs.current().map_err(|e| e.to_string())? {
+                Some(current) => current,
+                None => return Ok(RunScreen::NoRunNamed),
+            },
+        };
+        if let Some(view) = state.jobs.view_of(named).map_err(|e| e.to_string())? {
+            return Ok(RunScreen::Live(Box::new(view)));
+        }
+        recorded_run(state, named)
+    }
+
+    /// The named run as its own directory describes it.
+    ///
+    /// The results document is parsed through the published lib, so the tally
+    /// is the same one a live finished view carries.
+    ///
+    /// # Errors
+    /// The verbatim read or parse failure of a results document that exists.
+    fn recorded_run(state: &ConsoleState, id: RunId) -> Result<RunScreen, String> {
+        let dir = crate::run_job::job_dir(&state.out, id);
+        if !dir.is_dir() {
+            return Ok(RunScreen::Unknown(id));
+        }
+        let results_path = dir.join("results.json");
+        if !results_path.is_file() {
+            return Ok(RunScreen::Recorded(Box::new(RecordedRun {
+                id,
+                dir: dir.display().to_string(),
+                results: None,
+            })));
+        }
+        let body = std::fs::read_to_string(&results_path)
+            .map_err(|e| format!("{}: {e}", results_path.display()))?;
+        let results: veredictum::party::Results =
+            serde_json::from_str(&body).map_err(|e| format!("{}: {e}", results_path.display()))?;
+        let (passed, failed, errored, not_applicable) = crate::run_job::tally(&results);
+        Ok(RunScreen::Recorded(Box::new(RecordedRun {
+            id,
+            dir: dir.display().to_string(),
+            results: Some(RecordedResults {
+                sut_name: results.sut.name.clone(),
+                passed,
+                failed,
+                errored,
+                not_applicable,
+                results_path: results_path.display().to_string(),
+            }),
+        })))
     }
 
     /// The reachability probe.
@@ -842,9 +956,10 @@ pub mod fns {
     use leptos::prelude::{ServerFnError, server};
 
     use super::{
-        AuthChoice, ClaimSummary, DraftView, ProbeAnswer, ScopePreview, ScopeTier, StatementRow,
-        TierRow,
+        AuthChoice, ClaimSummary, DraftView, ProbeAnswer, RunScreen, ScopePreview, ScopeTier,
+        StatementRow, TierRow,
     };
+    use crate::run_job::RunId;
 
     /// Probes the connection and, on any answer, stores the draft with these
     /// facts (the probe outcome seed-gates Continue client-side). The secret
@@ -935,36 +1050,43 @@ pub mod fns {
         super::read::scope_preview(&state, &filter).map_err(ServerFnError::new)
     }
 
-    /// Starts the drafted run and answers with the job id.
+    /// Starts the drafted run and answers with the run's id, which is the
+    /// address `/run/live/{run_id}` carries.
     ///
     /// # Errors
     /// "no connection draft" before S3, the engine's refusals, the busy
     /// slot, and filesystem failures — each verbatim.
     #[server]
-    pub async fn start_run() -> Result<u64, ServerFnError> {
+    pub async fn start_run() -> Result<RunId, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         super::read::start_run(&state).map_err(ServerFnError::new)
     }
 
-    /// The live job view, when a job exists.
+    /// What the live screen is looking at, for the run the URL names.
+    ///
+    /// `None` asks about the run this process holds. The id is untrusted
+    /// input, and a parsed UUID keeps the derived directory under the
+    /// mounted output root.
     ///
     /// # Errors
-    /// The slot's poisoned-state diagnostic only.
+    /// The slot's poisoned-state diagnostic, or a results document that
+    /// exists and cannot be read.
     #[server]
-    pub async fn fetch_job() -> Result<Option<crate::run_job::JobView>, ServerFnError> {
+    pub async fn fetch_run(id: Option<RunId>) -> Result<RunScreen, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        let view = state.jobs.view().map_err(ServerFnError::new)?;
-        Ok(crate::capture::job(&state, view))
+        let screen = super::read::run_screen(&state, id).map_err(ServerFnError::new)?;
+        Ok(crate::capture::run_screen(&state, screen))
     }
 
-    /// Cancels the in-flight run.
+    /// Cancels the NAMED run.
     ///
     /// # Errors
-    /// "no run is in flight", or the kill's own failure.
+    /// "no run is in flight" when this process is not driving that run, or
+    /// the kill's own failure.
     #[server]
-    pub async fn cancel_run() -> Result<(), ServerFnError> {
+    pub async fn cancel_run(id: RunId) -> Result<(), ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        state.jobs.cancel().map_err(ServerFnError::new)
+        state.jobs.cancel(id).map_err(ServerFnError::new)
     }
 
     /// Validates and stores the scope half onto the draft, answering with

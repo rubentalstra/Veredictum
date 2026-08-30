@@ -21,7 +21,8 @@
 //! the progress bar's width transition it happened to catch.
 
 use crate::export_api::{ExportScreen, ExportSummary};
-use crate::run_job::JobView;
+use crate::run_api::RunScreen;
+use crate::run_job::{JobView, RunId};
 use crate::verify_api::{BundleView, VerifyScreen};
 
 /// The environment variable that turns capture mode on.
@@ -67,6 +68,13 @@ pub const PINNED_TIME: &str = "1970-01-01T00:00:00Z";
 /// The run clock every captured live screen shows, in milliseconds.
 pub const PINNED_ELAPSED_MS: u64 = 0;
 
+/// The run id every captured live screen shows in place of a minted one.
+///
+/// A run id is a fresh UUID per run (#386), and the live screen prints it as
+/// the run's own address, so without a stand-in every capture pass would
+/// rewrite the screenshot with an id nobody changed.
+pub const PINNED_RUN_ID: RunId = RunId::NIL;
+
 /// The export section as this console answers it: pinned under capture mode,
 /// verbatim otherwise.
 #[cfg(feature = "ssr")]
@@ -101,14 +109,14 @@ pub fn verification(state: &crate::state::ConsoleState, screen: VerifyScreen) ->
     }
 }
 
-/// The live run as this console answers it.
+/// The live screen as this console answers it.
 #[cfg(feature = "ssr")]
 #[must_use]
-pub fn job(state: &crate::state::ConsoleState, view: Option<JobView>) -> Option<JobView> {
+pub fn run_screen(state: &crate::state::ConsoleState, screen: RunScreen) -> RunScreen {
     if state.capture {
-        view.map(pin_job)
+        pin_run_screen(screen)
     } else {
-        view
+        screen
     }
 }
 
@@ -161,10 +169,23 @@ pub fn pin_bundle(view: BundleView) -> BundleView {
     }
 }
 
+/// The live screen as a capture shows it.
+///
+/// Only the streamed run is pinned: the other three states carry no fact a
+/// re-run moves.
+#[must_use]
+pub fn pin_run_screen(screen: RunScreen) -> RunScreen {
+    match screen {
+        RunScreen::Live(view) => RunScreen::Live(Box::new(pin_job(*view))),
+        other => other,
+    }
+}
+
 /// The live run as a capture shows it.
 #[must_use]
 pub fn pin_job(view: JobView) -> JobView {
     JobView {
+        id: PINNED_RUN_ID,
         elapsed_ms: PINNED_ELAPSED_MS,
         eta_ms: view.eta_ms.map(|_| PINNED_ELAPSED_MS),
         ..view
@@ -174,11 +195,12 @@ pub fn pin_job(view: JobView) -> JobView {
 #[cfg(test)]
 mod tests {
     use super::{
-        PINNED_DIGEST, PINNED_ELAPSED_MS, PINNED_TIME, pin_bundle, pin_export, pin_job,
-        pin_summary, pin_verification,
+        PINNED_DIGEST, PINNED_ELAPSED_MS, PINNED_RUN_ID, PINNED_TIME, pin_bundle, pin_export,
+        pin_job, pin_run_screen, pin_summary, pin_verification,
     };
     use crate::export_api::{ExportScreen, ExportSummary};
-    use crate::run_job::{JobStatus, JobView};
+    use crate::run_api::RunScreen;
+    use crate::run_job::{JobStatus, JobView, RunId};
     use crate::verify_api::{BundleView, FileRow, VerifyScreen};
 
     /// One sealed record's summary as the export seam builds it.
@@ -291,11 +313,10 @@ mod tests {
         assert_eq!(super::root_class(false), "");
     }
 
-    /// The live screen's clock is the run's, and only the clock is pinned.
-    #[test]
-    fn a_pinned_job_keeps_its_progress() {
-        let view = JobView {
-            id: 1,
+    /// One driving job as the slot answers it.
+    fn driving() -> JobView {
+        JobView {
+            id: RunId::NIL,
             sut_name: String::from("example-cdr"),
             status: JobStatus::Running,
             completed: 7,
@@ -305,12 +326,42 @@ mod tests {
             eta_ms: Some(4_200),
             tail: vec![String::from("driving 11 cases")],
             finished: None,
-        };
-        let pinned = pin_job(view);
+        }
+    }
+
+    /// The live screen's clock and the run's own address are the two facts a
+    /// re-run moves, so both are pinned and nothing else is.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+    )]
+    #[test]
+    fn a_pinned_job_keeps_its_progress() -> Result<(), crate::run_job::RunIdError> {
+        let minted: RunId = "3f2504e0-4f89-41d3-9a0c-0305e82c3301".parse()?;
+        let pinned = pin_job(JobView {
+            id: minted,
+            ..driving()
+        });
         assert_eq!(pinned.elapsed_ms, PINNED_ELAPSED_MS);
         assert_eq!(pinned.eta_ms, Some(PINNED_ELAPSED_MS));
+        assert_eq!(pinned.id, PINNED_RUN_ID, "the address is a fresh UUID");
         assert_eq!(pinned.completed, 7);
         assert_eq!(pinned.total, 11);
         assert_eq!(pinned.tail, vec![String::from("driving 11 cases")]);
+        Ok(())
+    }
+
+    /// A live screen with no streamed run carries nothing a re-run moves.
+    #[test]
+    fn only_a_streamed_run_is_pinned() {
+        assert_eq!(pin_run_screen(RunScreen::NoRunNamed), RunScreen::NoRunNamed);
+        assert_eq!(
+            pin_run_screen(RunScreen::Unknown(RunId::NIL)),
+            RunScreen::Unknown(RunId::NIL)
+        );
+        let RunScreen::Live(pinned) = pin_run_screen(RunScreen::Live(Box::new(driving()))) else {
+            panic!("a streamed run stays streamed");
+        };
+        assert_eq!(pinned.elapsed_ms, PINNED_ELAPSED_MS);
     }
 }

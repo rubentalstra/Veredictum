@@ -111,10 +111,11 @@ pub mod prepare {
 
     /// Removes any sealed bundle left in a job directory.
     ///
-    /// Called when a run STARTS into that directory. Nothing inside a bundle
-    /// names the run it certifies, and the job counter restarts with the
-    /// console process while the output mount persists, so a stale bundle
-    /// would be presented as a later run's record.
+    /// Called when a run STARTS into that directory. The seal lives INSIDE
+    /// the job directory and nothing in a bundle names the run it certifies,
+    /// so the seam that creates a run's directory is what guarantees no
+    /// bundle is in it, and a stale one is never presented as this run's
+    /// record.
     ///
     /// # Errors
     /// The verbatim filesystem failure, because a bundle that cannot be

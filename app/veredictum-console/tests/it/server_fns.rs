@@ -267,7 +267,8 @@ async fn the_bench_endpoints_answer_over_an_empty_output_root()
 #[tokio::test]
 async fn the_run_endpoints_refuse_an_out_of_order_wizard() -> Result<(), Box<dyn std::error::Error>>
 {
-    use veredictum_console::run_api::fns;
+    use veredictum_console::run_api::{RunScreen, fns};
+    use veredictum_console::run_job::RunId;
 
     let scratch = assert_fs::TempDir::new()?;
     let state = state_over(scratch.path());
@@ -278,10 +279,21 @@ async fn the_run_endpoints_refuse_an_out_of_order_wizard() -> Result<(), Box<dyn
         None,
         "no draft before Connect"
     );
+    // "No run is in flight" is said only about a request that named no run.
     assert_eq!(
-        fns::fetch_job().await.map_err(|e| e.to_string())?,
-        None,
+        fns::fetch_run(None).await.map_err(|e| e.to_string())?,
+        RunScreen::NoRunNamed,
         "no job before Live"
+    );
+    // A run this instance never drove says so in its own words, and a run id
+    // is untrusted input that can name nothing outside the output mount.
+    let stranger: RunId = "3f2504e0-4f89-41d3-9a0c-0305e82c3301".parse()?;
+    assert_eq!(
+        fns::fetch_run(Some(stranger))
+            .await
+            .map_err(|e| e.to_string())?,
+        RunScreen::Unknown(stranger),
+        "an unknown run is not an idle console"
     );
 
     let scope = fns::save_scope(None, None, false)
@@ -290,7 +302,7 @@ async fn the_run_endpoints_refuse_an_out_of_order_wizard() -> Result<(), Box<dyn
         .to_string();
     assert!(scope.contains("no connection draft"), "{scope}");
 
-    let cancel = fns::cancel_run()
+    let cancel = fns::cancel_run(stranger)
         .await
         .expect_err("an idle slot has nothing to cancel")
         .to_string();

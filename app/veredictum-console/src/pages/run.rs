@@ -9,12 +9,14 @@
 
 use leptos::prelude::{
     Action, AddAnyAttr, ClassAttribute, CollectView, Effect, ElementChild, Get, GlobalAttributes,
-    IntoAny, IntoView, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal,
+    IntoAny, IntoView, Memo, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal,
     ServerAction, ServerFnError, Set, StyleAttribute, Suspend, Suspense, Transition, Update, With,
     component, view,
 };
 use leptos_meta::Title;
 use leptos_router::components::{A, Redirect};
+use leptos_router::hooks::use_params_map;
+use leptos_use::{UseClipboardReturn, use_clipboard};
 
 use crate::components::field::{BTN_PRIMARY, BTN_SECONDARY, INPUT, LABEL, TEXTAREA};
 use crate::components::format_view::{Pane, inline_error};
@@ -22,13 +24,14 @@ use crate::components::page_header::{Crumb, PageHeader};
 use crate::components::surface::{CARD_PAD, CARD_TITLE};
 use crate::components::toast;
 use crate::run_api::fns::{
-    ProbeAndSave, cancel_run, compose_claim, fetch_draft, fetch_job, fetch_scope_preview,
+    ProbeAndSave, cancel_run, compose_claim, fetch_draft, fetch_run, fetch_scope_preview,
     fetch_statement_body, fetch_statements, fetch_tier_counts, save_scope, start_run,
 };
 use crate::run_api::{
-    AuthChoice, ClaimSummary, ProbeAnswer, ScopePreview, ScopeTier, StatementRow, TierRow,
+    AuthChoice, ClaimSummary, ProbeAnswer, RecordedRun, RunScreen, ScopePreview, ScopeTier,
+    StatementRow, TierRow,
 };
-use crate::run_job::{JobStatus, JobView};
+use crate::run_job::{JobStatus, JobView, RunId};
 
 /// `/run` — the wizard's entry: always the first step.
 #[expect(
@@ -390,13 +393,13 @@ pub fn Scope() -> impl IntoView {
             }
         }
     });
-    let started = RwSignal::new(None::<Result<u64, String>>);
+    let started = RwSignal::new(None::<Result<RunId, String>>);
     let start = Action::new(move |(): &()| async move {
         match start_run().await {
             Ok(id) => {
                 toast::success(
                     "Run started",
-                    &format!("Job {id} is driving; watch it on the Live screen."),
+                    &format!("Run {id} is driving; watch it on the Live screen."),
                 );
                 started.set(Some(Ok(id)));
             }
@@ -572,9 +575,9 @@ pub fn Scope() -> impl IntoView {
                                 view! {
                                     <div class="flex items-center gap-2">
                                         <p class="text-sm text-ink">
-                                            {format!("Run started (job {id}).")}
+                                            {format!("Run started ({id}).")}
                                         </p>
-                                        <A href="/run/live" attr:class=BTN_SECONDARY>
+                                        <A href=live_path(id) attr:class=BTN_SECONDARY>
                                             "Watch it live"
                                         </A>
                                     </div>
@@ -808,32 +811,90 @@ fn mmss(ms: u64) -> String {
     format!("{:02}:{:02}", seconds / 60, seconds % 60)
 }
 
+/// What `/run/live/{run_id}` names, read out of the URL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Requested {
+    /// The bare `/run/live`: ask this process which run it holds.
+    Nothing,
+    /// A readable run id.
+    Named(RunId),
+    /// A path segment that is not a run id; the field is the parse reason.
+    Unreadable(String),
+}
+
+/// What the live screen renders, once the URL and the server have both had
+/// their say.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+enum LiveScreen {
+    /// The URL named something this build cannot read as a run id.
+    Unreadable(String),
+    /// The server's own answer for the named run, or for no name at all.
+    Answered(RunScreen),
+}
+
+/// The run the URL names, re-read on every navigation.
+///
+/// A helper rather than the component body: reading the router's params
+/// inside a `#[component]` fn silences `clippy::must_use_candidate` there,
+/// turning the crate's `#[expect]` idiom into an unfulfilled-expectation
+/// build failure.
+fn requested_run() -> Memo<Requested> {
+    let params = use_params_map();
+    Memo::new(move |_| {
+        params.with(|map| match map.get("run_id") {
+            None => Requested::Nothing,
+            Some(text) if text.is_empty() => Requested::Nothing,
+            Some(text) => match text.parse::<RunId>() {
+                Ok(id) => Requested::Named(id),
+                Err(e) => Requested::Unreadable(e.to_string()),
+            },
+        })
+    })
+}
+
 /// S5 — the live run: progress from the engine's own stream, the honest
 /// estimate, the output tail, and cancel. The page polls and therefore
 /// rejoins the running job on refresh.
+///
+/// The URL carries the run's identity (#386), so a reload, a bookmark and a
+/// shared link all follow the same run. A bare `/run/live` asks about the run
+/// this process holds and renders it exactly as the addressed URL does.
 #[expect(
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"
 )]
 #[component]
 pub fn Live() -> impl IntoView {
+    let requested = requested_run();
     // A browser-side tick drives the poll; on the server the resource loads
     // once and the timer never runs (pause/resume are browser-only).
     let tick = RwSignal::new(0_u64);
-    let job = Resource::new(move || tick.get(), |_| fetch_job());
+    let screen = Resource::new(
+        move || (tick.get(), requested.get()),
+        |(_, requested)| async move {
+            match requested {
+                Requested::Unreadable(reason) => Ok(LiveScreen::Unreadable(reason)),
+                Requested::Nothing => fetch_run(None).await.map(LiveScreen::Answered),
+                Requested::Named(id) => fetch_run(Some(id)).await.map(LiveScreen::Answered),
+            }
+        },
+    );
     // Cancel is a mutation, so both outcomes are notifications: the live
     // screen's own status chip is the standing record, and a silent refusal
     // below the fold would read as "nothing happened".
-    let cancel = Action::new(move |(): &()| async move {
-        match cancel_run().await {
-            Ok(()) => toast::success(
-                "Cancel requested",
-                "The engine process was signalled; the job reports cancelled once it exits.",
-            ),
-            Err(e) => toast::error(
-                "The cancel was refused",
-                &format!("The run is still driving: {e}."),
-            ),
+    let cancel = Action::new(move |id: &RunId| {
+        let id = *id;
+        async move {
+            match cancel_run(id).await {
+                Ok(()) => toast::success(
+                    "Cancel requested",
+                    "The engine process was signalled; the job reports cancelled once it exits.",
+                ),
+                Err(e) => toast::error(
+                    "The cancel was refused",
+                    &format!("The run is still driving: {e}."),
+                ),
+            }
         }
     });
     Effect::new(move |_| {
@@ -851,20 +912,78 @@ pub fn Live() -> impl IntoView {
             <div class="flex items-center gap-1">{steps("live")}</div>
         </PageHeader>
         <Transition fallback=|| {
-            view! { <p class="text-sm text-ink-muted">"Reading the job…"</p> }
+            view! { <p class="text-sm text-ink-muted">"Reading the run…"</p> }
         }>
             {move || Suspend::new(async move {
-                match job.await {
-                    Ok(Some(view_job)) => live_view(&view_job, cancel).into_any(),
-                    Ok(None) => idle_view().into_any(),
+                match screen.await {
+                    Ok(LiveScreen::Unreadable(reason)) => {
+                        unknown_view(None, Some(reason)).into_any()
+                    }
+                    Ok(LiveScreen::Answered(RunScreen::Live(job))) => {
+                        live_view(&job, cancel).into_any()
+                    }
+                    Ok(LiveScreen::Answered(RunScreen::Recorded(run))) => {
+                        recorded_view(&run).into_any()
+                    }
+                    Ok(LiveScreen::Answered(RunScreen::Unknown(id))) => {
+                        unknown_view(Some(id.to_string()), None).into_any()
+                    }
+                    Ok(LiveScreen::Answered(RunScreen::NoRunNamed)) => idle_view().into_any(),
                     Err(e) => inline_error(&e.to_string()).into_any(),
                 }
             })}
         </Transition>
+        {ephemeral_note()}
     }
 }
 
-/// The no-job state: the wizard starts at Connect.
+/// The standing note about what this instance keeps.
+///
+/// Page furniture on every state, because a reader deciding whether to close
+/// the tab needs it whether the run is driving or already finished.
+fn ephemeral_note() -> impl IntoView + use<> {
+    view! {
+        <p class="mt-4 text-xs text-ink-muted">
+            "This instance keeps nothing durable. A run's artifacts live long enough to be judged, shown and submitted, and a redeploy ends the runs in flight along with them."
+        </p>
+    }
+}
+
+/// The run's own address: what a reader copies to come back or to share.
+#[component]
+fn Permalink(
+    /// The run's path under this console.
+    #[prop(into)]
+    path: String,
+) -> impl IntoView {
+    let UseClipboardReturn { copy, copied, .. } = use_clipboard();
+    let source = path.clone();
+    let shown = path.clone();
+    view! {
+        <div class="mt-2 flex flex-wrap items-center gap-2">
+            <span class="text-xs font-medium uppercase tracking-wide text-ink-muted">
+                "this run"
+            </span>
+            <a href=path class="font-mono text-xs text-accent hover:underline">
+                {shown}
+            </a>
+            <button
+                type="button"
+                class="text-xs text-accent hover:text-accent-hover hover:underline"
+                on:click=move |_| copy(&source)
+            >
+                {move || if copied.get() { "copied" } else { "copy" }}
+            </button>
+        </div>
+    }
+}
+
+/// The path one run is addressed by.
+fn live_path(id: RunId) -> String {
+    format!("/run/live/{id}")
+}
+
+/// The no-run state, said only about a request that named no run.
 fn idle_view() -> impl IntoView + use<> {
     view! {
         <div class="space-y-2">
@@ -876,12 +995,83 @@ fn idle_view() -> impl IntoView + use<> {
     }
 }
 
+/// A run this instance never heard of, or an address it cannot read.
+fn unknown_view(id: Option<String>, reason: Option<String>) -> impl IntoView + use<> {
+    let named = id.map_or_else(
+        || String::from("That address does not name a run."),
+        |id| format!("This console knows nothing about run {id}."),
+    );
+    view! {
+        <div class="space-y-2">
+            <p class="text-sm text-ink">{named}</p>
+            <p class="text-sm text-ink-muted">
+                "It never ran here, or the instance that drove it is gone. Nothing was lost that this console can recover."
+            </p>
+            {reason
+                .map(|reason| {
+                    view! { <p class="font-mono text-xs text-ink-faint">{reason}</p> }
+                })}
+            <A href="/run/connect" attr:class=BTN_SECONDARY>
+                "Go to Connect"
+            </A>
+        </div>
+    }
+}
+
+/// A run read back from its own directory: this process never drove it, and
+/// the screen says so before it states a number.
+fn recorded_view(run: &RecordedRun) -> impl IntoView + use<> {
+    let outcome = run.results.as_ref().map_or_else(
+        || {
+            view! {
+                <p class="text-sm text-ink">
+                    "The run left no results document, so there is no outcome to state. It was cancelled, or it stopped before the engine wrote one."
+                </p>
+            }
+                .into_any()
+        },
+        |results| {
+            view! {
+                <div class="space-y-1">
+                    <p class="text-sm text-ink">{format!("{} · finished", results.sut_name)}</p>
+                    <p class="tabular-nums text-sm text-ink">
+                        {format!(
+                            "{} passed · {} failed · {} errored · {} not applicable",
+                            results.passed,
+                            results.failed,
+                            results.errored,
+                            results.not_applicable,
+                        )}
+                    </p>
+                    <p class="font-mono text-xs text-ink-muted">
+                        {format!("results: {}", results.results_path)}
+                    </p>
+                </div>
+            }
+                .into_any()
+        },
+    );
+    let path = live_path(run.id);
+    view! {
+        <section class=CARD_PAD>
+            <h2 class=CARD_TITLE>{format!("Run {}", run.id)}</h2>
+            <p class="text-sm text-ink-muted">
+                "This console did not drive this run. Everything below is read from the artifacts it left in the mounted output tree."
+            </p>
+            <div class="mt-3">{outcome}</div>
+            <p class="mt-2 font-mono text-xs text-ink-muted">{format!("artifacts: {}", run.dir)}</p>
+            <Permalink path=path />
+        </section>
+    }
+}
+
 /// The loaded job's sections — plain assembly, erased per section.
 #[expect(
     clippy::too_many_lines,
     reason = "the progress header, the tail pane and the finished summary — one cohesive assembly, each section already erased"
 )]
-fn live_view(job: &JobView, cancel: Action<(), ()>) -> impl IntoView + use<> {
+fn live_view(job: &JobView, cancel: Action<RunId, ()>) -> impl IntoView + use<> {
+    let id = job.id;
     // Display truncation is intended: a bar at 99.9% shows 99.
     let percent = job
         .completed
@@ -959,7 +1149,7 @@ fn live_view(job: &JobView, cancel: Action<(), ()>) -> impl IntoView + use<> {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
                     <h2 class="text-sm font-semibold text-ink-heading">
-                        {format!("job {} · {}", job.id, job.sut_name)}
+                        {format!("{} · {}", job.sut_name, job.id)}
                     </h2>
                     {status_line}
                 </div>
@@ -970,7 +1160,7 @@ fn live_view(job: &JobView, cancel: Action<(), ()>) -> impl IntoView + use<> {
                                 type="button"
                                 class=crate::components::field::BTN_DANGER
                                 on:click=move |_| {
-                                    cancel.dispatch(());
+                                    cancel.dispatch(id);
                                 }
                             >
                                 "Cancel run"
@@ -978,6 +1168,7 @@ fn live_view(job: &JobView, cancel: Action<(), ()>) -> impl IntoView + use<> {
                         }
                     })}
             </div>
+            <Permalink path=live_path(id) />
             <div class="mt-3 h-2 w-full overflow-hidden rounded-control bg-sunken">
                 <div
                     class="h-full rounded-control bg-run transition-all"

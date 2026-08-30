@@ -3,6 +3,11 @@
 
 //! The run job (#66): one engine run at a time, supervised server-side.
 //!
+//! A run's identity is a [`RunId`], a UUID minted once and unique across
+//! processes and restarts (#386): it names the run's own directory under the
+//! mounted output tree, and the live URL carries it, so a run stays
+//! addressable after the memory holding it is gone.
+//!
 //! The job's memory is in-process, like everything else in the console: an
 //! image restart legitimately forgets a finished job, and the artifacts it
 //! wrote stay in the mounted output directory exactly as a terminal run
@@ -24,6 +29,65 @@ use crate::engine::{Canceller, Engine, Line, RunSpec};
 /// How many tail lines the job keeps for the live screen.
 #[cfg(feature = "ssr")]
 const TAIL_CAP: usize = 200;
+
+/// A run's identity: a UUID, minted once when the run is allocated.
+///
+/// Unique across processes and restarts, which is what makes it addressable:
+/// `/run/live/{run_id}` names one run, and [`job_dir`] gives that run its own
+/// directory under the mounted output tree. Both compilation targets carry
+/// the type — the id crosses the server-fn wire and the browser reads it out
+/// of the URL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RunId(uuid::Uuid);
+
+impl RunId {
+    /// The nil run id: all zeros, which no minted id can be.
+    ///
+    /// Documentation capture mode shows it in place of a minted id
+    /// ([`crate::capture::PINNED_RUN_ID`]), so a capture pass over an
+    /// unchanged console photographs the same address.
+    pub const NIL: Self = Self(uuid::Uuid::nil());
+
+    /// Mints a fresh run id.
+    ///
+    /// Server-side only: a v4 mint needs a random source, and the console's
+    /// WASM bundle claims no getrandom backend.
+    #[cfg(feature = "ssr")]
+    #[must_use]
+    pub fn mint() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+}
+
+impl std::fmt::Display for RunId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0.as_hyphenated(), f)
+    }
+}
+
+/// Why a run id read from a URL could not be understood.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("`{text}` is not a run id: {reason}")]
+pub struct RunIdError {
+    /// The text the URL carried, verbatim.
+    pub text: String,
+    /// The UUID parser's own reason.
+    pub reason: String,
+}
+
+impl std::str::FromStr for RunId {
+    type Err = RunIdError;
+
+    fn from_str(text: &str) -> Result<Self, Self::Err> {
+        uuid::Uuid::parse_str(text)
+            .map(Self)
+            .map_err(|e| RunIdError {
+                text: text.to_owned(),
+                reason: e.to_string(),
+            })
+    }
+}
 
 /// One parsed `--progress` line: `progress: <k>/<n>` with an optional case id
 /// (#81's documented grammar).
@@ -87,8 +151,8 @@ pub struct FinishedView {
 /// What the live screen polls.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JobView {
-    /// The job id (monotonic per console process).
-    pub id: u64,
+    /// The run's identity, the address `/run/live/{run_id}` carries.
+    pub id: RunId,
     /// Where the job stands.
     pub status: JobStatus,
     /// The SUT display name the run records.
@@ -115,7 +179,7 @@ pub struct JobView {
 #[cfg(feature = "ssr")]
 #[derive(Debug)]
 struct JobState {
-    id: u64,
+    id: RunId,
     status: JobStatus,
     sut_name: String,
     completed: u64,
@@ -137,7 +201,7 @@ struct JobState {
 /// spellings of the same claim drift the moment either side changes.
 #[cfg(feature = "ssr")]
 #[must_use]
-pub fn job_dir(out: &std::path::Path, id: u64) -> std::path::PathBuf {
+pub fn job_dir(out: &std::path::Path, id: RunId) -> std::path::PathBuf {
     out.join(format!("console-job-{id}"))
 }
 
@@ -146,7 +210,6 @@ pub fn job_dir(out: &std::path::Path, id: u64) -> std::path::PathBuf {
 #[derive(Debug, Clone, Default)]
 pub struct JobSlot {
     state: Arc<Mutex<Option<JobState>>>,
-    next_id: Arc<Mutex<u64>>,
 }
 
 /// Everything the supervisor can refuse.
@@ -154,8 +217,8 @@ pub struct JobSlot {
 #[derive(Debug, thiserror::Error)]
 pub enum JobError {
     /// A run is already driving.
-    #[error("a run is already in flight (job {0}); cancel it first or wait")]
-    Busy(u64),
+    #[error("a run is already in flight (run {0}); cancel it first or wait")]
+    Busy(RunId),
     /// The slot's lock was poisoned by a panicking thread; the field is the
     /// poison's own display.
     #[error("the job state is poisoned ({0}); restart the console")]
@@ -229,20 +292,42 @@ fn finish_status(
     }
 }
 
+/// One job's live view, read off the state the supervising thread writes.
+#[cfg(feature = "ssr")]
+fn snapshot(job: &JobState) -> JobView {
+    let elapsed = u64::try_from(job.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let remaining = job.total.saturating_sub(job.completed);
+    JobView {
+        id: job.id,
+        status: job.status.clone(),
+        sut_name: job.sut_name.clone(),
+        completed: job.completed,
+        total: job.total,
+        current_case: job.current_case.clone(),
+        elapsed_ms: elapsed,
+        eta_ms: if job.status == JobStatus::Running {
+            eta_ms(&job.durations_ms, remaining)
+        } else {
+            None
+        },
+        tail: job.tail.iter().cloned().collect(),
+        finished: job.finished.clone(),
+    }
+}
+
 #[cfg(feature = "ssr")]
 impl JobSlot {
-    /// Allocates the next job id — the caller derives the output directory
-    /// from it BEFORE starting, so the artifacts' home carries the id.
+    /// Allocates this run's id — the caller derives the output directory from
+    /// it BEFORE starting, so the artifacts' home carries the id.
     ///
-    /// # Errors
-    /// [`JobError::Poisoned`] only.
-    pub fn allocate_id(&self) -> Result<u64, JobError> {
-        let mut next = self
-            .next_id
-            .lock()
-            .map_err(|poison| JobError::Poisoned(poison.to_string()))?;
-        *next += 1;
-        Ok(*next)
+    /// Infallible: minting a UUID takes no lock and reads no shared state.
+    #[expect(
+        clippy::unused_self,
+        reason = "the slot owns run identity, and #389 turns this into an insertion that needs it"
+    )]
+    #[must_use]
+    pub fn allocate_id(&self) -> RunId {
+        RunId::mint()
     }
 
     /// Starts a run under a previously allocated id: spawns the engine and a
@@ -254,11 +339,11 @@ impl JobSlot {
     /// the engine's own spawn refusals.
     pub fn start(
         &self,
-        id: u64,
+        id: RunId,
         engine: &Engine,
         spec: &RunSpec,
         sut_name: String,
-    ) -> Result<u64, JobError> {
+    ) -> Result<RunId, JobError> {
         let mut guard = self
             .state
             .lock()
@@ -313,19 +398,23 @@ impl JobSlot {
         Ok(id)
     }
 
-    /// Cancels the in-flight run; the supervising thread records the state.
+    /// Cancels the NAMED run; the supervising thread records the state.
+    ///
+    /// A run this slot does not hold, or one that already left `Running`, is
+    /// [`JobError::Idle`]: cancel addresses one run, never whatever happens
+    /// to be in flight.
     ///
     /// # Errors
-    /// [`JobError::Idle`] with nothing in flight, [`JobError::Poisoned`], and
-    /// the kill's own failure.
-    pub fn cancel(&self) -> Result<(), JobError> {
+    /// [`JobError::Idle`] when the named run is not driving here,
+    /// [`JobError::Poisoned`], and the kill's own failure.
+    pub fn cancel(&self, id: RunId) -> Result<(), JobError> {
         let canceller = {
             let mut guard = self
                 .state
                 .lock()
                 .map_err(|poison| JobError::Poisoned(poison.to_string()))?;
             let job = guard.as_mut().ok_or(JobError::Idle)?;
-            if job.status != JobStatus::Running {
+            if job.id != id || job.status != JobStatus::Running {
                 return Err(JobError::Idle);
             }
             job.cancel_requested = true;
@@ -343,26 +432,39 @@ impl JobSlot {
             .state
             .lock()
             .map_err(|poison| JobError::Poisoned(poison.to_string()))?;
-        Ok(guard.as_ref().map(|job| {
-            let elapsed = u64::try_from(job.started.elapsed().as_millis()).unwrap_or(u64::MAX);
-            let remaining = job.total.saturating_sub(job.completed);
-            JobView {
-                id: job.id,
-                status: job.status.clone(),
-                sut_name: job.sut_name.clone(),
-                completed: job.completed,
-                total: job.total,
-                current_case: job.current_case.clone(),
-                elapsed_ms: elapsed,
-                eta_ms: if job.status == JobStatus::Running {
-                    eta_ms(&job.durations_ms, remaining)
-                } else {
-                    None
-                },
-                tail: job.tail.iter().cloned().collect(),
-                finished: job.finished.clone(),
-            }
-        }))
+        Ok(guard.as_ref().map(snapshot))
+    }
+
+    /// The live view of the NAMED run: `Some` only when this slot holds it.
+    ///
+    /// The call the live screen makes, so the screen can tell "this process
+    /// is driving the run you asked about" from "some other run is in this
+    /// slot". #389 turns it into a map lookup.
+    ///
+    /// # Errors
+    /// [`JobError::Poisoned`] only.
+    pub fn view_of(&self, id: RunId) -> Result<Option<JobView>, JobError> {
+        let guard = self
+            .state
+            .lock()
+            .map_err(|poison| JobError::Poisoned(poison.to_string()))?;
+        Ok(guard.as_ref().filter(|job| job.id == id).map(snapshot))
+    }
+
+    /// The run this process holds, running or finished.
+    ///
+    /// The seam #389 replaces: one slot has exactly one current run, and a
+    /// map of concurrent runs has none. Everything else here addresses a run
+    /// by id.
+    ///
+    /// # Errors
+    /// [`JobError::Poisoned`] only.
+    pub fn current(&self) -> Result<Option<RunId>, JobError> {
+        let guard = self
+            .state
+            .lock()
+            .map_err(|poison| JobError::Poisoned(poison.to_string()))?;
+        Ok(guard.as_ref().map(|job| job.id))
     }
 }
 
@@ -372,7 +474,7 @@ impl JobSlot {
 /// The match is exhaustive on purpose: a status the engine adds later breaks
 /// this build instead of being counted as excused by a catch-all.
 #[cfg(feature = "ssr")]
-fn tally(results: &veredictum::party::Results) -> (u64, u64, u64, u64) {
+pub(crate) fn tally(results: &veredictum::party::Results) -> (u64, u64, u64, u64) {
     use veredictum::party::OutcomeStatus;
 
     let mut counts = (0_u64, 0_u64, 0_u64, 0_u64);
@@ -389,15 +491,70 @@ fn tally(results: &veredictum::party::Results) -> (u64, u64, u64, u64) {
 
 #[cfg(test)]
 mod tests {
-    use super::{eta_ms, parse_progress};
+    use super::{RunId, RunIdError, eta_ms, parse_progress};
+
+    /// One fixed id, so the derivations below assert a path and never a
+    /// fresh mint.
+    const FIXED: &str = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 
     #[cfg(feature = "ssr")]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+    )]
     #[test]
-    fn the_job_directory_is_the_output_root_plus_the_id() {
+    fn the_job_directory_is_the_output_root_plus_the_id() -> Result<(), RunIdError> {
+        let id: RunId = FIXED.parse()?;
         assert_eq!(
-            super::job_dir(std::path::Path::new("/work/out"), 7),
-            std::path::PathBuf::from("/work/out/console-job-7")
+            super::job_dir(std::path::Path::new("/work/out"), id),
+            std::path::PathBuf::from(format!("/work/out/console-job-{FIXED}"))
         );
+        Ok(())
+    }
+
+    /// The URL trip: the id renders hyphenated and reads back as itself.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+    )]
+    #[test]
+    fn a_run_id_round_trips_through_the_url() -> Result<(), RunIdError> {
+        let id: RunId = FIXED.parse()?;
+        assert_eq!(id.to_string(), FIXED, "the URL spelling is hyphenated");
+        assert_eq!(FIXED.parse::<RunId>()?, id);
+        assert_eq!(
+            RunId::NIL.to_string(),
+            "00000000-0000-0000-0000-000000000000"
+        );
+        Ok(())
+    }
+
+    /// The server-fn trip: the id serializes as itself, so a URL segment and
+    /// a wire value are the same text.
+    #[cfg(feature = "ssr")]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+    )]
+    #[test]
+    fn a_run_id_round_trips_across_the_server_fn_wire() -> Result<(), Box<dyn std::error::Error>> {
+        let id: RunId = FIXED.parse()?;
+        let wire = serde_json::to_string(&id)?;
+        assert_eq!(wire, format!("\"{FIXED}\""));
+        assert_eq!(serde_json::from_str::<RunId>(&wire)?, id);
+        Ok(())
+    }
+
+    /// A path segment that is not a run id refuses with the text it read, so
+    /// the screen can say what it was handed.
+    #[test]
+    fn a_malformed_run_id_refuses_by_name() {
+        let refusal = "../../etc/passwd"
+            .parse::<RunId>()
+            .expect_err("a path is not a run id");
+        assert_eq!(refusal.text, "../../etc/passwd");
+        assert!(!refusal.reason.is_empty(), "{refusal:?}");
+        assert!(refusal.to_string().contains("is not a run id"), "{refusal}");
     }
 
     /// Every status the engine records lands in exactly one column, and the
