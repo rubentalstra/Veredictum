@@ -168,6 +168,16 @@ if command -v codesign >/dev/null; then
   done
 fi
 
+# The console's output mount is this harness's own scratch, and it is emptied
+# before every pass. A driven run's job directories and the bench page's
+# uploaded batches both survive a pass — the bench sweep keeps a batch for an
+# hour — so a second pass listed each uploaded record twice and the benchmark
+# captures grew a row per run. The console's own TTL is a production
+# behaviour and stays untouched; what is reset is the directory the harness
+# created.
+rm -rf "$ROOT/target/ui-e2e/out"
+mkdir -p "$ROOT/target/ui-e2e/out"
+
 echo "── serving the console on $CONSOLE_ADDR over the repository mounts"
 # The mounts are RELATIVE and the process runs from the repository root: the
 # landing renders them verbatim, and an absolute path would put whoever ran the

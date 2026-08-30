@@ -110,8 +110,7 @@ impl ConsoleState {
             catalogue: Arc::new(catalogue),
             draft: Arc::new(std::sync::Mutex::new(None)),
             jobs: crate::run_job::JobSlot::default(),
-            capture: std::env::var(crate::capture::CAPTURE_ENV)
-                .is_ok_and(|value| !value.is_empty()),
+            capture: crate::capture::enabled(),
         }
     }
 }

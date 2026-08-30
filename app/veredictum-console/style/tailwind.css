@@ -128,3 +128,17 @@
     color: var(--ink-faint);
   }
 }
+
+/* ── Documentation capture mode ────────────────────────────────────────────
+   The server stamps `capture` on <html> when VEREDICTUM_CAPTURE_MODE is set
+   (src/capture.rs). A screenshot that catches a running transition differs
+   byte for byte from the next pass over the same console, so the pass gets a
+   settled frame instead. Deliberately unlayered: unlayered rules outrank
+   every @layer, which is where Tailwind's `transition-*` utilities live. */
+.capture,
+.capture *,
+.capture *::before,
+.capture *::after {
+  transition: none;
+  animation: none;
+}

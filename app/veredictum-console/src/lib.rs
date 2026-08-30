@@ -36,7 +36,6 @@ pub const ENGINE_PIN: &str = "0.1.1";
 
 pub mod app;
 pub mod bench_api;
-#[cfg(feature = "ssr")]
 pub mod capture;
 pub mod catalogue_api;
 pub mod components;

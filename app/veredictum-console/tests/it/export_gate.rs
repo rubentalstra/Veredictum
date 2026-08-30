@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 
 use veredictum_console::engine::{Engine, RunSpec, VerdictsSpec};
 use veredictum_console::export::render::escape;
-use veredictum_console::export_api::{ExportScreen, prepare};
+use veredictum_console::export_api::{ExportScreen, prepare, route};
 use veredictum_console::run_job::{JobSlot, JobStatus};
 use veredictum_console::state::ConsoleState;
 
@@ -213,19 +213,67 @@ fn an_export_seals_the_record_and_the_lib_verifies_it() -> Result<(), Box<dyn st
     Ok(())
 }
 
+/// The response body, read whole — the archive is capped by what one sealed
+/// bundle holds, and this gate refuses anything larger rather than streaming.
+async fn body_of(response: axum::response::Response) -> Result<Vec<u8>, axum::Error> {
+    axum::body::to_bytes(response.into_body(), MAX_ARCHIVE_BYTES)
+        .await
+        .map(|bytes| bytes.to_vec())
+}
+
+/// The read cap for the served archive: far above one bundle, far below a
+/// test that hangs reading a body that never ends.
+const MAX_ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
+
+/// The download is a server-owned axum route, so the gate drives the HANDLER
+/// axum invokes for [`veredictum_console::export_api::DOWNLOAD_PATH`] — its
+/// status, its headers and its bytes — rather than the preparation helper
+/// behind it.
 #[expect(
     clippy::panic_in_result_fn,
     reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
 )]
-#[test]
-fn the_download_route_serves_the_sealed_bytes() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test(flavor = "multi_thread")]
+async fn the_download_route_serves_the_sealed_bytes() -> Result<(), Box<dyn std::error::Error>> {
     let scratch = assert_fs::TempDir::new()?;
     let Some((state, engine)) = driven(scratch.path())? else {
         return Ok(());
     };
+
+    // Before anything is sealed the route answers 404 with the reason, so a
+    // premature download never serves a stale or half-written archive.
+    let empty = route::record_zip(axum::Extension(state.clone())).await;
+    assert_eq!(empty.status(), axum::http::StatusCode::NOT_FOUND);
+    let reason = String::from_utf8(body_of(empty).await?)?;
+    assert!(reason.contains("no prepared export"), "{reason}");
+
     prepare::run_with(&state, &engine)?;
 
-    let archive = prepare::archive(&state)?;
+    let response = route::record_zip(axum::Extension(state.clone())).await;
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let headers = response.headers().clone();
+    assert_eq!(
+        headers
+            .get(axum::http::header::CONTENT_TYPE)
+            .map(axum::http::HeaderValue::to_str)
+            .transpose()?,
+        Some("application/zip"),
+        "the route must answer as an archive"
+    );
+    let disposition = headers
+        .get(axum::http::header::CONTENT_DISPOSITION)
+        .ok_or("the route must offer the archive as an attachment")?
+        .to_str()?
+        .to_owned();
+    assert!(
+        disposition.contains("attachment") && disposition.contains("veredictum-record.zip"),
+        "{disposition}"
+    );
+
+    let archive = body_of(response).await?;
+    // What the route serves IS what the preparation helper packs; the route
+    // adds a status and headers and nothing else.
+    assert_eq!(archive, prepare::archive(&state)?);
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(archive.as_slice()))?;
     let names: Vec<String> = (0..zip.len())
         .map(|index| Ok(zip.by_index(index)?.name().to_owned()))

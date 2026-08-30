@@ -212,6 +212,9 @@ pub mod read {
     /// The pasted-claim size cap: far above any real ICS, far below abuse.
     const STATEMENT_CAP_BYTES: usize = 1_048_576;
 
+    /// The refusal every step past Connect gives when no draft exists.
+    const NO_DRAFT: &str = "no connection draft: complete the Connect step first";
+
     /// NOTE: no openEHR spec governs this — our own design; usize → u64 is
     /// lossless on every supported target (see `catalogue_api::read::count`).
     fn count(n: usize) -> u64 {
@@ -300,9 +303,7 @@ pub mod read {
             })
             .transpose()?;
         let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
-        let draft = guard
-            .as_mut()
-            .ok_or_else(|| String::from("no connection draft: complete the Connect step first"))?;
+        let draft = guard.as_mut().ok_or_else(|| String::from(NO_DRAFT))?;
         draft.statement_product = summary.as_ref().map(|claim| claim.product.clone());
         draft.statement_json = statement_json;
         draft.filter = filter;
@@ -607,9 +608,7 @@ pub mod read {
         let matrix = capability_matrix(validation)?;
         let (name, version) = {
             let guard = state.draft.lock().map_err(|e| e.to_string())?;
-            let draft = guard.as_ref().ok_or_else(|| {
-                String::from("no connection draft: complete the Connect step first")
-            })?;
+            let draft = guard.as_ref().ok_or_else(|| String::from(NO_DRAFT))?;
             (
                 draft.sut_name.trim().to_owned(),
                 draft.sut_version.trim().to_owned(),
@@ -691,19 +690,46 @@ pub mod read {
 
     /// Starts the drafted run.
     ///
-    /// Writes the ixit under the job's own output directory, locates and
-    /// verifies the engine, and hands the spec to the job slot. The
-    /// credentials MOVE out of the draft into the spawned run's environment.
+    /// Locates and verifies the engine, then hands the drafted spec to
+    /// [`start_run_with`].
     ///
     /// # Errors
     /// "no connection draft" before S3, the engine's own locate/spawn
     /// refusals, the slot's busy refusal, and the filesystem's verbatim
     /// failures.
     pub fn start_run(state: &ConsoleState) -> Result<u64, String> {
+        // The no-draft refusal precedes engine discovery, so an unconnected
+        // wizard is refused for what it is on a host with no engine mounted.
+        let connected = state.draft.lock().map_err(|e| e.to_string())?.is_some();
+        if !connected {
+            return Err(String::from(NO_DRAFT));
+        }
+        let engine = crate::engine::locate().map_err(|e| e.to_string())?;
+        start_run_with(state, &engine)
+    }
+
+    /// Starts the drafted run through an already-located engine.
+    ///
+    /// Writes the ixit under the job's own output directory, invalidates any
+    /// export sealed over that directory, and hands the spec to the job slot.
+    /// The credentials MOVE out of the draft into the spawned run's
+    /// environment: they reach the child process and nothing else — no file,
+    /// no log line, no client-visible state.
+    ///
+    /// The split exists for the gate, exactly as the export seam's does:
+    /// [`start_run`] finds the pinned binary the way the server does, and a
+    /// test injects the one it verified itself rather than reaching for
+    /// `PATH`.
+    ///
+    /// # Errors
+    /// "no connection draft" before S3, the engine's own spawn refusals, the
+    /// slot's busy refusal, and the filesystem's verbatim failures.
+    pub fn start_run_with(
+        state: &ConsoleState,
+        engine: &crate::engine::Engine,
+    ) -> Result<u64, String> {
         let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
-        let draft = guard
-            .as_mut()
-            .ok_or_else(|| String::from("no connection draft: complete the Connect step first"))?;
+        let draft = guard.as_mut().ok_or_else(|| String::from(NO_DRAFT))?;
         let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
         let out_dir = crate::run_job::job_dir(&state.out, id);
         std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
@@ -727,7 +753,6 @@ pub mod read {
                 Ok::<_, String>(path)
             })
             .transpose()?;
-        let engine = crate::engine::locate().map_err(|e| e.to_string())?;
         let spec = crate::engine::RunSpec {
             root: state.root.clone(),
             ixit: ixit_path,
@@ -744,7 +769,7 @@ pub mod read {
         drop(guard);
         state
             .jobs
-            .start(id, &engine, &spec, sut_name)
+            .start(id, engine, &spec, sut_name)
             .map_err(|e| e.to_string())
     }
 
