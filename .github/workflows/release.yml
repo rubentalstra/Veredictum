@@ -470,6 +470,16 @@ jobs:
           tool: cargo-auditable@0.7.5
 
       - name: Build (release, native)
+        # LEPTOS_OUTPUT_NAME must be in the COMPILER's environment: leptos's
+        # HydrationScripts reads it via option_env! and appends `_bg` to the
+        # wasm file name it renders when absent (leptos-0.8 hydration/mod.rs),
+        # while cargo-leptos names the shipped file `<output>.wasm` — a binary
+        # built without it 404s its own wasm and never hydrates (found live on
+        # the published 0.1.1 image, #369; FerroEHR#2550 was the same defect).
+        # cargo-leptos exports it on the from-source Dockerfile path; this
+        # plain cargo build must match.
+        env:
+          LEPTOS_OUTPUT_NAME: veredictum-console
         run: >-
           cargo auditable build --release --locked -p veredictum-console
           --bin veredictum-console --no-default-features --features ssr
@@ -611,6 +621,20 @@ jobs:
           body="$(curl -fsS --retry 12 --retry-delay 2 --retry-connrefused --retry-all-errors http://127.0.0.1:3000/)"
           echo "$body" | grep -F "Veredictum console" >/dev/null \
             || { echo "::error::the served landing page does not carry the console title"; exit 1; }
+          # Every /pkg/ asset the page references must fetch 200 — the
+          # assembly gate the title check cannot provide: the 0.1.1 image
+          # served its page perfectly while the baked wasm URL 404'd on every
+          # load and the console never hydrated (#369). The grep reads both
+          # attribute forms (href/src, modulepreload and script alike).
+          assets="$(printf '%s' "$body" | grep -oE '(href|src)="/pkg/[^"]+"' | sed -E 's/^[a-z]+="//; s/"$//' | sort -u)"
+          [ -n "$assets" ] || { echo "::error::the landing page references no /pkg/ assets — the hydration scripts are missing entirely"; exit 1; }
+          for a in $assets; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000${a}")"
+            if [ "$code" != "200" ]; then
+              echo "::error::${a} answers ${code} — the served page references an asset the image does not carry (the #369 defect class)"; exit 1
+            fi
+            echo "${a} -> 200"
+          done
 
   # ── The gate that makes the pushed digest referencable ──────────────────────
   scan-and-tag:

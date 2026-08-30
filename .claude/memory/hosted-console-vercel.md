@@ -30,8 +30,19 @@ lane that already works.
   call after scan-and-tag moves `:latest`, posture push, manual). The
   verification polls the SSR footer's `engine X.Y.Z` string, never a bare
   200 (the old deployment answers 200 too — FerroEHR 4.0.4/4.0.10 lesson).
-- Remaining owner action: add the domain to the Vercel project and CNAME
-  `console.veredictum.eu` at Vercel; until DNS resolves, the deploy run's
-  version poll stays honestly red.
+- LIVE since 2026-08-30 (deploy run 33320229889 green end to end: hook →
+  buildah build → promote → `engine 0.1.1` served). Two lessons paid for on
+  the way, both already paid once in FerroEHR:
+  - The root `.dockerignore` must NOT exclude the baked trees (buildah reads
+    only the root-level ignore file, never the Dockerfile-adjacent form —
+    buildah#4236; the first build died at `COPY artifacts/`). One root file,
+    the FerroEHR shape (#367).
+  - Vercel forwards to `$PORT` whose PLATFORM default is 80 — an image-level
+    `ENV PORT` changes nothing; rebind `LEPTOS_SITE_ADDR=0.0.0.0:80` and set
+    `PORT=80` (#368, the FerroEHR#2947 fix). The symptom is "Application
+    initialization timed out" + 500 on every route.
+  Before replicating ANY Vercel container setup: read FerroEHR's merged
+  `fix(sandbox)`/`ci(sandbox)` PR list first — every failure mode so far was
+  already fixed there.
 
 Related: [[release-conventions]], [[use-pr-stacks]].
