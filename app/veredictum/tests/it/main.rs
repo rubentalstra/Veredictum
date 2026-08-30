@@ -43,5 +43,6 @@ mod run_execution;
 mod run_transcript;
 mod schema_drift;
 mod signature_asserts;
+mod unparsed_bodies;
 mod verification_pack;
 mod version_asserts;
