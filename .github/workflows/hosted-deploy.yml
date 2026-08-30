@@ -134,8 +134,7 @@ jobs:
           flyctl deploy . \
             --remote-only \
             --config deploy/hosted/fly.toml \
-            --dockerfile deploy/hosted/Dockerfile \
-            --yes
+            --dockerfile deploy/hosted/Dockerfile
 
       # The version poll IS the verification, and it stays whatever the host
       # is: what proves a deploy landed is the console serving the expected
