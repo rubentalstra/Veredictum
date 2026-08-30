@@ -1,9 +1,11 @@
 # The hosted console (console.veredictum.eu)
 
-The hosted console is the public reading surface of the instrument: the
-catalogue, the party statements, and the vendored specification oracle,
-served by the released console image on Vercel. It exists so anyone can read
-the conformance record without running anything locally (#348).
+The hosted console is the public face of the instrument: the catalogue, the
+party statements, and the vendored specification oracle, served by the
+released console image on Vercel — and a working instrument, by owner ruling
+(#375): a visitor can connect a publicly reachable CDR and drive a real run
+from the browser. It exists so anyone can read the conformance record, and
+try the instrument, without installing anything (#348).
 
 ## What runs
 
@@ -21,11 +23,10 @@ pull plus data layers: the exact release bytes, with `artifacts/`,
 builds. The compose stack mounts the same paths; the hosted instance bakes
 them because Vercel has no persistent filesystem.
 
-The posture is view-only by construction. The image ships only the console
-binary. The engine is resolved from `VEREDICTUM_ENGINE` or `PATH` and is
-deliberately absent, so no visitor can start a run that touches any network
-from this instance, and the distroless nonroot user cannot write the
-root-owned baked tree.
+Runs write the instance's ephemeral filesystem (`/work/out`, created
+65532-writable by the overlay) and vanish on the next redeploy — the
+sandbox's honest lifecycle. A record worth keeping is produced on the
+operator's own machine with the same image.
 
 ## How a deploy happens
 

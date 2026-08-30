@@ -1,5 +1,11 @@
 # Installation
 
+The zeroth way installs nothing: the hosted console at
+[console.veredictum.eu](https://console.veredictum.eu) browses the catalogue
+and drives runs against a publicly reachable CDR, on an ephemeral
+filesystem. Everything below is for running the instrument yourself, which
+is where a record you keep comes from.
+
 Four ways end at the same place: a `veredictum` you can point at a catalogue.
 Pick by what you already have installed. Whichever you pick, you also want a
 clone of the repository, and the next section says why.

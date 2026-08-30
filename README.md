@@ -83,6 +83,15 @@ It ships as two products over one engine:
   the verdicts. The image is the console, never the CLI — a static binary
   needs no container.
 
+A hosted instance of the console runs at
+[console.veredictum.eu](https://console.veredictum.eu), no install needed:
+browse the catalogue, the party statements and the vendored specification
+text, or connect a publicly reachable CDR and drive a real run from the
+browser. Runs there write the instance's ephemeral filesystem, so a record
+you want to keep belongs on your own machine, one section down. The delivery
+pipeline behind the hosted instance is documented in
+[deploy/vercel/README.md](deploy/vercel/README.md).
+
 Both are pre-1.0. The 0.1.x line publishes working releases and makes no
 API-stability claim yet; every claim a release does make is checked, signed
 and reproducible, which is the stability that matters for a verdict.
@@ -120,9 +129,12 @@ answer the same questions without this tool.
 
 ## Quick start
 
-Fastest first: the console with `docker compose up`, the CLI from cargo, the
-signed bare-metal binaries. Grading a server end to end needs the catalogue,
-which lives in this repository — that path closes the section.
+The fastest path installs nothing:
+[console.veredictum.eu](https://console.veredictum.eu) is the hosted console
+described above. For everything you want to keep, run it yourself — fastest
+first: the console with `docker compose up`, the CLI from cargo, the signed
+bare-metal binaries. Grading a server end to end needs the catalogue, which
+lives in this repository — that path closes the section.
 
 ### docker compose up — the console
 
