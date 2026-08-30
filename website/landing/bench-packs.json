@@ -92,7 +92,7 @@
   "packs": [
     {
       "id": "aql-mix",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "Measures AQL query speed over the same Vital signs population the community-vitals pack seeds, so a query figure and a read figure describe the same corpus. The seed phase creates 50 EHRs and commits the same composition 20 times into each, on a pool of 8 workers. This pack version pins that population, and it is sized for query shapes: large enough that a query has to choose an access path, small enough to load before a measured window opens. The measured phase is open-loop at 24 arrivals a second for 60s after a 15s warmup, over six query classes at equal share, so each class is offered at 4 arrivals a second and every class returns the same number of samples. Each class posts one AQL statement to /query/aql, accepts only 200, and counts every other answer in its own error class, so a server that refuses one shape never contaminates another class's percentiles. Every query parameter draws from the run's seeded streams: the systolic threshold, the page offset, and the EHR or composition each arrival addresses, so no arrival repeats the previous one's result set and the whole draw is reproducible from the seed the record discloses. The six classes: adhoc_query_point_lookup probes the indexed-read floor: one composition addressed by its own uid inside one EHR, the cheapest query a server can answer; adhoc_query_ehr_scan probes the loaded-database shape: every composition in one EHR projected by uid, so the cost follows how much that EHR holds; adhoc_query_filtered probes the value index: a systolic magnitude threshold over the observation leaves of one EHR, with the threshold drawn per arrival so no result set can be memoized; adhoc_query_population probes the cross-EHR planner: the same magnitude threshold with no EHR scope and a fetch bound, so the server picks an access path over the whole population; adhoc_query_aggregate probes the columnar shape: one COUNT over the population that threshold matches, which returns a single row and reads every value behind it; adhoc_query_ordered_page probes sorting and pagination: an ORDER BY over composition start time read through a moving fetch window, the shape a paged user interface issues. Fixture provenance: the operational template is the vendored CKM export for template id 'Vital signs' (CKM cid 1013.26.380) and the composition is the attachment on post 8 of <https://discourse.openehr.org/t/17224>, both byte-identical and pinned by sha256. This pack version pins a failed-arrival ceiling of 0.01: a record in which any repetition, phase and operation loses a larger share of its arrivals, on the target or on any baseline, is not submittable, because percentiles taken over failed arrivals measure the failure rather than the system.",
       "max_failed_share": 0.01,
       "seed": 4706627057783240704,
@@ -198,6 +198,30 @@
             "tenancy": "single",
             "version_signing": "none"
           }
+        },
+        {
+          "name": "minimal-signed-digest",
+          "summary": "The minimal surface with digest version signing: no audit trail, digest-signed versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": false,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "digest"
+          }
+        },
+        {
+          "name": "minimal-signed-pgp",
+          "summary": "The minimal surface with openPGP version signing: no audit trail, openPGP-signed versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": false,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "pgp"
+          }
         }
       ],
       "probe_rationales": {
@@ -211,7 +235,7 @@
     },
     {
       "id": "community-vitals",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "description": "Reproduces the openEHR community's vital-signs benchmark harness (<https://discourse.openehr.org/t/17224>) and measures the same work a second way. The write phase creates 100 EHRs and commits the same Vital signs composition 1,000 times into each with Prefer: return=identifier, on one worker, and reports bulk-load throughput plus the whole-loop milliseconds-per-composition average the thread quotes, labelled closed-loop. The read phase then runs twice: read_walk is the sequential walk over every committed composition, seven GETs each (latest, version_at_time, the VERSIONED_COMPOSITION, its latest version, its version at that instant, one version by id, and the revision history), reporting the whole-loop microseconds-per-request average, labelled closed-loop; read_open_loop offers the same seven reads as an arrival schedule pinned at 200/s for 60s after a 15s warmup, which is where the coordinated-omission-free percentiles come from. The pinned rate is part of this pack version: changing it changes the work and bumps the version. Every version_at_time read addresses one instant captured after the write phase finished, which every seeded version predates, so it selects the same versions the harness's own start-of-run instant selects. Fixture provenance: the operational template is the vendored CKM export for template id 'Vital signs' (CKM cid 1013.26.380), byte-identical; the composition is the attachment on post 8 of that thread, byte-identical. Both are pinned by sha256 and verified at load. This pack version pins a failed-arrival ceiling of 0.01: a record in which any repetition, phase and operation loses a larger share of its arrivals, on the target or on any baseline, is not submittable, because percentiles taken over failed arrivals measure the failure rather than the system.",
       "max_failed_share": 0.01,
       "seed": 4859222839474415988,
@@ -341,6 +365,30 @@
           }
         },
         {
+          "name": "minimal-signed-digest",
+          "summary": "The minimal surface with digest version signing: no audit trail, digest-signed versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": false,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "digest"
+          }
+        },
+        {
+          "name": "minimal-signed-pgp",
+          "summary": "The minimal surface with openPGP version signing: no audit trail, openPGP-signed versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": false,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "pgp"
+          }
+        },
+        {
           "name": "clinical-default",
           "summary": "A clinical deployment's usual configuration: an audit trail written to the deployment's own store, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.",
           "default": false,
@@ -365,7 +413,7 @@
     },
     {
       "id": "smoke",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "description": "One blood-pressure template, a small EHR corpus, and a mixed open-loop phase over the read, write and query surface. Version 1.1.0 moved the committed composition onto openEHR-EHR-COMPOSITION.minimal.v1, the root its own template defines, so the bytes offered to a server changed and a 1.1.0 record is not comparable with a 1.0.0 one. This pack version pins a failed-arrival ceiling of 0.01: a record in which any repetition, phase and operation loses a larger share of its arrivals, on the target or on any baseline, is not submittable, because percentiles taken over failed arrivals measure the failure rather than the system.",
       "max_failed_share": 0.01,
       "seed": 6216465318106710868,
@@ -464,6 +512,30 @@
             "compression": "off",
             "tenancy": "single",
             "version_signing": "none"
+          }
+        },
+        {
+          "name": "minimal-signed-digest",
+          "summary": "The minimal surface with digest version signing: no audit trail, digest-signed versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": false,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "digest"
+          }
+        },
+        {
+          "name": "minimal-signed-pgp",
+          "summary": "The minimal surface with openPGP version signing: no audit trail, openPGP-signed versions, commits validated against the operational template, uncompressed responses, one tenant.",
+          "default": false,
+          "declares": {
+            "audit": "off",
+            "commit_validation": "template",
+            "compression": "off",
+            "tenancy": "single",
+            "version_signing": "pgp"
           }
         }
       ],

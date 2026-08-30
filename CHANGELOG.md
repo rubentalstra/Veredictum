@@ -18,6 +18,18 @@ version on.
 
 ## [Unreleased]
 
+### Added
+- **Signing-on posture profiles (#335).** Every bench pack defines
+  `minimal-signed-digest` and `minimal-signed-pgp` beside `minimal`, so a CDR
+  that signs versions out of the box benches without switching a shipped
+  feature off; the canaries keep refusing any declaration the deployment
+  contradicts. Pack versions move with the definition (`community-vitals`
+  and `aql-mix` to 1.1.0, `smoke` to 1.2.0) and the generated pack manifest
+  and methodology page follow.
+- `bench` warns once when a credential rides a plain-`http` base URL that is
+  not loopback; the run proceeds, because the operator names the transport
+  and a local quickstart is legitimately `http://localhost` (#296).
+
 ### Fixed
 - **The measured path stops substituting silently for a defect (#293).** A
   workload stage naming an operation the vocabulary does not carry is now a
@@ -172,11 +184,6 @@ version on.
   a server that serves the audit correctly. The shortcut now also requires the
   `_type` the released ITS-JSON binds a `VERSION` to, and any other body falls
   through to the family's envelope read.
-
-### Added
-- `bench` warns once when a credential rides a plain-`http` base URL that is
-  not loopback; the run proceeds, because the operator names the transport
-  and a local quickstart is legitimately `http://localhost` (#296).
 
 ### Removed
 - The `content_generation` registered-exception kind. Content cases execute
