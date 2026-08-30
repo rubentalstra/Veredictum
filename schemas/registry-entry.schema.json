@@ -258,7 +258,8 @@
               "record-manifest",
               "signature",
               "report",
-              "ixit"
+              "ixit",
+              "statement"
             ]
           },
           "path": {

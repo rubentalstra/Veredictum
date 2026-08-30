@@ -30,6 +30,7 @@ pub mod catalogue;
 pub mod conformance;
 pub mod judgement;
 pub mod measured;
+pub mod replay;
 
 use std::path::{Path, PathBuf};
 

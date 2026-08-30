@@ -1,0 +1,245 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The console tier's lane: re-derive the judgement, then sign it (#392).
+#
+# A `console` entry says the official hosted instrument drove a run and reached
+# these outcomes. Nobody is asked to believe that. The submission carries the
+# recorded exchanges, the topology they were driven under and the claim they
+# were judged against, so the whole judgement is recomputed here — the outcomes
+# from the transcript, the verdicts from the outcomes — and the record is
+# signed only if both agree. `scripts/checks/registry-rederive.sh` carries the
+# argument for why that is worth something, and what it cannot establish.
+#
+# WHY THIS ONE HOLDS A KEY, WHEN THE REPRODUCTION LANE REFUSES TO. A tier-1
+# entry's evidence is the workflow identity itself, so a key there would only
+# add something to steal. A `console` entry is produced on a public host that a
+# visitor reaches, and that host must hold no key at all — the signature has to
+# be made somewhere the host cannot reach. So exactly one key exists, in the
+# `registry-signing` environment, used by the `sign` job below and by nothing
+# else, over records this lane has already recomputed for itself.
+#
+# WHAT RUNS, AND FROM WHERE. `pull_request_target` runs the workflow from the
+# BASE of the pull request, which is what makes the key safe to hold here: the
+# engine, the scripts and this file are all the merged tree's own. The
+# submission enters as DATA — the entry and its record files, checked out into
+# the working tree and read by `jq` and by the engine — and no path from it
+# ever reaches a shell. Nothing a submitter wrote is executed in a job that
+# holds a token or a key.
+name: Registry console submissions
+
+# zizmor flags `pull_request_target` as fundamentally insecure, and it is
+# right about the usual case: a workflow that checks out and BUILDS the head
+# with secrets in scope hands its secrets to whoever opened the pull request.
+# This one is the case the trigger exists for. It must run the BASE tree —
+# otherwise a branch could rewrite this file, the gate and the signing script
+# and walk off with the key — and it never executes anything from the head,
+# which enters as data under `registry/` and is read by `jq` and by the engine
+# this repository built. The key sits behind a protected environment on top of
+# that, so a run reaches it only after a reviewer lets it through.
+on: # zizmor: ignore[dangerous-triggers]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'registry/entries/conformance/**'
+      - 'registry/records/**'
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: 'The submission pull request number to complete'
+        required: true
+        type: number
+
+permissions: {}
+
+concurrency:
+  group: registry-console-${{ github.event.pull_request.number || inputs.pull_request }}
+  cancel-in-progress: true
+
+env:
+  # The instrument a console entry may name. Derived here, never read out of
+  # the submission: a performer does not get to state its own provenance.
+  CONSOLE_ORIGIN: https://console.veredictum.eu
+  # The App identity that is allowed to open a console submission.
+  CONSOLE_APP_LOGIN: veredictum-console[bot]
+
+jobs:
+  # Is this a console submission at all, and did the instrument open it? Both
+  # answers come from what GitHub reports about the pull request, never from
+  # the entry.
+  triage:
+    name: what arrived
+    if: github.repository == 'rubentalstra/Veredictum'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      console: ${{ steps.read.outputs.console }}
+      entry: ${{ steps.read.outputs.entry }}
+      run-id: ${{ steps.read.outputs.run-id }}
+      head-sha: ${{ steps.read.outputs.head-sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Read the submission
+        id: read
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || inputs.pull_request }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pr="$(gh pr view "$PR" --repo "$REPO" \
+            --json author,headRefName,headRefOid,baseRefOid,headRepositoryOwner)"
+          author="$(jq -r '.author.login' <<<"$pr")"
+          branch="$(jq -r '.headRefName' <<<"$pr")"
+          head="$(jq -r '.headRefOid' <<<"$pr")"
+          base="$(jq -r '.baseRefOid' <<<"$pr")"
+          owner="$(jq -r '.headRepositoryOwner.login' <<<"$pr")"
+          {
+            echo "head-sha=$head"
+          } >> "$GITHUB_OUTPUT"
+          # A fork cannot carry a console submission: the branch is pushed by
+          # the instrument's App into this repository, and a lane that signs
+          # must never read a head it does not control.
+          if [ "$owner" != "${REPO%%/*}" ]; then
+            echo "console=false" >> "$GITHUB_OUTPUT"
+            echo "the submission comes from a fork, which no console entry ever does."
+            exit 0
+          fi
+
+
+          git fetch --no-tags --depth=1 origin "$head"
+          added="$(git diff --name-only --diff-filter=A "$base..$head" -- registry/entries || true)"
+          count="$(printf '%s' "$added" | grep -c . || true)"
+          if [ "$count" != "1" ]; then
+            echo "console=false" >> "$GITHUB_OUTPUT"
+            echo "a submission adds exactly one entry; this one adds ${count}. Nothing to re-derive."
+            exit 0
+          fi
+          # The entry is read out of the head as data. A console entry arrives
+          # with no provenance block at all, because this lane writes it.
+          git checkout "$head" -- registry/
+          tier="$(jq -r '.provenance.tier // "none"' "$added")"
+          if [ "$tier" != "none" ] && [ "$tier" != "console" ]; then
+            echo "console=false" >> "$GITHUB_OUTPUT"
+            echo "$added declares tier '$tier' — this lane completes console submissions only."
+            exit 0
+          fi
+          # Only the instrument's own App may open one. A human opening a
+          # console-shaped submission is refused here rather than signed.
+          if [ "$author" != "$CONSOLE_APP_LOGIN" ]; then
+            echo "::error::$added is a console submission opened by '$author'. Only $CONSOLE_APP_LOGIN may open one: that identity IS what makes 'official records come from the hosted instrument' true mechanically." >&2
+            exit 1
+          fi
+          case "$branch" in
+            console-run/*) ;;
+            *)
+              echo "::error::a console submission arrives on a 'console-run/<run-id>' branch, and this one is on '$branch' — the run id is read from the branch, never from the submission." >&2
+              exit 1
+              ;;
+          esac
+          {
+            echo "console=true"
+            echo "entry=$added"
+            echo "run-id=${branch#console-run/}"
+          } >> "$GITHUB_OUTPUT"
+
+  # The gate. It holds no key and writes nothing: it recomputes, and it either
+  # agrees with the submission or names the rows that do not follow.
+  rederive:
+    name: re-derive the judgement
+    needs: triage
+    if: needs.triage.outputs.console == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      # The BASE tree: the engine and the scripts are this repository's own.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache-save-if: 'false'
+      - name: Take the submission in as data
+        shell: bash
+        env:
+          HEAD_SHA: ${{ needs.triage.outputs.head-sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$HEAD_SHA"
+          git checkout "$HEAD_SHA" -- registry/
+      - name: The outcomes follow from the recording, and the verdicts from the outcomes
+        shell: bash
+        env:
+          ENTRY: ${{ needs.triage.outputs.entry }}
+        run: bash scripts/checks/registry-rederive.sh "$ENTRY"
+
+  # The signature. Its environment is protected, so the key is reachable only
+  # from a run a reviewer let through, and only after the gate above agreed.
+  sign:
+    name: seal the record
+    needs: [triage, rederive]
+    if: needs.triage.outputs.console == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: registry-signing
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
+        with:
+          cache-save-if: 'false'
+      - name: Take the submission in as data
+        shell: bash
+        env:
+          HEAD_SHA: ${{ needs.triage.outputs.head-sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$HEAD_SHA"
+          git checkout "$HEAD_SHA" -- registry/
+      - name: Seal the record and write the provenance
+        shell: bash
+        env:
+          ENTRY: ${{ needs.triage.outputs.entry }}
+          CONSOLE_RUN_ID: ${{ needs.triage.outputs.run-id }}
+          SIGN_WORKFLOW_REF: ${{ github.repository }}/.github/workflows/registry-console.yml@${{ github.ref }}
+          SIGN_RUN_ID: ${{ github.run_id }}
+          SIGN_RUN_ATTEMPT: ${{ github.run_attempt }}
+          REGISTRY_SIGN_KEY_MATERIAL: ${{ secrets.REGISTRY_SIGN_KEY }}
+          REGISTRY_SIGN_PASSPHRASE: ${{ secrets.REGISTRY_SIGN_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          if [ -z "$REGISTRY_SIGN_KEY_MATERIAL" ]; then
+            echo "::error::REGISTRY_SIGN_KEY is empty in the registry-signing environment. A console record is signed from that environment and nowhere else, so a lane that cannot sign fails rather than publishing an unsigned entry. Provision it with: gh secret set REGISTRY_SIGN_KEY --env registry-signing < registry-signing.sec.asc" >&2
+            exit 1
+          fi
+          key="$(mktemp)"
+          printf '%s' "$REGISTRY_SIGN_KEY_MATERIAL" > "$key"
+          REGISTRY_SIGN_KEY="$key" bash scripts/registry/complete-console-entry.sh "$ENTRY"
+          shred -u "$key" 2>/dev/null || rm -f "$key"
+          bash scripts/render/conformance-board.sh
+      - name: Commit the sealed record onto the submission
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number || inputs.pull_request }}
+          HEAD_SHA: ${{ needs.triage.outputs.head-sha }}
+        # The Git Data API, never `git commit` and never the contents API: a
+        # commit built blob-tree-commit-ref is signed by GitHub, and the
+        # contents API produces an unverified one (root CLAUDE.md, hard rule 9).
+        run: bash scripts/registry/commit-sealed-record.sh

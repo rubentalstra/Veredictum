@@ -74,7 +74,15 @@ registry key that signs a console record. It lives in a protected CI
 environment, it is used by the lane that re-derived the verdicts it signs and
 by nothing else, and it never reaches the hosted instrument, this repository,
 or any workflow a pull request can influence. The instrument that produced the
-record holds no key in any form.
+record holds no key in any form. The public half is committed at
+`registry/keys/registry-signing.pub.asc`, so a reader checks a console record
+offline:
+
+```bash
+veredictum verify-record \
+  --record registry/records/<system>/<entry-id> \
+  --key registry/keys/registry-signing.pub.asc
+```
 
 **Self-reported.** The submitter performed the run and signed the artifact,
 with OpenPGP or with a Sigstore bundle carrying their own identity. The entry
@@ -148,8 +156,10 @@ list is complete by role.
   `transcript`, a `record-manifest`, rendered `report` documents and the
   `ixit` declaration the run was driven under.
 - A **benchmark** entry carries one `bench-result`.
-- A **console** entry carries the `transcript` as well, because the verdicts
-  are re-derived from it here, and the `signature` CI writes over one of the
+- A **console** entry carries the `transcript`, the `ixit` and the `statement`
+  as well, because those three are what a re-derivation reads: the recorded
+  exchanges, the topology they were driven under, and the claim they were
+  judged against. It also carries the `signature` CI writes over one of the
   entry's own artifacts.
 - A **self-reported** entry carries the `signature` file too, and the artifact
   it signs must be one of the entry's own.
@@ -183,6 +193,11 @@ the verdicts from the transcript the submission carries, refuses any mismatch,
 signs the record with the registry key from its protected environment, and
 writes the `console` block stating what it established. The merge is the
 publication, exactly as for every other entry.
+
+Two of that block's facts are things the lane OBSERVED rather than read: the
+instrument comes from the App identity that opened the submission, and the run
+id from the `console-run/<run-id>` branch it arrived on. A submission opened by
+anything but that identity is refused rather than signed.
 
 Nothing about that path removes this one. The same console run on your own
 machine, sealed and signed with your own key, is a self-reported entry, and it

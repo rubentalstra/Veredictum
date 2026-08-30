@@ -943,6 +943,50 @@ pub fn execute(
     recording: Recording,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<RunReport, String> {
+    let spec_versions = statement.map(|s| &s.spec_versions);
+    campaign(set, ixit, statement, progress, |_| {
+        Ok(HttpDriver::new(set, ixit, spec_versions)?.with_recording(recording))
+    })
+}
+
+/// Re-judge a recorded run from its transcript instead of from a server.
+///
+/// The selection, the composition, the classification and the assertion
+/// evaluators are the live campaign's own: only the transport changes, so
+/// the outcomes this produces are the outcomes the recorded exchanges
+/// support. A case whose recording runs out, or whose replay composes a
+/// request the recording does not carry, records a transport failure rather
+/// than a pass — a verdict is never reproduced over evidence nobody has.
+///
+/// # Errors
+/// Interpreter defects only, as [`execute`].
+pub fn replay(
+    set: &ArtifactSet,
+    ixit: &Ixit,
+    statement: Option<&crate::party::Statement>,
+    transcript: &crate::transcript::RunTranscript,
+    progress: &mut dyn FnMut(Progress<'_>),
+) -> Result<RunReport, String> {
+    let spec_versions = statement.map(|s| &s.spec_versions);
+    campaign(set, ixit, statement, progress, |case| {
+        let exchanges = transcript
+            .cases
+            .iter()
+            .find(|recorded| recorded.case == *case)
+            .map_or(&[][..], |recorded| recorded.exchanges.as_slice());
+        HttpDriver::replaying(set, ixit, spec_versions, exchanges)
+    })
+}
+
+/// The campaign both entry points run, differing only in where a composed
+/// request is answered from.
+fn campaign<'a>(
+    set: &'a ArtifactSet,
+    ixit: &'a Ixit,
+    statement: Option<&crate::party::Statement>,
+    progress: &mut dyn FnMut(Progress<'_>),
+    mut driver_for: impl FnMut(&CaseId) -> Result<HttpDriver<'a>, String>,
+) -> Result<RunReport, String> {
     let mut report = RunReport::default();
     let ordered = exclusive_server_first(set);
     let total = ordered.len();
@@ -978,8 +1022,7 @@ pub fn execute(
         } else {
             case.clone()
         };
-        let mut driver = HttpDriver::new(set, ixit, statement.map(|s| &s.spec_versions))?
-            .with_recording(recording);
+        let mut driver = driver_for(&case.id)?;
         let format = runnable.formats.first().copied();
         let record = run_case(&runnable, format, &mut driver)?;
         report.interpreter_run += 1;

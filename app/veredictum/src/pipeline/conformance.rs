@@ -263,7 +263,7 @@ fn tally(outcomes: &[OutcomeRecord]) -> OutcomeCounts {
 // shape that hid four red canonical-xml rows behind a PASS badge. The profile
 // therefore comes from the party statement's its-rest claim; with no
 // statement, EVERY format is selected so nothing red can vanish.
-fn tech_profile(statement: Option<&Statement>) -> crate::party::TechProfile {
+pub(crate) fn tech_profile(statement: Option<&Statement>) -> crate::party::TechProfile {
     crate::party::TechProfile {
         its: crate::vocab::ItsName::ItsRest,
         formats: statement

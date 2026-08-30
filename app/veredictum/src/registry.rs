@@ -312,6 +312,13 @@ pub enum ArtifactRole {
     /// results' `ixit_digest` is taken over and the only thing that explains
     /// which principals the deployment had.
     Ixit,
+    /// The party statement the run was selected and judged against.
+    ///
+    /// A conformance entry names its statement by path, and a claim that
+    /// lives outside this repository is one nobody can re-judge against. A
+    /// submission that carries the exact bytes it was judged against is one
+    /// anybody can recompute.
+    Statement,
 }
 
 impl ArtifactRole {
@@ -325,6 +332,7 @@ impl ArtifactRole {
         ArtifactRole::Signature,
         ArtifactRole::Report,
         ArtifactRole::Ixit,
+        ArtifactRole::Statement,
     ];
 
     /// The token an entry names this role by.
@@ -339,6 +347,7 @@ impl ArtifactRole {
             ArtifactRole::Signature => "signature",
             ArtifactRole::Report => "report",
             ArtifactRole::Ixit => "ixit",
+            ArtifactRole::Statement => "statement",
         }
     }
 
@@ -1269,6 +1278,20 @@ fn provenance_defects(entry: &RegistryEntry) -> Vec<EntryDefect> {
                     kind: entry.subject.deployment.kind,
                 });
             }
+            // The three artifacts a re-derivation needs. Without the recorded
+            // exchanges, the topology they were driven under and the claim
+            // they were judged against, the tier's whole warrant — that CI
+            // recomputed this judgement — cannot be established at all.
+            let kind = entry.kind();
+            for role in [
+                ArtifactRole::Transcript,
+                ArtifactRole::Ixit,
+                ArtifactRole::Statement,
+            ] {
+                if entry.artifact(role).is_none() {
+                    defects.push(EntryDefect::MissingArtifact { role, kind });
+                }
+            }
             defects.extend(signature_defects(entry, signature, signs));
         }
         Provenance::SelfReported {
@@ -1449,6 +1472,16 @@ mod tests {
                 sha256: Digest("c".repeat(DIGEST_LEN)),
             },
             ArtifactRef {
+                role: ArtifactRole::Ixit,
+                path: format!("{RECORD}ixit.json"),
+                sha256: Digest("e".repeat(DIGEST_LEN)),
+            },
+            ArtifactRef {
+                role: ArtifactRole::Statement,
+                path: format!("{RECORD}statement.json"),
+                sha256: Digest("f".repeat(DIGEST_LEN)),
+            },
+            ArtifactRef {
                 role: ArtifactRole::Signature,
                 path: format!("{RECORD}verdicts.json.asc"),
                 sha256: Digest("d".repeat(DIGEST_LEN)),
@@ -1474,6 +1507,24 @@ mod tests {
     #[test]
     fn the_publishable_fixture_carries_no_defect() {
         assert_eq!(entry_defects(&bench_entry()), Vec::new());
+    }
+
+    /// A console entry that does not carry what a re-derivation reads cannot
+    /// be recomputed by anybody, and the gate says which artifact is missing.
+    #[test]
+    fn a_console_entry_missing_its_re_derivation_inputs_is_refused() {
+        let mut entry = console_entry();
+        entry
+            .artifacts
+            .retain(|artifact| artifact.role != ArtifactRole::Transcript);
+        let defects = entry_defects(&entry);
+        assert!(
+            defects.contains(&EntryDefect::MissingArtifact {
+                role: ArtifactRole::Transcript,
+                kind: EntryKind::Conformance
+            }),
+            "{defects:?}"
+        );
     }
 
     /// The console tier is publishable exactly when the lane wrote its
