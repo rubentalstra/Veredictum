@@ -36,7 +36,9 @@ outcomes:
   conflict:
     status: 409                           # 409_PERSON_with_uid_based_id.yaml — uid_based_id is not the latest version
     headers:
-      ETag: latest-version-uid
+      ETag:
+        - latest-version-uid
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
       Location: { match: absent, applies: { its_rest: ">=1.1.0" } }  # error response — overview §Location (creation/redirect only)
 captures:
   version_uid:

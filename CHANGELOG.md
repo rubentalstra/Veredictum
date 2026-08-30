@@ -19,6 +19,9 @@ version on.
 ## [Unreleased]
 
 ### Added
+- The two 409 delete-conflict `ETag` outcomes assert the `W/` weakness
+  indicator behind `applies: { its_rest: ">=1.1.0" }`, the same sentence and
+  gate as the thirteen 412 outcomes #360 ratcheted (#361).
 - **The error-response surface the released ITS-REST actually pins gains its
   coverage (#340).** A new `present-with-body` header matcher carries the
   `Resources.md` §JSON Format MUST in its own shape — the header is asserted
