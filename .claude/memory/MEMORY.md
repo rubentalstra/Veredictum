@@ -28,3 +28,7 @@ apply" part so a future session can act on it without re-deriving it.
   engine signing #62
 - [Subagent worktree isolation](subagent-worktree-isolation.md) — parallel implementers need isolation:worktree; shared checkout mixes authorship; REST over GraphQL when agents saturate gh
 - [SonarCloud API workflow](sonarcloud-api-workflow.md) — token env, accept/falsepositive transitions with comments, idempotent bulk loops
+- [Use PR stacks](use-pr-stacks.md) — owner ruling 2026-08-30: dependent or
+  batched changes go through GitHub stacked PRs after the adoption gate in
+  `.claude/rules/stacked-prs.md`; the serial changelog merge train is the
+  failure mode to avoid
