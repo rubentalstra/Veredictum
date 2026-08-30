@@ -1637,7 +1637,6 @@ fn a_refused_compose_still_tears_the_project_down() -> Fallible {
         },
     )
     .expect_err("a compose that exits non-zero refuses the baseline");
-    drop(progress);
 
     // The refusal names the baseline and quotes the runtime's own diagnostic,
     // rather than a generic "the sweep failed".
