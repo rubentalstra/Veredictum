@@ -281,14 +281,18 @@ records who submitted it, their relationship to the system, the deployment
 with its image digests, the instrument version, the machine, and the
 artifacts it stands on by digest.
 
-Every entry carries one of two tiers, and the tier is a property of who
+Every entry carries one of three tiers, and the tier is a property of who
 performed the run. A **reproduced** entry was produced by this repository's
 own workflow: it composed the deployment from a recipe committed under
 `registry/topologies/`, drove the catalogue against it, and attested the
-bundle. A **self-reported** entry was run and signed by its submitter; the
-signature proves who submitted the file and that the bytes have not moved,
-and it never proves the run happened as described. The tier is the
-discriminant of the entry's provenance block, so it cannot be claimed
+bundle. A **console** entry was produced at
+[console.veredictum.eu](https://console.veredictum.eu), the official hosted
+instrument, against an endpoint the submitter named; its verdicts were
+re-derived here from the transcript it submitted, and the record was signed
+only after they matched. A **self-reported** entry was run and signed by its
+submitter; the signature proves who submitted the file and that the bytes
+have not moved, and it never proves the run happened as described. The tier
+is the discriminant of the entry's provenance block, so it cannot be claimed
 without the evidence its variant requires.
 
 **A test report is not a certificate.** An entry says what happened when a

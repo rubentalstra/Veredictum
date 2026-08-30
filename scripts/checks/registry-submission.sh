@@ -22,9 +22,11 @@
 #      integration test, because it reads the same model the engine writes
 #      entries with; a second reimplementation in shell would be a second thing
 #      to keep true.
-#   3. No signing secret. The reproduced tier is an attestation from the
-#      workflow identity, so a stored key would be the single point of forgery
-#      the whole design exists to remove. Any armored private key committed
+#   3. No signing secret in the tree. The reproduced tier is an attestation
+#      from the workflow identity, and the one key this project holds — the
+#      registry key that signs a console record — lives in a protected CI
+#      environment and nowhere else. A committed key would be the single point
+#      of forgery the whole design exists to remove, so any armored private key
 #      under the registry fails the gate on sight.
 #   4. The boards are not stale. Both pages are generated from what is
 #      committed, so a merged submission that leaves one unchanged would
@@ -74,10 +76,10 @@ else
 fi
 
 # ── 3. No signing secret anywhere in the registry ────────────────────────────
-# The reproduced tier is an attestation issued to the workflow identity, and no
-# key exists for anyone to steal. A committed private key would quietly turn
-# the strongest tier on the board back into something a compromised workflow
-# could forge, so it is refused here as well as by review.
+# The reproduced tier is an attestation issued to the workflow identity, and the
+# console tier is signed from a protected environment no submitted branch can
+# reach. A committed private key would quietly turn either into something a
+# compromised workflow could forge, so it is refused here as well as by review.
 registry_files=()
 while IFS= read -r -d '' file; do
   registry_files+=("$file")

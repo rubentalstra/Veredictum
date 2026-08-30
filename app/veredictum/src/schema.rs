@@ -2593,7 +2593,7 @@ fn registry_result_schema() -> Value {
     })
 }
 
-/// The two provenance blocks, each internally tagged by the tier it
+/// The three provenance blocks, each internally tagged by the tier it
 /// establishes.
 fn registry_provenance_schema() -> Value {
     json!({
@@ -2608,6 +2608,24 @@ fn registry_provenance_schema() -> Value {
                     "run_id": { "type": "string", "pattern": "^[0-9]+$" },
                     "run_attempt": { "type": "integer", "minimum": 1 },
                     "predicate_type": { "type": "string", "minLength": 1 },
+                    "verify_command": { "type": "string", "minLength": 1 }
+                }
+            },
+            {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["tier", "instrument_origin", "console_run_id", "workflow_ref", "run_id", "run_attempt", "scheme", "signature", "signs", "identity", "verify_command"],
+                "properties": {
+                    "tier": { "const": RegistryTier::Console.as_str() },
+                    "instrument_origin": { "type": "string", "minLength": 1 },
+                    "console_run_id": { "type": "string", "minLength": 1 },
+                    "workflow_ref": { "type": "string", "minLength": 1 },
+                    "run_id": { "type": "string", "pattern": "^[0-9]+$" },
+                    "run_attempt": { "type": "integer", "minimum": 1 },
+                    "scheme": { "enum": registry_tokens(SignatureScheme::ALL, SignatureScheme::as_str) },
+                    "signature": { "type": "string", "minLength": 1 },
+                    "signs": { "type": "string", "minLength": 1 },
+                    "identity": { "type": "string", "minLength": 1 },
                     "verify_command": { "type": "string", "minLength": 1 }
                 }
             },
@@ -2637,7 +2655,7 @@ pub fn registry_entry_schema() -> Value {
         "$schema": DRAFT,
         "$id": urn("registry-entry"),
         "title": "Veredictum public results registry entry",
-        "description": "One append-only registry entry. Every figure a board prints comes out of the artifacts this entry pins by digest, never out of a number restated here. The tier is the discriminant of `provenance`: `reproduced` carries the identity of the workflow that performed the run, `self-reported` carries the submitter's own signature. No long-lived signing key exists on either side. An entry is a REPORT, never a certificate.",
+        "description": "One append-only registry entry. Every figure a board prints comes out of the artifacts this entry pins by digest, never out of a number restated here. The tier is the discriminant of `provenance`: `reproduced` carries the identity of the workflow that performed the run, `console` carries the workflow that re-derived the verdicts from the submitted transcript plus the signature CI then made, and `self-reported` carries the submitter's own signature. No signing key exists on the hosted instrument or in this repository. An entry is a REPORT, never a certificate.",
         "type": "object",
         "additionalProperties": false,
         "required": ["registry_schema_version", "entry_id", "rules_version", "submitter", "subject", "disclosure", "result", "artifacts", "provenance"],

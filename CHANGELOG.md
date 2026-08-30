@@ -18,6 +18,23 @@ version on.
 
 ## [Unreleased]
 
+### Added
+- **The registry publishes a third kind of entry: `console` (#393).** A run
+  performed at console.veredictum.eu, the official hosted instrument, against
+  an endpoint the submitter named. Its verdicts are re-derived here from the
+  transcript the submission carries, and the record is signed only after they
+  match, with a key held in a protected CI environment that the instrument
+  cannot reach. Every field of a `console` provenance block is written by that
+  lane rather than by the instrument, so a performer cannot state its own
+  provenance. `registry/RULES.md` states what the kind attests and what it
+  cannot — it cannot attest the environment, because the submitter chose the
+  endpoint — and the conformance board labels and orders the new rows.
+
+### Changed
+- **The registry entry format and the submission rules are both at 1.1.0
+  (#393).** `schemas/registry-entry.schema.json` carries the third provenance
+  branch, and an entry declares the versions it was accepted under as before.
+
 ## [0.1.3] - 2026-08-30
 
 ### Changed

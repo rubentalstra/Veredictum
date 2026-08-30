@@ -437,6 +437,14 @@ fn board_workspace(
 /// a value the engine produced here; the entries the registry actually carries
 /// are held to the published schema by the tests above.
 fn board_entry(system: &str, id: &str, tier: &serde_json::Value) -> serde_json::Value {
+    // The deployment follows the tier the way the rules bind them: a console
+    // run reached an endpoint the submitter named, so a fixture row cannot
+    // pair that tier with a deployment the instrument never drives.
+    let deployment = if tier.get("tier").and_then(serde_json::Value::as_str) == Some("console") {
+        json!({"kind": "hosted-endpoint", "endpoint": "https://cdr.example/openehr/v1", "reproduction_authorized": false})
+    } else {
+        json!({"kind": "container-image", "reproduction_authorized": false})
+    };
     json!({
         "registry_schema_version": REGISTRY_SCHEMA_VERSION,
         "entry_id": id,
@@ -450,7 +458,7 @@ fn board_entry(system: &str, id: &str, tier: &serde_json::Value) -> serde_json::
             "system": system,
             "display_name": system,
             "version": "1.0.0",
-            "deployment": {"kind": "container-image", "reproduction_authorized": false}
+            "deployment": deployment
         },
         "disclosure": {
             "instrument_version": "0.1.1",
@@ -499,6 +507,42 @@ fn occurrences(page: &str, fragment: &str) -> usize {
     page.matches(fragment).count()
 }
 
+/// The three provenance blocks a board row can carry, each shaped as its tier
+/// requires: the workflow identity, the re-derivation lane plus the signature
+/// it made, and the submitter's own signature.
+fn board_provenances() -> (serde_json::Value, serde_json::Value, serde_json::Value) {
+    let reproduced = json!({
+        "tier": "reproduced",
+        "workflow_ref": "rubentalstra/Veredictum/.github/workflows/registry-reproduce.yml@refs/heads/main",
+        "run_id": "42",
+        "run_attempt": 1,
+        "predicate_type": "https://slsa.dev/provenance/v1",
+        "verify_command": "gh attestation verify verdicts.json --repo rubentalstra/Veredictum"
+    });
+    let console = json!({
+        "tier": "console",
+        "instrument_origin": "https://console.veredictum.eu",
+        "console_run_id": "018f3b1e-6f0a-7c21-9a3d-6c2f5d4b8e77",
+        "workflow_ref": "rubentalstra/Veredictum/.github/workflows/registry-console.yml@refs/heads/main",
+        "run_id": "43",
+        "run_attempt": 1,
+        "scheme": "openpgp-detached",
+        "signature": "registry/records/gamma/2026-01-04-gamma/verdicts.json.asc",
+        "signs": "registry/records/gamma/2026-01-04-gamma/verdicts.json",
+        "identity": "0123456789ABCDEF",
+        "verify_command": "veredictum verify-record --record ."
+    });
+    let self_reported = json!({
+        "tier": "self-reported",
+        "scheme": "openpgp-detached",
+        "signature": "registry/records/beta/2026-01-03-beta/verdicts.json.asc",
+        "signs": "registry/records/beta/2026-01-03-beta/verdicts.json",
+        "identity": "0123456789ABCDEF",
+        "verify_command": "gpg --verify verdicts.json.asc"
+    });
+    (reproduced, console, self_reported)
+}
+
 /// The board labels the tier of every row from the entry's own provenance, and
 /// never from a default, so a self-reported row can never read as a reproduced
 /// one. The report-not-certificate boundary is on the page whatever the rows
@@ -514,22 +558,7 @@ fn the_conformance_board_labels_every_row_with_its_tier() -> Result<(), Box<dyn 
         eprintln!("SKIP the_conformance_board_labels_every_row_with_its_tier: no `jq` on PATH");
         return Ok(());
     }
-    let reproduced = json!({
-        "tier": "reproduced",
-        "workflow_ref": "rubentalstra/Veredictum/.github/workflows/registry-reproduce.yml@refs/heads/main",
-        "run_id": "42",
-        "run_attempt": 1,
-        "predicate_type": "https://slsa.dev/provenance/v1",
-        "verify_command": "gh attestation verify verdicts.json --repo rubentalstra/Veredictum"
-    });
-    let self_reported = json!({
-        "tier": "self-reported",
-        "scheme": "openpgp-detached",
-        "signature": "registry/records/beta/2026-01-03-beta/verdicts.json.asc",
-        "signs": "registry/records/beta/2026-01-03-beta/verdicts.json",
-        "identity": "0123456789ABCDEF",
-        "verify_command": "gpg --verify verdicts.json.asc"
-    });
+    let (reproduced, console, self_reported) = board_provenances();
     let root = board_workspace(
         &[
             (
@@ -540,6 +569,10 @@ fn the_conformance_board_labels_every_row_with_its_tier() -> Result<(), Box<dyn 
                 "registry/entries/conformance/beta/2026-01-03-beta.json",
                 board_entry("beta", "2026-01-03-beta", &self_reported),
             ),
+            (
+                "registry/entries/conformance/gamma/2026-01-04-gamma.json",
+                board_entry("gamma", "2026-01-04-gamma", &console),
+            ),
         ],
         &[
             (
@@ -549,6 +582,10 @@ fn the_conformance_board_labels_every_row_with_its_tier() -> Result<(), Box<dyn 
             (
                 "registry/records/beta/2026-01-03-beta/verdicts.json",
                 board_verdicts(40, 60),
+            ),
+            (
+                "registry/records/gamma/2026-01-04-gamma/verdicts.json",
+                board_verdicts(70, 30),
             ),
         ],
     )?;
@@ -564,11 +601,15 @@ fn the_conformance_board_labels_every_row_with_its_tier() -> Result<(), Box<dyn 
 
     assert_eq!(
         occurrences(&page, "<article class=\"board-row"),
-        2,
+        3,
         "{page}"
     );
     assert!(
         page.contains("<span class=\"tier tier-reproduced\">reproduced</span>"),
+        "{page}"
+    );
+    assert!(
+        page.contains("<span class=\"tier tier-console\">console</span>"),
         "{page}"
     );
     assert!(
@@ -589,9 +630,13 @@ fn the_conformance_board_labels_every_row_with_its_tier() -> Result<(), Box<dyn 
     let beta = page
         .find("2026-01-03-beta")
         .ok_or("the self-reported row is missing")?;
+    let gamma = page
+        .find("2026-01-04-gamma")
+        .ok_or("the console row is missing")?;
     assert!(
-        alpha < beta,
-        "the reproduced tier is the strongest thing a reader can know, so it orders the page: \
+        alpha < gamma && gamma < beta,
+        "who performed a run orders the page: the two official tiers first, and the tier whose \
+         environment was composed here ahead of the one whose endpoint the submitter chose: \
          {page}"
     );
     Ok(())

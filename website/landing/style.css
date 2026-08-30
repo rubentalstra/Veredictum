@@ -680,14 +680,21 @@ td strong {
   color: var(--signal);
 }
 
-/* The tier this repository produced itself. It reads as the stronger of the
-   two because it is, and the board says exactly what it means. */
+/* A run the official hosted instrument performed, whose verdicts were
+   recomputed here before the record was signed. */
+.tier-console {
+  border-color: color-mix(in srgb, var(--ver-teal-deep) 40%, transparent);
+  color: var(--ver-teal-deep);
+}
+
+/* The tier this repository produced end to end, the environment included. */
 .tier-reproduced {
   border-color: color-mix(in srgb, var(--ver-teal-deep) 55%, transparent);
   color: var(--ver-teal-deep);
 }
 
 @media (prefers-color-scheme: dark) {
+  .tier-console,
   .tier-reproduced {
     border-color: color-mix(in srgb, var(--accent) 55%, transparent);
     color: var(--accent);

@@ -78,12 +78,17 @@
     <div class="wrap">
       <div class="head">
         <span class="eyebrow">The board</span>
-        <h2>Two tiers, labelled on every row</h2>
+        <h2>Three kinds of row, labelled on every one</h2>
         <p>A <span class="tier tier-reproduced">reproduced</span> row was produced by the
           workflow in this repository. It composed the deployment from a recipe committed
           here, drove the catalogue, and attested the artifacts from that workflow identity
-          through Sigstore. No signing key exists anywhere in this repository, so there is
-          none to steal. A <span class="tier tier-self-reported">self-reported</span> row was
+          through Sigstore, so no key stands behind it for anyone to steal.</p>
+        <p>A <span class="tier tier-console">console</span> row was produced at
+          console.veredictum.eu, the official hosted instrument, against an endpoint the
+          submitter named. Its verdicts were recomputed here from the transcript it
+          submitted, and the record was signed only after they matched. The instrument
+          holds no key, and it writes none of the evidence in that block.</p>
+        <p>A <span class="tier tier-self-reported">self-reported</span> row was
           produced by the submitter and signed with their own key or identity, and the row
           prints the command that checks it.</p>
         <p>Percentages are taken over cases that were actually driven. A case the claim did

@@ -128,10 +128,13 @@ render_body() {
           }
       ];
 
-    # Reproduced entries first, then by system, then newest first: the tier is
-    # the strongest thing a reader can know about a row, so it orders the page.
+    # The two official tiers first, then the self-reported claim, then by
+    # system, then newest first: who performed a run is the first thing a
+    # reader needs about a row, so it orders the page. No apostrophe may enter
+    # this comment: the whole program is one single-quoted shell argument.
     def ranked:
-      sort_by(if .tier == "reproduced" then 0 else 1 end, .system, (.id | explode | map(-.)));
+      sort_by(if .tier == "reproduced" then 0 elif .tier == "console" then 1 else 2 end,
+              .system, (.id | explode | map(-.)));
 
     def badge($tier):
       "<span class=\"tier tier-" + ($tier | @html) + "\">" + ($tier | @html) + "</span>";
@@ -217,12 +220,17 @@ render_body() {
     "    <div class=\"wrap\">\n" +
     "      <div class=\"head\">\n" +
     "        <span class=\"eyebrow\">The board</span>\n" +
-    "        <h2>Two tiers, labelled on every row</h2>\n" +
+    "        <h2>Three kinds of row, labelled on every one</h2>\n" +
     "        <p>A <span class=\"tier tier-reproduced\">reproduced</span> row was produced by the\n" +
     "          workflow in this repository. It composed the deployment from a recipe committed\n" +
     "          here, drove the catalogue, and attested the artifacts from that workflow identity\n" +
-    "          through Sigstore. No signing key exists anywhere in this repository, so there is\n" +
-    "          none to steal. A <span class=\"tier tier-self-reported\">self-reported</span> row was\n" +
+    "          through Sigstore, so no key stands behind it for anyone to steal.</p>\n" +
+    "        <p>A <span class=\"tier tier-console\">console</span> row was produced at\n" +
+    "          console.veredictum.eu, the official hosted instrument, against an endpoint the\n" +
+    "          submitter named. Its verdicts were recomputed here from the transcript it\n" +
+    "          submitted, and the record was signed only after they matched. The instrument\n" +
+    "          holds no key, and it writes none of the evidence in that block.</p>\n" +
+    "        <p>A <span class=\"tier tier-self-reported\">self-reported</span> row was\n" +
     "          produced by the submitter and signed with their own key or identity, and the row\n" +
     "          prints the command that checks it.</p>\n" +
     "        <p>Percentages are taken over cases that were actually driven. A case the claim did\n" +
