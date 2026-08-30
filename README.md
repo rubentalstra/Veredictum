@@ -90,7 +90,7 @@ text, or connect a publicly reachable CDR and drive a real run from the
 browser. Runs there write the instance's ephemeral filesystem, so a record
 you want to keep belongs on your own machine, one section down. The delivery
 pipeline behind the hosted instance is documented in
-[deploy/vercel/README.md](deploy/vercel/README.md).
+[deploy/hosted/README.md](deploy/hosted/README.md).
 
 Both are pre-1.0. The 0.1.x line publishes working releases and makes no
 API-stability claim yet; every claim a release does make is checked, signed

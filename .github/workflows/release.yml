@@ -699,8 +699,8 @@ jobs:
       tags: ${{ needs.image.outputs.tags }}
 
   # ── hosted console ──────────────────────────────────────────────────────────
-  # The Vercel build is `FROM ghcr.io/rubentalstra/veredictum:latest`, so the
-  # ping rides the leg that MOVES `:latest` — scan-and-tag — and only for a
+  # The hosted build is `FROM ghcr.io/rubentalstra/veredictum:latest`, so the
+  # deploy rides the leg that MOVES `:latest` — scan-and-tag — and only for a
   # real release, because a pre-release moves no `:latest` and so changes
   # nothing to deploy. A failure here reddens `announce` with the recovery
   # named; it can never un-publish anything the release already published.
@@ -713,7 +713,7 @@ jobs:
     with:
       expected-version: ${{ needs.plan.outputs.version }}
     secrets:
-      SANDBOX_DEPLOY_HOOK_URL: ${{ secrets.SANDBOX_DEPLOY_HOOK_URL }}
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
   # ── crates.io ───────────────────────────────────────────────────────────────
   # LAST on purpose, and after the release is otherwise complete. A crates.io
@@ -877,7 +877,7 @@ jobs:
                 '- **crates.io published and a later step failed**: that version is public and' \
                 '  immutable. Do NOT try to replace it — yank it and cut the next version.' \
                 '- **hosted console failed**: nothing published is affected. Read the step'"'"'s' \
-                '  own diagnosis (stale `:latest`, empty hook secret, or a Vercel-side build),' \
+                '  own diagnosis (stale `:latest`, empty deploy token, or the deploy itself),' \
                 '  fix that half, then redeploy with `gh workflow run "Sandbox deploy"`.' \
                 ''
             fi
