@@ -6,8 +6,12 @@ the openEHR specification that server implements.
 
 It executes a machine-readable catalogue of 1143 spec-cited test cases against
 the server's own wire, records every exchange, and computes verdicts as pure
-functions over what it recorded. Functional conformance, measured performance
-and step-load stress come from the one tool.
+functions over what it recorded. Functional conformance, measured performance,
+step-load stress and the comparative-speed benchmark come from the one tool,
+and published results live on the public
+[conformance](https://veredictum.eu/conformance-board.html) and
+[benchmark](https://veredictum.eu/benchmarks.html) boards, submitted by pull
+request.
 
 The released openEHR specifications are the only authority the instrument
 accepts. Every expectation in the catalogue names the section it comes from, so
