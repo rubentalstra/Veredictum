@@ -13,6 +13,13 @@ and published results live on the public
 [benchmark](https://veredictum.eu/benchmarks.html) boards, submitted by pull
 request.
 
+A hosted instance of the web console runs at
+[console.veredictum.eu](https://console.veredictum.eu). It serves the
+catalogue, the party statements and the vendored specification text, and it
+can drive a run against a publicly reachable CDR — nothing to install. Its
+filesystem is ephemeral, so a record you want to keep is produced on your
+own machine ([Installation](installation.md)).
+
 The released openEHR specifications are the only authority the instrument
 accepts. Every expectation in the catalogue names the section it comes from, so
 it can be refuted by a better reading of the specification and by nothing else.

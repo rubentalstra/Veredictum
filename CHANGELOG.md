@@ -19,6 +19,10 @@ version on.
 ## [Unreleased]
 
 ### Added
+- The hosted console is documented where readers look (#374): the README,
+  the landing page and the book's entry pages name
+  <https://console.veredictum.eu> as the no-install path, with its ephemeral
+  lifecycle stated plainly.
 - The two 409 delete-conflict `ETag` outcomes assert the `W/` weakness
   indicator behind `applies: { its_rest: ">=1.1.0" }`, the same sentence and
   gate as the thirteen 412 outcomes #360 ratcheted (#361).
