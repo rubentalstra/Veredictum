@@ -610,6 +610,13 @@ jobs:
       - env:
           RUSTDOCFLAGS: -D warnings
         run: cargo doc --locked --workspace --no-deps --document-private-items
+      # The console's default feature set is EMPTY, so the workspace pass above
+      # documents only its featureless slice — every #[cfg(feature = "ssr")]
+      # item (the server APIs, the engine seam) was ungated until this second
+      # invocation. A [lints.rustdoc] table only bites where cargo doc runs.
+      - env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked -p veredictum-console --no-deps --document-private-items --features ssr
 
   # The declared MSRV is a possibly-breaking semver datum
   # (https://doc.rust-lang.org/cargo/reference/semver.html#env-new-rust), and
