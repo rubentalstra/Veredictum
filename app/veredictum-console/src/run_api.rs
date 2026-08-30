@@ -8,10 +8,9 @@
 //! never logged), the statement pick and the filter. What the client can read
 //! back is [`DraftView`], which carries no secret by construction.
 //!
-//! The reachability probe is the ONE console-originated request to a CDR, and
-//! it is carved out deliberately: a diagnostic whose answer is rendered
-//! verbatim, never judged — conformance traffic stays the spawned instrument's
-//! alone (#54).
+//! The reachability probe is the ONE console-originated request to a CDR: a
+//! diagnostic rendered verbatim and never judged, so conformance traffic
+//! stays the spawned instrument's alone (#54).
 
 use serde::{Deserialize, Serialize};
 
@@ -354,10 +353,8 @@ pub mod read {
 
     /// The scope preview over the loaded catalogue.
     ///
-    /// The filter-scoped case set IS what a run processes (each case lands
-    /// as an outcome or a recorded exception), so this count is honest
-    /// without re-implementing the drive-time selection — the integration
-    /// test holds it to a real run.
+    /// The filter-scoped case set IS what a run processes, so the count is
+    /// honest without re-implementing the drive-time selection.
     ///
     /// # Errors
     /// The verbatim load failure when the catalogue is absent.
@@ -380,8 +377,7 @@ pub mod read {
         })
     }
 
-    /// The lib's tier for one offerable tier — the single mapping every walk
-    /// here goes through.
+    /// The lib's tier for one offerable tier.
     fn lib_tier(tier: ScopeTier) -> veredictum::vocab::Tier {
         match tier {
             ScopeTier::Core => veredictum::vocab::Tier::Core,
@@ -411,9 +407,9 @@ pub mod read {
     /// The tier row: each tier's member capabilities and the distinct cases
     /// they gate.
     ///
-    /// The member set is the published lib's own `tier_members` walk, which
-    /// is what the judgement computes each profile verdict from, so the count
-    /// cannot drift from the answer the verdict gives.
+    /// The member set is the published lib's own `tier_members` walk, the one
+    /// the judgement computes each profile verdict from, so the count cannot
+    /// drift from the verdict's own answer.
     ///
     /// # Errors
     /// The catalogue's verbatim load failure, or the absent capability matrix.
@@ -493,14 +489,11 @@ pub mod read {
 
     /// The spec-component versions a composed claim declares.
     ///
-    /// A statement that declares no version for a component puts every case
-    /// gated on it OUT of scope, because an undeclared version fails the
-    /// `applies` filter by design, and this catalogue dates nearly every case
-    /// to a Reference Model floor. The declaration is therefore derived from
-    /// the catalogue itself: the highest floor its own case and operation
-    /// ranges name, which is the release at which every one of them is in
-    /// scope. The operator sees it in the composed document and may edit it
-    /// down before saving.
+    /// An undeclared version fails the `applies` filter by design, putting
+    /// every case gated on that component out of scope. The declaration is
+    /// therefore derived from the catalogue: the highest floor its own case
+    /// and operation ranges name, which is the release at which all of them
+    /// are in scope. The operator may edit it down before saving.
     ///
     /// # Errors
     /// When the derived declaration does not satisfy some range after all
@@ -590,19 +583,17 @@ pub mod read {
     /// Composes the ad-hoc claim for a tier selection.
     ///
     /// The product identity is the connection draft's own SUT name and
-    /// version; the claimed capabilities are exactly the published lib's
-    /// member set for the checked tiers, in capability-matrix order. The
-    /// answer is a statement document the operator reads and saves like a
-    /// pasted one — nothing is stored here.
+    /// version; the claimed capabilities are the published lib's member set
+    /// for the checked tiers, in capability-matrix order. Nothing is stored:
+    /// the answer is a document the operator saves like a pasted one.
     ///
     /// # Errors
     /// An empty selection, a missing connection draft or product identity,
     /// the catalogue's load failure, and the schedule-release and
     /// spec-version derivations above, each verbatim.
     pub fn compose_claim(state: &ConsoleState, tiers: &[ScopeTier]) -> Result<String, String> {
-        // The selection is normalized against the vocabulary itself, so a
-        // repeated or reordered list from a public endpoint composes the same
-        // claim as the row that sent it.
+        // Normalized against the vocabulary itself, so a repeated or reordered
+        // list from a public endpoint composes the same claim.
         let selected: Vec<ScopeTier> = ScopeTier::ALL
             .into_iter()
             .filter(|tier| tiers.contains(tier))
@@ -672,8 +663,8 @@ pub mod read {
     /// Renders the draft's ixit document.
     ///
     /// The three instances point at the CDR, each carrying env-var NAMES
-    /// only — the values live in the draft and reach the spawned run's
-    /// environment alone. The secrecy test pins it.
+    /// only: the values live in the draft and reach the spawned run's
+    /// environment alone.
     #[must_use]
     pub fn ixit_document(draft: &RunDraft) -> String {
         let auth = match draft.auth {
@@ -717,18 +708,16 @@ pub mod read {
         let out_dir = crate::run_job::job_dir(&state.out, id);
         std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
         // A run into this directory invalidates any export of it (#68). The
-        // job counter restarts with the console process while the output
-        // mount persists, so a fresh run CAN land on an older run's
-        // directory — and a sealed bundle left there certifies the documents
-        // of the run before it. Leaving it would let the export surface
-        // present one run's signature as another run's record.
+        // job counter restarts with the console process while the output mount
+        // persists, so a fresh run CAN land on an older run's directory, where
+        // a sealed bundle left behind certifies the run before it.
         crate::export_api::prepare::invalidate(&out_dir)?;
         let ixit_path = out_dir.join("ixit.json");
         std::fs::write(&ixit_path, ixit_document(draft))
             .map_err(|e| format!("{}: {e}", ixit_path.display()))?;
-        // The claim travels WITH the run: the job directory carries the
-        // exact bytes the engine graded, and the verdicts read them back
-        // from there — never from the mutable draft.
+        // The claim travels WITH the run: the job directory carries the exact
+        // bytes the engine graded, and the verdicts read them back from there,
+        // never from the mutable draft.
         let statement_path = draft
             .statement_json
             .as_deref()
@@ -819,10 +808,6 @@ pub mod read {
 
 pub mod fns {
     //! The `#[server]` endpoints, one module for one inner suppression.
-    //!
-    //! The same adjudication as `catalogue_api::fns`: macro-expanded
-    //! `unused_async` and `missing_docs`, module-scoped, signed off in the
-    //! pull request.
     #![allow(
         clippy::unused_async,
         missing_docs,
@@ -994,9 +979,8 @@ pub mod fns {
     /// Composes the ad-hoc claim for a tier selection, answering with the
     /// statement document itself.
     ///
-    /// The tier list is untrusted input on a public endpoint: it is a closed
-    /// vocabulary, so an unknown token never decodes, and duplicates collapse
-    /// into the same claim. Nothing is stored — the operator saves the
+    /// The tier list is a closed vocabulary, so an unknown token from a public
+    /// endpoint never decodes. Nothing is stored: the operator saves the
     /// document through the same schema-validated path a pasted one takes.
     ///
     /// The argument is optional because the default URL-encoded server-fn

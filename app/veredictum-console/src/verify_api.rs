@@ -5,10 +5,10 @@
 //! machinery (#62).
 //!
 //! Anyone can verify a published bundle here: no run, no CDR, no login. The
-//! verification itself is the published lib's `record::verify_bundle` — the
-//! console recomputes nothing and decides nothing, it renders what the lib
-//! reports. The page prints the command-line equivalent beside every outcome,
-//! so nobody has to trust the console to check the console.
+//! verification is the published lib's `record::verify_bundle`, and the
+//! console renders what the lib reports. The page prints the command-line
+//! equivalent beside every outcome, so nobody has to trust the console to
+//! check the console.
 //!
 //! An uploaded bundle is transient. It unpacks into a scratch directory under
 //! the mounted output root, is verified, and is swept on a short TTL; the
@@ -249,8 +249,7 @@ pub mod unpack {
     /// Removes every scratch directory older than [`TTL`].
     ///
     /// Best effort by design: a directory that cannot be read or removed is
-    /// skipped rather than turned into an upload failure, because sweeping is
-    /// housekeeping and never the caller's business.
+    /// skipped rather than turned into an upload failure.
     pub fn sweep(state: &ConsoleState) {
         let Ok(entries) = std::fs::read_dir(&state.out) else {
             return;
@@ -457,9 +456,8 @@ pub mod route {
     //! The server-owned upload route.
     //!
     //! A plain `<form method="post" enctype="multipart/form-data">` posts
-    //! here and is answered with a redirect back to the page. That is the
-    //! whole mechanism: a file upload with zero JavaScript, working before
-    //! the WASM bundle has loaded and working with it disabled entirely.
+    //! here and is answered with a redirect back to the page: a file upload
+    //! with zero JavaScript, working before the WASM bundle has loaded.
 
     use crate::redirect::{percent_encode, see_other};
 
@@ -508,10 +506,6 @@ pub mod route {
 
 pub mod fns {
     //! The `#[server]` endpoints, one module for one inner suppression.
-    //!
-    //! The same adjudication as `catalogue_api::fns`: macro-expanded
-    //! `unused_async` and `missing_docs`, module-scoped, signed off in the
-    //! pull request.
     #![allow(
         clippy::unused_async,
         missing_docs,

@@ -105,10 +105,9 @@ pub fn Verdicts() -> impl IntoView {
                 }
             })}
         </Suspense>
-        // OUTSIDE the Suspense on purpose: this section owns a resource, and
-        // a Suspend closure re-runs on every notification of what it awaits,
-        // re-creating everything inside it — which diverges the server's and
-        // the client's resource id spaces and breaks hydration (rules §4).
+        // OUTSIDE the Suspense on purpose: this section owns a resource, and a
+        // Suspend closure re-creates everything inside it on every
+        // notification, diverging the two sides' resource id spaces.
         <Export />
     }
 }
@@ -219,10 +218,9 @@ fn Export() -> impl IntoView {
     let note = RwSignal::new(None::<Result<String, String>>);
     let running = RwSignal::new(false);
     // The sanctioned dispatch-continuation shape: the click is the event, the
-    // answer lands in the action's own async block (rules §2). The sealed
-    // bundle itself is never mirrored into a second signal — the resource is
-    // refetched and stays the one reader of that fact, so nothing writes a
-    // render-visible signal from inside a Suspend.
+    // answer lands in the action's own async block. The sealed bundle is never
+    // mirrored into a second signal; the refetched resource stays its one
+    // reader, so nothing writes a render-visible signal inside a Suspend.
     let prepare = Action::new(move |(): &()| async move {
         running.set(true);
         match prepare_export().await {

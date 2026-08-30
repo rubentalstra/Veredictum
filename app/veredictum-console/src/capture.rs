@@ -4,17 +4,15 @@
 //! Documentation capture mode: the stand-ins the surfaces show for the facts
 //! one run stamps.
 //!
-//! The book's screenshots are refreshed by the browser journeys, and six of
-//! them photograph a live run's clock, its record digest and its signing
-//! time. Those change on every pass, so a capture run over an unchanged
-//! console still rewrites committed images and the `ui-screenshot-guard` job
-//! cannot tell that from a real visual change.
+//! Six of the book's screenshots photograph a live run's clock, its record
+//! digest and its signing time, which change on every pass, so the
+//! `ui-screenshot-guard` job cannot tell a re-run from a real visual change.
 //!
 //! In capture mode the server functions answer with the fixed stand-ins
-//! below, so an unchanged console photographs identically. Nothing else moves:
-//! the run's own record, the sealed manifest, the signature and the three
-//! rendered presentation files all carry the real values, because the pinning
-//! happens where a value is SENT TO A BROWSER and nowhere else.
+//! below, so an unchanged console photographs identically. Nothing else
+//! moves: the record, the manifest, the signature and the presentation files
+//! carry real values, because the pinning happens where a value is SENT TO A
+//! BROWSER and nowhere else.
 
 use crate::export_api::{ExportScreen, ExportSummary};
 use crate::run_job::JobView;

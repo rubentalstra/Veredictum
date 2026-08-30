@@ -111,12 +111,10 @@ pub mod prepare {
 
     /// Removes any sealed bundle left in a job directory.
     ///
-    /// Called when a run STARTS into that directory. A bundle certifies the
-    /// documents of the run that produced it, and nothing inside it names the
-    /// run — so a stale one inherited by a later run would be presented as
-    /// that run's record. The job counter restarts with the console process
-    /// while the output mount persists, which makes the inheritance real
-    /// rather than theoretical.
+    /// Called when a run STARTS into that directory. Nothing inside a bundle
+    /// names the run it certifies, and the job counter restarts with the
+    /// console process while the output mount persists, so a stale bundle
+    /// would be presented as a later run's record.
     ///
     /// # Errors
     /// The verbatim filesystem failure, because a bundle that cannot be
@@ -236,8 +234,8 @@ pub mod prepare {
             .map_err(|e| e.to_string())?;
 
         // ONE judgement feeds the summary AND the three presentation files:
-        // the lib judges the whole campaign, so re-deriving these facts per
-        // consumer costs the seal a full judgement each time.
+        // the lib judges the whole campaign, so a per-consumer re-derivation
+        // costs the seal a full judgement each time.
         let facts = record_facts(state)?;
         let summary = summarize(state, &bundle, &facts)?;
         render_presentation(&bundle, &summary, &facts)?;
@@ -295,8 +293,7 @@ pub mod prepare {
     /// What one judgement of the finished run establishes for the export.
     ///
     /// The judgement is the seal's expensive step, so it runs once and every
-    /// consumer — the summary, the seal card, the badge, the report — reads
-    /// its facts from this value.
+    /// consumer reads its facts from this value.
     #[derive(Debug)]
     struct RecordFacts {
         /// The system under test the record names.
@@ -338,8 +335,7 @@ pub mod prepare {
     ///
     /// Only CLAIMED tiers reach the card: an unclaimed tier has no verdict to
     /// state, and listing it pushes the slot's one line across the rule the
-    /// master draws for it. The console's own matrix still shows every tier,
-    /// so nothing is hidden — this is the certificate's line length.
+    /// master draws for it. The console's own matrix still shows every tier.
     fn card_slot(
         profiles: &[(String, String)],
         performance: &[String],
@@ -513,9 +509,9 @@ pub mod route {
 
     /// Serves the prepared bundle as one archive.
     ///
-    /// Deliberately outside the Leptos route tree, like `/healthz`: it
-    /// answers with bytes rather than a view, and every anchor pointing at it
-    /// carries `rel="external"` so the client router does not intercept it.
+    /// Outside the Leptos route tree because it answers with bytes rather
+    /// than a view, so every anchor pointing at it carries `rel="external"`
+    /// and the client router does not intercept it.
     #[expect(
         clippy::unused_async,
         reason = "an axum handler is async by contract; this one only reads the filesystem"
@@ -550,10 +546,6 @@ pub mod route {
 
 pub mod fns {
     //! The `#[server]` endpoints, one module for one inner suppression.
-    //!
-    //! The same adjudication as `catalogue_api::fns`: macro-expanded
-    //! `unused_async` and `missing_docs`, module-scoped, signed off in the
-    //! pull request.
     #![allow(
         clippy::unused_async,
         missing_docs,

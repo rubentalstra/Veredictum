@@ -11,16 +11,15 @@
 //! The console renders and never decides. Submittability, the unmet
 //! requirements, the relative index and the posture assurance labels are read
 //! out of the record as written; nothing here recomputes an index or a
-//! verdict. The alignment a comparison needs, the failed-arrival readings and
-//! the mismatch warnings are derived from disclosed numbers, which is
-//! presentation rather than judgement, and each carries the issue that moves
-//! it back onto the engine.
+//! verdict. The comparison alignment, the failed-arrival readings and the
+//! mismatch warnings are derived from disclosed numbers, which is
+//! presentation, and each carries the issue that moves it onto the engine.
 //!
 //! The read types below mirror the published `bench-result` document because
-//! the console consumes the engine at an exact crates.io version that predates
-//! the bench module. The mirror is deserialize-only and the fixture gate holds
-//! it to `schemas/bench-result.schema.json`, so it cannot drift from the
-//! artifact family it reads.
+//! the pinned engine version predates the bench module. The mirror is
+//! deserialize-only and the fixture gate holds it to
+//! `schemas/bench-result.schema.json`, so it cannot drift from the family it
+//! reads.
 
 use serde::{Deserialize, Serialize};
 
@@ -485,10 +484,8 @@ pub mod mirror {
     //! The deserialize-only mirror of the published `bench-result` document.
     //!
     //! Every type here is the shape `schemas/bench-result.schema.json`
-    //! publishes, and the fixture gate validates a record against that schema
-    //! before this reader ever sees it, so the mirror cannot drift from the
-    //! family it reads. Closed vocabularies are enums, so an unknown token is
-    //! a loud parse failure rather than a silent default.
+    //! publishes. Closed vocabularies are enums, so an unknown token is a loud
+    //! parse failure rather than a silent default.
     // TODO(#179): replace with veredictum::bench types when the engine pin
     // catches up.
 
@@ -1190,10 +1187,9 @@ pub mod derive {
     //! The arithmetic a record discloses but does not carry.
     //!
     //! The failed-arrival readings, the comparison alignment and its mismatch
-    //! warnings are pure functions of numbers the record already states. They
-    //! are the engine's own definitions, mirrored here because the pinned
-    //! engine predates the bench module; nothing here is a judgement, and no
-    //! index or verdict is recomputed.
+    //! warnings are pure functions of numbers the record already states,
+    //! carrying the engine's own definitions. No index or verdict is
+    //! recomputed here.
     // TODO(#179): call veredictum::bench::result and veredictum::bench::compare
     // when the engine pin catches up.
 
@@ -2196,10 +2192,6 @@ pub mod route {
 
 pub mod fns {
     //! The `#[server]` endpoints, one module for one inner suppression.
-    //!
-    //! The same adjudication as `catalogue_api::fns`: macro-expanded
-    //! `unused_async` and `missing_docs`, module-scoped, signed off in the
-    //! pull request.
     #![allow(
         clippy::unused_async,
         missing_docs,
