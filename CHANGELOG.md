@@ -18,6 +18,14 @@ version on.
 
 ## [Unreleased]
 
+### Changed
+- **The console speaks about the console (#382).** Every screen that printed a
+  command line or pointed at a terminal now states what it did itself: the
+  verify page's "check it without this page" box, the benchmark pages' three
+  command boxes, the empty-state hint that told a reader to run `bench`, and
+  the verdicts line about "the bodies the command line writes". Documents that
+  leave the console keep their verification instructions, because their reader
+  is holding a record rather than looking at a screen.
 ### Fixed
 - **Every server function answered 404 in the published image (#381).** A
   server-function URL is `xxh64` over the crate's absolute manifest directory

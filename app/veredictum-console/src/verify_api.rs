@@ -24,9 +24,6 @@ pub const NO_KEY_HINT: &str =
 /// The server-owned route a bundle is posted to.
 pub const UPLOAD_PATH: &str = "/verify/upload";
 
-/// The command-line equivalent, printed on every outcome.
-pub const CLI_EQUIVALENT: &str = "veredictum verify-record --record <dir> --key <public-key>";
-
 /// What verification proves, and what it does not.
 ///
 /// Rendered on EVERY outcome, clean or not: a signature that is overread is

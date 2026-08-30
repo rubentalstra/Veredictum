@@ -26,12 +26,6 @@ use serde::{Deserialize, Serialize};
 /// The server-owned route a batch of bench records is posted to.
 pub const UPLOAD_PATH: &str = "/benchmarks/upload";
 
-/// The command-line equivalent of the detail surface.
-pub const CLI_DETAIL: &str = "veredictum bench --pack <id> --base-url <url> --out <dir>";
-
-/// The command-line equivalent of the comparison surface.
-pub const CLI_COMPARE: &str = "veredictum bench-compare --result <a.json> --result <b.json>";
-
 /// Why the recorded distributions are tabulated rather than drawn.
 ///
 /// Every operation carries the standard `HdrHistogram` V2 encoding of its own

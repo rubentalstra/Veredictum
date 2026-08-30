@@ -197,7 +197,7 @@ fn judged_view(
         <section class="mt-2">
             <h2 class=format!("{CARD_TITLE} mt-4")>"The rendered documents"</h2>
             <p class="text-sm text-ink-muted">
-                "Byte-for-byte the bodies the command line writes — the same pure function produced them."
+                "Byte-for-byte the bodies the sealed record carries: one pure function renders them, here and in the export."
             </p>
             {panes}
         </section>

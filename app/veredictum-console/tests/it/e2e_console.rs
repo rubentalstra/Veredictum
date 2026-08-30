@@ -938,9 +938,10 @@ async fn export_and_verify(h: &Harness) -> String {
     // one — that is the whole point of it.
     h.wait_xpath("//h2[contains(., 'What this proves')]").await;
     h.wait_xpath("//body[contains(., 'not the run')]").await;
-    // And the command-line equivalent, so the console is never the only
-    // witness to its own verdict.
-    h.wait_xpath("//body[contains(., 'veredictum verify-record')]")
+    // The check's own provenance table, so a clean verdict names the origin
+    // and the instrument it rests on and not merely that something verified.
+    h.wait_xpath("//h2[contains(., 'The check')]").await;
+    h.wait_xpath("//body[contains(., 'Every file the manifest names')]")
         .await;
     h.capture("verify-light").await;
 
