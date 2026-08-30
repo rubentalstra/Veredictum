@@ -483,6 +483,69 @@ fn an_imported_version_is_judged_against_the_wrappers_own_audit() -> Fallible {
     Ok(())
 }
 
+/// A `version` row over an `IMPORTED_VERSION` judges `lifecycle_state`
+/// through the version the wrapper imported.
+///
+/// `lifecycle_state ()` is an effected function on `IMPORTED_VERSION`,
+/// "Lifecycle state of the content item in wrapped `ORIGINAL_VERSION`, derived
+/// as `_item.lifecycle_state_`" (RM common
+/// `UML/classes/imported_version.adoc` §Functions), and released ITS-JSON
+/// `components/RM/Release-1.1.0/Common/IMPORTED_VERSION.json` requires only
+/// `contribution`, `commit_audit` and `item` under
+/// `additionalProperties: false`. The served wrapper here carries the property
+/// nowhere but inside `item`, so a row reading the top level would charge a
+/// server that answered exactly as the release binds it (#322).
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_imported_versions_lifecycle_state_is_judged_through_the_wrapped_item() -> Fallible {
+    let sut = FakeSut::start();
+    mount_create(&sut);
+    mount_envelope(&sut, imported_version(1));
+    let bindings = [create_composition_binding(), version_read_binding()];
+
+    let mut vars = provisioned_vars()?;
+    let failures = drive(
+        &sut,
+        &bindings,
+        create_case(&json!([{
+            "assert": "version", "of": "${version_uid}",
+            "lifecycle_state": "openehr::532|complete|"
+        }])),
+        &mut vars,
+    )?;
+    assert!(
+        failures.is_empty(),
+        "a conformant imported version was charged for its wrapped lifecycle state: {failures:?}"
+    );
+
+    let mut vars = provisioned_vars()?;
+    let mismatched = drive(
+        &sut,
+        &bindings,
+        create_case(&json!([{
+            "assert": "version", "of": "${version_uid}",
+            "lifecycle_state": "openehr::523|deleted|"
+        }])),
+        &mut vars,
+    )?;
+    let first = mismatched
+        .first()
+        .ok_or("a wrong lifecycle term passed silently")?;
+    assert!(
+        matches!(first, AssertionOutcome::Mismatch(_)),
+        "a served value that contradicts the assertion is a finding against the SUT: {first:?}"
+    );
+    assert!(
+        first.reason().contains("532"),
+        "the failure names neither side: {}",
+        first.reason()
+    );
+    Ok(())
+}
+
 /// An `IMPORTED_VERSION` already in hand is judged through the family's
 /// version read, because the in-hand shortcut compares a `uid` the class
 /// cannot carry.
