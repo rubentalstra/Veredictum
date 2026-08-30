@@ -65,9 +65,12 @@ if [[ "${1:-}" == "--self-test" ]]; then
 fi
 
 files=()
+# The guard excludes itself: the self-test above seeds literal bare TODOs,
+# which are test fixtures, not pending work.
 while IFS= read -r f; do [[ -f "$f" ]] && files+=("$f"); done < <(
   git ls-files '*.yml' '*.yaml' '*.sh' '*.toml' \
-    ':(exclude)specs/**' ':(exclude)fuzz/corpus/**' ':(exclude)fuzz/seeds/**'
+    ':(exclude)specs/**' ':(exclude)fuzz/corpus/**' ':(exclude)fuzz/seeds/**' \
+    ':(exclude)scripts/checks/todo-issue-refs.sh'
 )
 if scan "${files[@]}"; then
   echo "todo-issue-refs: OK (${#files[@]} files)."
