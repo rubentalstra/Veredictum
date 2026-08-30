@@ -199,6 +199,8 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
         verify_key: None,
         jobs: JobSlot::default(),
         client_ip_header: None,
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     };
     let id = state.jobs.allocate_id();
@@ -371,6 +373,8 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
         verify_key: None,
         jobs: JobSlot::default(),
         client_ip_header: None,
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     };
 
@@ -475,6 +479,8 @@ fn state_over(out: &std::path::Path) -> veredictum_console::state::ConsoleState 
         sign_key: None,
         verify_key: None,
         jobs: JobSlot::default(),
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     }
 }
@@ -905,6 +911,8 @@ fn the_start_seam_answers_with_the_run_already_in_flight() -> Result<(), Box<dyn
         verify_key: None,
         jobs: JobSlot::default(),
         client_ip_header: None,
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     };
 

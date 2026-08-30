@@ -36,6 +36,14 @@ What the overlay adds for it is `/work/out`: the baked `/work` tree is
 root-owned and the distroless base has no shell, so the directory is created
 in a `busybox` helper stage and copied in owned by uid 65532.
 
+The overlay also sets `VEREDICTUM_POSTURE=hosted`, which is what turns on the
+target guard (#390): anyone may name the endpoint this instance drives, so a
+loopback, RFC 1918 private, link-local, unique-local, unspecified or multicast
+target is refused before a socket opens, with the name resolved first and every
+address it answers with checked. An operator's own console leaves the variable
+unset and drives `localhost` as before. Any other value refuses to start, so a
+typo fails the deploy instead of dropping the guard.
+
 ## What the instance keeps
 
 Nothing durable, and no volume is attached. A run's artifacts live long enough

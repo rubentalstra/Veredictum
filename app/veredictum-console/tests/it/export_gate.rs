@@ -60,6 +60,8 @@ fn state_over(out: &Path, jobs: JobSlot) -> ConsoleState {
         )),
         client_ip_header: None,
         jobs,
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     }
 }

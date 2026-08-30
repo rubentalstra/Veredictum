@@ -10,8 +10,8 @@
 use leptos::prelude::{
     Action, AddAnyAttr, ClassAttribute, CollectView, Effect, ElementChild, Get, GlobalAttributes,
     IntoAny, IntoView, Memo, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal,
-    ServerAction, ServerFnError, Set, StyleAttribute, Suspend, Suspense, Transition, Update, With,
-    component, view,
+    ServerFnError, Set, StyleAttribute, Suspend, Suspense, Transition, Update, With, component,
+    view,
 };
 use leptos_meta::Title;
 use leptos_router::components::{A, Redirect};
@@ -24,8 +24,8 @@ use crate::components::page_header::{Crumb, PageHeader};
 use crate::components::surface::{CARD_PAD, CARD_TITLE};
 use crate::components::toast;
 use crate::run_api::fns::{
-    ProbeAndSave, cancel_run, compose_claim, fetch_draft, fetch_run, fetch_scope_preview,
-    fetch_statement_body, fetch_statements, fetch_tier_counts, save_scope, start_run,
+    cancel_run, compose_claim, fetch_draft, fetch_run, fetch_scope_preview, fetch_statement_body,
+    fetch_statements, fetch_tier_counts, probe_and_save, save_scope, start_run,
 };
 use crate::run_api::{
     AuthChoice, ClaimSummary, ProbeAnswer, RecordedRun, RunScreen, ScopePreview, ScopeTier,
@@ -58,6 +58,28 @@ pub(crate) fn steps(active: &'static str) -> impl IntoView + use<> {
         .collect_view()
 }
 
+/// The connect form's values, snapshotted when the probe is dispatched.
+///
+/// The action reads this rather than the signals, so the request carries what
+/// the form said at the click and never what a later keystroke changed.
+#[derive(Debug, Clone)]
+struct ProbeInput {
+    /// The CDR base URL.
+    base_url: String,
+    /// The SUT display name for the record.
+    sut_name: String,
+    /// The SUT version label for the record.
+    sut_version: String,
+    /// The authentication mode.
+    auth: AuthChoice,
+    /// The Basic user, empty for the other modes.
+    user: String,
+    /// The Basic password, empty for the other modes.
+    password: String,
+    /// The bearer token, empty for the other modes.
+    token: String,
+}
+
 /// S3 — the connection form and the probe.
 #[expect(
     clippy::must_use_candidate,
@@ -76,7 +98,37 @@ pub fn Connect() -> impl IntoView {
     let user = RwSignal::new(String::new());
     let password = RwSignal::new(String::new());
     let token = RwSignal::new(String::new());
-    let probe = ServerAction::<ProbeAndSave>::new();
+    // The probe both contacts a server and stores the draft, so it reports
+    // its refusal as a notification the way every other mutation here does —
+    // a target the posture refuses, or a spent probe budget, must never look
+    // like nothing happened.
+    let answer = RwSignal::new(None::<Result<ProbeAnswer, String>>);
+    let probe = Action::new(move |input: &ProbeInput| {
+        let input = input.clone();
+        async move {
+            match probe_and_save(
+                input.base_url,
+                input.sut_name,
+                input.sut_version,
+                input.auth,
+                input.user,
+                input.password,
+                input.token,
+            )
+            .await
+            {
+                Ok(probed) => answer.set(Some(Ok(probed))),
+                Err(e) => {
+                    let body = e.to_string();
+                    toast::error(
+                        "The connection was refused",
+                        &format!("Nothing was contacted: {body}"),
+                    );
+                    answer.set(Some(Err(body)));
+                }
+            }
+        }
+    });
 
     let auth_button = move |choice: AuthChoice, label: &'static str| {
         let active = move || auth.get() == choice;
@@ -98,7 +150,7 @@ pub fn Connect() -> impl IntoView {
     };
 
     let dispatch_probe = move |_| {
-        probe.dispatch(ProbeAndSave {
+        probe.dispatch(ProbeInput {
             base_url: base_url.get(),
             sut_name: sut_name.get(),
             sut_version: sut_version.get(),
@@ -231,8 +283,7 @@ pub fn Connect() -> impl IntoView {
                     </button>
                 </div>
                 {move || {
-                    probe
-                        .value()
+                    answer
                         .get()
                         .map(|result| {
                             match result {
@@ -277,7 +328,17 @@ pub fn Connect() -> impl IntoView {
                                     }
                                         .into_any()
                                 }
-                                Err(e) => inline_error(&e.to_string()).into_any(),
+                                Err(e) => {
+                                    view! {
+                                        <div class="space-y-2">
+                                            {inline_error(&e)}
+                                            <p class="text-sm text-ink-muted">
+                                                "Nothing was contacted and no connection was stored. Correct the target and probe again."
+                                            </p>
+                                        </div>
+                                    }
+                                        .into_any()
+                                }
                             }
                         })
                 }}

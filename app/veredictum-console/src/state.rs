@@ -92,6 +92,14 @@ pub struct ConsoleState {
     /// The request header the operator asked to be trusted for the client
     /// address ([`CLIENT_IP_HEADER_ENV`]), when they named one.
     pub client_ip_header: Option<String>,
+    /// Whose network this instance sits in (#390), read once from
+    /// [`crate::posture::POSTURE_ENV`]. The hosted posture refuses a target
+    /// only this instance can reach; the local one refuses nothing.
+    pub posture: crate::posture::Posture,
+    /// The per-submitter rate ledger (#390) the probe and start seams ask
+    /// before spending anything, over the same submitter identity the
+    /// concurrency caps read.
+    pub rates: crate::rate_limit::RateLimiter,
     /// Whether the documentation capture mode is on
     /// ([`crate::capture::CAPTURE_ENV`]): the facts a run stamps then render
     /// as fixed stand-ins. It changes what the surfaces DISPLAY and nothing
@@ -102,8 +110,16 @@ pub struct ConsoleState {
 impl ConsoleState {
     /// Reads the mounts from the environment and loads the catalogue once,
     /// through the published lib — the same call `validate` runs.
-    #[must_use]
-    pub fn load() -> Self {
+    ///
+    /// # Errors
+    /// [`crate::posture::UnknownPosture`] when
+    /// [`crate::posture::POSTURE_ENV`] names no posture. That is the ONE
+    /// startup value this console refuses to guess at: a missing mount is a
+    /// first-class state the screens explain, but a public instance falling
+    /// back to `local` on a typo would drive whatever address a visitor
+    /// named, so the process does not start at all.
+    pub fn load() -> Result<Self, crate::posture::UnknownPosture> {
+        let posture = crate::posture::from_env()?;
         let root =
             PathBuf::from(std::env::var(ROOT_ENV).unwrap_or_else(|_| String::from("artifacts")));
         let specs = PathBuf::from(
@@ -116,7 +132,7 @@ impl ConsoleState {
         let verify_key = std::env::var(VERIFY_KEY_ENV).ok().map(PathBuf::from);
         let catalogue = veredictum::pipeline::catalogue::validate_tree(&root, Some(&specs))
             .map_err(|e| e.to_string());
-        Self {
+        Ok(Self {
             root,
             specs,
             party,
@@ -129,7 +145,9 @@ impl ConsoleState {
             client_ip_header: std::env::var(CLIENT_IP_HEADER_ENV)
                 .ok()
                 .filter(|name| !name.trim().is_empty()),
+            posture,
+            rates: crate::rate_limit::RateLimiter::default(),
             capture: crate::capture::enabled(),
-        }
+        })
     }
 }

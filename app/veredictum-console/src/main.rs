@@ -44,7 +44,11 @@ async fn main() -> anyhow::Result<()> {
     // The catalogue loads ONCE, before the listener binds: every request
     // shares the same startup read, and a missing mount is a first-class
     // state the screens explain rather than a crash (#64).
-    let state = veredictum_console::state::ConsoleState::load();
+    // The posture is the ONE startup value that refuses rather than degrades
+    // (#390): a public instance that read a typo as `local` would drive
+    // whatever address a visitor named.
+    let state = veredictum_console::state::ConsoleState::load()?;
+    eprintln!("veredictum-console: {} posture", state.posture.token());
     if let Err(reason) = state.catalogue.as_ref() {
         // A load diagnostic about a mount, never SUT data: no response body
         // reaches a log stream.
