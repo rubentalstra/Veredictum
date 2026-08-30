@@ -4,7 +4,8 @@ Veredictum is the independent conformance instrument for openEHR clinical data
 repositories: a machine-readable catalogue of spec-cited test cases, executed
 against any running CDR over its own wire, judged by pure functions over the
 recorded exchanges. One tool covers functional conformance, measured
-performance, and step-load stress. The released openEHR specifications are the
+performance, step-load stress, and the comparative-speed benchmark. The
+released openEHR specifications are the
 only authority it accepts, and every expectation in the catalogue cites the
 section it comes from. The instrument is independent on purpose: a CDR must
 never be able to grade its own homework, and that property only holds if the
