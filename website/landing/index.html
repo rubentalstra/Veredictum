@@ -199,11 +199,10 @@
   <section id="evidence">
     <div class="wrap">
       <div class="head">
-        <span class="eyebrow">One tool, three kinds of evidence</span>
-        <h2>Functional conformance, measured performance, step-load stress</h2>
-        <p>The same catalogue and the same recorded-then-computed discipline
-          carry all three, so a performance number and a functional verdict come
-          from one instrument against one deployment.</p>
+        <span class="eyebrow">One tool, four kinds of evidence</span>
+        <h2>Functional conformance, measured performance, step-load stress, comparative speed</h2>
+        <p>The same recorded-then-computed discipline carries all four, so
+          every number about a deployment comes from one instrument.</p>
       </div>
       <div class="table-scroll">
         <table>
@@ -225,6 +224,11 @@
               <td><strong>Step-load stress</strong><br><code>stress</code></td>
               <td>Where does this deployment break, in arrivals per second?</td>
               <td><code>stress.json</code>. Exploration only, and never a conformance record</td>
+            </tr>
+            <tr>
+              <td><strong>Benchmark</strong><br><code>bench</code></td>
+              <td>How fast does this CDR answer a fixed workload, relative to reference CDRs measured on the same machine?</td>
+              <td>A bench result with a relative index per reference. Comparative speed only, never a conformance verdict; results are submittable to the <a href="benchmarks.html">public board</a> by pull request</td>
             </tr>
           </tbody>
         </table>
@@ -307,11 +311,11 @@
 <span class="p">$</span> veredictum validate --root artifacts --specs specs/openehr</code></pre>
       </figure>
       <figure class="code">
-        <figcaption>The web console, with Docker</figcaption>
-        <pre><code><span class="cmt"># The image is the web console — a browser frontend that drives the</span>
-<span class="cmt"># same pinned CLI. It has no login, so keep it on loopback.</span>
-<span class="p">$</span> docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD:/work" \
-      ghcr.io/rubentalstra/veredictum:&lt;tag&gt;</code></pre>
+        <figcaption>The web console, with Docker Compose</figcaption>
+        <pre><code><span class="cmt"># One downloaded file starts the console on http://127.0.0.1:3210.</span>
+<span class="cmt"># It has no login, so the file binds it to loopback.</span>
+<span class="p">$</span> curl -LO https://raw.githubusercontent.com/rubentalstra/Veredictum/main/docker/docker-compose.yml
+<span class="p">$</span> docker compose up</code></pre>
       </figure>
       <p class="after-code">Prebuilt binaries for x86_64 and aarch64 Linux are
         attached to each release, every one with a checksum, a CycloneDX
