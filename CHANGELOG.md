@@ -44,6 +44,17 @@ version on.
   mounts the working directory; every release from the next cut attaches it
   beside the binaries, `check-console-pin.sh` holds its image tag to the one
   engine value, and the release pipeline refuses to publish without it.
+- **The 429 publish guard is pinned in both directions, the driver's exchange
+  names its URL, and a failed statement reset no longer poisons a probe's
+  attribution (#145).** The rule that a rate-limited window never becomes a
+  published measurement now lives in one `refuse_rate_limited_record` seam
+  that the measured and stress instruments both call, with a test for each
+  direction: a latched 429 withholds the record, a clean window publishes.
+  The recorded exchange's field is `url`, which is what it has always held
+  and what the transcript already publishes. `aql-probe` reports a failed
+  `pg_stat_statements_reset` and withholds that probe's statement rows,
+  where it used to drop the failure and charge one probe with the previous
+  probe's cost.
 - **An undeclared signing posture no longer reds the row against the server
   (#279).** A `signature` assertion asking for `verifiable` where the ixit
   declares no `signing` at party or instance level now records the row

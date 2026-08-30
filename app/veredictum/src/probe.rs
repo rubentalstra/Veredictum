@@ -373,9 +373,22 @@ pub fn run_probe(
 
     let mut probes = Vec::new();
     for (name, aql, method, path, body) in probe_set {
-        if let Some(db) = &attribution_db {
-            let _reset = db_sql(db, "SELECT pg_stat_statements_reset();");
-        }
+        // The counters carry every earlier probe until they are reset, so a
+        // failed reset makes this probe's attribution the whole run's. The
+        // failure is named and the statements are withheld: an unreset read
+        // would charge one probe with another's cost.
+        let attributable = match &attribution_db {
+            Some(db) => match db_sql(db, "SELECT pg_stat_statements_reset();") {
+                Ok(_) => true,
+                Err(e) => {
+                    progress(format!(
+                        "probe {name}: attribution reset failed, statements withheld: {e}"
+                    ));
+                    false
+                }
+            },
+            None => false,
+        };
         let mut samples_ms: Vec<f64> = Vec::new();
         let mut failures: u32 = 0;
         for _ in 0..requests {
@@ -406,6 +419,7 @@ pub fn run_probe(
         };
         let statements = attribution_db
             .as_ref()
+            .filter(|_| attributable)
             .and_then(|db| match read_statements(db) {
                 Ok(rows) => Some(rows),
                 Err(e) => {
