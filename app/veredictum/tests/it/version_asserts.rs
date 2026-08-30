@@ -318,6 +318,64 @@ fn an_envelope_already_in_hand_is_judged_without_a_second_read() -> Fallible {
     Ok(())
 }
 
+/// A `COMPOSITION` as a server serves it under `Prefer: return=representation`:
+/// the versioned item, carrying the version's own `OBJECT_VERSION_ID` at
+/// `uid.value` (RM common `UML/classes/version.adoc` §Attributes) and no
+/// `commit_audit` at all.
+fn representation_composition(tree: u32) -> Value {
+    json!({
+        "_type": "COMPOSITION",
+        "uid": { "_type": "OBJECT_VERSION_ID", "value": version_uid(tree) },
+        "name": { "value": "Vital signs" },
+        "archetype_node_id": "openEHR-EHR-COMPOSITION.encounter.v1"
+    })
+}
+
+/// A representation body is the versioned ITEM, so it is never the envelope
+/// however exactly its uid matches: the released ITS-JSON binds a `VERSION` to
+/// `_type` `ORIGINAL_VERSION`/`IMPORTED_VERSION`
+/// (`components/RM/Release-1.1.0/Common/ORIGINAL_VERSION.json`), and only that
+/// body carries `commit_audit`. The row reads the real envelope instead of
+/// charging the server for a `change_type` its answer was never required to
+/// hold.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_representation_body_is_not_the_envelope_however_its_uid_matches() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path(format!("/ehr/{EHR_ID}/composition")))
+            .respond_with(
+                ResponseTemplate::new(201)
+                    .insert_header("ETag", format!("W/\"{}\"", version_uid(1)).as_str())
+                    .set_body_json(representation_composition(1)),
+            ),
+    );
+    mount_envelope(&sut, envelope(1, "249", "532", "complete"));
+    let mut vars = provisioned_vars()?;
+    let failures = drive(
+        &sut,
+        &[create_composition_binding(), version_read_binding()],
+        create_case(&json!([{
+            "assert": "version", "of": "${version_uid}", "change_type": "CREATE"
+        }])),
+        &mut vars,
+    )?;
+    assert!(
+        failures.is_empty(),
+        "the served COMPOSITION was judged as the envelope: {failures:?}"
+    );
+    assert_eq!(
+        sut.requests().len(),
+        2,
+        "the row must fall through to the envelope read the family declares"
+    );
+    Ok(())
+}
+
 /// `count` is judged against the family's `REVISION_HISTORY`, one
 /// `REVISION_HISTORY_ITEM` per version (RM common
 /// `revision_history_item.adoc` §Description).

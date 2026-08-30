@@ -42,6 +42,25 @@ pub fn envelope_uid(envelope: &Value) -> Option<&str> {
     envelope.get("uid")?.get("value")?.as_str()
 }
 
+/// Whether a served body IS a `VERSION`, by the `_type` discriminator the
+/// released ITS-JSON binds it to.
+///
+/// `components/RM/Release-1.1.0/Common/ORIGINAL_VERSION.json` and
+/// `IMPORTED_VERSION.json` each fix `_type` to a `const` naming their own
+/// class, and those two are the concrete `VERSION` descendants the release
+/// carries. A versioned item served on its own — a `COMPOSITION` under
+/// `Prefer: return=representation`, say — repeats the version's
+/// `OBJECT_VERSION_ID` at `uid.value` (RM common
+/// `UML/classes/version.adoc` §Attributes) while carrying no `commit_audit`,
+/// so the uid alone cannot tell the envelope from its content.
+#[must_use]
+pub fn is_version_envelope(body: &Value) -> bool {
+    matches!(
+        body.get("_type").and_then(Value::as_str),
+        Some("ORIGINAL_VERSION" | "IMPORTED_VERSION")
+    )
+}
+
 /// The regex fragment a `<name>` token of a `uid_pattern` denotes.
 ///
 /// The vocabulary is CLOSED, and an unknown token is refused by
@@ -310,6 +329,22 @@ mod tests {
         );
         assert!(eval_lifecycle_state(&served, "openehr::532|complete|").is_err());
         assert!(eval_lifecycle_state(&served, "complete").is_err());
+    }
+
+    /// Only the two concrete `VERSION` classes the released ITS-JSON binds a
+    /// `_type` const to ARE the envelope; a versioned item repeating the same
+    /// `OBJECT_VERSION_ID` is not, and neither is a body naming no class.
+    #[test]
+    fn a_version_envelope_is_recognized_by_its_released_type_token() {
+        let uid = "a::s::2";
+        assert!(is_version_envelope(&envelope("249", "532", uid)));
+        assert!(is_version_envelope(&json!({ "_type": "IMPORTED_VERSION" })));
+        assert!(!is_version_envelope(&json!({
+            "_type": "COMPOSITION", "uid": { "value": uid }
+        })));
+        assert!(!is_version_envelope(&json!({ "uid": { "value": uid } })));
+        assert!(!is_version_envelope(&json!({ "_type": "PERSON" })));
+        assert!(!is_version_envelope(&Value::Null));
     }
 
     #[test]
