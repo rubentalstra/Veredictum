@@ -19,6 +19,12 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+
+
+### Removed
+- The `content_generation` registered-exception kind. Content cases execute
+  through the synthesized functional flow, so nothing could raise it and no
+  published record ever carried it (#248).
 - `validate` now finds a step-level `equivalent to: committed` assertion whose
   flow commits no payload at or before the asserting step; the shape was a
   drive-time failure charged against the row instead of a catalogue finding
@@ -38,11 +44,15 @@ version on.
   directly, which also makes the fact judgeable for the directory delete, the
   two demographic party-relationship rows, and a contribution spanning two
   containers.
-
-### Removed
-- The `content_generation` registered-exception kind. Content cases execute
-  through the synthesized functional flow, so nothing could raise it and no
-  published record ever carried it (#248).
+- **The measured path fails loud instead of substituting a value (#253).** A
+  failed integer conversion no longer collapses corpus addressing onto one
+  entry or maps a journey onto shard 0: the corpus stride and the capture
+  shard are reduced before they narrow, so every arrival addresses what it
+  planned to. A workload share naming a journey the catalogue does not carry
+  is now a named finding at the schedulable filter, so the operator reads
+  which name failed. One principal set drives both what a measured window
+  plans and what it fires, which is why `run_window` and `run_stress` no
+  longer take one separately.
 
 ## [0.1.1] - 2026-08-30
 

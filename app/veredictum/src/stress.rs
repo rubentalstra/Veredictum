@@ -29,7 +29,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::ixit::Environment;
 use crate::perf::OperationMeasurement;
-use crate::perf_run::client::PerfPrincipals;
 use crate::perf_run::corpus::SeededCorpus;
 use crate::perf_run::schedule::JourneyWorkload;
 use crate::perf_run::window::run_window;
@@ -171,6 +170,9 @@ fn step_breaches(
 /// Run the geometric step-load ladder and locate the maximum sustainable
 /// throughput.
 ///
+/// Every rung drives the workload's own principal set, the same one the
+/// schedule plans against ([`run_window`]).
+///
 /// # Errors
 /// A message on schedule construction or aggregation failure (an unstable
 /// step is a finding, never an error).
@@ -179,7 +181,6 @@ fn step_breaches(
     reason = "one linear procedure: climb → bisect → report"
 )]
 pub fn run_stress(
-    principals: &PerfPrincipals,
     corpus: &SeededCorpus,
     workload: &JourneyWorkload<'_>,
     environment: &Environment,
@@ -224,7 +225,6 @@ pub fn run_stress(
             )
         });
         let window = run_window(
-            principals,
             corpus,
             workload,
             rate,

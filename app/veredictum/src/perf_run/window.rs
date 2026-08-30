@@ -169,9 +169,33 @@ fn collect_completions(rx: mpsc::Receiver<ArrivalReport>) -> Result<CollectedWin
     })
 }
 
+/// The window's refusal when the generator could not fire planned
+/// arrivals: the total count, then one `<operation>: <reason> (N arrivals)`
+/// clause per distinct fault. `None` when every planned arrival fired.
+///
+/// A fault is the instrument failing to drive the schedule, so the window
+/// publishes no measurement at all instead of a record missing the
+/// arrivals it lost.
+fn generator_fault_refusal(faults: &BTreeMap<String, u64>) -> Option<String> {
+    let faulted: u64 = faults.values().copied().sum();
+    if faulted == 0 {
+        return None;
+    }
+    let detail: Vec<String> = faults
+        .iter()
+        .map(|(reason, count)| format!("{reason} ({count} arrivals)"))
+        .collect();
+    Some(format!("{faulted} generator faults: {}", detail.join("; ")))
+}
+
 /// Execute one open-loop window: the journey workload at `rate` operation
 /// arrivals/s for `warmup_s + duration_s`, recording only the post-warmup
 /// span.
+///
+/// The workload's own [`PerfPrincipals`] is the one principal set: the same
+/// declaration decides which journeys the schedule plans and which client
+/// each arrival is fired through, so the schedule can never plan an arrival
+/// the dispatcher has no client for.
 ///
 /// # Errors
 /// A message on schedule construction or aggregation failure, and one
@@ -183,7 +207,6 @@ fn collect_completions(rx: mpsc::Receiver<ArrivalReport>) -> Result<CollectedWin
     reason = "one measured-window procedure: schedule → collect → aggregate"
 )]
 pub fn run_window(
-    principals: &PerfPrincipals,
     corpus: &SeededCorpus,
     workload: &JourneyWorkload<'_>,
     rate: f64,
@@ -191,6 +214,7 @@ pub fn run_window(
     duration_s: u64,
     progress: &(dyn Fn(String) + Sync),
 ) -> Result<WindowOutcome, String> {
+    let principals: &PerfPrincipals = workload.principals;
     let schedule = build_schedule(workload, rate, warmup_s, duration_s, corpus.ward.len())?;
     if !schedule.dropped_journeys.is_empty() {
         progress(format!(
@@ -259,7 +283,11 @@ pub fn run_window(
             let tx = tx.clone();
             let client = client.clone();
             let captures = &captures;
-            let arrival_index = u64::try_from(i).unwrap_or(u64::MAX);
+            #[expect(
+                clippy::as_conversions,
+                reason = "the arrival index widens exactly: usize is at most 64 bits on every supported target"
+            )]
+            let arrival_index = i as u64;
             let failure_samples = Arc::clone(&failure_samples);
             scope.spawn(move || {
                 let mut observed: Option<u16> = None;
@@ -319,14 +347,8 @@ pub fn run_window(
             .unwrap_or_else(|| "non-string panic payload".to_owned());
         format!("collector thread panicked: {detail}")
     })??;
-    let faulted: u64 = collected.generator_faults.values().copied().sum();
-    if faulted > 0 {
-        let detail: Vec<String> = collected
-            .generator_faults
-            .iter()
-            .map(|(reason, count)| format!("{reason} ({count} arrivals)"))
-            .collect();
-        return Err(format!("{faulted} generator faults: {}", detail.join("; ")));
+    if let Some(refusal) = generator_fault_refusal(&collected.generator_faults) {
+        return Err(refusal);
     }
 
     // Offered load actually sustained: measured arrivals over the actual
@@ -412,7 +434,6 @@ pub fn drive_case(
         principals,
     };
     let window = run_window(
-        principals,
         corpus,
         &workload,
         case.workload.arrival_rate.0,
@@ -467,4 +488,57 @@ pub fn rederive_verdict(
         measurement.offered_load_sustained,
         &measurement.operations,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// An arrival the generator could not fire carries no latency, so it
+    /// never reaches a histogram: it is counted per
+    /// `<operation>: <reason>` line, and the window refuses to publish a
+    /// measurement naming both the count and the faulting operation.
+    #[test]
+    fn unfired_arrivals_are_counted_per_reason_and_refuse_the_window() {
+        let (tx, rx) = mpsc::channel::<ArrivalReport>();
+        let fault = GeneratorFault::UndeclaredPrincipal(Principal::Unauthenticated);
+        for _ in 0..3 {
+            tx.send(ArrivalReport::NotFired {
+                op: PerfOp::UnauthenticatedProbe,
+                fault,
+            })
+            .expect("the collector receiver is alive");
+        }
+        tx.send(ArrivalReport::Completed(Completion {
+            op: PerfOp::EhrRead,
+            latency_us: 1_500,
+            ok: true,
+            recorded: true,
+        }))
+        .expect("the collector receiver is alive");
+        drop(tx);
+
+        let collected = collect_completions(rx).expect("the histogram bounds are accepted");
+        assert_eq!(collected.recorders.len(), 1);
+        let refusal = generator_fault_refusal(&collected.generator_faults)
+            .expect("three unfired arrivals refuse the window");
+        assert!(
+            refusal.starts_with("3 generator faults"),
+            "the refusal does not name the fault count: {refusal}"
+        );
+        assert!(
+            refusal.contains("unauthenticated_probe"),
+            "the refusal does not name the faulting operation: {refusal}"
+        );
+        assert!(
+            refusal.contains("(3 arrivals)"),
+            "the refusal does not count the reason's arrivals: {refusal}"
+        );
+    }
+
+    /// A window that fired every planned arrival has nothing to refuse.
+    #[test]
+    fn a_window_without_faults_produces_no_refusal() {
+        assert_eq!(generator_fault_refusal(&BTreeMap::new()), None);
+    }
 }

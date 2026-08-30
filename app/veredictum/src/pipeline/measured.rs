@@ -325,7 +325,6 @@ pub fn run_stress(
         principals: &principals,
     };
     let report = crate::stress::run_stress(
-        &principals,
         &corpus,
         &workload,
         environment,

@@ -88,6 +88,23 @@ pub(crate) struct CaptureStore {
 
 const SHARDS: usize = 64;
 
+/// The shard a journey instance's state lives in: its id reduced modulo
+/// the fixed shard count, so an instance always finds its own entry and
+/// the ids spread across every shard.
+fn shard_of(id: u64) -> usize {
+    #[expect(
+        clippy::as_conversions,
+        reason = "the shard count widens exactly: usize is at most 64 bits on every supported target"
+    )]
+    let shards = SHARDS as u64;
+    #[expect(
+        clippy::expect_used,
+        reason = "the remainder is below SHARDS, itself a usize, so the narrowing should be total"
+    )]
+    let shard = usize::try_from(id % shards).expect("a remainder below SHARDS should fit a usize");
+    shard
+}
+
 impl CaptureStore {
     pub(crate) fn new() -> Self {
         Self {
@@ -100,7 +117,7 @@ impl CaptureStore {
     // value is a plain per-id map with no cross-entry invariant a panic
     // elsewhere can break, so `None` now means only "no such shard".
     fn journey<R>(&self, id: u64, f: impl FnOnce(&mut JourneyState) -> R) -> Option<R> {
-        let shard = usize::try_from(id).unwrap_or(0) % SHARDS;
+        let shard = shard_of(id);
         let mut map = self
             .journeys
             .get(shard)?
@@ -120,7 +137,7 @@ impl CaptureStore {
     }
 
     fn drop_journey(&self, id: u64) {
-        let shard = usize::try_from(id).unwrap_or(0) % SHARDS;
+        let shard = shard_of(id);
         if let Some(mutex) = self.journeys.get(shard)
             && let Ok(mut map) = mutex.lock()
         {
@@ -170,6 +187,27 @@ fn stride(arrival: u64) -> u64 {
         .checked_mul(2_654_435_761)
         .unwrap_or(arrival)
         .max(arrival)
+}
+
+/// The pool entry one arrival addresses: the stride reduced modulo the
+/// pool length, so the index addresses `0..len` and an empty pool addresses
+/// entry 0 (the caller reports the empty pool).
+///
+/// The reduction happens in `u64`, so the full stride reaches the whole
+/// pool on every supported target.
+fn pool_index(arrival: u64, len: usize) -> usize {
+    #[expect(
+        clippy::as_conversions,
+        reason = "the pool length widens exactly: usize is at most 64 bits on every supported target"
+    )]
+    let modulus = len.max(1) as u64;
+    #[expect(
+        clippy::expect_used,
+        reason = "the remainder is below `len`, itself a usize, so the narrowing should be total"
+    )]
+    let index = usize::try_from(stride(arrival) % modulus)
+        .expect("a remainder below a usize pool length should fit a usize");
+    index
 }
 
 /// Create the journey instance's own EHR and capture its id, which every
@@ -272,7 +310,8 @@ pub(crate) fn perform(
                 false,
                 None,
             )?;
-            if note(observed, reply.status) == StatusCode::OK
+            let status = note(observed, reply.status);
+            if status == StatusCode::OK
                 && let Some(ovid) = reply.etag.as_deref().map(strip_weak_quotes)
             {
                 if let Some(patient) = planned.patient {
@@ -281,7 +320,7 @@ pub(crate) fn perform(
                     captures.journey(journey, |s| s.status_ovid = Some(ovid));
                 }
             }
-            note(observed, reply.status) == StatusCode::OK
+            status == StatusCode::OK
         }
         PerfOp::EhrStatusUpdate => {
             // If-Match from the journey's own status read (the ADT flow
@@ -342,8 +381,7 @@ pub(crate) fn perform(
         }
         PerfOp::CompositionRead => {
             // A committed-corpus read: the scale pool, stride-addressed.
-            let n = corpus.compositions.len().max(1);
-            let index = usize::try_from(stride(arrival_index)).unwrap_or(usize::MAX) % n;
+            let index = pool_index(arrival_index, corpus.compositions.len());
             let (ehr_index, uid) = corpus
                 .compositions
                 .get(index)
@@ -479,13 +517,14 @@ pub(crate) fn perform(
                 false,
                 None,
             )?;
-            if note(observed, reply.status) == StatusCode::OK
+            let status = note(observed, reply.status);
+            if status == StatusCode::OK
                 && let Some(patient) = planned.patient
                 && let Some(ovid) = reply.etag.as_deref().map(strip_weak_quotes)
             {
                 captures.patient(patient, |s| s.directory_ovid = Some(ovid));
             }
-            note(observed, reply.status) == StatusCode::OK
+            status == StatusCode::OK
         }
         PerfOp::DirectoryUpdate => {
             let preceding = planned
@@ -612,8 +651,7 @@ pub(crate) fn perform(
         }
         PerfOp::TemplateGet => {
             // Stride across the pack (integration engines poll them all).
-            let n = journey_pack.templates.len().max(1);
-            let index = usize::try_from(stride(arrival_index)).unwrap_or(usize::MAX) % n;
+            let index = pool_index(arrival_index, journey_pack.templates.len());
             let template = journey_pack
                 .get(index)
                 .ok_or_else(|| "pack is empty".to_owned())?;
@@ -833,8 +871,7 @@ pub(crate) fn perform(
             note(observed, reply.status) == StatusCode::OK
         }
         PerfOp::TemplateExample => {
-            let n = journey_pack.templates.len().max(1);
-            let index = usize::try_from(stride(arrival_index)).unwrap_or(usize::MAX) % n;
+            let index = pool_index(arrival_index, journey_pack.templates.len());
             let template = journey_pack
                 .get(index)
                 .ok_or_else(|| "pack is empty".to_owned())?;
