@@ -1,6 +1,6 @@
 ---
 name: hosted-console-vercel
-description: The public console runs on Vercel at console.veredictum.eu, view-only by construction, deploy-hook only — the FerroEHR sandbox pattern with the 2945 lesson
+description: The public console runs FULLY WORKING on Vercel at console.veredictum.eu (owner ruling 2026-08-30), deploy-hook only, ephemeral filesystem — the FerroEHR sandbox pattern
 metadata:
   type: project
 ---
@@ -20,11 +20,13 @@ lane that already works.
   (FerroEHR#2945); with one service, rooting at the repo top is what lets
   COPY reach `artifacts/`, `specs/openehr/`, `party/` (baked into `/work`;
   Vercel has no volume).
-- View-only is BY CONSTRUCTION, not configuration: the image ships no engine
-  binary (`VEREDICTUM_ENGINE`/PATH resolution finds nothing), so no visitor
-  can start a network-touching run, and distroless nonroot cannot write the
-  baked tree. Never add the engine to this image without a deliberate
-  security adjudication.
+- FULLY WORKING, by owner ruling (2026-08-30, #375): the base image carries
+  the engine, the overlay keeps it active, and a visitor can drive a real
+  run against a publicly reachable CDR. The overlay creates a
+  65532-writable `/work/out` through a busybox helper stage (distroless has
+  no shell for RUN mkdir); runs vanish on redeploy — the honest lifecycle,
+  stated in every reader-facing doc (#374). The earlier view-only posture is
+  retired; never reintroduce it without a new owner ruling.
 - Deploys: git-triggered deploys OFF in `vercel.json`; the only trigger is
   the Deploy Hook pinged by `.github/workflows/sandbox-deploy.yml` (release
   call after scan-and-tag moves `:latest`, posture push, manual). The
