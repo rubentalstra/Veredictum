@@ -123,6 +123,15 @@ jobs:
       # The console's server-fn seams, engine seam, run supervisor, export
       # renderer, redirect helper and startup state stay INSIDE the
       # denominator: they are ordinary Rust the ssr suite drives directly.
+      #
+      # SUB-FILE RESIDUES stay in the number rather than being hidden by a
+      # whole-file exclusion (#153's closing adjudication, recorded in full
+      # beside the exclusion list in `sonar-project.properties`): the
+      # environment-coupled tails of `pipeline/measured.rs`,
+      # `bench/baselines.rs` and `pipeline/bench.rs`, the
+      # unreachable-by-construction regions listed on #193, and
+      # `bench/fingerprint.rs`'s Linux-only /proc readers, which execute in
+      # this lane and cannot on a macOS workstation.
       - run: cargo llvm-cov --no-report nextest --locked --workspace --features veredictum-console/ssr --profile ci
       - run: cargo llvm-cov report --lcov --output-path lcov.info
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
