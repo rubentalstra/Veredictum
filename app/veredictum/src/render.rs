@@ -723,13 +723,7 @@ fn join_options(statement: &Statement) -> String {
 }
 
 fn format_token(format: FormatName) -> &'static str {
-    match format {
-        FormatName::CanonicalJson => "canonical-json",
-        FormatName::CanonicalXml => "canonical-xml",
-        FormatName::WtFlat => "wt-flat",
-        FormatName::WtStructured => "wt-structured",
-        FormatName::Wt => "wt",
-    }
+    format.token()
 }
 
 fn join_formats(formats: &[FormatName]) -> String {

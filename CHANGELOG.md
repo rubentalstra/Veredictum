@@ -19,6 +19,24 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **A recorded run can be re-judged from its own transcript: `veredictum
+  replay` (#392).** The transport is now the only seam between the driver and
+  the wire, so a replay answers every composed request out of the recording and
+  reaches its outcomes through the same request composition, response
+  classification and assertion evaluators the live run used. With `--against`
+  it holds a submitted `results.json` to what the recorded exchanges support and
+  names every row that differs. A case whose recording runs out, or whose replay
+  composes a request the recording does not carry, records a transport failure:
+  a verdict is never reproduced over evidence nobody has.
+- **The console tier's lane (#392).** `scripts/checks/registry-rederive.sh`
+  re-derives a `console` submission's outcomes from its transcript and its
+  verdicts from its outcomes; `.github/workflows/registry-console.yml` runs
+  that gate, then seals the record from a protected environment and writes the
+  provenance block the instrument is not allowed to write for itself. A record
+  altered after the run fails the gate, which is pinned by a test.
+- **A conformance entry may carry the `statement` it was judged against**, so a
+  claim that lives nowhere else is still one anybody can recompute against. A
+  `console` entry must carry it, with the transcript and the ixit.
 - **The registry publishes a third kind of entry: `console` (#393).** A run
   performed at console.veredictum.eu, the official hosted instrument, against
   an endpoint the submitter named. Its verdicts are re-derived here from the

@@ -27,6 +27,7 @@ use crate::exec::assertions::{self, AssertionFailure, AssertionOutcome};
 use crate::exec::outcome::{self, Observation};
 use crate::exec::resolve::Resolver;
 use crate::exec::state::{Captured, VarStore};
+use crate::exec::transport::{HttpTransport, Transport};
 use crate::exec::{PostconditionOutcomes, Provisioned, StepDriver, StepObservation};
 use crate::ids::{CaptureName, SmOperationRef};
 use crate::ixit::{AuthMode, Instance, Ixit};
@@ -123,7 +124,10 @@ pub struct HttpDriver<'a> {
     /// every `applies` floor consulted while driving (the version-dated
     /// header expectations). `None` on a statement-blind sweep.
     spec_versions: Option<&'a crate::party::SpecVersions>,
-    client: reqwest::blocking::Client,
+    /// Where a composed request is sent, and where its answer comes from.
+    /// The live run holds an HTTP client here; a re-judgement holds a
+    /// recording, and everything above this field is the same code.
+    transport: Box<dyn Transport + 'a>,
     resolver: Resolver<'a>,
     /// The payloads committed this row (the `equivalent to: committed`
     /// comparison source), newest last.
@@ -168,7 +172,8 @@ impl std::fmt::Debug for HttpDriver<'_> {
 }
 
 impl<'a> HttpDriver<'a> {
-    /// Build a driver over the loaded artifact set and an ixit topology.
+    /// Build a driver over the loaded artifact set and an ixit topology,
+    /// sending on a live HTTP client.
     ///
     /// # Errors
     /// A message when the artifact set lacks a corpus or the client cannot
@@ -178,6 +183,43 @@ impl<'a> HttpDriver<'a> {
         ixit: &'a Ixit,
         spec_versions: Option<&'a crate::party::SpecVersions>,
     ) -> Result<Self, String> {
+        Self::over(set, ixit, spec_versions, Box::new(HttpTransport::new()?))
+    }
+
+    /// Build a driver that answers every composed request from one case's
+    /// recorded exchanges instead of from a server.
+    ///
+    /// Everything the driver does above the transport is unchanged, which is
+    /// the whole point: a re-judgement reaches its outcomes through the same
+    /// composition, classification and assertion evaluators the live run
+    /// used.
+    ///
+    /// # Errors
+    /// A message when the artifact set lacks a corpus.
+    pub fn replaying(
+        set: &'a ArtifactSet,
+        ixit: &'a Ixit,
+        spec_versions: Option<&'a crate::party::SpecVersions>,
+        exchanges: &'a [RecordedExchange],
+    ) -> Result<Self, String> {
+        Self::over(
+            set,
+            ixit,
+            spec_versions,
+            Box::new(crate::exec::transport::ReplayTransport::over(exchanges)),
+        )
+    }
+
+    /// Build a driver over any transport.
+    ///
+    /// # Errors
+    /// A message when the artifact set lacks a corpus.
+    fn over(
+        set: &'a ArtifactSet,
+        ixit: &'a Ixit,
+        spec_versions: Option<&'a crate::party::SpecVersions>,
+        transport: Box<dyn Transport + 'a>,
+    ) -> Result<Self, String> {
         let (_, manifest) = set
             .corpus
             .as_ref()
@@ -186,15 +228,11 @@ impl<'a> HttpDriver<'a> {
             .corpus_dir
             .as_deref()
             .ok_or_else(|| "artifact set has no corpus directory".to_owned())?;
-        let client = reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| format!("http client: {e}"))?;
         Ok(Self {
             set,
             ixit,
             spec_versions,
-            client,
+            transport,
             resolver: Resolver::new(manifest, corpus_dir, Some(ixit)),
             committed: Vec::new(),
             last_step: None,
@@ -397,37 +435,12 @@ impl<'a> HttpDriver<'a> {
         body: Option<&Value>,
         body_is_json: bool,
     ) -> Result<Exchange, String> {
-        let m = match method {
-            HttpMethod::Get => reqwest::Method::GET,
-            HttpMethod::Post => reqwest::Method::POST,
-            HttpMethod::Put => reqwest::Method::PUT,
-            HttpMethod::Delete => reqwest::Method::DELETE,
-            HttpMethod::Head => reqwest::Method::HEAD,
-            HttpMethod::Options => reqwest::Method::OPTIONS,
-        };
-        let mut request = self.client.request(m, url);
-        for (name, value) in headers {
-            request = request.header(name, value);
-        }
-        if let Some(payload) = body {
-            request = if body_is_json {
-                request.body(serde_json::to_vec(payload).map_err(|e| e.to_string())?)
-            } else {
-                match payload {
-                    Value::String(text) => request.body(text.clone()),
-                    other => request.body(serde_json::to_vec(other).map_err(|e| e.to_string())?),
-                }
-            };
-        }
-        let response = request.send().map_err(|e| format!("transport: {e}"))?;
-        let status = response.status();
-        let mut response_headers = BTreeMap::new();
-        for (name, value) in response.headers() {
-            if let Ok(v) = value.to_str() {
-                response_headers.insert(name.as_str().to_owned(), v.to_owned());
-            }
-        }
-        let text = response.text().map_err(|e| format!("transport: {e}"))?;
+        let answer = self
+            .transport
+            .exchange(method, url, headers, body, body_is_json)?;
+        let status = answer.status;
+        let response_headers = answer.headers;
+        let text = answer.text;
         // The parse outcome is RECORDED rather than inferred later: an
         // unparsed body and a JSON string body are both `Value::String`, and
         // only the seam that read the bytes can still tell them apart.

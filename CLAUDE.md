@@ -329,7 +329,7 @@ It is every machine check over the artifact tree — id uniqueness, citation
 resolution against the vendored specs, binding completeness, coverage of the
 enumerated wire surface, claim completeness against the committed party
 statements — and **zero findings is the only passing result.** The instrument's
-own canonical CLI table (`validate`, `run`, `verdicts`, `verify-record`,
+own canonical CLI table (`validate`, `run`, `verdicts`, `replay`, `verify-record`,
 `perf`, `stress`, `stress-compare`, `aql-probe`, `bench`, `bench-compare`,
 `bench-packs`, `perf-assets`, `conformance-assets`, `emit-schemas`) is the authority on how to invoke
 everything else; never improvise a flag. `scripts/checks/cli-surface.sh` holds

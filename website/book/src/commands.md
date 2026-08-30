@@ -7,8 +7,9 @@ prints the same list from the build you have installed, and that output is the
 authority if the two ever disagree.
 
 Three commands make the conformance record (`validate`, `run`, `verdicts`),
-three measure (`perf`, `stress`, `bench`), `verify-record` checks a sealed
-bundle, and the rest render or explore.
+three measure (`perf`, `stress`, `bench`), `replay` re-judges a recorded run
+out of its own transcript, `verify-record` checks a sealed bundle, and the rest
+render or explore.
 
 ## validate
 
@@ -85,6 +86,44 @@ veredictum verdicts --statement <STATEMENT> --results <RESULTS> \
 The pure step. It reaches no network and reads nothing but its inputs, which is
 what makes a published verdict re-derivable by anyone who has the same four
 files.
+
+## replay
+
+Re-judge a recorded run from its transcript, answering every composed request
+out of the recording instead of a server.
+
+```bash
+veredictum replay --root <ROOT> --ixit <IXIT> --transcript <TRANSCRIPT> \
+    [--statement <STATEMENT>] [--filter <SUBSTRING>] \
+    [--out <RESULTS>] [--against <RESULTS>] [--progress]
+```
+
+| Flag | Meaning |
+|---|---|
+| `--root <ROOT>` | The artifact root. Required |
+| `--ixit <IXIT>` | The ixit topology the recorded run was driven under. Required |
+| `--transcript <TRANSCRIPT>` | That run's `transcript.json`. Required |
+| `--statement <STATEMENT>` | The party statement the run was selected against, when it had one |
+| `--filter <SUBSTRING>` | Re-judge only cases whose id contains this substring |
+| `--out <RESULTS>` | Where the re-judged `results.json` is written |
+| `--against <RESULTS>` | The submitted `results.json` the re-judgement is held against |
+| `--progress` | Print `progress: <k>/<n> <case>` lines while re-judging |
+
+Only the transport changes. The catalogue is driven again through the same
+request composition, the same response classification and the same assertion
+evaluators the live run used, with the recorded response standing in for the
+server's. A case whose recording runs out, or whose replay composes a request
+the recording does not carry, records a transport failure: a verdict is never
+reproduced over evidence nobody has.
+
+With `--against`, every row is compared on its status and its two row counts,
+and any disagreement exits `1` naming the case. The reason text is not
+compared, because a replay reaches a recording rather than a server and
+identical judgements can carry different words.
+
+What this establishes is that the judgement follows from the evidence. It does
+not establish the evidence: a transcript is what the instrument says it sent
+and received.
 
 ## verify-record
 

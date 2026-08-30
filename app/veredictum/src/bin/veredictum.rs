@@ -25,6 +25,12 @@
 //!                                       certificate + verdicts.json. With
 //!                                       --sign-key, seal the bundle with
 //!                                       record-manifest.json + .asc
+//! veredictum replay --root DIR --ixit FILE --transcript FILE [--statement F]
+//!                   [--filter S] [--out FILE] [--against FILE] [--progress]
+//!                                       re-judge a recorded run out of its
+//!                                       own transcript instead of a server,
+//!                                       and refuse a results.json whose rows
+//!                                       the recorded exchanges do not support
 //! veredictum verify-record --record DIR --key FILE
 //!                                       recompute every digest a sealed
 //!                                       bundle's manifest names and verify
@@ -127,6 +133,7 @@ use veredictum::pipeline::measured::{
     MeasuredEvent, MeasuredRequest, ProbeRequest, StressRequest, SustainedWindow, run_aql_probe,
     run_measured, run_stress,
 };
+use veredictum::pipeline::replay::{ReplayRequest, divergences, replay_run};
 use veredictum::pipeline::{RenderedFile, ensure_parent_dir, to_json_document, write_file};
 use veredictum::record::{
     DigestOutcome, HONESTY_LINE, MANIFEST_FILE, RecordedFile, SIGNATURE_FILE, SignatureOutcome,
@@ -479,6 +486,36 @@ enum Command {
         #[arg(long, env = "VEREDICTUM_SIGN_PASSPHRASE", hide_env_values = true)]
         sign_passphrase: Option<String>,
     },
+    /// Re-judge a recorded run from its transcript, answering every composed
+    /// request out of the recording instead of a server, and optionally
+    /// refuse a results document the recorded exchanges do not support.
+    Replay {
+        /// The artifact root (schedule/, bindings/, corpus/, vocab/).
+        #[arg(long)]
+        root: PathBuf,
+        /// The ixit topology the recorded run was driven under.
+        #[arg(long)]
+        ixit: PathBuf,
+        /// The transcript of that run (`transcript.json`).
+        #[arg(long)]
+        transcript: PathBuf,
+        /// The party statement the run was selected against, when it had one.
+        #[arg(long)]
+        statement: Option<PathBuf>,
+        /// Re-judge only cases whose id contains this substring.
+        #[arg(long)]
+        filter: Option<String>,
+        /// Where the re-judged `results.json` is written.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// The submitted `results.json` the re-judgement is held against:
+        /// any row whose status or row counts differ fails the command.
+        #[arg(long)]
+        against: Option<PathBuf>,
+        /// Print `progress: <k>/<n> <case>` lines while re-judging.
+        #[arg(long)]
+        progress: bool,
+    },
     /// Verify a sealed bundle: recompute every digest its record manifest
     /// names, and check the detached signature over that manifest.
     VerifyRecord {
@@ -579,6 +616,27 @@ fn main() -> ExitCode {
             specs,
             write_report,
         } => validate_command(&root, specs.as_deref(), write_report),
+        Command::Replay {
+            root,
+            ixit,
+            transcript,
+            statement,
+            filter,
+            out,
+            against,
+            progress,
+        } => replay_command(
+            &ReplayRequest {
+                root: &root,
+                ixit: &ixit,
+                transcript: &transcript,
+                statement: statement.as_deref(),
+                filter: filter.as_deref(),
+            },
+            out.as_deref(),
+            against.as_deref(),
+            progress,
+        ),
         Command::Perf {
             root,
             ixit,
@@ -1206,6 +1264,97 @@ fn emit_documents(
         emitted.push((record_name(path)?, body));
     }
     Ok(emitted)
+}
+
+/// Re-judges a recorded run and, when held against a submitted record,
+/// refuses any row the recorded exchanges do not support.
+///
+/// The exit code carries the answer: `0` when the re-judgement agrees (or
+/// when nothing was held against it), `1` when a row diverges, `2` when the
+/// replay could not run at all.
+fn replay_command(
+    request: &ReplayRequest<'_>,
+    out: Option<&Path>,
+    against: Option<&Path>,
+    progress: bool,
+) -> ExitCode {
+    let mut report_progress = |event: veredictum::run::Progress<'_>| {
+        if progress {
+            use std::io::Write as _;
+            println!("{}", event.render_line());
+            let _flush = std::io::stdout().flush();
+        }
+    };
+    let outcome = match replay_run(request, &mut report_progress) {
+        Ok(outcome) => outcome,
+        Err(e) => return fail(&e),
+    };
+    let document = match serde_json::to_string_pretty(&outcome.results) {
+        Ok(text) => format!(
+            "{text}
+"
+        ),
+        Err(e) => {
+            eprintln!("cannot serialize the re-judged results: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    if let Some(path) = out {
+        if let Some(parent) = path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            eprintln!("cannot create {}: {e}", parent.display());
+            return ExitCode::from(2);
+        }
+        if let Err(e) = std::fs::write(path, &document) {
+            eprintln!("cannot write {}: {e}", path.display());
+            return ExitCode::from(2);
+        }
+    }
+    println!(
+        "re-judged {} case-record(s) from the recording: {} passed / {} failed / {} errored / {} n-a",
+        outcome.results.outcomes.len(),
+        outcome.counts.passed,
+        outcome.counts.failed,
+        outcome.counts.errored,
+        outcome.counts.not_applicable
+    );
+    let Some(submitted_path) = against else {
+        return ExitCode::SUCCESS;
+    };
+    let submitted: veredictum::party::Results = match std::fs::read_to_string(submitted_path)
+        .map_err(|e| format!("cannot read {}: {e}", submitted_path.display()))
+        .and_then(|text| {
+            serde_json::from_str(&text).map_err(|e| {
+                format!(
+                    "{} does not parse as results.json: {e}",
+                    submitted_path.display()
+                )
+            })
+        }) {
+        Ok(results) => results,
+        Err(reason) => {
+            eprintln!("{reason}");
+            return ExitCode::from(2);
+        }
+    };
+    let found = divergences(&submitted, &outcome.results);
+    if found.is_empty() {
+        println!(
+            "every row of {} follows from the recorded exchanges",
+            submitted_path.display()
+        );
+        return ExitCode::SUCCESS;
+    }
+    eprintln!(
+        "{} row(s) of {} do not follow from the recorded exchanges:",
+        found.len(),
+        submitted_path.display()
+    );
+    for divergence in &found {
+        eprintln!("  {divergence}");
+    }
+    ExitCode::from(1)
 }
 
 fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> ExitCode {

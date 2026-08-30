@@ -1028,6 +1028,19 @@ impl FormatName {
         FormatName::WtStructured,
         FormatName::Wt,
     ];
+
+    /// The token a record, a report and a rendered row all name this format
+    /// by — one spelling, so two surfaces cannot drift apart.
+    #[must_use]
+    pub const fn token(self) -> &'static str {
+        match self {
+            FormatName::CanonicalJson => "canonical-json",
+            FormatName::CanonicalXml => "canonical-xml",
+            FormatName::WtFlat => "wt-flat",
+            FormatName::WtStructured => "wt-structured",
+            FormatName::Wt => "wt",
+        }
+    }
 }
 
 impl CorpusFormat {
