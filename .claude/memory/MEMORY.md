@@ -32,3 +32,6 @@ apply" part so a future session can act on it without re-deriving it.
   batched changes go through GitHub stacked PRs after the adoption gate in
   `.claude/rules/stacked-prs.md`; the serial changelog merge train is the
   failure mode to avoid
+- [Commit memory promptly](commit-memory-promptly.md) — memory files never
+  float in the working tree; sweep and push them with the work that produced
+  them
