@@ -35,6 +35,14 @@ version on.
   engine value, and the release pipeline refuses to publish without it.
 
 ### Fixed
+- **An undeclared signing posture no longer reds the row against the server
+  (#279).** A `signature` assertion asking for `verifiable` where the ixit
+  declares no `signing` at party or instance level now records the row
+  inconclusive with the citation: the mode is a deployment fact the wire never
+  discloses, so a declaration the party did not make is not evidence of a
+  violation. `validate` gained the other half — a statement claiming the
+  `Signing` capability beside an ixit that declares no posture is a
+  claim-completeness finding, before any SUT is composed.
 - Three bench error variants (`FixturePin`, `UnknownProfile`, `NoProfiles`)
   carry the `PackId`/`FixtureKey` newtypes instead of bare strings, the
   posture-contradiction payload is boxed with the error-size posture recorded

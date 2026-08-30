@@ -19,11 +19,12 @@
 use base64::Engine as _;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
+use veredictum::exec::assertions::AssertionOutcome;
 use veredictum::exec::driver::HttpDriver;
 use veredictum::exec::outcome::Observation;
 use veredictum::exec::signature::canonical_form;
 use veredictum::exec::state::{Captured, VarStore};
-use veredictum::exec::{StepDriver, StepObservation};
+use veredictum::exec::{RowOutcome, StepDriver, StepObservation};
 use veredictum::ids::CaptureName;
 use veredictum::ixit::Ixit;
 use veredictum::vocab::OutcomeKind;
@@ -146,13 +147,49 @@ fn bound(signature: &str, other: &str) -> Result<VarStore, Box<dyn std::error::E
     Ok(vars)
 }
 
-/// The one failure reason a judged step produced.
-fn only_failure(observed: &StepObservation) -> Result<String, Box<dyn std::error::Error>> {
-    let first = observed
+/// The one outcome a judged step produced, channel intact: a mismatch is a
+/// finding against the server, an unjudgeable fact is not.
+fn only_outcome(
+    observed: &StepObservation,
+) -> Result<&AssertionOutcome, Box<dyn std::error::Error>> {
+    Ok(observed
         .assertion_failures
         .first()
-        .ok_or("the step raised no assertion failure")?;
-    Ok(first.reason().to_owned())
+        .ok_or("the step raised no assertion outcome")?)
+}
+
+/// The one failure reason a judged step produced.
+fn only_failure(observed: &StepObservation) -> Result<String, Box<dyn std::error::Error>> {
+    Ok(only_outcome(observed)?.reason().to_owned())
+}
+
+/// The row `run_case` records for a case whose only step declares `facts`
+/// against the served envelope, under the given signing posture.
+///
+/// The channel is pinned at the ROW level because that is where a finding is
+/// charged to the SUT or recorded inconclusive; the binding's path carries no
+/// parameter, so the row needs no provisioned ground.
+fn row_of(
+    served: &Value,
+    facts: &Value,
+    signing: Option<Value>,
+) -> Result<RowOutcome, Box<dyn std::error::Error>> {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/version"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(served.clone())),
+    );
+    let set = artifact_set(&[envelope_binding()]);
+    let ixit = topology(&sut.base_url(), signing)?;
+    let core = case(envelope_case(facts));
+    let mut driver = HttpDriver::new(&set, &ixit, None)?;
+    let record = veredictum::exec::run_case(&core, None, &mut driver)?;
+    record
+        .rows
+        .into_iter()
+        .next()
+        .ok_or_else(|| "the case drove no row".into())
 }
 
 /// `present` is mode-agnostic and bites on both absences the wire can serve:
@@ -332,8 +369,13 @@ fn a_verifiable_fact_recomputes_the_canonical_form_under_the_declared_posture() 
         Some(digest.clone()),
         &mut vars,
     )?;
+    let outcome = only_outcome(&observed)?;
     assert!(
-        only_failure(&observed)?.contains("does not verify"),
+        matches!(outcome, AssertionOutcome::Mismatch(_)),
+        "a signature the SUT served over other bytes is a conformance finding: {outcome:?}"
+    );
+    assert!(
+        outcome.reason().contains("does not verify"),
         "a signature over other bytes must fail the row"
     );
 
@@ -348,8 +390,13 @@ fn a_verifiable_fact_recomputes_the_canonical_form_under_the_declared_posture() 
     // which is a boundary of the topology rather than a server defect.
     let mut vars = bound("sig", "other")?;
     let observed = judge(&envelope(Some(&signed)), &facts, None, &mut vars)?;
+    let outcome = only_outcome(&observed)?;
     assert!(
-        only_failure(&observed)?.contains("no `signing` posture"),
+        matches!(outcome, AssertionOutcome::Unjudgeable(_)),
+        "a posture the party never declared is not evidence against the server: {outcome:?}"
+    );
+    assert!(
+        outcome.reason().contains("no `signing` posture"),
         "an undeclared posture must be named"
     );
 
@@ -362,6 +409,45 @@ fn a_verifiable_fact_recomputes_the_canonical_form_under_the_declared_posture() 
     assert!(
         reason.contains("signature verify:") && reason.contains("sha512"),
         "{reason}"
+    );
+    Ok(())
+}
+
+/// The undeclared posture, pinned where it counts: `run_case` records the row
+/// INCONCLUSIVE, never as a failure charged to the server.
+///
+/// A signing mode is a deployment fact the wire never discloses (RM common
+/// `master06-change_control_package.adoc` §Digital Signature), so a party that
+/// declared none leaves the run with no canonical form to verify against — the
+/// instrument never asked the question, and a declaration nobody made is not
+/// evidence of a violation. The verifying twin below keeps the pair honest: a
+/// posture that IS declared still passes the same row.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_undeclared_signing_posture_errors_the_row_instead_of_failing_it() -> Fallible {
+    let facts = json!({ "assert": "signature", "of": "${version_uid}", "verifiable": true });
+    let signed = digest_of(&envelope(None))?;
+    let served = envelope(Some(&signed));
+
+    match row_of(&served, &facts, None)? {
+        RowOutcome::Errored { step, ref reason } => {
+            assert_eq!(step, 1);
+            assert!(
+                reason.contains("no `signing` posture"),
+                "the inconclusive row must name the missing declaration: {reason}"
+            );
+        }
+        other => panic!("an undeclared posture must not be a SUT finding: {other:?}"),
+    }
+
+    let digest = json!({ "mode": "digest", "algorithm": "sha256", "encoding": "base64" });
+    assert_eq!(
+        row_of(&served, &facts, Some(digest))?,
+        RowOutcome::Passed,
+        "the same envelope verifies once the party declares the posture"
     );
     Ok(())
 }

@@ -592,6 +592,74 @@ fn a_party_declaring_one_family_twice_fails_validate() {
     );
 }
 
+const FERROEHR_IXIT: &str = "party/ferroehr/ixit.json";
+
+/// An ixit declaring one reachable instance and NO signing posture at either
+/// level — what a party running no version signing looks like.
+const IXIT_WITHOUT_SIGNING: &str = r#"{
+  "instances": {
+    "sut": {
+      "base_url": "http://localhost:8080/openehr/v1",
+      "auth": { "mode": "none" }
+    }
+  }
+}
+"#;
+
+/// The posture on the INSTANCE alone, which is the shape a party exercising a
+/// second deployment declares.
+const IXIT_WITH_INSTANCE_SIGNING: &str = r#"{
+  "instances": {
+    "sut": {
+      "base_url": "http://localhost:8080/openehr/v1",
+      "auth": { "mode": "none" },
+      "signing": {
+        "mode": "digest",
+        "algorithm": "sha256",
+        "encoding": "base64",
+        "prefix": "sha256:"
+      }
+    }
+  }
+}
+"#;
+
+/// A `Signing` claim is held to a declared posture (#279). The mode is a
+/// deployment fact no released operation discloses (RM common
+/// `master06-change_control_package.adoc` §Digital Signature), so a claim with
+/// no posture behind it can only ever produce inconclusive rows — the hollow
+/// claim the gate refuses, one document further out.
+#[test]
+fn a_signing_claim_without_a_declared_posture_fails_validate() {
+    let world = World::new();
+    world.write(FERROEHR_IXIT, IXIT_WITHOUT_SIGNING);
+    assert_gate(
+        &world.findings(),
+        "claim-completeness",
+        "claims capability Signing while",
+    );
+}
+
+/// The instance-level half of the same law: the posture resolves
+/// instance-first, so a declaration on the addressed instance alone satisfies
+/// the claim and the gate stays silent.
+#[test]
+fn a_signing_posture_declared_on_the_instance_alone_satisfies_the_claim() {
+    let world = World::new();
+    world.write(FERROEHR_IXIT, IXIT_WITH_INSTANCE_SIGNING);
+    let findings = world.findings();
+    let signing: Vec<String> = findings
+        .iter()
+        .filter(|f| f.message.contains("capability Signing while"))
+        .map(ToString::to_string)
+        .collect();
+    assert!(
+        signing.is_empty(),
+        "an instance-declared posture satisfies the claim, got:\n{}",
+        signing.join("\n")
+    );
+}
+
 /// A guard may not restate the capability-scoping selection rule (FerroEHR#2378): the
 /// runner decides it globally from `capabilities:`, and a per-case prose copy
 /// is free to drift from what the runner does with nothing to catch it.
