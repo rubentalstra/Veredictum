@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # The public results registry — submission rules
 
-Rules version **1.0.0**. Every merged entry records the rules version it was
+Rules version **1.1.0**. Every merged entry records the rules version it was
 accepted under, and rules change prospectively: a published entry is never
 re-scored against a later version of this document.
 
@@ -30,11 +30,13 @@ deployment, and a benchmark entry is comparative speed. Neither one substitutes
 for the other. A fast server that fails the catalogue is a fast server that
 fails the catalogue.
 
-## Two tiers, and what separates them
+## Three kinds of entry, and what separates them
 
 A signature proves who submitted a file and that the bytes have not moved
 since. It never proves the run happened as described. So every entry carries
-one of two tiers, and the tier is a property of who performed the run.
+one of three tiers, and the tier is a property of who performed the run. Two
+of them are official, and they answer different questions: neither supersedes
+the other.
 
 **Reproduced.** This repository's own workflow composed a deployment from a
 recipe committed here, drove the catalogue against it, and attested the
@@ -45,22 +47,51 @@ the signature. Anybody can check it:
 gh attestation verify <artifact> --repo rubentalstra/Veredictum
 ```
 
-No signing key exists in this repository or in its Actions, and none will. A
-stored key in a public repository's CI is one compromised workflow away from
-forging every entry on the board, and the release lanes here already refuse
-long-lived credentials for the same reason.
+No key stands behind this tier and none ever will. A stored key is one
+compromised workflow away from forging every entry on the board, and the
+release lanes here refuse long-lived credentials for the same reason.
+
+**Console.** console.veredictum.eu, the official hosted instrument, drove the
+catalogue against an endpoint the submitter named, recorded every exchange,
+computed the verdicts, and opened the submission from its own GitHub App
+identity. That identity is the only one permitted to open a `console` entry.
+
+The instrument is not asked to be trusted. A verdict is a pure function over
+the recorded exchanges, so CI recomputes the verdicts here from the transcript
+the submission carries and refuses the submission unless they match. Only then
+is the record signed. What a console entry attests is therefore threefold: the
+run was performed by an instrument nobody in the exchange controls, its
+judgement is arithmetic anyone can repeat, and the bytes have not moved since
+CI repeated it.
+
+What it cannot attest is the environment. The submitter chose the endpoint, so
+the entry states what was measured and where, and claims nothing about how
+that server is normally configured. That is the one thing `reproduced` adds,
+and the only sense in which it is stronger.
+
+One signing key exists in this project, and this is its whole scope: the
+registry key that signs a console record. It lives in a protected CI
+environment, it is used by the lane that re-derived the verdicts it signs and
+by nothing else, and it never reaches the hosted instrument, this repository,
+or any workflow a pull request can influence. The instrument that produced the
+record holds no key in any form.
 
 **Self-reported.** The submitter performed the run and signed the artifact,
 with OpenPGP or with a Sigstore bundle carrying their own identity. The entry
 carries the verification command, so a reader checks the signature rather than
 trusting the board. Read a self-reported entry as a claim its author put their
-name to in a public git history.
+name to in a public git history. A console run someone drives on their own
+machine is this kind: the instrument is the same, the identity behind it is
+theirs, and that is exactly why the hosted instance exists.
 
 Nothing about a tier is written by hand into a `tier` field. The tier is the
 discriminant of the entry's `provenance` block, so claiming `reproduced` means
 carrying the workflow reference, the run id and the attestation predicate that
 only this repository's lane produces. CI refuses an entry that names a
-workflow outside this repository.
+workflow outside this repository. A `console` block goes further: every field
+in it is written by the re-derivation lane rather than by the instrument that
+would benefit from it, so the performer cannot state its own provenance at
+all.
 
 ## Where an entry lives
 
@@ -117,6 +148,9 @@ list is complete by role.
   `transcript`, a `record-manifest`, rendered `report` documents and the
   `ixit` declaration the run was driven under.
 - A **benchmark** entry carries one `bench-result`.
+- A **console** entry carries the `transcript` as well, because the verdicts
+  are re-derived from it here, and the `signature` CI writes over one of the
+  entry's own artifacts.
 - A **self-reported** entry carries the `signature` file too, and the artifact
   it signs must be one of the entry's own.
 
@@ -133,7 +167,26 @@ veredictum verdicts --statement party/<system>/statement.json \
 
 Copy `results.json` and `verdicts.json` into
 `registry/records/<system>/<entry-id>/`, sign one of them, write the entry, and
-open the pull request.
+open the pull request. That is a self-reported entry: you performed the run,
+and your signature is what a reader checks.
+
+## Submitting from the hosted instrument
+
+A run at console.veredictum.eu submits itself. Connect the endpoint, drive the
+catalogue, and the finished run offers to open the pull request: the
+instrument writes the entry and the record, its GitHub App identity opens the
+branch, and you fill in the disclosure this document makes mandatory, the
+conflict-of-interest sentence included.
+
+You write no provenance block, and neither does the instrument. CI re-derives
+the verdicts from the transcript the submission carries, refuses any mismatch,
+signs the record with the registry key from its protected environment, and
+writes the `console` block stating what it established. The merge is the
+publication, exactly as for every other entry.
+
+Nothing about that path removes this one. The same console run on your own
+machine, sealed and signed with your own key, is a self-reported entry, and it
+is published on the same board beside the rest.
 
 ## Submitting a benchmark entry
 
@@ -151,6 +204,10 @@ end, declared under `registry/topologies/<id>/topology.json`. Nothing a
 submitter wrote is executed in a job that holds an OIDC token, which is why the
 lane will not compose an image or a compose file that arrived in a pull
 request.
+
+The re-derivation lane behind a `console` entry holds to the same rule and is
+not an exception to it: it READS the submitted transcript and recomputes
+verdicts over it, and it executes nothing that arrived in the pull request.
 
 A topology declares the principals its composed deployment actually has, which
 is narrower than the party's own declaration: the quickstarts stand up one
@@ -187,7 +244,9 @@ pull request on any of these.
 | Uniqueness | an entry id already used anywhere in the registry |
 | Artifacts | a required role missing, a path outside the tree it belongs in, or a digest that does not match the committed bytes |
 | Signature | a self-reported entry whose signature covers something it does not carry, or whose signature file it does not pin |
-| Tier | a `reproduced` entry naming a workflow outside this repository, or a deployment the lane cannot compose |
+| Tier | a `reproduced` entry naming a workflow outside this repository, or a deployment the lane cannot compose; a `console` entry naming a foreign re-derivation workflow, or a deployment the hosted instrument never drives |
+| Re-derivation | a `console` entry whose verdicts do not recompute from the transcript it carries |
+| Identity | a `console` submission opened by anything but the hosted instrument's own App |
 | Topology | a deployment naming a topology no committed file declares |
 | Supersede | a superseded id nothing in the registry carries, an entry superseding itself, or a supersede with no reason |
 | Bench pairing | a committed benchmark record with no entry pointing at it, or an entry pointing at a record that is not committed |

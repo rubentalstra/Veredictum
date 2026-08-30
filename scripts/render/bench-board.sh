@@ -456,8 +456,8 @@ render_body() {
     "          it as a claim its author put their name to in a public git history.\n" +
     "          <span class=\"tier tier-reproduced\">reproduced</span> means the workflow in this\n" +
     "          repository composed the deployment from a recipe committed here, drove the pack,\n" +
-    "          and attested the record from that workflow identity. No signing key exists in this\n" +
-    "          repository, so there is none to steal.</p>\n" +
+    "          and attested the record from that workflow identity. No key stands behind that\n" +
+    "          tier, so there is none to steal.</p>\n" +
     "        <p><b>Repetitions.</b> Three is the floor. One repetition measures a moment, so a\n" +
     "          record with fewer is rejected before it can be ranked, and each figure on the\n" +
     "          board is the median across repetitions.</p>\n" +

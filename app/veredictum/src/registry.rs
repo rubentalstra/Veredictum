@@ -35,13 +35,13 @@ use thiserror::Error;
 ///
 /// A submitted entry naming a different version is refused rather than read
 /// under this release's field meanings.
-pub const REGISTRY_SCHEMA_VERSION: &str = "1.0.0";
+pub const REGISTRY_SCHEMA_VERSION: &str = "1.1.0";
 
 /// The version of the published submission rules an entry is accepted under.
 ///
 /// Rules change prospectively: a merged entry is never re-scored, so the
 /// version it was accepted under travels with it.
-pub const RULES_VERSION: &str = "1.0.0";
+pub const RULES_VERSION: &str = "1.1.0";
 
 /// A failure of the registry machinery.
 ///
@@ -132,19 +132,28 @@ pub enum Tier {
     /// This repository's workflow performed the run and attested its output
     /// from the workflow's own OIDC identity.
     Reproduced,
+    /// The official hosted instrument performed the run, and this
+    /// repository's CI re-derived its verdicts from the submitted transcript
+    /// before signing the record.
+    Console,
     /// The submitter performed the run and signed its output.
     SelfReported,
 }
 
 impl Tier {
-    /// Every tier, strongest first.
-    pub const ALL: &[Tier] = &[Tier::Reproduced, Tier::SelfReported];
+    /// Every tier: the two official kinds, then the submitter's own claim.
+    ///
+    /// [`Tier::Reproduced`] and [`Tier::Console`] answer different questions
+    /// and neither supersedes the other; the order here is the order a board
+    /// renders them in.
+    pub const ALL: &[Tier] = &[Tier::Reproduced, Tier::Console, Tier::SelfReported];
 
     /// The token an entry names this tier by.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Tier::Reproduced => "reproduced",
+            Tier::Console => "console",
             Tier::SelfReported => "self-reported",
         }
     }
@@ -744,6 +753,37 @@ pub enum Provenance {
         /// The command anybody can re-run to check the attestation.
         verify_command: String,
     },
+    /// The official hosted instrument performed the run.
+    ///
+    /// Every field here is written by this repository's re-derivation lane,
+    /// never by the instrument that produced the record: the lane recomputes
+    /// the verdicts from the submitted transcript, refuses a mismatch, and
+    /// only then signs. So the block states what CI established rather than
+    /// what the performer asserted about itself.
+    Console {
+        /// The instrument that drove the run, by origin.
+        instrument_origin: String,
+        /// The run's own identity at that instrument.
+        console_run_id: String,
+        /// The workflow that re-derived the verdicts, as the OIDC
+        /// `workflow_ref` claim spells it.
+        workflow_ref: String,
+        /// The workflow run that re-derived them.
+        run_id: String,
+        /// Which attempt of that run.
+        run_attempt: u32,
+        /// The scheme the record signature was made with.
+        scheme: SignatureScheme,
+        /// The repository-relative path of the signature.
+        signature: String,
+        /// The repository-relative path of the artifact it covers.
+        signs: String,
+        /// The identity the signature is checked against: the registry key's
+        /// fingerprint, or the OIDC identity a Sigstore bundle carries.
+        identity: String,
+        /// The command anybody can re-run to check the signature.
+        verify_command: String,
+    },
     /// The submitter performed the run and signed its output.
     SelfReported {
         /// The scheme the signature was made with.
@@ -766,6 +806,7 @@ impl Provenance {
     pub const fn tier(&self) -> Tier {
         match self {
             Provenance::Reproduced { .. } => Tier::Reproduced,
+            Provenance::Console { .. } => Tier::Console,
             Provenance::SelfReported { .. } => Tier::SelfReported,
         }
     }
@@ -930,6 +971,13 @@ pub enum EntryDefect {
         /// The deployment kind the entry declared.
         kind: DeploymentKind,
     },
+    /// A console entry describes a deployment the hosted instrument cannot
+    /// have driven: it reaches an endpoint the submitter named, and nothing
+    /// else.
+    UndrivableDeployment {
+        /// The deployment kind the entry declared.
+        kind: DeploymentKind,
+    },
     /// A deployment names no topology although its kind is one.
     MissingTopology,
     /// An entry supersedes itself.
@@ -1007,6 +1055,11 @@ impl fmt::Display for EntryDefect {
                 f,
                 "the reproduced tier requires a deployment this repository composes itself, and \
                  this entry declares {kind}"
+            ),
+            EntryDefect::UndrivableDeployment { kind } => write!(
+                f,
+                "the console tier is a run the hosted instrument drove against an endpoint the \
+                 submitter named, and this entry declares {kind}"
             ),
             EntryDefect::MissingTopology => f.write_str(
                 "the deployment is a reproducible topology and names none, so no recipe stands \
@@ -1188,31 +1241,72 @@ fn provenance_defects(entry: &RegistryEntry) -> Vec<EntryDefect> {
                 });
             }
         }
+        Provenance::Console {
+            instrument_origin,
+            console_run_id,
+            workflow_ref,
+            signature,
+            signs,
+            ..
+        } => {
+            if instrument_origin.trim().is_empty() {
+                defects.push(EntryDefect::EmptyField {
+                    field: "provenance.instrument_origin",
+                });
+            }
+            if console_run_id.trim().is_empty() {
+                defects.push(EntryDefect::EmptyField {
+                    field: "provenance.console_run_id",
+                });
+            }
+            if !workflow_ref.starts_with(OWN_WORKFLOW_PREFIX) {
+                defects.push(EntryDefect::ForeignWorkflow {
+                    workflow_ref: workflow_ref.clone(),
+                });
+            }
+            if entry.subject.deployment.kind != DeploymentKind::HostedEndpoint {
+                defects.push(EntryDefect::UndrivableDeployment {
+                    kind: entry.subject.deployment.kind,
+                });
+            }
+            defects.extend(signature_defects(entry, signature, signs));
+        }
         Provenance::SelfReported {
             signature, signs, ..
-        } => {
-            if !entry
-                .artifacts
-                .iter()
-                .any(|artifact| artifact.path == *signs)
-            {
-                defects.push(EntryDefect::UnsignedArtifact {
-                    path: signs.clone(),
-                });
-            }
-            if !entry.artifacts.iter().any(|artifact| {
-                artifact.role == ArtifactRole::Signature && artifact.path == *signature
-            }) {
-                defects.push(EntryDefect::UndeclaredSignature {
-                    path: signature.clone(),
-                });
-            }
-        }
+        } => defects.extend(signature_defects(entry, signature, signs)),
     }
     if entry.subject.deployment.kind == DeploymentKind::ReproducibleTopology
         && entry.subject.deployment.topology.is_none()
     {
         defects.push(EntryDefect::MissingTopology);
+    }
+    defects
+}
+
+/// A signature block against the artifacts the entry carries.
+///
+/// The two signed tiers ask the same two questions, so they ask them through
+/// one reader: the signed artifact is one of the entry's own, and the
+/// signature file is pinned by digest as a `signature` artifact.
+fn signature_defects(entry: &RegistryEntry, signature: &str, signs: &str) -> Vec<EntryDefect> {
+    let mut defects = Vec::new();
+    if !entry
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.path == signs)
+    {
+        defects.push(EntryDefect::UnsignedArtifact {
+            path: signs.to_owned(),
+        });
+    }
+    if !entry
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.role == ArtifactRole::Signature && artifact.path == signature)
+    {
+        defects.push(EntryDefect::UndeclaredSignature {
+            path: signature.to_owned(),
+        });
     }
     defects
 }
@@ -1325,9 +1419,146 @@ mod tests {
         }
     }
 
+    /// An entry shaped exactly as a completed console submission: a
+    /// conformance run the hosted instrument drove against an endpoint the
+    /// submitter named, with the provenance block the re-derivation lane
+    /// writes once the verdicts recompute and the record is signed.
+    fn console_entry() -> RegistryEntry {
+        const RECORD: &str = "registry/records/example/2026-01-02-example-cdr/";
+        let mut entry = bench_entry();
+        entry.subject.deployment.kind = DeploymentKind::HostedEndpoint;
+        entry.subject.deployment.endpoint = Some(String::from("https://cdr.example/openehr/v1"));
+        entry.result = ResultBlock::Conformance {
+            catalogue_revision: String::from("0.1.4"),
+            statement: String::from("party/example/statement.json"),
+        };
+        entry.artifacts = vec![
+            ArtifactRef {
+                role: ArtifactRole::Results,
+                path: format!("{RECORD}results.json"),
+                sha256: Digest("a".repeat(DIGEST_LEN)),
+            },
+            ArtifactRef {
+                role: ArtifactRole::Verdicts,
+                path: format!("{RECORD}verdicts.json"),
+                sha256: Digest("b".repeat(DIGEST_LEN)),
+            },
+            ArtifactRef {
+                role: ArtifactRole::Transcript,
+                path: format!("{RECORD}transcript.json"),
+                sha256: Digest("c".repeat(DIGEST_LEN)),
+            },
+            ArtifactRef {
+                role: ArtifactRole::Signature,
+                path: format!("{RECORD}verdicts.json.asc"),
+                sha256: Digest("d".repeat(DIGEST_LEN)),
+            },
+        ];
+        entry.provenance = Provenance::Console {
+            instrument_origin: String::from("https://console.veredictum.eu"),
+            console_run_id: String::from("018f3b1e-6f0a-7c21-9a3d-6c2f5d4b8e77"),
+            workflow_ref: String::from(
+                "rubentalstra/Veredictum/.github/workflows/registry-console.yml@refs/heads/main",
+            ),
+            run_id: String::from("33306498731"),
+            run_attempt: 1,
+            scheme: SignatureScheme::OpenpgpDetached,
+            signature: format!("{RECORD}verdicts.json.asc"),
+            signs: format!("{RECORD}verdicts.json"),
+            identity: String::from("0123456789ABCDEF"),
+            verify_command: String::from("veredictum verify-record --record ."),
+        };
+        entry
+    }
+
     #[test]
     fn the_publishable_fixture_carries_no_defect() {
         assert_eq!(entry_defects(&bench_entry()), Vec::new());
+    }
+
+    /// The console tier is publishable exactly when the lane wrote its
+    /// evidence: the workflow that re-derived the verdicts, and the signature
+    /// it then made over an artifact the entry carries.
+    #[test]
+    fn a_completed_console_entry_carries_no_defect() {
+        assert_eq!(entry_defects(&console_entry()), Vec::new());
+    }
+
+    /// The instrument cannot mint its own tier: a console block naming any
+    /// workflow but this repository's is refused, exactly as the reproduced
+    /// tier's is.
+    #[test]
+    fn a_console_entry_naming_a_foreign_workflow_is_refused() {
+        let mut entry = console_entry();
+        let foreign = String::from("example/ci/.github/workflows/sign.yml@refs/heads/main");
+        if let Provenance::Console { workflow_ref, .. } = &mut entry.provenance {
+            *workflow_ref = foreign.clone();
+        }
+        assert!(
+            entry_defects(&entry).contains(&EntryDefect::ForeignWorkflow {
+                workflow_ref: foreign
+            }),
+            "a foreign re-derivation workflow must be refused"
+        );
+    }
+
+    /// The hosted instrument drives an endpoint the submitter named and
+    /// nothing else, so any other deployment kind under this tier is a claim
+    /// about a run that cannot have happened there.
+    #[test]
+    fn a_console_entry_over_a_deployment_the_instrument_cannot_reach_is_refused() {
+        let mut entry = console_entry();
+        entry.subject.deployment.kind = DeploymentKind::LocalBuild;
+        assert!(
+            entry_defects(&entry).contains(&EntryDefect::UndrivableDeployment {
+                kind: DeploymentKind::LocalBuild
+            }),
+            "a console entry over a local build must be refused"
+        );
+    }
+
+    /// The signature is checked against the artifacts the entry pins, through
+    /// the same reader the self-reported tier uses.
+    #[test]
+    fn a_console_entry_whose_signature_is_not_pinned_is_refused() {
+        let mut entry = console_entry();
+        entry
+            .artifacts
+            .retain(|artifact| artifact.role != ArtifactRole::Signature);
+        let defects = entry_defects(&entry);
+        assert!(
+            defects.contains(&EntryDefect::UndeclaredSignature {
+                path: String::from(
+                    "registry/records/example/2026-01-02-example-cdr/verdicts.json.asc"
+                )
+            }),
+            "{defects:?}"
+        );
+    }
+
+    /// The two facts only the lane can establish are named when they are
+    /// blank, rather than published as an empty string.
+    #[test]
+    fn a_console_entry_missing_its_instrument_facts_is_refused() {
+        let mut entry = console_entry();
+        if let Provenance::Console {
+            instrument_origin,
+            console_run_id,
+            ..
+        } = &mut entry.provenance
+        {
+            instrument_origin.clear();
+            console_run_id.clear();
+        }
+        let defects = entry_defects(&entry);
+        assert!(
+            defects.contains(&EntryDefect::EmptyField {
+                field: "provenance.instrument_origin"
+            }) && defects.contains(&EntryDefect::EmptyField {
+                field: "provenance.console_run_id"
+            }),
+            "{defects:?}"
+        );
     }
 
     #[test]
