@@ -475,6 +475,25 @@ impl Assertion {
                             .to_owned(),
                     );
                 }
+                // The evaluator compares the FULL coded term (RM common
+                // original_version.adoc §Attributes: a DV_CODED_TEXT), so a
+                // bare code parses and can never match a conformant server.
+                if let Some(state) = lifecycle_state {
+                    let well_formed = state.split_once("::").is_some_and(|(terminology, rest)| {
+                        !terminology.is_empty()
+                            && rest.split_once('|').is_some_and(|(code, rubric_tail)| {
+                                !code.is_empty() && rubric_tail.ends_with('|')
+                            })
+                    });
+                    if !well_formed {
+                        return Err(format!(
+                            "version assertion: lifecycle_state {state:?} is not the \
+                             `terminology::code|rubric|` term the evaluator compares against \
+                             (RM common original_version.adoc §Attributes types it \
+                             DV_CODED_TEXT, so a bare code can never match)"
+                        ));
+                    }
+                }
                 Ok(())
             }
             _ => Ok(()),
@@ -791,6 +810,40 @@ mod tests {
             "columns": [{ "name": "uid" }]
         }));
         assert!(a.check_invariants().is_ok());
+    }
+
+    /// A bare code parses as YAML and can never match the full coded term the
+    /// evaluator compares, so it is refused at the invariant, not at drive
+    /// time (RM common `original_version.adoc` §Attributes; issue #264).
+    #[test]
+    fn a_lifecycle_state_outside_the_term_grammar_is_refused() {
+        let term = parse(serde_json::json!({
+            "assert": "version", "of": "${v2_uid}",
+            "lifecycle_state": "openehr::523|deleted|"
+        }));
+        assert!(term.check_invariants().is_ok());
+        // The empty rubric is a legal term: the grammar demands the delimiters.
+        let empty_rubric = parse(serde_json::json!({
+            "assert": "version", "of": "${v2_uid}", "lifecycle_state": "openehr::523||"
+        }));
+        assert!(empty_rubric.check_invariants().is_ok());
+        for bad in [
+            "523",
+            "openehr::523",
+            "523|deleted|",
+            "openehr::523|deleted",
+        ] {
+            let a = parse(serde_json::json!({
+                "assert": "version", "of": "${v2_uid}", "lifecycle_state": bad
+            }));
+            let message = a
+                .check_invariants()
+                .expect_err("a bare code must be refused");
+            assert!(
+                message.contains("terminology::code|rubric|"),
+                "{bad}: {message}"
+            );
+        }
     }
 
     #[test]

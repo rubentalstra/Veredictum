@@ -3625,7 +3625,7 @@ impl StepDriver for HttpDriver<'_> {
 /// `assert: version` unaddressable, which is a loud failure rather than a
 /// guess.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum VersionedFamily {
+pub(crate) enum VersionedFamily {
     /// `VERSIONED_COMPOSITION` (RM ehr `versioned_composition.adoc`).
     Composition,
     /// `VERSIONED_EHR_STATUS` (RM ehr `versioned_ehr_status.adoc`).
@@ -3645,7 +3645,7 @@ impl VersionedFamily {
     /// operation name discriminates: the relationship operations all spell
     /// `party_relationship` (SM `master06-demographic_service.adoc`
     /// §`i_demographic_service`).
-    fn of_operation(op: &SmOperationRef) -> Option<Self> {
+    pub(crate) fn of_operation(op: &SmOperationRef) -> Option<Self> {
         match op.interface() {
             "I_EHR_COMPOSITION" => Some(Self::Composition),
             "I_EHR_STATUS" => Some(Self::EhrStatus),
@@ -3680,7 +3680,7 @@ impl VersionedFamily {
     /// The operation (and binding variant) serving one `ORIGINAL_VERSION`
     /// envelope of this family, or `None` where the released ITS-REST
     /// realizes no such read.
-    fn envelope_read(self) -> Option<(&'static str, &'static str)> {
+    pub(crate) fn envelope_read(self) -> Option<(&'static str, &'static str)> {
         match self {
             Self::Composition => Some(("I_EHR_COMPOSITION.get_versioned_composition", "version")),
             Self::EhrStatus => Some(("I_EHR_STATUS.get_versioned_ehr_status", "version")),
@@ -3691,7 +3691,7 @@ impl VersionedFamily {
 
     /// The operation serving this family's `REVISION_HISTORY`, or `None`
     /// where the released ITS-REST realizes no such read.
-    fn revision_history_read(self) -> Option<&'static str> {
+    pub(crate) fn revision_history_read(self) -> Option<&'static str> {
         match self {
             Self::Composition => {
                 Some("I_ITS_REST_REVISION_HISTORY.versioned_composition_revision_history")

@@ -19,6 +19,9 @@ version on.
 ## [Unreleased]
 
 ### Added
+
+
+### Fixed
 - **A role-boundary premise is a declaration, never a presumption (#281).**
   The IXIT instance block gains an `administrative` posture (SM delegates
   access control, so nothing on the wire discloses a principal's roles), the
@@ -27,14 +30,20 @@ version on.
   wherever the posture is undeclared or opposite. The first reproduction
   charged exactly those five rows against a server whose posture nothing had
   declared.
+- **Three catalogue-grammar guards close the #264 gaps.** A `version`
+  assertion's `lifecycle_state` outside the `terminology::code|rubric|` term
+  grammar is refused at the invariant; a `version` fact whose container read
+  is addressed by a path parameter no flow step captures and no requires
+  mints is a validate finding instead of a drive-time inconclusive (the gate
+  immediately surfaced and fixed five more cases of the #280 class); and
+  `todo-issue-refs.sh` holds the `TODO(#NNNN):` form over every hand-written
+  YAML, shell and TOML file, self-tested, in CI beside the `.rs` guard.
 - **`docker compose up` starts the console with no clone and no build
   (#297).** The operator compose file `docker/docker-compose.yml` pins the
   console image to the workspace version, binds loopback port 3210, and
   mounts the working directory; every release from the next cut attaches it
   beside the binaries, `check-console-pin.sh` holds its image tag to the one
   engine value, and the release pipeline refuses to publish without it.
-
-### Fixed
 - **An undeclared signing posture no longer reds the row against the server
   (#279).** A `signature` assertion asking for `verifiable` where the ixit
   declares no `signing` at party or instance level now records the row

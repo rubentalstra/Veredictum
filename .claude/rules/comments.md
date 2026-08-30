@@ -91,6 +91,10 @@ history carries it. A comment describes the code as it IS.
   justification exactly like a comment. Runs per-edit via the
   `rust_fmt_clippy.sh` PostToolUse hook, and per-PR through the `--all` step
   in the CI guards job.
+- `scripts/checks/todo-issue-refs.sh` — the `TODO(#NNNN):` form OUTSIDE the
+  Rust tree (#264): every committed hand-written YAML, shell and TOML file,
+  vendored trees excluded. Self-tested with seeded violations, run in the CI
+  guards job beside the `.rs` guard.
 - **Adjudicated 2026-08-27 (#125): a corpus-local README is NOT a sanctioned
   exception to rule 11.** A document committed beside the material it
   describes moves and dies like any other internal document, so the guard

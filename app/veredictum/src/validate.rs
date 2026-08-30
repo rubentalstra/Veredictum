@@ -243,6 +243,7 @@ pub fn validate(ctx: &Context<'_>) -> Vec<Finding> {
         let who = case.id.to_string();
         check_kind_shape(case, &who, &mut findings);
         check_references(case, &who, ctx.set, &mut findings);
+        check_version_read_bindability(case, &who, ctx.set, &mut findings);
         check_literals(case, &who, &mut findings);
         check_capability_tier(case, &who, ctx.set, &mut findings);
         check_links(case, &who, ctx.set, &mut findings);
@@ -1524,6 +1525,124 @@ fn check_one_ref(
                         format!("${{time:…({t})}} references no earlier capture"),
                     );
                 }
+            }
+        }
+    }
+}
+
+/// Every `version` assertion whose facts need a container read can resolve
+/// that read's path parameters from the case's own flow.
+///
+/// Six roundtrip cases of the first registry reproduction (#280) errored at
+/// drive time on a `{versioned_object_uid}` no step captured, and validate
+/// was blind to the class (#264): the defect was the catalogue's, so it is a
+/// catalogue finding, never a drive-time inconclusive. The family resolves
+/// statically (the SM anchor, else the single family the flow's calls
+/// reach); a case whose family only resolves from committed members is
+/// skipped, because the driver already refuses those by name. `version_uid`
+/// is exempt: the driver supplies it from the assertion's own resolved
+/// target.
+fn check_version_read_bindability(
+    case: &CaseCore,
+    who: &str,
+    set: &ArtifactSet,
+    findings: &mut Vec<Finding>,
+) {
+    use crate::exec::driver::VersionedFamily;
+    let mut needs_history = false;
+    let mut needs_envelope = false;
+    for assertion in case
+        .flow
+        .iter()
+        .flat_map(|step| step.assertions.iter())
+        .chain(case.postconditions.iter())
+    {
+        if let Assertion::Version {
+            change_type,
+            lifecycle_state,
+            count,
+            ..
+        } = assertion
+        {
+            needs_history |= count.is_some();
+            needs_envelope |= change_type.is_some() || lifecycle_state.is_some();
+        }
+    }
+    if !needs_history && !needs_envelope {
+        return;
+    }
+    let anchor = case.sm_operation.as_ref();
+    let family = anchor.and_then(VersionedFamily::of_operation).or_else(|| {
+        let called: BTreeSet<VersionedFamily> = case
+            .flow
+            .iter()
+            .filter_map(|step| {
+                if step.call.contains('.') {
+                    SmOperationRef::parse(&step.call).ok()
+                } else {
+                    anchor.map(|a| a.sibling(&step.call))
+                }
+            })
+            .filter_map(|op| VersionedFamily::of_operation(&op))
+            .collect();
+        if called.len() == 1 {
+            called.into_iter().next()
+        } else {
+            None
+        }
+    });
+    let Some(family) = family else {
+        return;
+    };
+    let mut bindable: BTreeSet<String> = case
+        .requires
+        .minted_handles()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    for step in &case.flow {
+        for (name, _) in step.captures() {
+            bindable.insert(name.to_string());
+        }
+    }
+    bindable.insert("version_uid".to_owned());
+    let mut reads: Vec<(&str, Option<&str>)> = Vec::new();
+    if needs_history && let Some(op) = family.revision_history_read() {
+        reads.push((op, None));
+    }
+    if needs_envelope && let Some((op, variant)) = family.envelope_read() {
+        reads.push((op, Some(variant)));
+    }
+    for (op, variant) in reads {
+        let Ok(op_ref) = SmOperationRef::parse(op) else {
+            continue;
+        };
+        let binding = set
+            .bindings
+            .iter()
+            .map(|(_, b)| b)
+            .find(|b| b.sm_operation == op_ref && b.variant.as_deref() == variant)
+            .or_else(|| {
+                set.bindings
+                    .iter()
+                    .map(|(_, b)| b)
+                    .find(|b| b.sm_operation == op_ref && b.variant.is_none())
+            });
+        let Some(request) = binding.and_then(|b| b.request.as_ref()) else {
+            continue;
+        };
+        for param in request.path.params() {
+            if !bindable.contains(param.as_str()) {
+                push(
+                    findings,
+                    CheckId::BindingCompleteness,
+                    who,
+                    format!(
+                        "version assertion: the {family:?} family's read ({op}) is addressed \
+                         by `{{{param}}}`, which no flow step captures and no requires mints \
+                         — the row would error at drive time on an unresolved path parameter"
+                    ),
+                );
             }
         }
     }
@@ -6676,6 +6795,67 @@ mod reference_grammar_tests {
             message.contains("${time:…(t1)} references no earlier capture"),
             "{message}"
         );
+    }
+
+    /// A `version` fact needing a container read must be able to RESOLVE that
+    /// read's path parameters from the case's own flow (issue #264, the #280
+    /// recurrence class): the missing capture is a catalogue finding here,
+    /// never a drive-time inconclusive charged against the row.
+    #[test]
+    fn a_version_read_with_an_unbindable_path_parameter_is_a_finding() {
+        let history_binding: OperationBinding =
+            serde_json::from_value(serde_json::json!({
+                "sm_operation": "I_ITS_REST_REVISION_HISTORY.versioned_composition_revision_history",
+                "its": "its-rest",
+                "request": {
+                    "method": "GET",
+                    "path": "/ehr/{ehr_id}/versioned_composition/{versioned_object_uid}/revision_history"
+                },
+                "outcomes": { "ok": { "status": 200 } }
+            }))
+            .expect("a binding parses");
+        let mut set = ArtifactSet::default();
+        set.bindings.push((PathBuf::from("test"), history_binding));
+        let case = |capture: serde_json::Value| -> CaseCore {
+            serde_json::from_value(serde_json::json!({
+                "id": "VRB-case", "kind": "functional", "component": "EHR_COMPOSITION",
+                "sm_operation": "I_EHR_COMPOSITION.create_composition",
+                "test_purpose": "t", "description": "d", "spec_refs": [],
+                "requires": { "ehr": { "commits": "none" } },
+                "flow": [{
+                    "step": 1, "call": "create_composition", "expect": "created",
+                    "capture": capture
+                }],
+                "postconditions": [{ "assert": "version", "count": 1 }]
+            }))
+            .unwrap()
+        };
+        // The container uid is uncaptured: the read's parameter is unbindable.
+        let mut findings = Vec::new();
+        check_version_read_bindability(
+            &case(serde_json::json!({ "version_uid": "created.version_uid" })),
+            "VRB-case",
+            &set,
+            &mut findings,
+        );
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert!(
+            findings[0].message.contains("{versioned_object_uid}"),
+            "{}",
+            findings[0].message
+        );
+        // Captured, the same case is clean: ehr_id is minted by requires.ehr.
+        let mut findings = Vec::new();
+        check_version_read_bindability(
+            &case(serde_json::json!({
+                "version_uid": "created.version_uid",
+                "versioned_object_uid": "created.versioned_object_uid"
+            })),
+            "VRB-case",
+            &set,
+            &mut findings,
+        );
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     /// `equivalent to: committed` compares a retrieved body against what this

@@ -68,7 +68,7 @@ captures:
     from: capture version_uid
     transform: root-uid
 server_assigned: [uid]
-# TODO: case the canonical-XML request/response branch of this extension route
+# TODO(#303): case the canonical-XML request/response branch of this extension route
 # once a codec-derived cnf.demographic.party_relationship.v1.xml fixture exists
 # in the corpus; until then the binding declares only canonical-json, so the XML
 # branch is uncovered rather than silently claimed.

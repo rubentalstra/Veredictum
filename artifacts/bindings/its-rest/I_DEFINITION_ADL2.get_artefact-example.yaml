@@ -8,7 +8,7 @@
 # This is a SECOND realization of I_DEFINITION_ADL2.get_artefact (the plain
 # /definition/template/adl2/{template_id} OPT GET is the first). Flow steps
 # select this realization by `variant: example`.
-# TODO: the operation-binding schema has no variant discriminator and the
+# TODO(#304): the operation-binding schema has no variant discriminator and the
 #       binding-completeness check matches by sm_operation only, so a case that
 #       observed `not_acceptable` here would (wrongly) require the plain
 #       get_artefact binding to map 406 too; the schedule therefore authors no

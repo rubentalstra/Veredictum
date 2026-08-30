@@ -2122,7 +2122,7 @@ cnf.demographic.person.archetyped_full:
 # (src/vocab.rs) has no TDS member and a vocabulary value
 # enters only by schedule release, so these entries carry `canonical-xml`,
 # which the resolver treats as "an XML text payload".
-# TODO: give the TDS its own CorpusFormat member when the schedule releases one.
+# TODO(#305): give the TDS its own CorpusFormat member when the schedule releases one.
 cnf.messaging.ehr_extract.v1:
   source: fixtures/messaging/ehr_extract.v1.json
   format: canonical-json
