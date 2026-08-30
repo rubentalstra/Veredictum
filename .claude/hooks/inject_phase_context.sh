@@ -4,8 +4,8 @@
 # .claude/hooks/inject_phase_context.sh
 #
 # Ported from FerroEHR at the Veredictum split (FerroEHR#2789); the tracker dump
-# is unchanged, the oracle banner states where the spec text actually is until
-# the migration vendors it here.
+# is unchanged, and the oracle banner states where the vendored spec text is,
+# or says loudly that it is missing from the checkout.
 #
 # Claude Code SessionStart hook: prints the open GitHub issue list (the
 # tracker — CLAUDE.md issue workflow) annotated with native issue

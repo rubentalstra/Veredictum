@@ -22,9 +22,9 @@
 # A LATER PATTERN WINS. The catch-all comes first and every specific area
 # overrides it, so ordering here is load-bearing.
 #
-# EVERY PATH BELOW EXISTS. They were carved before the code migration on
-# purpose — the paths that decide what "conformant" means should never land
-# without an owner already named — and the migration filled them in.
+# EVERY PATH BELOW EXISTS. They were carved ahead of the code on purpose: the
+# paths that decide what "conformant" means should never land without an owner
+# already named.
 #
 # MAINTAINERS.md is the roster and the access-continuity record; GOVERNANCE.md
 # is the decision process. This file is only the routing table.
