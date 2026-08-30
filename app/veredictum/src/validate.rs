@@ -99,7 +99,9 @@ pub enum CheckId {
     /// register entry that adjudicated that. Declaring a capability IS the
     /// obligation to run the framework against it, so a hollow claim cannot
     /// even enter a run — the gate is at validate time, before any SUT is
-    /// composed.
+    /// composed. It also holds a `Signing` claim to the ixit committed beside
+    /// the statement: a posture declared nowhere leaves every `verifiable` row
+    /// inconclusive, which is the same hollow claim one document further out.
     ClaimCompleteness,
     /// Guard scope (issue FerroEHR#2378): a `guards:` entry may not state a
     /// CAPABILITY-scoped selection rule. That rule is global, implemented once
@@ -284,6 +286,7 @@ pub fn validate(ctx: &Context<'_>) -> Vec<Finding> {
     check_vocab_drift(ctx.set, &mut findings);
     check_journey_envelope(ctx.set, &mut findings);
     check_claim_completeness(ctx.set, &mut findings);
+    check_signing_posture_declared(ctx.set, &mut findings);
     check_guard_scope(ctx.set, &mut findings);
     check_served_extension_declarations(ctx.set, &mut findings);
     check_capability_depth(ctx.set, &mut findings);
@@ -495,6 +498,69 @@ fn check_claim_completeness(set: &ArtifactSet, findings: &mut Vec<Finding>) {
             ),
             (None, false) => {}
         }
+    }
+}
+
+/// The one capability whose evidence rests on an ixit-declared posture.
+///
+/// RM common `master06-change_control_package.adoc` §Digital Signature makes
+/// the signing mode a property of the running deployment, and nothing on the
+/// wire discloses it, so the runner reads it from the topology alone
+/// ([`crate::ixit::Ixit::signing`], [`crate::ixit::Instance::signing`]).
+const SIGNING_CAPABILITY: &str = "Signing";
+
+/// A statement claiming `Signing` is held to an ixit that declares a posture.
+///
+/// The `verifiable` half of the version-signature battery reconstructs the
+/// agreed canonical form under the posture in force for the addressed
+/// instance. With no posture declared at either level the run holds no mode
+/// and no key material, so those rows come back inconclusive and the claim
+/// carries no executed evidence — the same hollow claim
+/// [`check_claim_completeness`] refuses, one document further out.
+///
+/// The pairing is by party directory. A statement committed without an ixit
+/// beside it is silent here: there is no second declaration to contradict.
+fn check_signing_posture_declared(set: &ArtifactSet, findings: &mut Vec<Finding>) {
+    for (party_path, statement) in &set.parties {
+        let claims_signing = statement
+            .claims
+            .capabilities
+            .iter()
+            .any(|cap| cap.as_str() == SIGNING_CAPABILITY);
+        if !claims_signing {
+            continue;
+        }
+        let Some(party_dir) = party_path.parent() else {
+            continue;
+        };
+        let Some((ixit_path, ixit)) = set
+            .party_ixits
+            .iter()
+            .find(|(path, _)| path.parent() == Some(party_dir))
+        else {
+            continue;
+        };
+        let declares_posture = ixit.signing.is_some()
+            || ixit
+                .instances
+                .iter()
+                .any(|(_, instance)| instance.signing.is_some());
+        if declares_posture {
+            continue;
+        }
+        push(
+            findings,
+            CheckId::ClaimCompleteness,
+            &party_path.display().to_string(),
+            format!(
+                "claims capability {SIGNING_CAPABILITY} while {} declares no `signing` posture at \
+                 party or instance level — the mode is a deployment fact no released operation \
+                 discloses (RM common master06-change_control_package.adoc §Digital Signature), \
+                 so every `verifiable` row is inconclusive and the claim can carry no executed \
+                 evidence; declare the posture or withdraw the claim",
+                ixit_path.display()
+            ),
+        );
     }
 }
 

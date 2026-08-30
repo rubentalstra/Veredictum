@@ -79,6 +79,11 @@ pub struct ArtifactSet {
     /// in path order — the ICS side of the claim-completeness gate. Empty
     /// when no sibling `party/` directory exists.
     pub parties: Vec<(PathBuf, crate::party::Statement)>,
+    /// The ixit topology committed beside each statement
+    /// (`<root>/../party/*/ixit.json`), in path order. A party that commits a
+    /// statement without one is absent here, so a check pairing the two reads
+    /// the party directory both entries share.
+    pub party_ixits: Vec<(PathBuf, crate::ixit::Ixit)>,
 }
 
 /// A load pass over one artifact root.
@@ -139,11 +144,12 @@ fn statement_files_under(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-/// Load one party statement (JSON, schema-validated like every artifact).
-fn load_statement(
+/// Load one JSON submission document (a party statement or its ixit
+/// topology), schema-validated like every artifact.
+fn load_json_document<T: serde::de::DeserializeOwned>(
     path: &Path,
     validator: &jsonschema::Validator,
-) -> Result<crate::party::Statement, LoadError> {
+) -> Result<T, LoadError> {
     let text = std::fs::read_to_string(path).map_err(|source| LoadError::Io {
         path: path.to_owned(),
         source,
@@ -203,6 +209,8 @@ struct Schemas {
     wire_surface: &'static jsonschema::Validator,
     /// `statement.schema.json`.
     statement: &'static jsonschema::Validator,
+    /// `ixit.schema.json`.
+    ixit: &'static jsonschema::Validator,
 }
 
 /// The process-wide compiled schema set.
@@ -249,6 +257,7 @@ static SCHEMAS: LazyLock<Result<Schemas, (PathBuf, String)>> = LazyLock::new(|| 
         )?,
         wire_surface: one(&schema::wire_surface_schema(), "wire-surface.schema.json")?,
         statement: one(&schema::statement_schema(), "statement.schema.json")?,
+        ixit: one(&schema::ixit_schema(), "ixit.schema.json")?,
     })
 });
 
@@ -285,6 +294,7 @@ pub fn load_root(root: &Path) -> Result<Loaded, LoadError> {
         journeys: journeys_schema,
         wire_surface: wire_surface_schema,
         statement: statement_schema,
+        ixit: ixit_schema,
     } = schemas;
 
     let mut loaded = Loaded::default();
@@ -295,7 +305,18 @@ pub fn load_root(root: &Path) -> Result<Loaded, LoadError> {
     // between the two and no gate can see it from one side alone.
     if let Some(party_dir) = root.parent().map(|p| p.join("party")) {
         for path in statement_files_under(&party_dir) {
-            match load_statement(&path, statement_schema) {
+            // The ixit beside the statement is swept for the same reason: a
+            // capability the statement claims and the topology never declares
+            // is a relation between the two documents, invisible from either
+            // one alone.
+            let ixit_path = path.with_file_name("ixit.json");
+            if ixit_path.is_file() {
+                match load_json_document::<crate::ixit::Ixit>(&ixit_path, ixit_schema) {
+                    Ok(ixit) => loaded.set.party_ixits.push((ixit_path, ixit)),
+                    Err(e) => loaded.errors.push(e),
+                }
+            }
+            match load_json_document::<crate::party::Statement>(&path, statement_schema) {
                 Ok(statement) => loaded.set.parties.push((path, statement)),
                 Err(e) => loaded.errors.push(e),
             }

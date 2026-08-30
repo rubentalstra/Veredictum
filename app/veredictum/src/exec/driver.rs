@@ -585,6 +585,10 @@ impl<'a> HttpDriver<'a> {
     /// mode-agnostic; `verifiable` reconstructs the agreed canonical form and
     /// verifies per `signing` — the posture of the INSTANCE the step ran on
     /// (RM common master06 §Digital Signature; [`crate::exec::signature`]).
+    ///
+    /// Every fact judged against a value the SUT SERVED is a conformance
+    /// mismatch; a `verifiable` fact the party's own declarations leave without
+    /// a posture is unjudgeable, and takes the inconclusive channel.
     #[expect(
         clippy::too_many_arguments,
         reason = "one parameter per declared signature fact — mirrors the assertion shape"
@@ -598,13 +602,14 @@ impl<'a> HttpDriver<'a> {
         distinct_from: Option<&crate::model::value::TemplatedValue>,
         signing: Option<&crate::exec::signature::SigningMode>,
         vars: &VarStore,
-    ) -> Result<(), AssertionFailure> {
+    ) -> Result<(), AssertionOutcome> {
         let signature = body.get("signature").and_then(Value::as_str);
         if present == Some(true) && signature.is_none_or(str::is_empty) {
             return Err(AssertionFailure(
                 "signature: expected present, the ORIGINAL_VERSION envelope carries no signature"
                     .into(),
-            ));
+            )
+            .into());
         }
         if let Some(other) = distinct_from {
             // Distinct-signature-per-version: the canonical form the signature
@@ -624,19 +629,22 @@ impl<'a> HttpDriver<'a> {
                 return Err(AssertionFailure(
                     "signature: distinct_from requested but the envelope carries no signature"
                         .into(),
-                ));
+                )
+                .into());
             };
             if want.is_empty() {
                 return Err(AssertionFailure(
                     "signature: distinct_from comparand is empty (the earlier signature capture failed)"
                         .into(),
-                ));
+                )
+                .into());
             }
             if sig == want {
                 return Err(AssertionFailure(
                     "signature: identical to the compared version's signature — the signature must be a function of the version's canonical content (RM common master06 §Digital Signature)"
                         .into(),
-                ));
+                )
+                .into());
             }
         }
         if let Some(expected) = equals {
@@ -650,19 +658,29 @@ impl<'a> HttpDriver<'a> {
             if signature != Some(want.as_str()) {
                 return Err(AssertionFailure(format!(
                     "signature: stored {signature:?} is not the client-supplied {want:?} (must be stored verbatim)"
-                )));
+                ))
+                .into());
             }
         }
         if verifiable == Some(true) {
             let Some(sig) = signature else {
                 return Err(AssertionFailure(
                     "signature: verifiable requested but the envelope carries no signature".into(),
-                ));
+                )
+                .into());
             };
+            // The mode is a DEPLOYMENT fact the party declares in its ixit (RM
+            // common master06 §Digital Signature: a deployment runs digest or
+            // openPGP, one at a time). With no declaration the run holds no
+            // agreed canonical form and no key material, so it never asked the
+            // question — a declaration the party did not make is not evidence
+            // the server violated anything.
             let Some(mode) = signing else {
-                return Err(AssertionFailure(
+                return Err(AssertionOutcome::Unjudgeable(
                     "signature: verifiable requested but the ixit declares no `signing` posture \
-                     for the addressed instance"
+                     for the addressed instance — the mode is a deployment fact (RM common \
+                     master06-change_control_package.adoc §Digital Signature), so this run \
+                     cannot judge the fact"
                         .into(),
                 ));
             };
@@ -672,9 +690,10 @@ impl<'a> HttpDriver<'a> {
                     return Err(AssertionFailure(
                         "signature: does not verify over the agreed canonical form (RFC 8785 JCS of the version minus signature)"
                             .into(),
-                    ));
+                    )
+                    .into());
                 }
-                Err(e) => return Err(AssertionFailure(format!("signature verify: {e}"))),
+                Err(e) => return Err(AssertionFailure(format!("signature verify: {e}")).into()),
             }
         }
         Ok(())
@@ -822,17 +841,15 @@ impl<'a> HttpDriver<'a> {
                     equals,
                     distinct_from,
                     ..
-                } => self
-                    .eval_signature_assertion(
-                        body,
-                        *present,
-                        *verifiable,
-                        equals.as_ref(),
-                        distinct_from.as_ref(),
-                        signing,
-                        vars,
-                    )
-                    .map_err(AssertionOutcome::from),
+                } => self.eval_signature_assertion(
+                    body,
+                    *present,
+                    *verifiable,
+                    equals.as_ref(),
+                    distinct_from.as_ref(),
+                    signing,
+                    vars,
+                ),
                 // The version family is judged against the VERSION envelope it
                 // names, read back off the versioned object when the step's
                 // own body is not already that envelope.
