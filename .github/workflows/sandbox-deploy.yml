@@ -169,7 +169,11 @@ jobs:
           sleep 60
           while :; do
             body=$(curl -sS -m 30 "$SANDBOX_BASE/" || true)
-            served=$(printf '%s' "$body" | grep -oE 'engine [0-9][0-9A-Za-z.+-]*' | head -1 | cut -d' ' -f2)
+            # `|| true` on the extraction too: under `set -e -o pipefail` a
+            # no-match grep exits 1 and would kill the loop on its FIRST poll
+            # (measured: run 33314783993 died on one DNS miss instead of
+            # retrying to the deadline).
+            served=$(printf '%s' "$body" | grep -oE 'engine [0-9][0-9A-Za-z.+-]*' | head -1 | cut -d' ' -f2 || true)
             if [ -n "$served" ] && [ "$served" = "$expected" ]; then
               echo "hosted console is serving engine ${served}"
               break
