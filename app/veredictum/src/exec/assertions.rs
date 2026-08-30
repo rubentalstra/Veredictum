@@ -969,17 +969,6 @@ pub fn eval_xml_root(
     Ok(())
 }
 
-/// Whether an assertion is wire-dependent (its facts need a driver read:
-/// versioned-object reads for `version`/`signature`, schema validation for
-/// `instance_of`). The pure evaluators above handle the rest.
-#[must_use]
-pub fn is_wire_dependent(assertion: &Assertion) -> bool {
-    matches!(
-        assertion,
-        Assertion::Version { .. } | Assertion::Signature { .. } | Assertion::InstanceOf { .. }
-    )
-}
-
 /// When the driver judges an assertion's declared facts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Judgement {
@@ -2453,31 +2442,5 @@ mod tests {
             failure.0.contains("is not bound to any namespace"),
             "{failure:?}"
         );
-    }
-
-    /// The wire-dependent set is exactly the three assertions whose facts a
-    /// pure evaluator cannot produce: the pure evaluators here handle the
-    /// rest, so a new assertion silently joining the driver-only set would
-    /// stop being evaluated at all.
-    #[test]
-    fn only_the_driver_read_assertions_are_wire_dependent() {
-        let assertion = |document: Value| -> Assertion {
-            serde_json::from_value(document).expect("an authored assertion")
-        };
-
-        for wire in [
-            json!({ "assert": "version", "of": "${uid}", "lifecycle_state": "532" }),
-            json!({ "assert": "signature", "of": "${uid}", "present": true }),
-            json!({ "assert": "instance_of", "rm_type": "COMPOSITION" }),
-        ] {
-            assert!(is_wire_dependent(&assertion(wire.clone())), "{wire}");
-        }
-        for pure in [
-            json!({ "assert": "field", "path": "uid/value", "exists": true }),
-            json!({ "assert": "unique", "over": "${ehr_id}", "aggregate": true }),
-            json!({ "assert": "returns", "equals": 1 }),
-        ] {
-            assert!(!is_wire_dependent(&assertion(pure.clone())), "{pure}");
-        }
     }
 }

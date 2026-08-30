@@ -191,6 +191,43 @@ fn a_step_assertion_the_replay_cannot_judge_refuses_the_entry() {
     );
 }
 
+/// A pack case that READS a provisioned `requires` handle is refused: the
+/// transcript records the flow's own exchanges and no provisioned handles,
+/// so any value the replay bound would be one the recorded exchanges never
+/// used.
+#[test]
+fn a_pack_case_reading_a_provisioned_handle_is_refused() {
+    let (mut set, transcript) = load();
+    let entry = transcript
+        .entries
+        .first()
+        .expect("the pack carries entries");
+    let case = set
+        .cases
+        .iter_mut()
+        .map(|(_, c)| c)
+        .find(|c| c.id == entry.case)
+        .expect("the entry's case is in the catalogue");
+    case.requires.ehr = Some(veredictum::model::case::EhrRequirement::Exists {
+        commits: veredictum::model::case::CommitState::None,
+    });
+    let reads_handle: veredictum::model::assertion::Assertion = serde_json::from_value(
+        serde_json::json!({ "assert": "field", "path": "ehr_id/value", "equals": "${ehr_id}" }),
+    )
+    .expect("a field assertion parses");
+    case.flow
+        .first_mut()
+        .expect("the case carries a flow")
+        .assertions
+        .push(reads_handle);
+
+    let refusal = replay_entry(&set, entry).expect_err("the replay must refuse, never answer");
+    assert!(
+        refusal.contains("ehr_id") && refusal.contains(entry.case.as_str()),
+        "the refusal names neither the handle nor the case: {refusal}"
+    );
+}
+
 #[test]
 fn transcript_verdict_vocabulary_is_exercised() {
     let (_, transcript) = load();

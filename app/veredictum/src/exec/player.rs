@@ -222,7 +222,17 @@ impl<'a> TranscriptPlayer<'a> {
                     }
                 }
                 crate::refgrammar::CaptureField::CommitTime => {
-                    let ms = i64::try_from(self.cursor).unwrap_or(i64::MAX) * 1_000;
+                    #[expect(
+                        clippy::expect_used,
+                        reason = "the cursor indexes the transcript's in-memory step vector, so \
+                                  it is bounded orders of magnitude below i64::MAX / 1000; a \
+                                  failed widening or multiplication is logically impossible and \
+                                  should fail loud, never substitute an instant"
+                    )]
+                    let ms = i64::try_from(self.cursor)
+                        .ok()
+                        .and_then(|seconds| seconds.checked_mul(1_000))
+                        .expect("the transcript cursor should fit an i64 millisecond instant");
                     vars.set(name.clone(), Captured::InstantMs { lo: ms, hi: ms });
                 }
                 crate::refgrammar::CaptureField::Field { name: field, list } => {
@@ -250,6 +260,30 @@ impl<'a> TranscriptPlayer<'a> {
             }
         }
     }
+}
+
+/// Whether any flow `with`/`scope` template or any assertion of `case`
+/// references `handle` as a capture.
+fn case_reads_capture(case: &CaseCore, handle: &CaptureName) -> bool {
+    let matches_handle = |reference: &crate::refgrammar::ValueRef| matches!(reference, crate::refgrammar::ValueRef::Capture { name, .. } if name == handle);
+    case.flow.iter().any(|step| {
+        step.with_entries()
+            .iter()
+            .any(|(_, value)| value.refs().iter().any(|r| matches_handle(r)))
+            || step
+                .scope_templates()
+                .iter()
+                .any(|template| template.refs().iter().any(|r| matches_handle(r)))
+            || step.assertions.iter().any(|a| {
+                crate::model::assertion::assertion_refs(a)
+                    .iter()
+                    .any(matches_handle)
+            })
+    }) || case.postconditions.iter().any(|a| {
+        crate::model::assertion::assertion_refs(a)
+            .iter()
+            .any(matches_handle)
+    })
 }
 
 impl StepDriver for TranscriptPlayer<'_> {
@@ -318,19 +352,33 @@ impl StepDriver for TranscriptPlayer<'_> {
 
     fn provision(
         &mut self,
-        _case: &CaseCore,
+        case: &CaseCore,
         _row: usize,
-        vars: &mut VarStore,
+        _vars: &mut VarStore,
     ) -> Result<crate::exec::Provisioned, String> {
-        // Provisioning is pre-recorded state in the pack; the requires
-        // handles bind to fixed adjudicated values.
-        if let Ok(handle) = CaptureName::parse("ehr_id") {
-            vars.set(
-                handle,
-                Captured::Scalar("7d44b88c-4199-4bad-97dc-d78268e01398".to_owned()),
-            );
+        // Provisioning is pre-recorded state in the pack, and the transcript
+        // records no provisioned handles — so a case that READS one would
+        // resolve against a value the recorded exchanges never used. The
+        // judge-or-refuse contract refuses the entry by name instead.
+        let minted = case.requires.minted_handles();
+        if minted.is_empty() {
+            return Ok(crate::exec::Provisioned::Ready);
         }
-        Ok(crate::exec::Provisioned::Ready)
+        let read: Vec<String> = minted
+            .iter()
+            .filter(|handle| case_reads_capture(case, handle))
+            .map(ToString::to_string)
+            .collect();
+        if read.is_empty() {
+            return Ok(crate::exec::Provisioned::Ready);
+        }
+        Err(format!(
+            "case {} reads provisioned handle(s) {} the transcript does not record; a pack \
+             entry may not resolve a requires handle against a value the recorded exchanges \
+             never used",
+            case.id,
+            read.join(", ")
+        ))
     }
 
     /// Refuses any judged postcondition instead of reproducing a verdict it
