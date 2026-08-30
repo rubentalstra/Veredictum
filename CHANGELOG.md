@@ -19,6 +19,11 @@ version on.
 ## [Unreleased]
 
 ### Added
+- The dump/load authorization refusals drive without a declared
+  `dump_location`: the refusal is a role or authentication decision taken
+  before any path is consulted, so a literal placeholder location suffices
+  and the boundary is testable on every party that declares the admin split
+  (#286).
 - **Signing-on posture profiles (#335).** Every bench pack defines
   `minimal-signed-digest` and `minimal-signed-pgp` beside `minimal`, so a CDR
   that signs versions out of the box benches without switching a shipped
