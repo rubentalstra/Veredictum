@@ -25,16 +25,6 @@
 //! declaration against the running system. A canary that contradicts the
 //! declaration refuses the run.
 //!
-//! Module map: [`pack`] the embedded packs, their pinned fixtures and the
-//! operation vocabulary · [`manifest`] the emitted description of every
-//! embedded pack · [`client`] targeting and credentials · [`posture`] the
-//! profiles, the disclosure block and its canaries · [`run`] the preflight,
-//! the seed phase and the open-loop dispatcher · [`baselines`] the pinned
-//! reference deployments and their compose orchestration · [`relative`] the
-//! relative index · [`result`] the emitted artifact · [`fingerprint`] the host
-//! environment record · [`compare`] the cross-file alignment and its median/IQR
-//! math · [`render`] the console and Markdown views.
-//!
 //! What this engine is NOT is stated in [`BOUNDARY_STATEMENT`], which every
 //! artifact and every rendered view carries verbatim.
 
@@ -65,19 +55,13 @@ pub const METHODOLOGY: &str = "Seed once, measure N times. Measured phases are o
 
 /// A failure of the benchmark engine.
 ///
-/// Each variant renders the diagnostic the command line reports, so a caller
-/// that only needs to show the problem prints the error and stops. Individual
+/// Each variant renders the diagnostic the command line reports. Individual
 /// arrival faults inside a measured phase are NOT errors here: they are
 /// counted by class in the result.
 ///
-/// Size posture: `clippy::result_large_err` fires crate-wide at 128 bytes, and
-/// this enum sits under it on purpose. A variant needing several owned strings
-/// boxes them behind one payload struct ([`PostureContradiction`] and
-/// [`FixtureRoot`] are the shape) rather than raising the threshold or
-/// spreading `#[expect]`s.
-///
-/// [`PostureContradiction`]: BenchError::PostureContradiction
-/// [`FixtureRoot`]: BenchError::FixtureRoot
+/// Size posture: `clippy::result_large_err` fires crate-wide at 128 bytes and
+/// this enum stays under it, so a variant needing several owned strings boxes
+/// them behind one payload struct rather than raising the threshold.
 #[derive(Debug, Error)]
 pub enum BenchError {
     /// The requested pack is not one this binary embeds.

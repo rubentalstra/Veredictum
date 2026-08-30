@@ -3,11 +3,10 @@
 
 //! The performance schedule machinery — conformance-by-MEASUREMENT.
 //!
-//! It carries the
-//! `kind: performance` case model (class, corpus, open-loop workload,
-//! thresholds), the journey catalogue (the hospital-simulation vocabulary a
-//! workload decomposes into), the measurement record (counts, errors,
-//! percentiles, the encoded HDR histogram so every threshold is
+//! It carries the `kind: performance` case model (class, corpus, open-loop
+//! workload, thresholds), the journey catalogue (the hospital-simulation
+//! vocabulary a workload decomposes into), the measurement record (counts,
+//! errors, percentiles, the encoded HDR histogram so every threshold is
 //! RE-CHECKABLE from the artifact), and the class-verdict pure function
 //! (earned | not-earned).
 //!
@@ -506,9 +505,8 @@ impl PerfOp {
             PerfOp::UnauthenticatedProbe => Principal::Unauthenticated,
             PerfOp::ReadonlyWriteDenied => Principal::ReadOnly,
             PerfOp::SmartConfigurationRead => Principal::SmartPlatform,
-            // The activity report is admin-gated on the served extension
-            // route (the 2026-07-29 POC window drove it with the primary
-            // principal and 403'd on every arrival).
+            // The served extension route is admin-gated: the primary
+            // principal is refused 403 on every arrival.
             PerfOp::AdminContributionReport => Principal::Admin,
             _ => Principal::Primary,
         }
@@ -703,9 +701,8 @@ impl PerfOp {
 
 /// The auxiliary committed payloads of the non-COMPOSITION journey stages.
 ///
-/// Each one is a corpus fixture the functional
-/// catalogue already adjudicates, never a payload invented for the load
-/// instrument.
+/// Each one is a corpus fixture the functional catalogue already adjudicates,
+/// never a payload invented for the load instrument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AuxPayloadKind {
     /// The Simplified FLAT composition + the OPT it is constrained by.
@@ -1416,11 +1413,10 @@ pub struct DiskAnchors {
 
 /// The resource telemetry of one measured run.
 ///
-/// Measured CONTEXT, never
-/// verdict-bearing: classes stay earned on latency/error/throughput only,
-/// and an absent record never fails a run (sampling is optional by
-/// capability — it requires the ixit `containers` block and a reachable
-/// container runtime).
+/// Measured CONTEXT, never verdict-bearing: classes stay earned on
+/// latency/error/throughput only, and an absent record never fails a run
+/// (sampling requires the ixit `containers` block and a reachable container
+/// runtime).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourcesRecord {
@@ -1790,7 +1786,6 @@ mod tests {
             );
             tokens.push(op.as_str());
         }
-        // A DENIED write mutates nothing, so it is not a write arrival.
         assert!(!PerfOp::ReadonlyWriteDenied.is_write());
         assert!(PerfOp::ReadonlyWriteDenied.needs_template());
         assert!(PerfOp::CompositionCommitFlat.is_write());
@@ -2203,7 +2198,6 @@ mod tests {
         };
         assert!((aborted.cpu_peak() - 42.5).abs() < f64::EPSILON);
         assert_eq!(aborted.rss_peak(), 300);
-        // No measured-phase sample: the whole series is reported.
         assert_eq!(aborted.measured_samples().len(), 2);
 
         let complete = ContainerResourceSeries {

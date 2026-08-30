@@ -236,8 +236,6 @@ mod tests {
     fn the_total_memory_is_converted_from_kibibytes() {
         const MEMINFO: &str = "MemTotal:       16307176 kB\nMemFree:         9312604 kB\nBuffers:          123456 kB\n";
         assert_eq!(total_memory_bytes_in(MEMINFO), Some(16_307_176_u64 * 1024));
-        // A body with no MemTotal line, and one whose value is not a number,
-        // are both hosts that did not disclose the field.
         assert_eq!(total_memory_bytes_in("MemFree: 100 kB\n"), None);
         assert_eq!(total_memory_bytes_in("MemTotal:  unknown kB\n"), None);
         assert_eq!(total_memory_bytes_in("MemTotal:\n"), None);
