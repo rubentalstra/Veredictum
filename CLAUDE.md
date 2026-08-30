@@ -14,24 +14,13 @@ the closed issues, the PR descriptions, `CHANGELOG.md`, and git history. There
 is no design-doc layer: decisions live in this file, in `.claude/rules/*.md`,
 and in the code.
 
-## Migration state (read this before anything else)
+## Layout
 
-Veredictum was built inside [FerroEHR](https://github.com/rubentalstra/FerroEHR)
-as a workspace member, and **the code lives here now.** The extraction carried
-the runner, the catalogue, the corpora, the ambiguity register, the party
-declarations and the vendored spec oracle, re-rooted at this repository's root.
-A change to instrument behaviour lands here.
-
-What is still open on the migration contract
-[FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) is the
-CONSUMER side: FerroEHR carries its own copy until its conformance pipeline pins
-the published version instead. Until that switch the two trees exist side by
-side, and this one is the source of truth. Publication is done on this side: the
-crate is on crates.io, and a `v*` tag publishes signed binaries and the container
-image through the pipeline the Releasing section below describes. The web UI as
-its own image is #6.
-
-Layout:
+This repository holds the whole instrument: the runner, the catalogue, the
+corpora, the ambiguity register, the party declarations and the vendored spec
+oracle. A change to instrument behaviour lands here, and every release ships
+from here. The crate is on crates.io, and a `v*` tag publishes signed binaries
+and the container image through the pipeline the Releasing section describes.
 
 | Path | Contents |
 |---|---|
@@ -276,7 +265,7 @@ v0.1.0 proper is the first STABLE release): `v0.1.0` (the web console over
 the published instrument, #6, with the signed record and the
 release-blocking findings) and `v0.2.0` (the console beyond stable: the
 measured instruments in the browser, #70, plus non-gating catalogue upkeep).
-The closed `v0.1.0-alpha` milestone is the shipped code migration
+The closed `v0.1.0-alpha` milestone shipped the code into this repository
 (FerroEHR#2789).
 
 **Skills.** `/phase-status` orients, `/next-task` turns an issue into a plan,
@@ -470,5 +459,5 @@ subagents.
   command surface, how the semantics meet this repository's rules, and the
   adoption gate
 - `README.md` — the product identity and the origin of the name
-- [FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) — the
-  migration contract
+- [FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) — where
+  the instrument was built before it moved to this repository
