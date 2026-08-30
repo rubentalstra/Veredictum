@@ -306,8 +306,14 @@ jobs:
           tag_name: ${{ needs.plan.outputs.tag }}
           name: ${{ needs.plan.outputs.version }}
           body_path: release-notes.md
+          # The operator compose file rides every release (#297): download it
+          # and `docker compose up` starts the console with no clone and no
+          # build. Its image tag is held to the version being cut by
+          # scripts/release/check-console-pin.sh, which `plan` re-verified
+          # against this same commit.
           files: |
             veredictum-${{ needs.plan.outputs.tag }}.spdx.json
+            docker/docker-compose.yml
           # Only an explicitly suffixed tag is a pre-release. The rule's one
           # definition lives in .github/actions/release-kind, which `plan` ran.
           prerelease: ${{ needs.plan.outputs.is-prerelease }}
@@ -391,6 +397,8 @@ jobs:
           done
           printf '%s\n' "$assets" | grep -Fxq "veredictum-${TAG}.spdx.json" \
             || missing="$missing veredictum-${TAG}.spdx.json"
+          printf '%s\n' "$assets" | grep -Fxq "docker-compose.yml" \
+            || missing="$missing docker-compose.yml"
           [ -z "$missing" ] || {
             echo "::error::the draft is missing assets, so it will not be published:$missing"
             exit 1

@@ -53,11 +53,23 @@ reimplementing the format.
 The container image is the web console: a browser frontend over the same
 instrument, served by its own binary. The CLI is deliberately not distributed
 as an image — a static binary needs no container, and the release binaries
-below are its no-toolchain path. Start the console against a clone and it
-serves on port 3000:
+below are its no-toolchain path.
+
+The fastest start is the operator compose file, which pins the image to the
+version it shipped with and binds the console to loopback on port 3210:
 
 ```bash
-docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD:/work" \
+curl -LO https://raw.githubusercontent.com/rubentalstra/Veredictum/main/docker/docker-compose.yml
+docker compose up
+```
+
+Open <http://127.0.0.1:3210>. Releases cut after v0.1.1 attach the same file
+to the [release page](https://github.com/rubentalstra/Veredictum/releases),
+pinned to that release's image. The equivalent `docker run`, if you would
+rather not use compose:
+
+```bash
+docker run --rm -p 127.0.0.1:3210:3000 -v "$PWD:/work" \
     ghcr.io/rubentalstra/veredictum:<tag>
 ```
 
@@ -69,17 +81,12 @@ passed.
 
 The catalogue and the specification oracle are not baked into the image. That is
 the same over 300 MB reason as above, and it means the data you grade against is the
-data you can see in your own checkout. The console has no login, so the
-publish flag above binds it to loopback; exposing it further is the
-operator's decision, behind their own gate.
-
-> [!NOTE]
-> Every image tag published so far predates the console's first release and
-> still carries the CLI as the payload, invoked as
-> `docker run --rm -v "$PWD:/work" ghcr.io/rubentalstra/veredictum:<tag>
-> validate --root /work/artifacts --specs /work/specs/openehr`. The console
-> serves from its first release tag onward; [the console
-> chapter](console.md) shows what it does today.
+data you can see in your own checkout: run compose beside a clone and the
+`/work` mount carries `artifacts/`, `specs/openehr/` and `party/`; run it
+beside an empty directory and the console comes up and says what it is
+missing. The console has no login, so both invocations above bind it to
+loopback; exposing it further is the operator's decision, behind their own
+gate. [The console chapter](console.md) shows what it does today.
 
 ## From a release binary
 

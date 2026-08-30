@@ -18,6 +18,14 @@ version on.
 
 ## [Unreleased]
 
+### Added
+- **`docker compose up` starts the console with no clone and no build
+  (#297).** The operator compose file `docker/docker-compose.yml` pins the
+  console image to the workspace version, binds loopback port 3210, and
+  mounts the working directory; every release from the next cut attaches it
+  beside the binaries, `check-console-pin.sh` holds its image tag to the one
+  engine value, and the release pipeline refuses to publish without it.
+
 ### Fixed
 - Three bench error variants (`FixturePin`, `UnknownProfile`, `NoProfiles`)
   carry the `PackId`/`FixtureKey` newtypes instead of bare strings, the

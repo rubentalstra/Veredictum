@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The operator compose file (#297): `docker compose up` starts the web console
+# with no clone and no build. This file is attached to every release beside the
+# binaries, and its image tag is held to the workspace engine version by
+# scripts/release/check-console-pin.sh — the same one-value discipline as the
+# console's crates.io pin, so a stale copy cannot ship with a cut.
+#
+#   curl -LO https://raw.githubusercontent.com/rubentalstra/Veredictum/main/docker/docker-compose.yml
+#   docker compose up
+#
+# The console then serves on http://127.0.0.1:3210 (the container listens on
+# 3000; the host side maps 3210 to stay clear of the dev servers that camp on
+# 3000). It binds loopback ON PURPOSE: the console has no login, so exposing
+# it wider is the operator's decision, behind their own gate.
+#
+# The image carries the console and the pinned engine, never the catalogue or
+# the specification oracle — those are paths the instrument reads, and a party
+# may legitimately point at their own. Started beside an empty directory the
+# console comes up and says what it is missing; to grade a server, run it
+# beside a checkout of https://github.com/rubentalstra/Veredictum so the
+# `/work` mount carries `artifacts/`, `specs/openehr/` and `party/`.
+services:
+  console:
+    image: ghcr.io/rubentalstra/veredictum:0.1.1
+    ports:
+      - "127.0.0.1:3210:3000"
+    volumes:
+      # The working directory: catalogue root, spec tree, party declarations
+      # and run output, exactly as the image's VEREDICTUM_* defaults expect.
+      - ./:/work
