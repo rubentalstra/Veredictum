@@ -86,7 +86,15 @@ impl EnvironmentFingerprint {
 /// An absent or unreadable procfs is a host that legitimately does not
 /// disclose the field, so it becomes `None` rather than an error.
 fn cpu_model() -> Option<String> {
-    let text = std::fs::read_to_string("/proc/cpuinfo").ok()?;
+    cpu_model_in(&std::fs::read_to_string("/proc/cpuinfo").ok()?)
+}
+
+/// The CPU model a `/proc/cpuinfo` body discloses.
+///
+/// Split from the read so the parse is exercised on every host: only Linux
+/// has a procfs, and a rule the engine applies to a recorded fingerprint must
+/// not go unchecked on the machines this suite runs on.
+fn cpu_model_in(text: &str) -> Option<String> {
     text.lines()
         .find_map(|line| {
             line.split_once(':')
@@ -101,7 +109,13 @@ fn cpu_model() -> Option<String> {
 /// `MemTotal` is reported in kibibytes, which this converts to bytes. An
 /// absent or unreadable procfs becomes `None`, as in [`cpu_model`].
 fn total_memory_bytes() -> Option<u64> {
-    let text = std::fs::read_to_string("/proc/meminfo").ok()?;
+    total_memory_bytes_in(&std::fs::read_to_string("/proc/meminfo").ok()?)
+}
+
+/// The total memory a `/proc/meminfo` body discloses, in bytes.
+///
+/// Split from the read for the reason [`cpu_model_in`] gives.
+fn total_memory_bytes_in(text: &str) -> Option<u64> {
     let line = text.lines().find(|line| line.starts_with("MemTotal:"))?;
     let kibibytes: u64 = line
         .split_whitespace()
@@ -158,5 +172,80 @@ mod tests {
         let labels = EnvironmentFingerprint::detect().labels();
         assert!(labels.contains_key("arch"));
         assert!(labels.contains_key("os"));
+    }
+
+    /// Every optional field the host disclosed reaches the label map, and one
+    /// it did not disclose is absent rather than labelled with a guess.
+    #[test]
+    fn the_label_map_carries_exactly_what_the_host_disclosed() {
+        let disclosed = EnvironmentFingerprint {
+            arch: String::from("aarch64"),
+            os: String::from("linux"),
+            available_parallelism: Some(8),
+            cpu_model: Some(String::from("Neoverse-N1")),
+            total_memory_bytes: Some(16_777_216),
+        };
+        let labels = disclosed.labels();
+        assert_eq!(
+            labels.get("available_parallelism").map(String::as_str),
+            Some("8")
+        );
+        assert_eq!(
+            labels.get("cpu_model").map(String::as_str),
+            Some("Neoverse-N1")
+        );
+        assert_eq!(
+            labels.get("total_memory_bytes").map(String::as_str),
+            Some("16777216")
+        );
+
+        let silent = EnvironmentFingerprint {
+            available_parallelism: None,
+            cpu_model: None,
+            total_memory_bytes: None,
+            ..disclosed
+        };
+        let labels = silent.labels();
+        assert_eq!(labels.len(), 2, "{labels:?}");
+        assert!(!labels.contains_key("cpu_model"));
+        assert!(!labels.contains_key("total_memory_bytes"));
+        assert!(!labels.contains_key("available_parallelism"));
+    }
+
+    /// A `/proc/cpuinfo` body as Linux writes it: the model name is read from
+    /// the first processor block, trimmed of the padding procfs puts there.
+    #[test]
+    fn the_cpu_model_is_read_from_a_procfs_body() {
+        const CPUINFO: &str = "processor\t: 0\nvendor_id\t: GenuineIntel\nmodel name\t: Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz\ncache size\t: 49152 KB\n\nprocessor\t: 1\nmodel name\t: Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz\n";
+        assert_eq!(
+            cpu_model_in(CPUINFO).as_deref(),
+            Some("Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz")
+        );
+        // An aarch64 procfs discloses no `model name` at all, which is a host
+        // that legitimately does not answer rather than an empty model.
+        assert_eq!(
+            cpu_model_in("processor\t: 0\nBogoMIPS\t: 50.00\nCPU part\t: 0xd0c\n"),
+            None
+        );
+        assert_eq!(cpu_model_in("model name\t:   \n"), None);
+        assert_eq!(cpu_model_in(""), None);
+    }
+
+    /// `MemTotal` is kibibytes, and the recorded field is bytes.
+    #[test]
+    fn the_total_memory_is_converted_from_kibibytes() {
+        const MEMINFO: &str = "MemTotal:       16307176 kB\nMemFree:         9312604 kB\nBuffers:          123456 kB\n";
+        assert_eq!(total_memory_bytes_in(MEMINFO), Some(16_307_176_u64 * 1024));
+        // A body with no MemTotal line, and one whose value is not a number,
+        // are both hosts that did not disclose the field.
+        assert_eq!(total_memory_bytes_in("MemFree: 100 kB\n"), None);
+        assert_eq!(total_memory_bytes_in("MemTotal:  unknown kB\n"), None);
+        assert_eq!(total_memory_bytes_in("MemTotal:\n"), None);
+        // The kibibyte-to-byte multiply is checked, so a nonsense value that
+        // would overflow is absent rather than a wrapped number.
+        assert_eq!(
+            total_memory_bytes_in(&format!("MemTotal: {} kB\n", u64::MAX)),
+            None
+        );
     }
 }

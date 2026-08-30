@@ -372,3 +372,143 @@ fn an_uploaded_batch_lands_in_the_listing_and_is_marked_transient()
     assert!(veredictum_console::bench_api::upload::batch(&state, &[]).is_err());
     Ok(())
 }
+
+/// A bare output mount, with no catalogue: nothing the bench surfaces read
+/// touches one.
+fn bare_state(out: &Path) -> veredictum_console::state::ConsoleState {
+    veredictum_console::state::ConsoleState {
+        root: repo_root().join("artifacts"),
+        specs: repo_root().join("specs/openehr"),
+        party: repo_root().join("party"),
+        out: out.to_path_buf(),
+        catalogue: std::sync::Arc::new(Err(String::from("not read by this surface"))),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        sign_key: None,
+        verify_key: None,
+        jobs: veredictum_console::run_job::JobSlot::default(),
+    }
+}
+
+/// Every cap the upload enforces is enforced BEFORE anything is written, and
+/// a refused batch leaves the output mount exactly as it found it.
+///
+/// The endpoint takes a document from an anonymous stranger — the console has
+/// no login by design — so each refusal is a boundary rather than a nicety.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn a_refused_batch_leaves_the_output_mount_untouched() -> Result<(), Box<dyn std::error::Error>> {
+    use veredictum_console::bench_api::upload::{
+        MAX_BATCH_BYTES, MAX_RECORD_BYTES, MAX_RECORDS, batch,
+    };
+
+    let out = assert_fs::TempDir::new()?;
+    let state = bare_state(out.path());
+    let alpha = std::fs::read(fixtures().join("bench-result-alpha.json"))?;
+
+    let scratched = |root: &Path| -> Result<usize, std::io::Error> {
+        let mut count = 0;
+        for entry in std::fs::read_dir(root)? {
+            if entry?
+                .file_name()
+                .to_string_lossy()
+                .starts_with(veredictum_console::bench_api::scan::SCRATCH_PREFIX)
+            {
+                count += 1;
+            }
+        }
+        Ok(count)
+    };
+
+    // More records than one batch accepts: refused on the count.
+    let many: Vec<(String, Vec<u8>)> = (0..=MAX_RECORDS)
+        .map(|index| (format!("r-{index}.json"), alpha.clone()))
+        .collect();
+    let refusal = batch(&state, &many).expect_err("a batch over the record cap is refused");
+    assert!(refusal.contains(&MAX_RECORDS.to_string()), "{refusal}");
+
+    // One record over the per-record cap: refused naming that record.
+    let oversized = usize::try_from(MAX_RECORD_BYTES)
+        .unwrap_or(usize::MAX)
+        .saturating_add(1);
+    let refusal = batch(
+        &state,
+        &[
+            (String::from("small.json"), alpha.clone()),
+            (String::from("huge.json"), vec![b'0'; oversized]),
+        ],
+    )
+    .expect_err("a record over the per-record cap is refused");
+    assert!(refusal.contains("huge.json"), "{refusal}");
+    assert_eq!(
+        scratched(out.path())?,
+        0,
+        "a refused batch takes back what it had already written"
+    );
+
+    // Records each inside the per-record cap that together exceed the batch
+    // cap: refused on the total, which is the bomb rule.
+    let each = usize::try_from(MAX_RECORD_BYTES).unwrap_or(usize::MAX);
+    let heavy: Vec<(String, Vec<u8>)> = (0..MAX_RECORDS)
+        .map(|index| (format!("part-{index}.json"), vec![b'0'; each]))
+        .collect();
+    let refusal = batch(&state, &heavy).expect_err("a batch over the total cap is refused");
+    assert!(refusal.contains(&MAX_BATCH_BYTES.to_string()), "{refusal}");
+    assert_eq!(scratched(out.path())?, 0);
+    assert!(
+        listing(&state).records.is_empty(),
+        "no refused record ever reached the listing"
+    );
+    Ok(())
+}
+
+/// The comparison answers every selection shape without reading a record it
+/// cannot resolve: one address needs a second, too many overflow the columns,
+/// and an address naming nothing says the record went away.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn the_comparison_states_why_a_selection_compares_nothing() -> Result<(), Box<dyn std::error::Error>>
+{
+    let out = assert_fs::TempDir::new()?;
+    let state = state_over_fixtures(out.path())?;
+
+    assert_eq!(compare(&state, ""), CompareScreen::Idle);
+    assert_eq!(
+        compare(&state, " , , "),
+        CompareScreen::Idle,
+        "a selection of nothing but separators selects nothing"
+    );
+
+    let listed = listing(&state);
+    let first = listed
+        .records
+        .first()
+        .ok_or("the fixture mount lists records")?;
+    assert_eq!(
+        compare(&state, &first.key),
+        CompareScreen::NeedsMore { selected: 1 },
+        "one record compares with nothing"
+    );
+
+    let overflowing = (0..12)
+        .map(|_| first.key.clone())
+        .collect::<Vec<_>>()
+        .join(",");
+    let CompareScreen::Unknown { reason } = compare(&state, &overflowing) else {
+        panic!("a selection past the column bound is refused with its reason");
+    };
+    assert!(reason.contains("records are selected"), "{reason}");
+
+    let CompareScreen::Unknown { reason } =
+        compare(&state, &format!("{},no-such-record", first.key))
+    else {
+        panic!("an address naming nothing is refused with its reason");
+    };
+    assert!(reason.contains("no longer here"), "{reason}");
+    Ok(())
+}

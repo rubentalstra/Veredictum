@@ -1484,3 +1484,447 @@ fn a_posture_mismatch_is_stated_in_the_comparison_header() -> Fallible {
     );
     Ok(())
 }
+
+/// Writes an executable stand-in for the docker CLI and answers `docker
+/// version` with `version`.
+///
+/// `DockerCli` carries its binary path for exactly this
+/// (`bench::baselines`'s own module documentation), so the orchestration
+/// around a container runtime — the compose document that gets written, the
+/// teardown that runs whether or not the measurement succeeded, the workspace
+/// that gets cleaned up — is provable without composing a real stack, which
+/// costs minutes and two multi-hundred-megabyte images.
+///
+/// The script logs every invocation, one argument line per call, so a test
+/// asserts on what the engine ASKED the runtime to do rather than on a
+/// side effect.
+fn fake_docker(
+    dir: &std::path::Path,
+    version: &str,
+    up_exit: i32,
+) -> Result<(PathBuf, PathBuf), std::io::Error> {
+    let binary = dir.join("docker");
+    let log = dir.join("docker.log");
+    let script = format!(
+        r#"#!/bin/sh
+printf '%s\n' "$*" >> '{log}'
+case "$1" in
+  version) printf '{version}\n' ;;
+  compose)
+    for arg in "$@"; do
+      case "$arg" in
+        up) printf 'compose up refused by the fake runtime\n' >&2 ; exit {up_exit} ;;
+        down) exit 0 ;;
+      esac
+    done
+    ;;
+esac
+exit 0
+"#,
+        log = log.display(),
+    );
+    std::fs::write(&binary, script)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))?;
+    }
+    Ok((binary, log))
+}
+
+/// The lines a [`fake_docker`] run recorded, or an empty list when it was
+/// never invoked at all.
+fn docker_log(log: &std::path::Path) -> Vec<String> {
+    std::fs::read_to_string(log)
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+/// A runtime that answers `docker version` is probed once for the whole
+/// sweep, and the version it disclosed reaches the progress stream.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_container_runtime_is_probed_once_and_its_version_reported() -> Fallible {
+    let scratch = assert_fs::TempDir::new()?;
+    let (binary, log) = fake_docker(scratch.path(), "27.5.1", 1)?;
+    let docker = DockerCli::at(&binary);
+    assert_eq!(docker.binary(), binary.as_path());
+    assert_eq!(docker.probe()?, "27.5.1");
+
+    let calls = docker_log(&log);
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert!(
+        calls
+            .first()
+            .is_some_and(|call| call.starts_with("version")),
+        "{calls:?}"
+    );
+    Ok(())
+}
+
+/// A runtime that answers `docker version` with a failure is unavailable, and
+/// the refusal carries the binary that was asked plus what it said.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_runtime_that_refuses_its_version_is_unavailable() -> Fallible {
+    let scratch = assert_fs::TempDir::new()?;
+    let binary = scratch.path().join("docker");
+    std::fs::write(
+        &binary,
+        "#!/bin/sh\nprintf 'Cannot connect to the Docker daemon\\n' >&2\nexit 1\n",
+    )?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))?;
+    }
+    let error = DockerCli::at(&binary)
+        .probe()
+        .expect_err("a runtime that exits non-zero on `version` is not available")
+        .to_string();
+    assert!(error.contains(&binary.display().to_string()), "{error}");
+    assert!(
+        error.contains("Cannot connect to the Docker daemon"),
+        "{error}"
+    );
+    Ok(())
+}
+
+/// The sweep writes the pinned compose document and its side files, asks the
+/// runtime to bring the stack up, and — when that fails — tears the project
+/// down anyway and removes the workspace it made.
+///
+/// The teardown-regardless property is the one a leaked container costs real
+/// money for, and it is exactly the property a real-stack test cannot prove
+/// cheaply: this drives it through the refusal arm, which reaches it in
+/// milliseconds.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_refused_compose_still_tears_the_project_down() -> Fallible {
+    use veredictum::bench::baselines::{BaselineRun, run_baselines};
+
+    let scratch = assert_fs::TempDir::new()?;
+    let (binary, log) = fake_docker(scratch.path(), "27.5.1", 3)?;
+    let docker = DockerCli::at(&binary);
+    let pack = smoke();
+
+    let mut reported: Vec<String> = Vec::new();
+    let progress = std::sync::Mutex::new(&mut reported);
+    let error = run_baselines(
+        &BaselineRun {
+            pack: &pack,
+            profile: &MINIMAL,
+            repetitions: 1,
+            scale: 1.0,
+            seed_workers: None,
+            docker: &docker,
+        },
+        &|message| {
+            if let Ok(mut sink) = progress.lock() {
+                sink.push(message);
+            }
+        },
+    )
+    .expect_err("a compose that exits non-zero refuses the baseline");
+
+    // The refusal names the baseline and quotes the runtime's own diagnostic,
+    // rather than a generic "the sweep failed".
+    let text = error.to_string();
+    let first = ReferenceCdr::ALL
+        .first()
+        .expect("the reference set is not empty");
+    assert!(text.contains(first.as_str()), "{text}");
+    assert!(
+        text.contains("compose up refused by the fake runtime"),
+        "{text}"
+    );
+
+    let calls = docker_log(&log);
+    assert!(
+        calls
+            .first()
+            .is_some_and(|call| call.starts_with("version")),
+        "the runtime is proved before anything is composed: {calls:?}"
+    );
+    let up = calls
+        .iter()
+        .find(|call| call.contains(" up "))
+        .expect("the sweep asked the runtime to bring the stack up");
+    assert!(up.contains(&first.pin().project()), "{up}");
+    assert!(up.contains("--wait"), "{up}");
+    let down = calls
+        .iter()
+        .find(|call| call.contains(" down "))
+        .expect("a refused compose is still torn down");
+    assert!(down.contains(&first.pin().project()), "{down}");
+    assert!(
+        down.contains("--volumes"),
+        "fresh volumes per baseline is the fairness rule: {down}"
+    );
+    assert!(
+        calls.iter().all(|call| !call.contains(
+            ReferenceCdr::ALL
+                .get(1)
+                .map_or("", |cdr| cdr.pin().recipe_repository)
+        )),
+        "the sweep stops at the first refusal rather than composing the next: {calls:?}"
+    );
+
+    // The workspace the sweep wrote is gone with it: a compose document left
+    // in the temp directory would be inherited by the next run on this host.
+    let workspace =
+        std::env::temp_dir().join(format!("{}-{}", first.pin().project(), std::process::id()));
+    assert!(!workspace.exists(), "{}", workspace.display());
+
+    assert!(
+        reported
+            .iter()
+            .any(|line| line.contains("container runtime answers, server version 27.5.1")),
+        "{reported:?}"
+    );
+    assert!(
+        reported.iter().any(|line| line.contains("tearing down")),
+        "{reported:?}"
+    );
+    Ok(())
+}
+
+/// A plain client over one fake SUT, with no authentication.
+fn client_for(
+    sut: &FakeSut,
+) -> Result<veredictum::bench::client::BenchClient, Box<dyn std::error::Error>> {
+    Ok(veredictum::bench::client::BenchClient::new(
+        &sut.base_url(),
+        AuthKind::None,
+        None,
+    )?)
+}
+
+/// Preflight stops at the FIRST exchange that does not answer, and the
+/// refusal names that exchange rather than "the run failed".
+///
+/// Every arm is its own fake SUT: a refusal that fires only because an
+/// earlier one already fired proves nothing about the arm it claims to pin.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn preflight_names_the_exchange_that_refused_it() -> Fallible {
+    let pack = smoke();
+
+    // 1. The template list itself is refused.
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/definition/template/adl1.4"))
+            .respond_with(ResponseTemplate::new(503)),
+    );
+    let error = veredictum::bench::run::preflight(&client_for(&sut)?, &pack)
+        .expect_err("a server that will not list templates is not benchable")
+        .to_string();
+    assert!(error.contains("template list"), "{error}");
+    assert!(error.contains("503"), "{error}");
+
+    // 2. The template upload answers a status that is neither created nor
+    //    already-there, which is the only other acceptable answer.
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/definition/template/adl1.4"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([]))),
+    );
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/definition/template/adl1.4"))
+            .respond_with(ResponseTemplate::new(422)),
+    );
+    let error = veredictum::bench::run::preflight(&client_for(&sut)?, &pack)
+        .expect_err("a template the server will not accept stops the run")
+        .to_string();
+    assert!(error.contains("template upload"), "{error}");
+    assert!(
+        error.contains("201, 204 or 409 expected"),
+        "the refusal states what a conformant answer would have been: {error}"
+    );
+
+    // 3. The scratch EHR create answers something other than 201.
+    let sut = FakeSut::start();
+    mount_templates(&sut);
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/ehr"))
+            .respond_with(ResponseTemplate::new(200)),
+    );
+    let error = veredictum::bench::run::preflight(&client_for(&sut)?, &pack)
+        .expect_err("a create that is not a 201 refuses the preflight")
+        .to_string();
+    assert!(error.contains("scratch ehr create"), "{error}");
+    assert!(error.contains("201 expected"), "{error}");
+
+    // 4. The create IS a 201, and discloses no identifier anywhere — no uid
+    //    body, no ETag, no Location. The run cannot proceed, and says why.
+    let sut = FakeSut::start();
+    mount_templates(&sut);
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/ehr"))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+    let error = veredictum::bench::run::preflight(&client_for(&sut)?, &pack)
+        .expect_err("a create that discloses no ehr_id refuses the preflight")
+        .to_string();
+    assert!(error.contains("disclosed no ehr_id"), "{error}");
+
+    // 5. The commit answers a status that is not a creation.
+    let sut = FakeSut::start();
+    mount_templates(&sut);
+    mount_ehr_create(&sut);
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/ehr/[^/]+/composition$"))
+            .respond_with(ResponseTemplate::new(400)),
+    );
+    let error = veredictum::bench::run::preflight(&client_for(&sut)?, &pack)
+        .expect_err("a refused commit refuses the preflight")
+        .to_string();
+    assert!(error.contains("scratch composition commit"), "{error}");
+    assert!(error.contains("201 or 204 expected"), "{error}");
+
+    // 6. The commit is created and discloses no version uid.
+    let sut = FakeSut::start();
+    mount_templates(&sut);
+    mount_ehr_create(&sut);
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/ehr/[^/]+/composition$"))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+    let error = veredictum::bench::run::preflight(&client_for(&sut)?, &pack)
+        .expect_err("a commit that discloses no version uid refuses the preflight")
+        .to_string();
+    assert!(error.contains("disclosed no version uid"), "{error}");
+
+    // 7. Everything is created and the read back does not answer 200, which
+    //    is the write-then-READ half the preflight exists to prove.
+    let sut = FakeSut::start();
+    mount_templates(&sut);
+    mount_ehr_create(&sut);
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/ehr/[^/]+/composition$"))
+            .respond_with(ResponseTemplate::new(201).insert_header("ETag", "\"c-1::sut::1\"")),
+    );
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path_regex(r"^/ehr/[^/]+/composition/[^/]+$"))
+            .respond_with(ResponseTemplate::new(404)),
+    );
+    let error = veredictum::bench::run::preflight(&client_for(&sut)?, &pack)
+        .expect_err("a commit that cannot be read back refuses the preflight")
+        .to_string();
+    assert!(error.contains("scratch composition read"), "{error}");
+    assert!(error.contains("200 expected"), "{error}");
+    Ok(())
+}
+
+/// The template list and upload a healthy server answers.
+fn mount_templates(sut: &FakeSut) {
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/definition/template/adl1.4"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([]))),
+    );
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/definition/template/adl1.4"))
+            .respond_with(ResponseTemplate::new(409)),
+    );
+}
+
+/// A scratch EHR create that discloses its identifier through `Location`.
+fn mount_ehr_create(sut: &FakeSut) {
+    sut.mount(Mock::given(method("POST")).and(path("/ehr")).respond_with(
+        ResponseTemplate::new(201).insert_header("Location", "http://sut/ehr/EHR-1"),
+    ));
+}
+
+/// A server that discloses a version has it recorded; one that discloses
+/// none is legitimately silent, and silence is `None` rather than a run
+/// failure or an invented string.
+///
+/// No openEHR specification defines a version-disclosure endpoint, so every
+/// arm here is our own best-effort probe over shapes deployments serve.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_version_probe_reads_what_a_server_discloses_and_nothing_more() -> Fallible {
+    use veredictum::bench::run::probe_sut_version;
+
+    // The first shape: `system/info` carrying `solution_version`.
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/system/info"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(json!({ "solution_version": "2.19.0" })),
+            ),
+    );
+    assert_eq!(
+        probe_sut_version(&client_for(&sut)?).as_deref(),
+        Some("2.19.0")
+    );
+
+    // The second shape: the base path carrying a nested `info.version`, read
+    // only because the first shape answered nothing usable.
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/system/info"))
+            .respond_with(ResponseTemplate::new(404)),
+    );
+    sut.mount(Mock::given(method("GET")).and(path("/")).respond_with(
+        ResponseTemplate::new(200).set_body_json(json!({
+            "info": { "version": "1.4.2" }
+        })),
+    ));
+    assert_eq!(
+        probe_sut_version(&client_for(&sut)?).as_deref(),
+        Some("1.4.2")
+    );
+
+    // A body that is not JSON at all, and a JSON body carrying none of the
+    // three pointers: both are silence, never a guess.
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/system/info"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("not json")),
+    );
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({ "name": "a cdr" }))),
+    );
+    assert_eq!(probe_sut_version(&client_for(&sut)?), None);
+
+    // A server that refuses both probes discloses nothing, and the probe is
+    // still not an error.
+    let sut = FakeSut::start();
+    sut.mount(Mock::given(method("GET")).respond_with(ResponseTemplate::new(500)));
+    assert_eq!(probe_sut_version(&client_for(&sut)?), None);
+    Ok(())
+}

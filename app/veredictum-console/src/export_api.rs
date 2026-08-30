@@ -184,6 +184,11 @@ pub mod prepare {
     /// The refusal that applies: no finished run, no claim, no key mounted,
     /// the engine's own diagnostic, or the verbatim filesystem failure.
     pub fn run(state: &ConsoleState) -> Result<ExportSummary, String> {
+        // The no-run refusal precedes engine discovery, so sealing nothing is
+        // refused the same way on a host with no engine mounted at all.
+        if job_dir(state)?.is_none() {
+            return Err(String::from("no finished run: grade a server first"));
+        }
         let engine = crate::engine::locate().map_err(|e| e.to_string())?;
         run_with(state, &engine)
     }
