@@ -154,7 +154,11 @@ you add one, add its enforcement in the same change.
 
 `<type>/<kebab-case-slug>` with `type` one of `feat`, `fix`, `chore`, `docs`,
 `refactor`, `perf`, `test`, `ci`, `build`, `release`. Pick the type by the
-dominant change. Never force-push `main`.
+dominant change. Never force-push `main`. When one issue's fix builds on
+another's unmerged branch, GitHub's native stacked pull requests are the
+candidate mechanism (cascading rebase, bottom-up merges, per-layer CI);
+`.claude/rules/stacked-prs.md` is the full reference and the adoption gate —
+one issue per PR and every gate stay unchanged either way.
 
 ### 8. Never add AI or Claude attribution to a commit or a PR
 
@@ -462,6 +466,9 @@ subagents.
   authority; the SonarQube Cloud setup facts
 - `.claude/rules/issue-relationships.md` — the four native issue edges, the one
   sanctioned write path, and the no-duplication law
+- `.claude/rules/stacked-prs.md` — GitHub stacked pull requests: the `gh stack`
+  command surface, how the semantics meet this repository's rules, and the
+  adoption gate
 - `README.md` — the product identity and the origin of the name
 - [FerroEHR#2789](https://github.com/rubentalstra/FerroEHR/issues/2789) — the
   migration contract
