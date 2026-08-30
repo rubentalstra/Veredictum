@@ -44,6 +44,20 @@ version on.
   mounts the working directory; every release from the next cut attaches it
   beside the binaries, `check-console-pin.sh` holds its image tag to the one
   engine value, and the release pipeline refuses to publish without it.
+- **A reproduction carries the IXIT it ran under, and its digest is
+  re-derivable (#284).** `ixit_digest` is now the leading 8 bytes of the
+  SHA-256 over the declaration's bytes, lowercase hex, so a reader checks a
+  published record with `sha256sum ixit.json | cut -c1-16`; the previous value
+  came from `DefaultHasher`, whose algorithm the standard library leaves
+  unspecified across releases, so nothing outside one build could reproduce
+  it. The reproduce lane copies the topology's ixit into the bundle as
+  `ixit.json`, attests it beside `results.json`, and fails the run when the
+  recorded digest does not re-derive from the carried bytes. Registry entries
+  gain an `ixit` artifact role so a committed entry pins that declaration, and
+  the results schema pins `ixit_digest` to 16 lowercase hex characters. The
+  first reproduction recorded `186989ede4f387fc` with no way to resolve it,
+  which left 40-odd admin rows not-applicable for a reason no reader could
+  check.
 - **The 429 publish guard is pinned in both directions, the driver's exchange
   names its URL, and a failed statement reset no longer poisons a probe's
   attribution (#145).** The rule that a rate-limited window never becomes a

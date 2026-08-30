@@ -878,7 +878,11 @@ pub fn results_schema() -> Value {
             },
             "schedule_release": { "type": "string", "minLength": 1 },
             "tech_profile": tech_profile_def(),
-            "ixit_digest": { "type": "string", "minLength": 1 },
+            "ixit_digest": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{16}$",
+                "description": "The leading 8 bytes of the SHA-256 over the ixit declaration this campaign was driven under, lowercase hex, computed over the document's bytes with nothing canonicalized first. A reader holding that declaration re-derives it with `sha256sum ixit.json | cut -c1-16`."
+            },
             "restapi_specs_version": {
                 "type": "string",
                 "minLength": 1,
