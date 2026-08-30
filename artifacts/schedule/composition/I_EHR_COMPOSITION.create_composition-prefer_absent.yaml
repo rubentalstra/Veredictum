@@ -42,7 +42,9 @@ flow:
     variant: prefer_absent               # sends NO Prefer header
     with: { ehr_id: "${ehr_id}", composition: "${ds:cnf.composition.minimal_event.v1}" }
     expect: created                      # 201 with an empty body — the assumed default
-    capture: { version_uid: created.version_uid }
+    capture:
+      version_uid: created.version_uid
+      versioned_object_uid: created.versioned_object_uid
   - step: 2                              # the identity the empty-bodied response carries addresses the COMPOSITION
     call: get_composition_at_version
     with: { ehr_id: "${ehr_id}", version_uid: "${version_uid}" }

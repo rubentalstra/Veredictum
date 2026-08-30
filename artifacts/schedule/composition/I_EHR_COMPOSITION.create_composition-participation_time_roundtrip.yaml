@@ -69,7 +69,9 @@ flow:
       ehr_id: "${ehr_id}"
       composition: "${ds:cnf.composition.minimal_event.participation_time}"
     expect: created
-    capture: { version_uid: created.version_uid }
+    capture:
+      version_uid: created.version_uid
+      versioned_object_uid: created.versioned_object_uid
   - step: 2                              # both intervals survived, verbatim
     call: get_composition_at_version
     format: canonical-json
