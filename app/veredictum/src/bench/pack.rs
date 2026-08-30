@@ -244,8 +244,8 @@ impl Fixture {
             return Ok(());
         }
         Err(BenchError::FixturePin {
-            pack: pack.as_str().to_owned(),
-            fixture: self.key.as_str().to_owned(),
+            pack,
+            fixture: self.key,
             expected: self.sha256.to_owned(),
             actual,
         })
@@ -792,16 +792,14 @@ impl BenchPack {
                 .profiles
                 .first()
                 .copied()
-                .ok_or_else(|| BenchError::NoProfiles {
-                    pack: self.id.as_str().to_owned(),
-                });
+                .ok_or_else(|| BenchError::NoProfiles { pack: self.id });
         };
         self.profiles
             .iter()
             .copied()
             .find(|profile| profile.name == token)
             .ok_or_else(|| BenchError::UnknownProfile {
-                pack: self.id.as_str().to_owned(),
+                pack: self.id,
                 requested: token.to_owned(),
                 known: self.profile_names().join(", "),
             })
@@ -1895,11 +1893,9 @@ mod tests {
                 .and_then(serde_json::Value::as_str),
             Some("openEHR-EHR-COMPOSITION.encounter.v1")
         );
-        assert!(
-            VITAL_SIGNS_OPT.contains("<template_id><value>Vital signs</value></template_id>")
-                || VITAL_SIGNS_OPT.contains("Vital signs"),
-            "the embedded template does not carry the template id the composition names"
-        );
+        let identity = template_identity(VITAL_SIGNS_OPT)
+            .map_err(|detail| format!("the embedded template does not parse: {detail}"))?;
+        assert_eq!(identity.id, "Vital signs");
         Ok(())
     }
 
