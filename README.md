@@ -439,7 +439,7 @@ below says what that work contributed to this catalogue.
   Pablo Pazos and Jake Smolka (Hannover Medical School) in their copyright
   headers, and the team maintains that set as its
   [integration tests](https://github.com/ehrbase/integration-tests). 156 of
-  the 463 corpus provenance records here name that set as the source of the
+  the 462 corpus provenance records here name that set as the source of the
   entry's bytes or of its template skeleton, each one re-adjudicated against
   the released specifications.
 - **The openEHR Foundation:** the
