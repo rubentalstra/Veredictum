@@ -1,14 +1,22 @@
 # The ONE build-context ignore file for every image built from this repository
-# root. A Dockerfile-adjacent `*.dockerignore` would SHADOW this file entirely
+# root — docker/Dockerfile and Dockerfile.vercel both. A Dockerfile-adjacent
+# `*.dockerignore` would SHADOW this file entirely
 # (https://docs.docker.com/build/concepts/context — a Dockerfile-specific
-# ignore-file takes precedence), so there is only this one.
+# ignore-file takes precedence), and Vercel's buildah supports only this
+# root-level form anyway (https://github.com/containers/buildah/issues/4236),
+# so there is only this one — the FerroEHR shape.
 #
-# The context is deliberately small. This repository is 347 MB, and almost none
-# of it is a compile input: the catalogue, the corpora and the vendored
-# specification oracle are read at RUN time from a mount, never embedded — no
-# source file uses `include_str!` or `include_bytes!`. Sending them to the
-# daemon would cost minutes per build and invalidate the COPY layer on every
-# artifact edit.
+# What the hosted console BAKES therefore must not be excluded here:
+# Dockerfile.vercel COPYs `artifacts/`, `specs/openehr/` and `party/` into
+# /work (Vercel has no volume), and the first sandbox build failed on exactly
+# an exclusion of those trees. They stay in the context; the price is that the
+# from-source operator build's `COPY . .` now carries them into its builder
+# stage, which only that local path pays — the CI target COPYs bin/ and site/
+# alone, and BuildKit transfers lazily.
+#
+# Everything else stays out. No source file uses `include_str!` or
+# `include_bytes!` on the excluded trees, and a smaller context keeps COPY
+# layers stable across edits to what images never read.
 #
 # What must NOT be excluded, so a future edit does not quietly break a build:
 # `app/*/src/`, the manifests, `Cargo.lock`, `rust-toolchain.toml` (the builder stage
@@ -27,11 +35,10 @@ target/
 .git/
 .gitattributes
 
-# The catalogue, the corpora, the party declarations and the vendored oracle —
-# read from a mount at run time, and the bulk of the repository's size.
-artifacts/
-specs/
-party/
+# The published schemas, the verification pack and the brand assets — read by
+# no image. The catalogue (artifacts/), the vendored oracle (specs/) and the
+# party declarations (party/) are NOT listed: Dockerfile.vercel bakes them
+# (header above), and the operator image simply never COPYs them.
 schemas/
 verification-pack/
 assets/
