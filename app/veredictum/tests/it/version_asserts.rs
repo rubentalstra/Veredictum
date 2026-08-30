@@ -320,7 +320,7 @@ fn an_envelope_already_in_hand_is_judged_without_a_second_read() -> Fallible {
 
 /// A `COMPOSITION` as a server serves it under `Prefer: return=representation`:
 /// the versioned item, carrying the version's own `OBJECT_VERSION_ID` at
-/// `uid.value` (RM common `UML/classes/version.adoc` §Attributes) and no
+/// `uid.value` (RM common `UML/classes/version.adoc` §Functions) and no
 /// `commit_audit` at all.
 fn representation_composition(tree: u32) -> Value {
     json!({
@@ -372,6 +372,159 @@ fn a_representation_body_is_not_the_envelope_however_its_uid_matches() -> Fallib
         sut.requests().len(),
         2,
         "the row must fall through to the envelope read the family declares"
+    );
+    Ok(())
+}
+
+/// One `AUDIT_DETAILS` coded by the openEHR `audit change type` group
+/// (TERM `computable/XML/en/openehr_terminology.xml`: `249|creation|`,
+/// `250|amendment|`).
+fn audit(change_code: &str, rubric: &str) -> Value {
+    json!({
+        "_type": "AUDIT_DETAILS",
+        "change_type": {
+            "value": rubric,
+            "defining_code": {
+                "terminology_id": { "value": "openehr" },
+                "code_string": change_code
+            }
+        }
+    })
+}
+
+/// An `IMPORTED_VERSION` as the released ITS-JSON binds it: the wrapper's own
+/// `contribution` and `commit_audit` beside the `item` it imported, and no
+/// `uid` of its own.
+///
+/// `components/RM/Release-1.1.0/Common/IMPORTED_VERSION.json` requires
+/// `contribution`, `commit_audit` and `item`, and closes the object with
+/// `additionalProperties: false`. The wrapper's audit trail is "distinct from
+/// those of the imported `ORIGINAL_VERSION`" (RM common
+/// `UML/classes/imported_version.adoc` §Description), so the two carry
+/// different change types here and the row must judge the wrapper's.
+fn imported_version(tree: u32) -> Value {
+    json!({
+        "_type": "IMPORTED_VERSION",
+        "contribution": {
+            "_type": "OBJECT_REF",
+            "namespace": "local",
+            "type": "CONTRIBUTION",
+            "id": { "_type": "HIER_OBJECT_ID", "value": "0e0f6ec4-2b7c-4b52-9b13-2d9a2ef0f8a1" }
+        },
+        "commit_audit": audit("249", "creation"),
+        "item": {
+            "_type": "ORIGINAL_VERSION",
+            "uid": { "value": version_uid(tree) },
+            "lifecycle_state": {
+                "value": "complete",
+                "defining_code": {
+                    "terminology_id": { "value": "openehr" },
+                    "code_string": "532"
+                }
+            },
+            "commit_audit": audit("250", "amendment")
+        }
+    })
+}
+
+/// A `version` row over an `IMPORTED_VERSION` judges the WRAPPER's own
+/// `commit_audit`, which is the trail of the import itself.
+///
+/// `IMPORTED_VERSION` inherits `commit_audit` and `contribution` from
+/// `VERSION`, "providing imported versions with their own audit trail and
+/// Contribution, distinct from those of the imported `ORIGINAL_VERSION`"
+/// (RM common `UML/classes/imported_version.adoc` §Description). The served
+/// wrapper reads `249|creation|` and the version it wraps reads
+/// `250|amendment|`, so a row that read through to `item` would judge the
+/// wrong trail.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_imported_version_is_judged_against_the_wrappers_own_audit() -> Fallible {
+    let sut = FakeSut::start();
+    mount_create(&sut);
+    mount_envelope(&sut, imported_version(1));
+    let bindings = [create_composition_binding(), version_read_binding()];
+
+    let mut vars = provisioned_vars()?;
+    let failures = drive(
+        &sut,
+        &bindings,
+        create_case(&json!([{
+            "assert": "version", "of": "${version_uid}", "change_type": "CREATE"
+        }])),
+        &mut vars,
+    )?;
+    assert!(failures.is_empty(), "{failures:?}");
+
+    let mut vars = provisioned_vars()?;
+    let mismatched = drive(
+        &sut,
+        &bindings,
+        create_case(&json!([{
+            "assert": "version", "of": "${version_uid}", "change_type": "MODIFY"
+        }])),
+        &mut vars,
+    )?;
+    let first = mismatched
+        .first()
+        .ok_or("the imported wrapper's change type passed silently")?;
+    assert!(
+        matches!(first, AssertionOutcome::Mismatch(_)),
+        "a served value that contradicts the assertion is a finding against the SUT: {first:?}"
+    );
+    assert!(
+        first.reason().contains("249"),
+        "the failure names the item's code rather than the wrapper's: {}",
+        first.reason()
+    );
+    Ok(())
+}
+
+/// An `IMPORTED_VERSION` already in hand is judged through the family's
+/// version read, because the in-hand shortcut compares a `uid` the class
+/// cannot carry.
+///
+/// The shortcut takes the step's own body only when its top-level `uid.value`
+/// is the version the row resolved, and `IMPORTED_VERSION.json` closes the
+/// object to `contribution`/`commit_audit`/`signature`/`item` with
+/// `additionalProperties: false`. `IMPORTED_VERSION.uid` is an effected
+/// function, `Result = item.uid` (RM common
+/// `UML/classes/imported_version.adoc` §Functions), so the identity travels
+/// inside `item`. The cost is one extra exchange; the verdict is the same.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_imported_version_in_hand_is_judged_through_the_envelope_read() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path(format!("/ehr/{EHR_ID}/composition")))
+            .respond_with(
+                ResponseTemplate::new(201)
+                    .insert_header("ETag", format!("W/\"{}\"", version_uid(1)).as_str())
+                    .set_body_json(imported_version(1)),
+            ),
+    );
+    mount_envelope(&sut, imported_version(1));
+    let mut vars = provisioned_vars()?;
+    let failures = drive(
+        &sut,
+        &[create_composition_binding(), version_read_binding()],
+        create_case(&json!([{
+            "assert": "version", "of": "${version_uid}", "change_type": "CREATE"
+        }])),
+        &mut vars,
+    )?;
+    assert!(failures.is_empty(), "{failures:?}");
+    assert_eq!(
+        sut.requests().len(),
+        2,
+        "an imported version carries no top-level uid, so the row reads the envelope"
     );
     Ok(())
 }

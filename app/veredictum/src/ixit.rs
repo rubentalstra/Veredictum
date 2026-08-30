@@ -478,8 +478,8 @@ impl Ixit {
     ///
     /// RM common `master06-change_control_package.adoc` §Digital Signature —
     /// the mode is a deployment fact, so a party exercising both modes runs
-    /// two deployments and the verification posture follows the instance the
-    /// step addressed, never the party-wide default.
+    /// two deployments, and the instance a step addressed overrides the
+    /// party-wide default whenever it declares a mode of its own.
     #[must_use]
     pub fn signing_of<'i>(
         &'i self,
