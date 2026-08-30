@@ -31,3 +31,8 @@ a "not X but Y" tell ("checkable rather than asserted"), and sign-off padding.
   line at most ("Happy to talk either way").
 - Discourse posts are MARKDOWN; Outlook emails are plain-text .txt files on
   the Desktop.
+- NEVER invent a biographical fact in their voice ("I have been following
+  this thread" when they had not) — every "I did/read/followed X" claim must
+  come from them or from their own published posts. Their Discourse
+  announcements (t/17230 FerroEHR, t/17238 Veredictum) are the source for
+  their real positions and phrasing; reuse those words.
