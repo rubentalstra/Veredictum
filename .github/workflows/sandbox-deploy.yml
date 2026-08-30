@@ -57,6 +57,7 @@ on:
     branches: [main]
     paths:
       - Dockerfile.vercel
+      - .dockerignore # it decides what the bake below can even see
       - vercel.json
       - deploy/vercel/**
   workflow_dispatch:
