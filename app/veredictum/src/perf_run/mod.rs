@@ -89,3 +89,57 @@ pub fn rate_limited_refusal(instrument: &str) -> String {
          again once the window is unlimited."
     )
 }
+
+/// Decides whether a finished window may become a published record.
+///
+/// Both measured instruments consult this at the seam where a window would
+/// reach a results document, so one 429 anywhere in the process withholds
+/// the record for `instrument` in exactly one place.
+///
+/// # Errors
+/// [`rate_limited_refusal`] for `instrument` once any arrival in this process
+/// observed `429 Too Many Requests`.
+pub fn refuse_rate_limited_record(instrument: &str) -> Result<(), String> {
+    if rate_limited_observed() {
+        return Err(rate_limited_refusal(instrument));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{note_rate_limited, rate_limited_observed, refuse_rate_limited_record};
+
+    // NOTE: nextest runs each test in its own process
+    // (<https://nexte.st/docs/design/how-it-works/>), so the two directions of
+    // this process-global latch never observe each other.
+
+    /// A window no arrival was rate-limited in is the server's own, so the
+    /// gate both instruments consult lets the record through.
+    #[test]
+    fn a_clean_window_publishes() {
+        assert!(
+            !rate_limited_observed(),
+            "nothing in this process observed a 429"
+        );
+        assert_eq!(refuse_rate_limited_record("perf"), Ok(()));
+        assert_eq!(refuse_rate_limited_record("stress"), Ok(()));
+    }
+
+    /// One rate-limited arrival withholds the record from both instruments,
+    /// and the refusal names the status the operator has to clear.
+    #[test]
+    fn a_rate_limited_window_is_never_published() {
+        note_rate_limited();
+        assert!(rate_limited_observed(), "the 429 observation did not latch");
+
+        let perf = refuse_rate_limited_record("perf")
+            .expect_err("a latched 429 withholds the measured record");
+        assert!(perf.starts_with("perf: "), "{perf}");
+        assert!(perf.contains("429"), "{perf}");
+
+        let stress = refuse_rate_limited_record("stress")
+            .expect_err("a latched 429 withholds the stress record");
+        assert!(stress.starts_with("stress: "), "{stress}");
+    }
+}
