@@ -76,6 +76,14 @@ version on.
   and a local quickstart is legitimately `http://localhost` (#296).
 
 ### Fixed
+- **The published image hydrates (#369).** The per-architecture ssr binary
+  was compiled without `LEPTOS_OUTPUT_NAME` in the compiler's environment, so
+  leptos's `option_env!` probe baked a `_bg` wasm URL into it while the site
+  bundle ships the cargo-leptos-named `veredictum-console.wasm` — every
+  published image to date served its pages SSR-only and 404'd its own client
+  bundle on each load. The compile step now carries the name, and the image
+  smoke fetches every `/pkg/` asset the served page references, so the class
+  cannot ship green again.
 - **One judgement per sealed record (#243).** Preparing the console's export
   ran the full judgement five times over the same run — once per fact the
   summary, the seal card, the badge and the HTML report each asked for — and
