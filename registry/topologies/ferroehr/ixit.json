@@ -14,5 +14,11 @@
         "mode": "none"
       }
     }
+  },
+  "signing": {
+    "mode": "digest",
+    "algorithm": "sha256",
+    "encoding": "base64",
+    "prefix": "sha256:"
   }
 }
