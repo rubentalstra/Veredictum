@@ -16,7 +16,9 @@ use serde::Deserialize;
 use sha2::{Digest as _, Sha256};
 
 use crate::bench::BenchError;
-use crate::bench::posture::{CLINICAL_DEFAULT, MINIMAL, PostureProfile};
+use crate::bench::posture::{
+    CLINICAL_DEFAULT, MINIMAL, MINIMAL_SIGNED_DIGEST, MINIMAL_SIGNED_PGP, PostureProfile,
+};
 
 /// The blood-pressure operational template every embedded pack seeds with.
 ///
@@ -1190,11 +1192,11 @@ comparable with a 1.0.0 one.";
 pub fn smoke() -> BenchPack {
     BenchPack {
         id: SMOKE,
-        version: "1.1.0".to_owned(),
+        version: "1.2.0".to_owned(),
         description: format!("{SMOKE_PREAMBLE} {}", failed_share_statement()),
         max_failed_share: DEFAULT_MAX_FAILED_SHARE,
         seed: 0x5645_5245_4449_4354,
-        profiles: vec![&MINIMAL],
+        profiles: vec![&MINIMAL, &MINIMAL_SIGNED_DIGEST, &MINIMAL_SIGNED_PGP],
         phases: vec![
             BenchPhase::Seed(SeedPhase {
                 name: "seed".to_owned(),
@@ -1315,14 +1317,19 @@ pub fn community_vitals() -> BenchPack {
     let fixtures = vital_signs_fixtures();
     BenchPack {
         id: COMMUNITY_VITALS,
-        version: "1.0.0".to_owned(),
+        version: "1.1.0".to_owned(),
         description: format!(
             "{COMMUNITY_VITALS_DESCRIPTION} {}",
             failed_share_statement()
         ),
         max_failed_share: DEFAULT_MAX_FAILED_SHARE,
         seed: 0x436f_6d6d_5f56_6974,
-        profiles: vec![&MINIMAL, &CLINICAL_DEFAULT],
+        profiles: vec![
+            &MINIMAL,
+            &MINIMAL_SIGNED_DIGEST,
+            &MINIMAL_SIGNED_PGP,
+            &CLINICAL_DEFAULT,
+        ],
         phases: vec![
             BenchPhase::Seed(SeedPhase {
                 name: "write".to_owned(),
@@ -1436,11 +1443,11 @@ const AQL_MIX_CLASSES: &[(BenchOp, &str)] = &[
 pub fn aql_mix() -> BenchPack {
     BenchPack {
         id: AQL_MIX,
-        version: "1.0.0".to_owned(),
+        version: "1.1.0".to_owned(),
         description: aql_mix_description(),
         max_failed_share: DEFAULT_MAX_FAILED_SHARE,
         seed: 0x4151_4c5f_4d69_7800,
-        profiles: vec![&MINIMAL],
+        profiles: vec![&MINIMAL, &MINIMAL_SIGNED_DIGEST, &MINIMAL_SIGNED_PGP],
         phases: vec![
             BenchPhase::Seed(SeedPhase {
                 name: "seed".to_owned(),
@@ -1785,7 +1792,7 @@ mod tests {
     fn the_community_pack_pins_its_source_fixtures() -> Result<(), BenchError> {
         let deck = load("community-vitals")?;
         assert_eq!(deck.id, COMMUNITY_VITALS);
-        assert_eq!(deck.version, "1.0.0");
+        assert_eq!(deck.version, "1.1.0");
         let pins = deck.fixture_pins();
         assert_eq!(
             pins.get("vital_signs.opt").map(String::as_str),
@@ -1826,7 +1833,12 @@ mod tests {
         }
         assert_eq!(
             community_vitals().profile_names(),
-            vec!["minimal", "clinical-default"]
+            vec![
+                "minimal",
+                "minimal-signed-digest",
+                "minimal-signed-pgp",
+                "clinical-default"
+            ]
         );
         Ok(())
     }
@@ -2032,7 +2044,7 @@ mod tests {
     fn the_aql_pack_seeds_the_community_population() -> Result<(), BenchError> {
         let deck = load("aql-mix")?;
         assert_eq!(deck.id, AQL_MIX);
-        assert_eq!(deck.version, "1.0.0");
+        assert_eq!(deck.version, "1.1.0");
         assert_eq!(deck.fixture_pins(), community_vitals().fixture_pins());
         assert_eq!(
             deck.fixture_pins()

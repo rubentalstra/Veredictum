@@ -137,7 +137,7 @@
       </div>
       <article class="pack" id="pack-aql-mix">
         <div class="pack-head">
-          <h3><code>aql-mix</code> <span class="pack-version">version 1.0.0</span></h3>
+          <h3><code>aql-mix</code> <span class="pack-version">version 1.1.0</span></h3>
           <p class="pack-meta">seed <code>4706627057783240704</code> · 2 phases · failed-arrival ceiling <code>0.01</code> · drive it with <code>--pack aql-mix</code></p>
         </div>
         <svg class="timeline" viewBox="0 0 640 118" role="img" aria-label="The phases of the aql-mix pack, in execution order" xmlns="http://www.w3.org/2000/svg">
@@ -178,6 +178,8 @@
               <thead><tr><th scope="col">Profile</th><th scope="col">What it switches on</th><th scope="col">Declares</th></tr></thead>
               <tbody>
                 <tr><td><code>minimal</code> <span class="tier tier-self">default</span></td><td>The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> none</td></tr>
+                <tr><td><code>minimal-signed-digest</code></td><td>The minimal surface with digest version signing: no audit trail, digest-signed versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> digest</td></tr>
+                <tr><td><code>minimal-signed-pgp</code></td><td>The minimal surface with openPGP version signing: no audit trail, openPGP-signed versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> pgp</td></tr>
               </tbody>
             </table>
           </div>
@@ -214,7 +216,7 @@
       </article>
       <article class="pack" id="pack-community-vitals">
         <div class="pack-head">
-          <h3><code>community-vitals</code> <span class="pack-version">version 1.0.0</span></h3>
+          <h3><code>community-vitals</code> <span class="pack-version">version 1.1.0</span></h3>
           <p class="pack-meta">seed <code>4859222839474415988</code> · 3 phases · failed-arrival ceiling <code>0.01</code> · drive it with <code>--pack community-vitals</code></p>
         </div>
         <svg class="timeline" viewBox="0 0 640 164" role="img" aria-label="The phases of the community-vitals pack, in execution order" xmlns="http://www.w3.org/2000/svg">
@@ -277,6 +279,8 @@
               <thead><tr><th scope="col">Profile</th><th scope="col">What it switches on</th><th scope="col">Declares</th></tr></thead>
               <tbody>
                 <tr><td><code>minimal</code> <span class="tier tier-self">default</span></td><td>The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> none</td></tr>
+                <tr><td><code>minimal-signed-digest</code></td><td>The minimal surface with digest version signing: no audit trail, digest-signed versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> digest</td></tr>
+                <tr><td><code>minimal-signed-pgp</code></td><td>The minimal surface with openPGP version signing: no audit trail, openPGP-signed versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> pgp</td></tr>
                 <tr><td><code>clinical-default</code></td><td>A clinical deployment&apos;s usual configuration: an audit trail written to the deployment&apos;s own store, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> internal<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> none</td></tr>
               </tbody>
             </table>
@@ -314,7 +318,7 @@
       </article>
       <article class="pack" id="pack-smoke">
         <div class="pack-head">
-          <h3><code>smoke</code> <span class="pack-version">version 1.1.0</span></h3>
+          <h3><code>smoke</code> <span class="pack-version">version 1.2.0</span></h3>
           <p class="pack-meta">seed <code>6216465318106710868</code> · 2 phases · failed-arrival ceiling <code>0.01</code> · drive it with <code>--pack smoke</code></p>
         </div>
         <svg class="timeline" viewBox="0 0 640 118" role="img" aria-label="The phases of the smoke pack, in execution order" xmlns="http://www.w3.org/2000/svg">
@@ -354,6 +358,8 @@
               <thead><tr><th scope="col">Profile</th><th scope="col">What it switches on</th><th scope="col">Declares</th></tr></thead>
               <tbody>
                 <tr><td><code>minimal</code> <span class="tier tier-self">default</span></td><td>The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> none</td></tr>
+                <tr><td><code>minimal-signed-digest</code></td><td>The minimal surface with digest version signing: no audit trail, digest-signed versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> digest</td></tr>
+                <tr><td><code>minimal-signed-pgp</code></td><td>The minimal surface with openPGP version signing: no audit trail, openPGP-signed versions, commits validated against the operational template, uncompressed responses, one tenant.</td><td><code>audit</code> off<br><code>commit_validation</code> template<br><code>compression</code> off<br><code>tenancy</code> single<br><code>version_signing</code> pgp</td></tr>
               </tbody>
             </table>
           </div>

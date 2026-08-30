@@ -748,7 +748,7 @@ fn the_aql_pack_records_one_set_of_percentiles_per_class() -> Fallible {
     let (result, document, _summary) = drive_pack(&sut, &tiny_aql_pack()?, "aql", 1, 1.0)?;
 
     assert_eq!(result.pack.id, "aql-mix");
-    assert_eq!(result.pack.version, "1.0.0");
+    assert_eq!(result.pack.version, "1.1.0");
     assert_eq!(
         result
             .pack

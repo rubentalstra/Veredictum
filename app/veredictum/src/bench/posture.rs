@@ -370,6 +370,37 @@ pub static MINIMAL: PostureProfile = PostureProfile {
     tenancy: Tenancy::Single,
 };
 
+/// The minimal surface with digest version signing on.
+///
+/// The posture a CDR that signs by default runs out of the box, benchable
+/// without switching a shipped feature off (#335). RM
+/// `UML/classes/version.adoc` §Attributes names the digest as one of the two
+/// signature forms a version carries.
+pub static MINIMAL_SIGNED_DIGEST: PostureProfile = PostureProfile {
+    name: "minimal-signed-digest",
+    summary: "The minimal surface with digest version signing: no audit trail, digest-signed versions, commits validated against the operational template, uncompressed responses, one tenant.",
+    audit: AuditSink::Off,
+    signing: SigningScheme::Digest,
+    validation: ValidationDepth::Template,
+    compression: CompressionMode::Off,
+    tenancy: Tenancy::Single,
+};
+
+/// The minimal surface with openPGP version signing on.
+///
+/// The second signature form the same RM sentence names, as its own profile
+/// rather than a variant of [`MINIMAL_SIGNED_DIGEST`]: the per-commit
+/// cryptography differs, and the board ranks only inside a profile.
+pub static MINIMAL_SIGNED_PGP: PostureProfile = PostureProfile {
+    name: "minimal-signed-pgp",
+    summary: "The minimal surface with openPGP version signing: no audit trail, openPGP-signed versions, commits validated against the operational template, uncompressed responses, one tenant.",
+    audit: AuditSink::Off,
+    signing: SigningScheme::Pgp,
+    validation: ValidationDepth::Template,
+    compression: CompressionMode::Off,
+    tenancy: Tenancy::Single,
+};
+
 /// The configuration a clinical deployment typically runs: the minimal surface
 /// with an audit trail written.
 pub static CLINICAL_DEFAULT: PostureProfile = PostureProfile {

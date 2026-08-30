@@ -51,9 +51,10 @@ What each flag is doing, and why the gate insists on it:
 - `--label` names the system on the board. Give the product and its version.
 - `--posture` declares which features were switched on behind the numbers, out
   of the profiles the pack defines. Omit it for `minimal`, the bare
-  spec-conformant surface, which is what a board row is read against;
-  `community-vitals` also defines `clinical-default`, the same surface with an
-  audit trail. Declare the profile your deployment actually runs. The canaries
+  spec-conformant surface. Every pack also defines `minimal-signed-digest` and
+  `minimal-signed-pgp` for a deployment that signs its versions out of the
+  box, and `community-vitals` adds `clinical-default`, the minimal surface
+  with an audit trail. Declare the profile your deployment actually runs. The canaries
   check each item against the running system before and after the measured
   window, and a run whose deployment disagrees with its declaration is refused
   rather than recorded, so a wrong declaration costs you the run. The board
