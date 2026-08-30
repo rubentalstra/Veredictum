@@ -38,4 +38,4 @@ apply" part so a future session can act on it without re-deriving it.
 - [Drafting in Ruben's voice](drafting-in-rubens-voice.md) — personal drafts
   (emails, forum posts) lead with the point, short paragraphs, no structure
   announcements, no AI tells; Discourse is markdown, Outlook is .txt
-- [Hosted console on Vercel](hosted-console-vercel.md) — console.veredictum.eu, view-only by construction (no engine in the image), deploy-hook only, FerroEHR#2945 service-root lesson
+- [The hosted instrument](hosted-instrument-always-on.md) — console.veredictum.eu is the OFFICIAL instrument (#388), one always-on machine, Vercel retired by #394, no signing key on the host
