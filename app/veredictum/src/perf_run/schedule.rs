@@ -97,6 +97,17 @@ pub struct JourneyWorkload<'a> {
     pub principals: &'a PerfPrincipals,
 }
 
+/// What the schedulable filter kept, beside what the party's declaration
+/// cost it.
+#[derive(Debug)]
+struct SchedulableShares {
+    /// The shares actually schedulable, renormalized to 100%.
+    kept: Vec<(String, Percent)>,
+    /// The journeys dropped because the ixit declares no principal for
+    /// one of their stages.
+    dropped: Vec<String>,
+}
+
 impl JourneyWorkload<'_> {
     /// The shares actually schedulable against this party's declared
     /// principals, RENORMALIZED to 100%.
@@ -108,15 +119,24 @@ impl JourneyWorkload<'_> {
     /// offered operation rate instead of silently running below the class
     /// floor. The dropped journeys are named to the caller so the run
     /// record says what the party's declaration cost it.
-    fn schedulable(&self) -> (Vec<(String, Percent)>, Vec<String>) {
+    ///
+    /// A share naming a journey the catalogue does not carry is a NAMED
+    /// finding here, never a silently kept share: a journey name is a
+    /// closed vocabulary, so an unknown token fails loud at the filter that
+    /// reads it.
+    ///
+    /// # Errors
+    /// A message naming the unknown journey.
+    fn schedulable(&self) -> Result<SchedulableShares, String> {
         let mut kept: Vec<(String, Percent)> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
         for (name, share) in self.shares {
-            let runnable = self.catalogue.get(name).is_none_or(|journey| {
-                journey.stages.iter().all(|stage| {
-                    PerfOp::parse(&stage.op)
-                        .is_ok_and(|op| self.principals.declares(op.principal()))
-                })
+            let journey = self
+                .catalogue
+                .get(name)
+                .ok_or_else(|| format!("workload names unknown journey {name:?}"))?;
+            let runnable = journey.stages.iter().all(|stage| {
+                PerfOp::parse(&stage.op).is_ok_and(|op| self.principals.declares(op.principal()))
             });
             if runnable {
                 kept.push((name.clone(), *share));
@@ -130,7 +150,7 @@ impl JourneyWorkload<'_> {
                 share.0 = share.0 / total * 100.0;
             }
         }
-        (kept, dropped)
+        Ok(SchedulableShares { kept, dropped })
     }
 }
 
@@ -378,7 +398,10 @@ pub(crate) fn build_schedule(
     if !(rate.is_finite() && rate > 0.0) {
         return Err("arrival rate must be positive".to_owned());
     }
-    let (shares, dropped_journeys) = workload.schedulable();
+    let SchedulableShares {
+        kept: shares,
+        dropped: dropped_journeys,
+    } = workload.schedulable()?;
     if shares.is_empty() {
         return Err(
             "no journey of this workload is runnable against the principals the ixit declares"
@@ -755,6 +778,36 @@ mod tests {
             "renormalized schedule planned {} arrivals",
             reduced.planned_measured
         );
+    }
+
+    /// A journey name is a closed vocabulary: a share naming one the
+    /// catalogue does not carry is a named finding at the schedulable
+    /// filter, so the operator reads WHICH name failed instead of a
+    /// silently kept share that only breaks later inside expansion.
+    #[test]
+    fn a_share_naming_an_unknown_journey_is_a_named_finding() {
+        let catalogue = catalogue();
+        let pack = pack();
+        let principals = stub_principals(true);
+        let shares = vec![
+            ("chart_review".to_owned(), Percent(90.0)),
+            ("ward_rounds_typo".to_owned(), Percent(10.0)),
+        ];
+        let workload = JourneyWorkload {
+            catalogue: &catalogue,
+            shares: &shares,
+            pack: &pack,
+            curve: ArrivalCurve::Uniform,
+            principals: &principals,
+        };
+
+        let filtered = workload.schedulable().unwrap_err();
+        assert!(
+            filtered.contains("ward_rounds_typo"),
+            "the filter does not name the unknown journey: {filtered}"
+        );
+        let built = build_schedule(&workload, 10.0, 0, 60, 100).unwrap_err();
+        assert_eq!(built, filtered);
     }
 
     #[test]

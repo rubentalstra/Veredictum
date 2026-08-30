@@ -644,7 +644,7 @@ fn the_deletion_directory_and_extension_arms_all_drive_their_wire() {
         curve: ArrivalCurve::Uniform,
         principals: &principals,
     };
-    let window = run_window(&principals, &corpus, &workload, 100.0, 0, 4, &progress).unwrap();
+    let window = run_window(&corpus, &workload, 100.0, 0, 4, &progress).unwrap();
 
     let labels: Vec<&str> = window
         .operations
@@ -694,7 +694,7 @@ fn a_write_refusing_sut_records_the_writes_as_errors_and_leaves_reads_clean() {
         curve: ArrivalCurve::Uniform,
         principals: &principals,
     };
-    let window = run_window(&principals, &corpus, &workload, 60.0, 0, 4, &progress).unwrap();
+    let window = run_window(&corpus, &workload, 60.0, 0, 4, &progress).unwrap();
 
     let by_op = |name: &str| window.operations.iter().find(|o| o.operation == name);
     let commit = by_op("composition_commit").expect("the commit stages were scheduled");
@@ -727,7 +727,7 @@ fn a_rate_limited_arrival_latches_the_run_wide_refusal() {
         curve: ArrivalCurve::Uniform,
         principals: &principals,
     };
-    let window = run_window(&principals, &corpus, &workload, 60.0, 0, 2, &progress).unwrap();
+    let window = run_window(&corpus, &workload, 60.0, 0, 2, &progress).unwrap();
 
     assert!(
         window.operations.iter().all(|o| o.errors == o.requests),
@@ -772,7 +772,7 @@ fn the_diurnal_curve_runs_and_an_undeclared_principal_drops_its_journey() {
         curve: ArrivalCurve::Diurnal,
         principals: &principals,
     };
-    let window = run_window(&principals, &corpus, &workload, 60.0, 0, 3, &progress).unwrap();
+    let window = run_window(&corpus, &workload, 60.0, 0, 3, &progress).unwrap();
 
     let seen = notes.lock().expect("the progress lock is uncontended");
     assert!(
@@ -793,13 +793,13 @@ fn the_diurnal_curve_runs_and_an_undeclared_principal_drops_its_journey() {
     );
 }
 
-/// An arrival the generator cannot fire is an INSTRUMENT fault, never a
-/// wire observation about the server: the principal set driving the window
-/// declares no instance for the access-control probe's boundary
-/// principals, so those arrivals never reach the SUT at all. The window
-/// refuses to publish a measurement and names how many arrivals it lost.
+/// An arrival the generator cannot fire never reaches the SUT, so it must
+/// never be planned: one principal set decides both what the schedule plans
+/// and what the dispatcher fires. Driving with the default instance alone
+/// drops the access-control probe at the schedulable filter, names it to
+/// the operator, and leaves the measured record free of its operations.
 #[test]
-fn arrivals_the_generator_cannot_fire_fail_the_window_with_their_count() {
+fn a_journey_whose_principal_is_undeclared_is_dropped_before_it_is_planned() {
     let (base_url, _server, _faults) = spawn_stub();
     let (declared, _environment) = client_and_env(&base_url);
     let notes = std::sync::Mutex::new(Vec::new());
@@ -813,10 +813,8 @@ fn arrivals_the_generator_cannot_fire_fail_the_window_with_their_count() {
     let catalogue = catalogue();
     let corpus = seeded(declared.primary(), &pack);
 
-    // The workload is PLANNED against the full declaration, so the probe
-    // journey survives the schedulable filter; the window is DRIVEN by the
-    // default instance alone, so the probe's arrivals have no client to
-    // fire through.
+    // The window is planned AND driven by the default instance alone, so
+    // the probe journey's boundary principals have no client anywhere.
     let driving = PerfPrincipals::single(declared.primary().clone());
     // The correction journey carries the one write, at 6.25% of the
     // expanded arrivals, which is inside the read:write derivation band the
@@ -834,28 +832,27 @@ fn arrivals_the_generator_cannot_fire_fail_the_window_with_their_count() {
         shares: &shares,
         pack: &pack,
         curve: ArrivalCurve::Uniform,
-        principals: &declared,
+        principals: &driving,
     };
-    let failure = run_window(&driving, &corpus, &workload, 100.0, 0, 3, &progress).unwrap_err();
+    let window = run_window(&corpus, &workload, 100.0, 0, 3, &progress).unwrap();
 
     assert!(
-        failure.contains("generator faults"),
-        "the window failed for another reason: {failure}"
-    );
-    let counted: u64 = failure
-        .split_whitespace()
-        .next()
-        .and_then(|n| n.parse().ok())
-        .unwrap_or(0);
-    assert!(counted > 0, "the failure names no fault count: {failure}");
-    assert!(
-        failure.contains("unauthenticated_probe"),
-        "the failure names no faulting operation: {failure}"
+        window
+            .operations
+            .iter()
+            .all(|o| o.operation != "unauthenticated_probe"),
+        "an undeclared principal's operation reached the measured record: {:?}",
+        window.operations
     );
     let seen = notes.lock().expect("the progress lock is uncontended");
     assert!(
-        seen.iter().any(|m| m.starts_with("arrival not fired")),
-        "no unfired arrival was sampled to the progress channel: {seen:?}"
+        seen.iter()
+            .any(|m| m.starts_with("journeys not scheduled") && m.contains("access_control_probe")),
+        "the dropped journey was not named to the operator: {seen:?}"
+    );
+    assert!(
+        seen.iter().all(|m| !m.starts_with("arrival not fired")),
+        "the schedule planned an arrival the dispatcher could not fire: {seen:?}"
     );
 }
 
@@ -892,7 +889,7 @@ fn a_sut_that_stops_answering_records_transport_faults_as_error_arrivals() {
         curve: ArrivalCurve::Uniform,
         principals: &dead,
     };
-    let window = run_window(&dead, &corpus, &workload, 40.0, 0, 2, &progress).unwrap();
+    let window = run_window(&corpus, &workload, 40.0, 0, 2, &progress).unwrap();
 
     assert!(
         !window.operations.is_empty(),
@@ -962,16 +959,7 @@ fn the_stress_ladder_climbs_to_its_cap_and_earns_nothing() {
         bisections: 0,
         ..StressOptions::default()
     };
-    let report = run_stress(
-        &principals,
-        &corpus,
-        &workload,
-        &environment,
-        None,
-        &options,
-        &progress,
-    )
-    .unwrap();
+    let report = run_stress(&corpus, &workload, &environment, None, &options, &progress).unwrap();
 
     assert_eq!(report.steps.len(), 1, "one rung below the cap");
     assert!(report.ladder_capped, "the climb stopped at the cap");
@@ -1037,7 +1025,6 @@ fn an_unholdable_budget_breaches_the_first_rung_and_bisects() {
         ..StressOptions::default()
     };
     let report = run_stress(
-        &principals,
         &corpus,
         &workload,
         &environment,

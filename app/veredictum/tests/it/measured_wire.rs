@@ -290,7 +290,6 @@ fn a_capped_climb_reports_the_last_stable_rate_and_no_knee() -> Fallible {
         principals: &principals,
     };
     let report = run_stress(
-        &principals,
         &corpus(),
         &workload,
         &environment(&ixit),
@@ -342,7 +341,6 @@ fn a_breached_envelope_stops_the_climb_and_bisects() -> Fallible {
         principals: &principals,
     };
     let report = run_stress(
-        &principals,
         &corpus(),
         &workload,
         &environment(&ixit),
@@ -408,7 +406,6 @@ fn a_refusing_sut_breaches_the_error_tolerance() -> Fallible {
         principals: &principals,
     };
     let report = run_stress(
-        &principals,
         &corpus(),
         &workload,
         &environment(&ixit),
