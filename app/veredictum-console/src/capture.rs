@@ -13,6 +13,12 @@
 //! moves: the record, the manifest, the signature and the presentation files
 //! carry real values, because the pinning happens where a value is SENT TO A
 //! BROWSER and nowhere else.
+//!
+//! A moving frame is the same problem as a moving fact: the served document
+//! carries [`CAPTURE_CLASS`] on its root element in capture mode, and
+//! `style/tailwind.css` switches every transition and animation off under it,
+//! so a screenshot photographs a settled frame instead of whatever phase of
+//! the progress bar's width transition it happened to catch.
 
 use crate::export_api::{ExportScreen, ExportSummary};
 use crate::run_job::JobView;
@@ -20,6 +26,33 @@ use crate::verify_api::{BundleView, VerifyScreen};
 
 /// The environment variable that turns capture mode on.
 pub const CAPTURE_ENV: &str = "VEREDICTUM_CAPTURE_MODE";
+
+/// The class the served document's root element carries in capture mode.
+///
+/// `style/tailwind.css` matches it, unlayered so it outranks every Tailwind
+/// utility, and switches transitions and animations off beneath it.
+pub const CAPTURE_CLASS: &str = "capture";
+
+/// Whether capture mode is on for this process.
+///
+/// The one read of [`CAPTURE_ENV`]: the state's flag and the served
+/// document's root class are the same fact, so they cannot disagree about
+/// which mode a pass is photographing.
+#[must_use]
+pub fn enabled() -> bool {
+    std::env::var(CAPTURE_ENV).is_ok_and(|value| !value.is_empty())
+}
+
+/// The served document's root class: [`CAPTURE_CLASS`] under capture mode,
+/// empty otherwise.
+///
+/// Server-side only by construction — the shell renders the document around
+/// the hydration root and is never re-rendered in the browser — so the class
+/// changes no hydrated view.
+#[must_use]
+pub fn root_class(capture: bool) -> &'static str {
+    if capture { CAPTURE_CLASS } else { "" }
+}
 
 /// The digest every captured surface shows in place of a real one.
 ///
@@ -36,6 +69,7 @@ pub const PINNED_ELAPSED_MS: u64 = 0;
 
 /// The export section as this console answers it: pinned under capture mode,
 /// verbatim otherwise.
+#[cfg(feature = "ssr")]
 #[must_use]
 pub fn export_screen(state: &crate::state::ConsoleState, screen: ExportScreen) -> ExportScreen {
     if state.capture {
@@ -46,6 +80,7 @@ pub fn export_screen(state: &crate::state::ConsoleState, screen: ExportScreen) -
 }
 
 /// One sealed record's summary as this console answers it.
+#[cfg(feature = "ssr")]
 #[must_use]
 pub fn export_summary(state: &crate::state::ConsoleState, summary: ExportSummary) -> ExportSummary {
     if state.capture {
@@ -56,6 +91,7 @@ pub fn export_summary(state: &crate::state::ConsoleState, summary: ExportSummary
 }
 
 /// The verification page as this console answers it.
+#[cfg(feature = "ssr")]
 #[must_use]
 pub fn verification(state: &crate::state::ConsoleState, screen: VerifyScreen) -> VerifyScreen {
     if state.capture {
@@ -66,6 +102,7 @@ pub fn verification(state: &crate::state::ConsoleState, screen: VerifyScreen) ->
 }
 
 /// The live run as this console answers it.
+#[cfg(feature = "ssr")]
 #[must_use]
 pub fn job(state: &crate::state::ConsoleState, view: Option<JobView>) -> Option<JobView> {
     if state.capture {
@@ -243,6 +280,15 @@ mod tests {
         // An unsigned bundle states no time, and pinning must not invent one.
         let unsigned = pin_verification(VerifyScreen::Idle);
         assert_eq!(unsigned, VerifyScreen::Idle);
+    }
+
+    /// The stylesheet's still-frame rule keys on this exact class, and an
+    /// ordinary serve carries none of it: a console that photographed with
+    /// transitions off would document a different product.
+    #[test]
+    fn only_a_capture_serve_stills_the_frame() {
+        assert_eq!(super::root_class(true), super::CAPTURE_CLASS);
+        assert_eq!(super::root_class(false), "");
     }
 
     /// The live screen's clock is the run's, and only the clock is pinned.

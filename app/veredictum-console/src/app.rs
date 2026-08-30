@@ -8,8 +8,8 @@
 //! chrome rendering exactly once around the `<Outlet/>`.
 
 use leptos::prelude::{
-    AutoReload, Effect, ElementChild, GlobalAttributes, HydrationScripts, IntoView, LeptosOptions,
-    component, document, view,
+    AutoReload, ClassAttribute, Effect, ElementChild, GlobalAttributes, HydrationScripts, IntoView,
+    LeptosOptions, component, document, view,
 };
 use leptos_meta::{Link, Meta, MetaTags, Stylesheet, Title, provide_meta_context};
 use leptos_router::{
@@ -29,11 +29,16 @@ use crate::pages::verify::Verify;
 
 /// The HTML document the server renders around the application: the head with
 /// the hydration bootstrap, and the body the client takes over.
+///
+/// The root element carries [`crate::capture::CAPTURE_CLASS`] in
+/// documentation capture mode. Hydration begins at the body's children, so
+/// the class reaches no hydrated view; what it reaches is the stylesheet,
+/// which stills every transition for the pass.
 #[must_use]
 pub fn shell(options: LeptosOptions) -> impl IntoView {
     view! {
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="en" class=crate::capture::root_class(crate::capture::enabled())>
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
