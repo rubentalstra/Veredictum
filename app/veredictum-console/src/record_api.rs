@@ -379,9 +379,8 @@ pub mod read {
 
     /// Everything one judgement of the finished run establishes.
     ///
-    /// The judgement reads the whole campaign, so it is the expensive step of
-    /// every surface that needs a verdict. A caller that needs more than one
-    /// of these facts takes this value and reads all of them from it.
+    /// The judgement reads the whole campaign, so a caller that needs more
+    /// than one of these facts takes this value and reads all of them from it.
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct JudgedFacts {
         /// Profile verdicts: tier token → verdict token.
@@ -414,9 +413,8 @@ pub mod read {
         let Some((_, results_path)) = finished_results(state)? else {
             return Ok(JudgedRun::NoRun);
         };
-        // The claim travels with the run: start_run writes the accepted
-        // statement beside the results, so the judgement certifies exactly
-        // the bytes the engine graded — never the mutable draft.
+        // The claim travels with the run: the judgement certifies the bytes
+        // beside the results, never the mutable draft.
         let statement_path = results_path
             .parent()
             .map(|dir| dir.join("statement.json"))
@@ -468,8 +466,8 @@ pub mod read {
         })))
     }
 
-    /// The verdicts screen: the lib's own judgement over the finished run
-    /// and the draft's statement — the CLI's bodies by construction.
+    /// The verdicts screen: the lib's own judgement over the finished run and
+    /// the draft's statement.
     ///
     /// # Errors
     /// The verbatim judgement failure.
@@ -488,10 +486,6 @@ pub mod read {
 
 pub mod fns {
     //! The `#[server]` endpoints, one module for one inner suppression.
-    //!
-    //! The same adjudication as `catalogue_api::fns`: macro-expanded
-    //! `unused_async` and `missing_docs`, module-scoped, signed off in the
-    //! pull request.
     #![allow(
         clippy::unused_async,
         missing_docs,

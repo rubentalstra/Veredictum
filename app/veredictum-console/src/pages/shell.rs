@@ -3,14 +3,13 @@
 
 //! The persistent chrome (#61 §Look and feel).
 //!
-//! The static sidebar — seal, one entry per surface, the versions in the
-//! footer — around the routed `<Outlet/>`. The chrome renders exactly once
+//! The static sidebar (seal, one entry per surface, the versions in the
+//! footer) around the routed `<Outlet/>`. The chrome renders exactly once
 //! outside any Suspense: a `Suspend` closure re-runs on every notification of
 //! the resources it awaits and re-creates everything inside it, so a resource
 //! owned there gets a different id on the server than on the client and
 //! hydration reads the wrong serialized slot. Dark mode is re-applied after
-//! hydration inside an `Effect` for the same reason — the initial render must
-//! be identical on both passes
+//! hydration inside an `Effect` for the same reason
 //! (<https://book.leptos.dev/ssr/24_hydration_bugs.html>).
 
 use leptos::prelude::{
@@ -63,7 +62,7 @@ fn nav_entries() -> [NavEntry; 5] {
 }
 
 /// Maps a full URL path to the top-level nav key it belongs under, so the
-/// sidebar highlights the active surface. Pure logic, unit-tested below.
+/// sidebar highlights the active surface.
 fn nav_key(path: &str) -> &'static str {
     if path.starts_with("/catalogue") {
         "/catalogue"

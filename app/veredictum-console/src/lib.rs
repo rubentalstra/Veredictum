@@ -10,24 +10,18 @@
 //! own — runs execute through the pinned `veredictum` binary and reads parse
 //! through the published lib (#54); the design record is #52.
 
-// Doctests are copy-paste templates: they must use `?`, never unwrap
-// (C-QUESTION-MARK, https://rust-lang.github.io/api-guidelines/documentation.html#c-question-mark).
+// Doctests are copy-paste templates and must use `?`, never unwrap
+// (https://rust-lang.github.io/api-guidelines/documentation.html#c-question-mark).
 #![doc(test(attr(deny(warnings))))]
-// Every `#[component]` in this crate expands `#[derive(TypedBuilder)]` on its
-// generated props struct, and that derive emits an inherent `builder()` whose
-// name matches a trait method already in scope — so `same_name_method` fires
-// once per component with the macro invocation as its only span, never on
-// hand-written code. Crate-level because there is no smaller item to scope it
-// to: the finding does not exist in this crate's source
+// The lint fires once per `#[component]`, spanned on the macro invocation, so
+// there is no smaller item to scope the suppression to
 // (https://docs.rs/leptos/0.8/leptos/attr.component.html).
 #![allow(
     clippy::same_name_method,
     reason = "emitted only by leptos's TypedBuilder derive inside #[component]; no hand-written method in this crate shadows a trait method"
 )]
 
-// `hydrate` (wasm client) and `ssr` (server) are mutually exclusive build
-// modes — cargo-leptos always builds them separately. Guarded per the Cargo
-// book's prescription for genuinely exclusive features
+// cargo-leptos always builds the wasm client and the server separately
 // (https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features).
 #[cfg(all(feature = "hydrate", feature = "ssr"))]
 compile_error!("features \"hydrate\" and \"ssr\" cannot be enabled at the same time");

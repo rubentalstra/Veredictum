@@ -5,13 +5,11 @@
 //!
 //! Runs execute through the pinned, published `veredictum` binary as a
 //! subprocess, so a run's output stays byte-identical to the same run from a
-//! terminal — the property `tests/it/engine_gate.rs` checks by diffing the
-//! two paths' emitted documents. Reads parse through the published lib's
-//! typed model, so no schema is reimplemented console-side. Nothing here
-//! speaks to a CDR: the spawned instrument is the only thing that touches
-//! the SUT, and the SUT credentials the console holds in memory reach only
-//! the spawned process's environment — never a file, a log line, or any
-//! client-visible state.
+//! terminal (`tests/it/engine_gate.rs` diffs the two paths' documents). Reads
+//! parse through the published lib's typed model, so no schema is
+//! reimplemented console-side. Nothing here speaks to a CDR, and the SUT
+//! credentials the console holds in memory reach only the spawned process's
+//! environment: never a file, a log line, or any client-visible state.
 
 use std::io::BufRead as _;
 use std::path::{Path, PathBuf};
@@ -19,10 +17,9 @@ use std::path::{Path, PathBuf};
 /// The exact engine version this console is built against.
 ///
 /// One fact with the manifest's crates.io pin and the lib-level
-/// [`crate::ENGINE_PIN`] the chrome displays; the unit test below locks the
-/// pin to the manifest, and [`Engine::verified`] refuses a binary that
-/// reports anything else, so the "one engine" property cannot rot into
-/// "whichever binary was on PATH".
+/// [`crate::ENGINE_PIN`] the chrome displays: the unit test below locks the
+/// constant to the manifest, and [`Engine::verified`] refuses a binary that
+/// reports anything else.
 pub const ENGINE_VERSION: &str = crate::ENGINE_PIN;
 
 /// The environment variable that names the engine binary explicitly. Without
@@ -61,8 +58,8 @@ pub struct Credential {
     pub value: Secret,
 }
 
-/// What to drive, mirroring the `veredictum run` CLI surface one to one —
-/// this type ADDS nothing to it, which is the point of the seam.
+/// What to drive, mirroring the `veredictum run` CLI surface one to one and
+/// adding nothing to it.
 #[derive(Debug)]
 pub struct RunSpec {
     /// The artifact root the run reads.
@@ -93,7 +90,7 @@ pub struct RunSpec {
 }
 
 /// What to judge and seal, mirroring the `veredictum verdicts` CLI surface
-/// one to one — this type ADDS nothing to it, which is the point of the seam.
+/// one to one and adding nothing to it.
 ///
 /// The passphrase is deliberately absent: [`Engine::verdicts`] reads it from
 /// the console's own environment at spawn time and puts it in the child's,
@@ -239,11 +236,9 @@ impl Engine {
     /// Renders and seals the judgement documents by running the pinned
     /// binary's `verdicts` subcommand to completion.
     ///
-    /// The sealing itself is the engine's (`veredictum::record`), never the
-    /// console's: this call supplies the key path and reads back what the
-    /// binary wrote. The passphrase is read from
-    /// [`crate::state::SIGN_PASSPHRASE_ENV`] here and set on the child only,
-    /// so it reaches no console state, no file and no log line.
+    /// The sealing is the engine's, never the console's. The passphrase is
+    /// read from [`crate::state::SIGN_PASSPHRASE_ENV`] here and set on the
+    /// child only, so it reaches no console state, no file and no log line.
     ///
     /// # Errors
     /// [`Error::Execute`] when the process cannot run, and
@@ -262,16 +257,13 @@ impl Engine {
         if output.status.success() {
             return Ok(());
         }
-        // The same tolerance as the reproduction lane (#269): a judgement
-        // carrying review findings (exit 1) is a legitimate record whose
-        // verdicts document states the findings, while a judge error (exit 2)
-        // is not a judgement at all. A sealed bundle the public lane
-        // publishes must also seal here.
+        // The same tolerance as the reproduction lane (#269): exit 1 with a
+        // verdicts document is a judgement carrying review findings, while
+        // exit 2 is not a judgement at all.
         if output.status.code() == Some(1) && spec.out_dir.join("verdicts.json").is_file() {
             return Ok(());
         }
-        // stderr first, because the engine's refusals print there; stdout is
-        // the fallback for a binary that reported on the other stream.
+        // stderr first, because the engine's refusals print there.
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
         let diagnostic = if stderr.is_empty() {
             String::from_utf8_lossy(&output.stdout).trim().to_owned()
@@ -398,8 +390,8 @@ fn drain_to_completion(
         for line in std::io::BufReader::new(stdout).lines() {
             let line = line.map_err(Error::Execute)?;
             on_line(Line::Out(line));
-            // Deliver whatever stderr produced meanwhile, keeping the
-            // merged stream close to arrival order.
+            // Drain what stderr produced meanwhile, so the merged stream stays
+            // close to arrival order.
             while let Ok(err_line) = receiver.try_recv() {
                 on_line(err_line);
             }
@@ -411,8 +403,8 @@ fn drain_to_completion(
             .map_err(|poison| Error::Execute(std::io::Error::other(poison.to_string())))?;
         child.wait().map_err(Error::Execute)?
     };
-    // The guard is joined, never dropped mid-stream: the remaining
-    // stderr lines are delivered before the run is reported finished.
+    // Joined, never dropped mid-stream: the remaining stderr lines are
+    // delivered before the run is reported finished.
     let joined = stderr_reader.join();
     drop(sender);
     while let Ok(err_line) = receiver.try_recv() {
@@ -473,8 +465,7 @@ pub fn locate() -> Result<Engine, Error> {
     }
 }
 
-/// Assembles the exact `veredictum run` argument vector for a spec — pure,
-/// so the mapping the gate test relies on is itself unit-tested.
+/// Assembles the exact `veredictum run` argument vector for a spec.
 #[must_use]
 pub fn args(spec: &RunSpec) -> Vec<std::ffi::OsString> {
     let mut args: Vec<std::ffi::OsString> = vec![
@@ -507,8 +498,7 @@ pub fn args(spec: &RunSpec) -> Vec<std::ffi::OsString> {
     args
 }
 
-/// Assembles the exact `veredictum verdicts` argument vector for a spec —
-/// pure, so the mapping the export gate relies on is itself unit-tested.
+/// Assembles the exact `veredictum verdicts` argument vector for a spec.
 #[must_use]
 pub fn verdicts_args(spec: &VerdictsSpec) -> Vec<std::ffi::OsString> {
     let mut args: Vec<std::ffi::OsString> = vec![
@@ -532,10 +522,9 @@ pub fn verdicts_args(spec: &VerdictsSpec) -> Vec<std::ffi::OsString> {
 /// Returns a value's published token: the lib's own serialization, without
 /// its JSON quotes.
 ///
-/// The console mirrors no vocabulary of its own, so a token on a surface is
-/// the engine's spelling of the engine's value. A serialization failure is
-/// returned, never absorbed: a blank token on a results row or a seal card
-/// is a wrong answer nobody can see.
+/// The console mirrors no vocabulary of its own. A serialization failure is
+/// returned, never absorbed: a blank token on a results row is a wrong answer
+/// nobody can see.
 ///
 /// # Errors
 /// The value's `serde_json` failure, verbatim.
@@ -714,8 +703,8 @@ mod tests {
         );
     }
 
-    /// The console renders the engine's spelling, so a token is locked to the
-    /// lib's own serialization rather than to a mirrored table.
+    /// A token is locked to the lib's own serialization, never a mirrored
+    /// table.
     #[expect(
         clippy::panic_in_result_fn,
         reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"

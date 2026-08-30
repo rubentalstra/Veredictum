@@ -4,11 +4,10 @@
 //! Dark mode: the `dark` class on `<html>` drives every design token
 //! (`style/tailwind.css`), and the choice persists to `localStorage`.
 //!
-//! Browser-only by construction: the persisted choice is re-applied after
-//! hydration inside an `Effect`, keeping the initial render deterministic:
+//! Browser-only by construction: the first paint is always light and the
+//! persisted choice is re-applied after hydration inside an `Effect`, because
 //! a server pass and a client pass that disagree are a hydration mismatch
-//! (<https://book.leptos.dev/ssr/24_hydration_bugs.html>). The first paint is
-//! light, and a dark preference flips within the hydration frame.
+//! (<https://book.leptos.dev/ssr/24_hydration_bugs.html>).
 
 use leptos::prelude::document;
 

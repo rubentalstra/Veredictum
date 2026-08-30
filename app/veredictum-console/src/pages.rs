@@ -21,8 +21,8 @@ use leptos_meta::Title;
 use crate::components::empty_state::EmptyState;
 use crate::components::page_header::PageHeader;
 
-/// The under-construction surface: the page exists, is routed and titled,
-/// and says exactly which issue builds it — never a blank pane.
+/// Renders a routed, titled placeholder naming the issue that builds the
+/// surface, so an unfinished screen is never a blank pane.
 #[must_use]
 pub fn under_construction(title: &'static str, purpose: &'static str, issue: u32) -> impl IntoView {
     view! {

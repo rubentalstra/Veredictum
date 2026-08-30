@@ -11,9 +11,8 @@
 //! the console to check the console.
 //!
 //! The upload is a plain `<form method="post" enctype="multipart/form-data">`
-//! posting to a server-owned axum route, which redirects back here. That is
-//! the whole mechanism: a file upload with zero JavaScript, working before
-//! the WASM bundle has loaded and with it disabled entirely.
+//! posting to a server-owned axum route, which redirects back here: zero
+//! JavaScript, working before the WASM bundle has loaded.
 
 use leptos::prelude::{
     ClassAttribute, CollectView, ElementChild, Get, GlobalAttributes, IntoAny, IntoView, Memo,
@@ -34,10 +33,9 @@ use crate::verify_api::{
 
 /// The bundle id and the refusal reason the upload route redirects with.
 ///
-/// Read in a private helper rather than in the component body: reading the
-/// query map directly in a `#[component]` fn silences
-/// `clippy::must_use_candidate` on that fn, which then turns the crate's
-/// `#[expect]` idiom into an unfulfilled-expectation build failure (rules §2).
+/// A helper rather than the component body: reading the query map inside a
+/// `#[component]` fn silences `clippy::must_use_candidate` there, turning the
+/// crate's `#[expect]` idiom into an unfulfilled-expectation build failure.
 fn params_from_url() -> Memo<(Option<String>, Option<String>)> {
     let query = use_query_map();
     Memo::new(move |_| query.with(|map| (map.get("bundle"), map.get("refused"))))

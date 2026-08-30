@@ -3,13 +3,9 @@
 
 //! Toast feedback: every mutation reports its outcome as a transient toast.
 //!
-//! Success AND failure both toast, with the
-//! inline `MessageBar` beside a failure where a diagnostic is worth reading
-//! line by line.
-//!
-//! Own machinery, deliberately small: a context queue plus one fixed host
-//! region the shell mounts. A widget-kit toaster can replace the internals
-//! later without touching a single call site, which is the point of the kit.
+//! Success AND failure both toast, with the inline `MessageBar` beside a
+//! failure where a diagnostic is worth reading line by line. The machinery is
+//! a context queue plus one fixed host region the shell mounts.
 
 use leptos::prelude::{
     AriaAttributes, ClassAttribute, CollectView, ElementChild, Get, GlobalAttributes, IntoView,

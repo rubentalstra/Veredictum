@@ -6,20 +6,15 @@
 //! build compiles a stub so plain `cargo build --all-targets` over the
 //! workspace stays green; the shipped binary is always the `ssr` shape
 //! (`bin-features` in `Cargo.toml`).
-//!
-//! Startup diagnostics go to stderr — the binary entry point relaxes the
-//! print lints at its own root, the same adjudication as the instrument's
-//! CLI (`app/veredictum/src/bin/veredictum.rs`).
 #![allow(
     clippy::print_stderr,
     reason = "the server binary's startup diagnostics belong on stderr, where an operator tailing the container sees them; library code stays restricted"
 )]
 
-//! Container duties live here because the image is distroless: the binary is
-//! PID 1 (exec-form ENTRYPOINT), so it must handle SIGTERM itself for
-//! `docker stop` to end it gracefully instead of by SIGKILL after the grace
-//! period, and it doubles as its own health probe (`veredictum-console
-//! healthcheck`) because the image carries no shell and no curl.
+//! The image is distroless and this binary is PID 1, so it handles SIGTERM
+//! itself for `docker stop` to end it gracefully, and it doubles as its own
+//! health probe (`veredictum-console healthcheck`) because the image carries
+//! no shell and no curl.
 
 /// Serves the console on the configured address (`site-addr`, overridable
 /// through the standard `LEPTOS_SITE_ADDR` environment variable), or, when
@@ -51,9 +46,8 @@ async fn main() -> anyhow::Result<()> {
     // state the screens explain rather than a crash (#64).
     let state = veredictum_console::state::ConsoleState::load();
     if let Err(reason) = state.catalogue.as_ref() {
-        // Named on stderr too, so an operator tailing the container sees it
-        // without opening the UI. The body never reaches a log — this is a
-        // load diagnostic about a mount, not SUT data.
+        // A load diagnostic about a mount, never SUT data: no response body
+        // reaches a log stream.
         eprintln!(
             "veredictum-console: no catalogue at {}: {reason}",
             state.root.display()
@@ -61,18 +55,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let app = axum::Router::new()
-        // The liveness endpoint the container HEALTHCHECK and any
-        // orchestrator probe read. Deliberately outside the Leptos route
-        // tree: it must answer even if the WASM bundle or the app shell is
-        // broken, because it claims only "the server accepts connections".
+        // Outside the Leptos route tree so it answers even when the WASM
+        // bundle or the app shell is broken: it claims only "the server
+        // accepts connections".
         .route("/healthz", axum::routing::get(|| async { "ok" }))
-        // The two server-owned routes S8 and S9 need, outside the Leptos
-        // route tree because neither answers with a view: one streams the
-        // sealed bundle as an archive, the other takes a plain
-        // multipart form post — a file upload with zero JavaScript, working
-        // before the WASM bundle loads and with it disabled entirely. Both
-        // are wrapped in the same context provision the Leptos routes get,
-        // so their handlers reach the console state through `expect_context`.
+        // Server-owned because neither answers with a view: one streams the
+        // sealed bundle as an archive, the other takes a plain multipart form
+        // post, which uploads with zero JavaScript and before WASM loads.
         .route(
             veredictum_console::export_api::DOWNLOAD_PATH,
             axum::routing::get(veredictum_console::export_api::route::record_zip),
@@ -81,16 +70,14 @@ async fn main() -> anyhow::Result<()> {
             veredictum_console::verify_api::UPLOAD_PATH,
             axum::routing::post(veredictum_console::verify_api::route::upload),
         )
-        // S10's own upload (#166), the same plain-form mechanism: a batch of
-        // bench-result documents, read and listed, never stored.
+        // The bench batch upload (#166): read and listed, never stored.
         .route(
             veredictum_console::bench_api::UPLOAD_PATH,
             axum::routing::post(veredictum_console::bench_api::route::upload),
         )
-        // axum defaults to a 2 MiB body; the upload routes need their own cap,
-        // and each page refuses anything past its own number itself so the
-        // reader gets a sentence rather than a bare 413. The layer is one
-        // value for the whole router, so it is the larger of the two.
+        // axum defaults to a 2 MiB body. The layer is one value for the whole
+        // router, so it takes the larger cap and each page refuses anything
+        // past its own number itself, giving the reader a sentence not a 413.
         .layer(axum::extract::DefaultBodyLimit::max(
             usize::try_from(
                 veredictum_console::verify_api::unpack::MAX_UPLOAD_BYTES
@@ -151,10 +138,10 @@ async fn shutdown_signal() {
 
 /// Probes the running server's `/healthz` over one plain HTTP/1.1 exchange.
 ///
-/// Hand-rolled over `std::net::TcpStream` on purpose: the probe runs inside
-/// the distroless image where no curl exists, and pulling an HTTP client into
-/// the binary for one localhost GET would be the heavier tool. `Connection:
-/// close` keeps the read finite.
+/// Hand-rolled over `std::net::TcpStream` because the probe runs inside the
+/// distroless image where no curl exists, and an HTTP client would be the
+/// heavier tool for one localhost GET. `Connection: close` keeps the read
+/// finite.
 ///
 /// # Errors
 /// Returns an error when the connection, the write, the read, or the status
@@ -165,8 +152,8 @@ fn healthcheck() -> anyhow::Result<()> {
     use std::io::{Read, Write};
 
     let addr = std::env::var("LEPTOS_SITE_ADDR").unwrap_or_else(|_| String::from("127.0.0.1:3000"));
-    // The server binds 0.0.0.0 in the container; the probe connects to the
-    // loopback realization of that bind.
+    // The server binds 0.0.0.0 in the container; the probe reaches it on
+    // loopback.
     let addr = addr.replace("0.0.0.0", "127.0.0.1");
     let timeout = std::time::Duration::from_secs(3);
 
@@ -187,8 +174,7 @@ fn healthcheck() -> anyhow::Result<()> {
     }
 }
 
-// The featureless stub: the client entry point is `lib.rs::hydrate`, and the
-// server shape is selected by cargo-leptos; this exists only so the bin
-// target compiles under every feature set the workspace gates build.
+// The featureless stub, so the bin target compiles under every feature set
+// the workspace gates build; the client entry point is `lib.rs::hydrate`.
 #[cfg(not(feature = "ssr"))]
 fn main() {}
