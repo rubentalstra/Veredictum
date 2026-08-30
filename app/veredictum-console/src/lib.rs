@@ -50,6 +50,7 @@ pub mod run_api;
 pub mod run_job;
 #[cfg(feature = "ssr")]
 pub mod state;
+pub mod submitter;
 pub mod theme;
 pub mod verify_api;
 

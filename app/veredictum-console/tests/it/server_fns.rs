@@ -34,7 +34,10 @@ fn state_over(out: &Path) -> ConsoleState {
         party: engine_gate::repo_root().join("party"),
         out: out.to_path_buf(),
         catalogue: std::sync::Arc::new(catalogue),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(
+            veredictum_console::run_api::Drafts::new(),
+        )),
+        client_ip_header: None,
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
@@ -481,7 +484,14 @@ async fn the_download_route_refuses_when_nothing_is_prepared()
 -> Result<(), Box<dyn std::error::Error>> {
     let scratch = assert_fs::TempDir::new()?;
     let state = state_over(scratch.path());
-    let response = veredictum_console::export_api::route::record_zip(axum::Extension(state)).await;
+    let response = veredictum_console::export_api::route::record_zip(
+        axum::Extension(state),
+        Some(axum::Extension(axum::extract::ConnectInfo(
+            engine_gate::gate_peer(),
+        ))),
+        axum::http::HeaderMap::new(),
+    )
+    .await;
     assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
     Ok(())
 }

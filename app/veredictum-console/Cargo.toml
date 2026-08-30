@@ -142,6 +142,16 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 # neither crate reaches the ssr binary or the hydrate bundle.
 thirtyfour = "0.37.2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+# The concurrency journey (#389) is TWO visitors: the browser, and the journey
+# itself calling the same public server-function endpoints under a different
+# client address. The shipping copy above stays optional behind `ssr`; the test
+# target compiles in the featureless clippy pass too, so this one is
+# unconditional, exactly like `zip`.
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+# The same journey reads the start endpoint's own answer back as the typed
+# outcome. Unconditional for the reason `zip` and `reqwest` above are: the test
+# target compiles in the featureless clippy pass, where the ssr copy is absent.
+serde_json = "1"
 
 [lints]
 workspace = true

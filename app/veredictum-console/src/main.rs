@@ -104,9 +104,15 @@ async fn main() -> anyhow::Result<()> {
         .with_state(leptos_options);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app.into_make_service())
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    // The peer address is the only identity a console with no login has
+    // (#389), and axum surfaces it as a `ConnectInfo` extension only when the
+    // service is built with one.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
     Ok(())
 }
 

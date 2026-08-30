@@ -32,7 +32,10 @@ fn committed_state() -> ConsoleState {
         party: repo_root().join("party"),
         out: repo_root().join("out"),
         catalogue: std::sync::Arc::new(catalogue),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(
+            veredictum_console::run_api::Drafts::new(),
+        )),
+        client_ip_header: None,
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
@@ -100,7 +103,10 @@ fn refused_state(reason: &str) -> ConsoleState {
         party: "/nonexistent/party".into(),
         out: "/nonexistent/out".into(),
         catalogue: std::sync::Arc::new(Err(reason.to_owned())),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(
+            veredictum_console::run_api::Drafts::new(),
+        )),
+        client_ip_header: None,
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
@@ -422,13 +428,27 @@ fn the_startup_read_falls_back_to_the_documented_mounts() {
     assert_eq!(state.out, Path::new("out"));
     assert_eq!(state.sign_key, None, "no signing posture without a mount");
     assert_eq!(state.verify_key, None);
+    // A fresh console holds nothing for ANY submitter (#389): the job map and
+    // the drafts map are both empty, and the question is asked per visitor
+    // because that is the only shape either one has now.
+    let who = veredictum_console::submitter::Submitter::Unknown;
     assert!(
-        state.jobs.view().is_ok_and(|view| view.is_none()),
+        state
+            .jobs
+            .latest_of(who, veredictum_console::run_job::Latest::Any)
+            .is_ok_and(|run| run.is_none()),
         "a fresh console has no job"
     );
     assert!(
-        state.draft.lock().is_ok_and(|draft| draft.is_none()),
+        state
+            .draft
+            .lock()
+            .is_ok_and(|drafts| drafts.get(who).is_none()),
         "a fresh console has no run draft"
+    );
+    assert_eq!(
+        state.client_ip_header, None,
+        "no forwarded header is trusted until the operator names one"
     );
     // The suite's own working directory carries no `artifacts` tree, so the
     // load refuses and the refusal is the state — not a panic, not a default.

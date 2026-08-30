@@ -37,6 +37,21 @@ version on.
 - **A conformance entry may carry the `statement` it was judged against**, so a
   claim that lives nowhere else is still one anybody can recompute against. A
   `console` entry must carry it, with the transcript and the ixit.
+- **Two people can drive the hosted console at once (#389).** The one job slot
+  is a map keyed by the run id, so several runs execute side by side and every
+  seam addresses a named run instead of asking whether one exists. Two drive at
+  once, a start past that ceiling is accepted and QUEUED with its place and an
+  estimated wait, one address gets one run in flight and a second start is
+  answered with the run it already has, a run past thirty minutes of wall clock
+  is ended by the console with its partial record discarded, and finished runs
+  are evicted from memory oldest-first while their artifacts stay where the run
+  wrote them. The connection draft is per submitter too, so two visitors
+  composing a connection no longer overwrite each other. The caps are named in
+  one place and are starting values to re-measure on the chosen host.
+- **`VEREDICTUM_CLIENT_IP_HEADER` (#389).** Behind a proxy the peer address is
+  the proxy, so the console reads a forwarded client address only from the
+  header the operator names; unset, it uses the socket peer and reads no
+  forwarded header at all.
 - **The registry publishes a third kind of entry: `console` (#393).** A run
   performed at console.veredictum.eu, the official hosted instrument, against
   an endpoint the submitter named. Its verdicts are re-derived here from the

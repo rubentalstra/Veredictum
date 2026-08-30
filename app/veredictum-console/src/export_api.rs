@@ -91,22 +91,26 @@ pub mod prepare {
     /// The subdirectory of the job the sealed bundle lands in.
     pub const EXPORT_DIR: &str = "export";
 
-    /// The finished job's own directory, when a finished run exists.
+    /// This submitter's most recent finished run's own directory.
     ///
-    /// The path itself comes from the run seam's one derivation
-    /// (`run_job::job_dir`), so the export reads exactly the directory the run
-    /// wrote into rather than a second spelling of it (#134).
+    /// Several runs share the process (#389), so "the finished run" is not a
+    /// thing a console can name: what the export section seals is the run the
+    /// person reading it just drove. The run is picked through the job map's
+    /// ONE per-submitter reader, and the path comes from the run seam's one
+    /// derivation (`run_job::job_dir`), so neither claim is spelled twice
+    /// (#134).
     ///
     /// # Errors
-    /// The slot's verbatim refusal.
-    pub fn job_dir(state: &ConsoleState) -> Result<Option<PathBuf>, String> {
-        let Some(view) = state.jobs.view().map_err(|e| e.to_string())? else {
-            return Ok(None);
-        };
-        if view.finished.is_none() {
-            return Ok(None);
-        }
-        Ok(Some(crate::run_job::job_dir(&state.out, view.id)))
+    /// The map's verbatim refusal.
+    pub fn job_dir(
+        state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
+    ) -> Result<Option<PathBuf>, String> {
+        let latest = state
+            .jobs
+            .latest_of(submitter, crate::run_job::Latest::Finished)
+            .map_err(|e| e.to_string())?;
+        Ok(latest.map(|id| crate::run_job::job_dir(&state.out, id)))
     }
 
     /// Removes any sealed bundle left in a job directory.
@@ -159,8 +163,11 @@ pub mod prepare {
     ///
     /// # Errors
     /// The verbatim read failures.
-    pub fn screen(state: &ConsoleState) -> Result<ExportScreen, String> {
-        let Some(dir) = job_dir(state)? else {
+    pub fn screen(
+        state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
+    ) -> Result<ExportScreen, String> {
+        let Some(dir) = job_dir(state, submitter)? else {
             return Ok(ExportScreen::NoRun);
         };
         if !dir.join("statement.json").is_file() {
@@ -172,7 +179,7 @@ pub mod prepare {
         }
         let bundle = dir.join(EXPORT_DIR);
         if bundle.join(veredictum::record::MANIFEST_FILE).is_file() {
-            let facts = record_facts(state)?;
+            let facts = record_facts(state, submitter)?;
             return summarize(state, &bundle, &facts).map(|s| ExportScreen::Prepared(Box::new(s)));
         }
         Ok(ExportScreen::Ready)
@@ -183,14 +190,17 @@ pub mod prepare {
     /// # Errors
     /// The refusal that applies: no finished run, no claim, no key mounted,
     /// the engine's own diagnostic, or the verbatim filesystem failure.
-    pub fn run(state: &ConsoleState) -> Result<ExportSummary, String> {
+    pub fn run(
+        state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
+    ) -> Result<ExportSummary, String> {
         // The no-run refusal precedes engine discovery, so sealing nothing is
         // refused the same way on a host with no engine mounted at all.
-        if job_dir(state)?.is_none() {
+        if job_dir(state, submitter)?.is_none() {
             return Err(String::from("no finished run: grade a server first"));
         }
         let engine = crate::engine::locate().map_err(|e| e.to_string())?;
-        run_with(state, &engine)
+        run_with(state, submitter, &engine)
     }
 
     /// Seals the finished run's record through an already-located engine.
@@ -204,10 +214,11 @@ pub mod prepare {
     /// the engine's own diagnostic, or the verbatim filesystem failure.
     pub fn run_with(
         state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
         engine: &crate::engine::Engine,
     ) -> Result<ExportSummary, String> {
-        let dir =
-            job_dir(state)?.ok_or_else(|| String::from("no finished run: grade a server first"))?;
+        let dir = job_dir(state, submitter)?
+            .ok_or_else(|| String::from("no finished run: grade a server first"))?;
         let statement = dir.join("statement.json");
         if !statement.is_file() {
             return Err(String::from(
@@ -237,7 +248,7 @@ pub mod prepare {
         // ONE judgement feeds the summary AND the three presentation files:
         // the lib judges the whole campaign, so a per-consumer re-derivation
         // costs the seal a full judgement each time.
-        let facts = record_facts(state)?;
+        let facts = record_facts(state, submitter)?;
         let summary = summarize(state, &bundle, &facts)?;
         render_presentation(&bundle, &summary, &facts)?;
         Ok(summary)
@@ -313,11 +324,14 @@ pub mod prepare {
     }
 
     /// The record's own identity and every judged fact the export states.
-    fn record_facts(state: &ConsoleState) -> Result<RecordFacts, String> {
-        let results = crate::record_api::read::results_screen(state)?
+    fn record_facts(
+        state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
+    ) -> Result<RecordFacts, String> {
+        let results = crate::record_api::read::results_screen(state, submitter)?
             .ok_or_else(|| String::from("no finished run"))?;
         let crate::record_api::read::JudgedRun::Judged(judged) =
-            crate::record_api::read::judged(state)?
+            crate::record_api::read::judged(state, submitter)?
         else {
             return Err(String::from("the run carries no judgeable claim"));
         };
@@ -406,8 +420,11 @@ pub mod prepare {
     /// # Errors
     /// The verbatim refusal when nothing is prepared or the archive cannot be
     /// written.
-    pub fn archive(state: &ConsoleState) -> Result<Vec<u8>, String> {
-        let dir = job_dir(state)?
+    pub fn archive(
+        state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
+    ) -> Result<Vec<u8>, String> {
+        let dir = job_dir(state, submitter)?
             .ok_or_else(|| String::from("no finished run"))?
             .join(EXPORT_DIR);
         if !dir.join(veredictum::record::MANIFEST_FILE).is_file() {
@@ -519,8 +536,18 @@ pub mod route {
     )]
     pub async fn record_zip(
         axum::Extension(state): axum::Extension<crate::state::ConsoleState>,
+        connect: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,
+        headers: axum::http::HeaderMap,
     ) -> axum::response::Response {
-        match super::prepare::archive(&state) {
+        // Outside the Leptos route tree there are no request Parts in
+        // context, so this handler gathers what the ONE submitter derivation
+        // needs from its own extractors. `ConnectInfo` itself has no optional
+        // extractor, and its extension is where it lives.
+        let who = crate::submitter::of_request(
+            crate::submitter::header_value(&state, &headers),
+            connect.map(|axum::Extension(axum::extract::ConnectInfo(peer))| peer.ip()),
+        );
+        match super::prepare::archive(&state, who) {
             Ok(bytes) => (
                 axum::http::StatusCode::OK,
                 [
@@ -564,7 +591,8 @@ pub mod fns {
     #[server]
     pub async fn fetch_export() -> Result<ExportScreen, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        let screen = super::prepare::screen(&state).map_err(ServerFnError::new)?;
+        let who = crate::submitter::current(&state);
+        let screen = super::prepare::screen(&state, who).map_err(ServerFnError::new)?;
         Ok(crate::capture::export_screen(&state, screen))
     }
 
@@ -579,7 +607,8 @@ pub mod fns {
         // The seal itself is never pinned: `run` writes the real digest and
         // the real signing time into the bundle, and only the answer this
         // endpoint hands the browser carries the capture stand-ins.
-        let summary = super::prepare::run(&state).map_err(ServerFnError::new)?;
+        let who = crate::submitter::current(&state);
+        let summary = super::prepare::run(&state, who).map_err(ServerFnError::new)?;
         Ok(crate::capture::export_summary(&state, summary))
     }
 }

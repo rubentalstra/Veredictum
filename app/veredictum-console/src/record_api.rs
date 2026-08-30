@@ -140,16 +140,30 @@ pub mod read {
     use crate::engine::{opt_token, token};
     use crate::state::ConsoleState;
 
-    /// The finished job's results record, through the published lib.
+    /// This submitter's most recent finished run's results record, through
+    /// the published lib.
+    ///
+    /// Several runs share the process (#389), so the record surfaces read the
+    /// run the person in front of them just drove, picked through the job
+    /// map's ONE per-submitter reader — the same one the export seam uses, so
+    /// the two surfaces cannot disagree about which run they are describing
+    /// (#134).
     fn finished_results(
         state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
     ) -> Result<Option<(veredictum::party::Results, std::path::PathBuf)>, String> {
-        let Some(view) = state.jobs.view().map_err(|e| e.to_string())? else {
+        let latest = state
+            .jobs
+            .latest_of(submitter, crate::run_job::Latest::Finished)
+            .map_err(|e| e.to_string())?;
+        let Some(id) = latest else {
             return Ok(None);
         };
-        let Some(finished) = view.finished else {
+        let view = state.jobs.view_of(id).map_err(|e| e.to_string())?;
+        let Some(finished) = view.and_then(|view| view.finished) else {
             return Ok(None);
         };
+        // The engine's own recorded path, never a second derivation of it.
         let path = std::path::PathBuf::from(finished.results_path);
         let body =
             std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -195,8 +209,11 @@ pub mod read {
     ///
     /// # Errors
     /// The verbatim read failures.
-    pub fn results_screen(state: &ConsoleState) -> Result<Option<ResultsScreen>, String> {
-        let Some((results, _)) = finished_results(state)? else {
+    pub fn results_screen(
+        state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
+    ) -> Result<Option<ResultsScreen>, String> {
+        let Some((results, _)) = finished_results(state, submitter)? else {
             return Ok(None);
         };
         let mut tallies = (0_u64, 0_u64, 0_u64, 0_u64);
@@ -327,10 +344,11 @@ pub mod read {
     /// The verbatim read failures.
     pub fn result_detail(
         state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
         case: &str,
         format: Option<&str>,
     ) -> Result<Option<ResultDetail>, String> {
-        let Some((results, results_path)) = finished_results(state)? else {
+        let Some((results, results_path)) = finished_results(state, submitter)? else {
             return Ok(None);
         };
         // Scanned rather than closed over, for the reason `narrow` gives: the
@@ -409,8 +427,11 @@ pub mod read {
     ///
     /// # Errors
     /// The verbatim judgement failure.
-    pub fn judged(state: &ConsoleState) -> Result<JudgedRun, String> {
-        let Some((_, results_path)) = finished_results(state)? else {
+    pub fn judged(
+        state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
+    ) -> Result<JudgedRun, String> {
+        let Some((_, results_path)) = finished_results(state, submitter)? else {
             return Ok(JudgedRun::NoRun);
         };
         // The claim travels with the run: the judgement certifies the bytes
@@ -471,8 +492,11 @@ pub mod read {
     ///
     /// # Errors
     /// The verbatim judgement failure.
-    pub fn verdicts_screen(state: &ConsoleState) -> Result<VerdictsScreen, String> {
-        Ok(match judged(state)? {
+    pub fn verdicts_screen(
+        state: &ConsoleState,
+        submitter: crate::submitter::Submitter,
+    ) -> Result<VerdictsScreen, String> {
+        Ok(match judged(state, submitter)? {
             JudgedRun::Judged(facts) => VerdictsScreen::Judged {
                 profiles: facts.profiles,
                 capabilities: facts.capabilities,
@@ -503,7 +527,8 @@ pub mod fns {
     #[server]
     pub async fn fetch_results() -> Result<Option<ResultsScreen>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::read::results_screen(&state).map_err(ServerFnError::new)
+        let who = crate::submitter::current(&state);
+        super::read::results_screen(&state, who).map_err(ServerFnError::new)
     }
 
     /// One outcome's detail; `None` for an id the record does not carry.
@@ -516,7 +541,9 @@ pub mod fns {
         format: Option<String>,
     ) -> Result<Option<ResultDetail>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::read::result_detail(&state, &case, format.as_deref()).map_err(ServerFnError::new)
+        let who = crate::submitter::current(&state);
+        super::read::result_detail(&state, who, &case, format.as_deref())
+            .map_err(ServerFnError::new)
     }
 
     /// The verdicts screen.
@@ -526,7 +553,8 @@ pub mod fns {
     #[server]
     pub async fn fetch_verdicts() -> Result<VerdictsScreen, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::read::verdicts_screen(&state).map_err(ServerFnError::new)
+        let who = crate::submitter::current(&state);
+        super::read::verdicts_screen(&state, who).map_err(ServerFnError::new)
     }
 }
 

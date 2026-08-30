@@ -34,7 +34,10 @@ fn state_over(out: &Path, verify_key: Option<PathBuf>) -> ConsoleState {
         party: engine_gate::repo_root().join("party"),
         out: out.to_path_buf(),
         catalogue: std::sync::Arc::new(Err(String::from("not loaded for this gate"))),
-        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(
+            veredictum_console::run_api::Drafts::new(),
+        )),
+        client_ip_header: None,
         sign_key: None,
         verify_key,
         jobs: veredictum_console::run_job::JobSlot::default(),

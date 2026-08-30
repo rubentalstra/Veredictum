@@ -42,6 +42,16 @@ pub const SIGN_KEY_ENV: &str = "VEREDICTUM_SIGN_KEY";
 /// Unset is a first-class state: the page explains what to configure.
 pub const VERIFY_KEY_ENV: &str = "VEREDICTUM_VERIFY_KEY";
 
+/// The environment variable naming the request header that carries the real
+/// client address, for a deployment behind a proxy.
+///
+/// Unset is the default and the safe state: the socket peer is then the whole
+/// answer, and no forwarded header is read at all. A header is trusted only
+/// because the operator named it (the hosted deployment sets `Fly-Client-IP`),
+/// since an unconditionally trusted `X-Forwarded-For` would let any visitor
+/// claim any identity and defeat every per-submitter cap.
+pub const CLIENT_IP_HEADER_ENV: &str = "VEREDICTUM_CLIENT_IP_HEADER";
+
 /// The environment variable carrying the passphrase that unlocks
 /// [`SIGN_KEY_ENV`].
 ///
@@ -70,12 +80,18 @@ pub struct ConsoleState {
     /// The one startup validation pass, shared by every request; `Err` is
     /// the verbatim reason the catalogue could not be opened.
     pub catalogue: Arc<Result<veredictum::pipeline::catalogue::Validation, String>>,
-    /// The one in-flight run draft (the wizard's server-side memory): the
-    /// console holds at most one, and a restart legitimately forgets it —
-    /// no console-local store exists.
-    pub draft: Arc<std::sync::Mutex<Option<crate::run_api::RunDraft>>>,
-    /// The one run-job slot (#66).
+    /// The in-flight run drafts (the wizard's server-side memory), one per
+    /// submitter (#389): two visitors composing a connection at once do not
+    /// overwrite each other. A restart legitimately forgets every draft — no
+    /// console-local store exists — and the map is capped and evicted
+    /// oldest-first like the job map beside it.
+    pub draft: Arc<std::sync::Mutex<crate::run_api::Drafts>>,
+    /// The run-job map (#66, #389): every run this process is driving or has
+    /// recently driven, addressed by its own id.
     pub jobs: crate::run_job::JobSlot,
+    /// The request header the operator asked to be trusted for the client
+    /// address ([`CLIENT_IP_HEADER_ENV`]), when they named one.
+    pub client_ip_header: Option<String>,
     /// Whether the documentation capture mode is on
     /// ([`crate::capture::CAPTURE_ENV`]): the facts a run stamps then render
     /// as fixed stand-ins. It changes what the surfaces DISPLAY and nothing
@@ -108,8 +124,11 @@ impl ConsoleState {
             sign_key,
             verify_key,
             catalogue: Arc::new(catalogue),
-            draft: Arc::new(std::sync::Mutex::new(None)),
+            draft: Arc::new(std::sync::Mutex::new(crate::run_api::Drafts::new())),
             jobs: crate::run_job::JobSlot::default(),
+            client_ip_header: std::env::var(CLIENT_IP_HEADER_ENV)
+                .ok()
+                .filter(|name| !name.trim().is_empty()),
             capture: crate::capture::enabled(),
         }
     }

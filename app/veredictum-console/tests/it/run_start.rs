@@ -99,11 +99,14 @@ fn recording_sut() -> Result<(u16, SeenHeaders), std::io::Error> {
     Ok((port, seen))
 }
 
-/// Polls the slot until the job leaves `Running`, bounded.
-fn wait_terminal(slot: &JobSlot) -> Option<veredictum_console::run_job::JobView> {
+/// Polls the map until the NAMED job leaves `Running`, bounded.
+fn wait_terminal(
+    slot: &JobSlot,
+    id: veredictum_console::run_job::RunId,
+) -> Option<veredictum_console::run_job::JobView> {
     for _ in 0..600 {
-        let view = slot.view().ok()??;
-        if view.status != JobStatus::Running {
+        let view = slot.view_of(id).ok()??;
+        if view.status.is_terminal() {
             return Some(view);
         }
         std::thread::sleep(std::time::Duration::from_millis(100));
@@ -163,7 +166,7 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
         // The start seam reads no catalogue: the engine reads the mounted root
         // itself, which is what the engine boundary exists to keep true.
         catalogue: Arc::new(Err(String::from("unused by the start seam"))),
-        draft: Arc::new(Mutex::new(Some(RunDraft {
+        draft: Arc::new(Mutex::new(engine_gate::drafts_of(RunDraft {
             base_url: format!("http://127.0.0.1:{port}"),
             sut_name: String::from("start-gate"),
             sut_version: String::from("0.0.0-gate"),
@@ -185,11 +188,20 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
             record_exchanges: false,
         }))),
         jobs: JobSlot::default(),
+        client_ip_header: None,
         capture: false,
     };
 
-    let id = veredictum_console::run_api::read::start_run_with(&state, &engine)
-        .map_err(|e| format!("start: {e}"))?;
+    let veredictum_console::run_api::StartOutcome::Accepted(id) =
+        veredictum_console::run_api::read::start_run_with(
+            &state,
+            engine_gate::gate_submitter(),
+            &engine,
+        )
+        .map_err(|e| format!("start: {e}"))?
+    else {
+        panic!("a first start from a submitter with no run in flight is accepted");
+    };
     // The id the start answers with is the run's address: it reads back from
     // its own spelling, which is what `/run/live/{run_id}` relies on (#386).
     assert_eq!(
@@ -235,7 +247,9 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
     // no longer holds them, and everything else about it survives.
     {
         let guard = state.draft.lock().map_err(|e| e.to_string())?;
-        let draft = guard.as_ref().ok_or("the draft survives the start")?;
+        let draft = guard
+            .get(engine_gate::gate_submitter())
+            .ok_or("the draft survives the start")?;
         assert!(
             draft.credentials.is_empty(),
             "the credentials were copied instead of moved: {:?}",
@@ -243,7 +257,7 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
         );
         assert_eq!(draft.sut_name, "start-gate");
     }
-    let view = veredictum_console::run_api::read::draft_view(&state)
+    let view = veredictum_console::run_api::read::draft_view(&state, engine_gate::gate_submitter())
         .ok_or("the client-safe view still reads back")?;
     let wire = serde_json::to_string(&view)?;
     assert!(
@@ -251,7 +265,7 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
         "the wire view carries a secret: {wire}"
     );
 
-    let terminal = wait_terminal(&state.jobs).ok_or("the job never left Running")?;
+    let terminal = wait_terminal(&state.jobs, id).ok_or("the job never left Running")?;
     assert_eq!(
         terminal.status,
         JobStatus::Finished,
@@ -303,12 +317,14 @@ fn starting_without_a_draft_is_refused_by_name() -> Result<(), Box<dyn std::erro
         sign_key: None,
         verify_key: None,
         catalogue: Arc::new(Err(String::from("unused by the start seam"))),
-        draft: Arc::new(Mutex::new(None)),
+        draft: Arc::new(Mutex::new(veredictum_console::run_api::Drafts::new())),
         jobs: JobSlot::default(),
+        client_ip_header: None,
         capture: false,
     };
     let refusal =
-        veredictum_console::run_api::read::start_run(&state).expect_err("no draft must refuse");
+        veredictum_console::run_api::read::start_run(&state, engine_gate::gate_submitter())
+            .expect_err("no draft must refuse");
     assert!(refusal.contains("no connection draft"), "{refusal}");
     // And nothing was written: no job directory, no ixit.
     assert_eq!(
