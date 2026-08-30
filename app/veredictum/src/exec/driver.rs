@@ -3857,7 +3857,7 @@ impl HttpDriver<'_> {
         }
         let (call, variant) = family.envelope_read().ok_or_else(|| {
             AssertionOutcome::Unjudgeable(format!(
-                "version: the released ITS-REST realizes no VERSION envelope read for the {family:?} family, so change_type/lifecycle_state/uid_pattern are unjudgeable here"
+                "version: the released ITS-REST realizes no VERSION envelope read for the {family:?} family, so change_type/lifecycle_state are unjudgeable here"
             ))
         })?;
         let with = BTreeMap::from([(
