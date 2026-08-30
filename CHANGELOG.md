@@ -22,6 +22,16 @@ version on.
 
 
 ### Fixed
+- **The unmatched-container-member posture becomes a declared option
+  (#283).** No released AM sentence decides whether a data member matching no
+  constraint node is invalid (reported upstream as #307), so the two
+  type-narrowing refusal rows move to option-tagged sibling cases under
+  register AMB-229 and the matched halves stay gating. The structural
+  synthesizer stops emitting VCACA-illegal templates on `CLUSTER.items`:
+  `any` states no cardinality (the RM default is the constraint) and `opt`
+  refuses loudly, with the four unauthorable rows dropped under that
+  citation; the ADL1.4/AOM2 divergence on open occurrences bounds is
+  reported upstream as #308.
 - **A role-boundary premise is a declaration, never a presumption (#281).**
   The IXIT instance block gains an `administrative` posture (SM delegates
   access control, so nothing on the wire discloses a principal's roles), the

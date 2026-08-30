@@ -10191,3 +10191,37 @@ AMB-228:
     rested on them. Nothing is deleted: a party that declares the split runs
     the boundary exactly as before.
   disposition: statement_declared
+AMB-229:
+  ambiguity: >-
+    Whether a data member of a container attribute that matches NONE of the
+    attribute's C_OBJECT children makes the instance invalid. The released
+    closure quantifier exists for single-valued attributes and only for them
+    ("only one of which needs to be matched by the data"); the container
+    sections state no counterpart, valid_value is abstract with no
+    post-condition in both AOM releases, and every coded V… rule constrains
+    the archetype rather than a data instance. A validator that refuses the
+    unmatched member and one that admits it both survive every released
+    sentence, so the two type-narrowing refusal rows the catalogue carried as
+    gating were unsourced expectations.
+  source: >-
+    AM ADL1.4 master05-cadl.adoc §"Single-valued Attributes" — "Two or more
+    object blocks introduced by type names appearing after an attribute which
+    is not a container (i.e. for which there is no cardinality constraint) are
+    taken to be alternative constraints, only one of which needs to be matched
+    by the data" (the ADL2 twin says the same, and the container sections that
+    follow state no counterpart);
+    AM AOM2 master04.2-constraint_model-semantics.adoc §"Attribute Nodes" —
+    "The constraint on child objects is essentially the same except that more
+    than one of the alternatives can co-exist in the data" (an analogy, never
+    a refusal rule). ALL CONFIRMED first-hand 2026-08-30.
+  handling: >-
+    option_select. The refusal and the acceptance of an unmatched container
+    member are sibling option-tagged cases (the CONT-ITEM unmatched-member
+    pair), selected by the party's declared statement options, so neither
+    posture is presented as spec-required; the matched-member rows of the
+    type-narrowing cases stay gating, because a member that DOES satisfy the
+    narrowed C_OBJECT is grounded conformance in both directions. Reported
+    upstream as the container-closure silence.
+  disposition: option_select
+  options: [unmatched-member-refused, unmatched-member-accepted]
+  upstream_issue: 307
