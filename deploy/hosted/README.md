@@ -49,7 +49,7 @@ visitor can reach must hold nothing that could forge a record.
 
 ## How a deploy happens
 
-`.github/workflows/sandbox-deploy.yml` is the only thing that deploys, on
+`.github/workflows/hosted-deploy.yml` is the only thing that deploys, on
 exactly three occasions:
 
 1. **A real release.** `release.yml` calls the workflow after the scan-and-tag

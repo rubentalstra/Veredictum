@@ -54,8 +54,8 @@ version on.
   request platform breaks that three ways: several instances answer one
   service, an idle one is terminated with the engine child inside it, and each
   has its own filesystem. `deploy/hosted/` now carries the posture and the
-  image overlay, `sandbox-deploy.yml` applies it, and `Dockerfile.vercel` and
-  `vercel.json` are gone. The verification is unchanged and host-independent:
+  image overlay, the deploy lane is `hosted-deploy.yml` and applies it, and
+  `Dockerfile.vercel` and `vercel.json` are gone. The verification is unchanged and host-independent:
   what proves a deploy landed is the console serving the expected engine
   version, never a platform API agreeing that it deployed something.
 - **The registry entry format and the submission rules are both at 1.1.0

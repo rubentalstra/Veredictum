@@ -704,12 +704,12 @@ jobs:
   # real release, because a pre-release moves no `:latest` and so changes
   # nothing to deploy. A failure here reddens `announce` with the recovery
   # named; it can never un-publish anything the release already published.
-  sandbox:
+  hosted:
     name: hosted console
     needs: [plan, scan-and-tag]
     if: needs.plan.outputs.is-release == 'true'
     permissions: {}
-    uses: ./.github/workflows/sandbox-deploy.yml
+    uses: ./.github/workflows/hosted-deploy.yml
     with:
       expected-version: ${{ needs.plan.outputs.version }}
     secrets:
@@ -793,7 +793,7 @@ jobs:
       - image
       - image-smoke
       - scan-and-tag
-      - sandbox
+      - hosted
       - publish-crate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -815,7 +815,7 @@ jobs:
           R_IMAGE: ${{ needs.image.result }}
           R_IMAGE_SMOKE: ${{ needs.image-smoke.result }}
           R_SCAN_AND_TAG: ${{ needs.scan-and-tag.result }}
-          R_SANDBOX: ${{ needs.sandbox.result }}
+          R_HOSTED: ${{ needs.hosted.result }}
           R_CRATE: ${{ needs.publish-crate.result }}
         run: |
           set -uo pipefail
@@ -838,10 +838,10 @@ jobs:
           check "image" "$R_IMAGE"
           check "image smoke" "$R_IMAGE_SMOKE"
           check "scan + tag" "$R_SCAN_AND_TAG"
-          # A pre-release moves no `:latest`, so the sandbox leg is SKIPPED by
+          # A pre-release moves no `:latest`, so the hosted leg is SKIPPED by
           # design there and skipped is the correct outcome, not a failure.
           if [ "$IS_RELEASE" = "true" ]; then
-            check "hosted console" "$R_SANDBOX"
+            check "hosted console" "$R_HOSTED"
           else
             rows="${rows}| hosted console | skipped — pre-release moves no \`:latest\` |"$'\n'
           fi
