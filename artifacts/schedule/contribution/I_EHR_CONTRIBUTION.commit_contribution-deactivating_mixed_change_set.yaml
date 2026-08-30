@@ -29,6 +29,7 @@ description: "Commit deactivating mixed CONTRIBUTION carrying final content"
 spec_refs:
   - "RM ehr §EHR Active Status (master04 — the deactivation scenarios; the scope of is_modifiable)"
   - "RM common §Committal and Audits (master06 — the commit is one atomic act)"
+  - "RM common §revision_history_item (one entry per version of ONE versioned container)"
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
 applies: { rm: ">=1.0.2" }
 requires:
@@ -74,4 +75,10 @@ postconditions:
     text: >-
       The deactivating mixed commit landed atomically and the follow-up
       content commit was refused: one COMPOSITION, two EHR_STATUS versions
-  - { assert: version, count: 3 }        # default EHR_STATUS + the deactivating modification + the final COMPOSITION
+  # A revision history is one container's own: RM common revision_history_item.adoc
+  # §Description — "An entry in a revision history, corresponding to a version from
+  # a versioned container". The family this flow resolves is the EHR_STATUS
+  # container, which holds its default version and the deactivating modification.
+  # The COMPOSITION container is a SEPARATE history, asserted by the twin case
+  # -deactivating_mixed_change_set_composition_container.
+  - { assert: version, count: 2 }

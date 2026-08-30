@@ -43,6 +43,17 @@ version on.
   violation. `validate` gained the other half — a statement claiming the
   `Signing` capability beside an ixit that declares no posture is a
   claim-completeness finding, before any SUT is composed.
+- **The two mixed-change-set version counts read one container, and the
+  contribution delete case authors the full lifecycle term (#282).** A
+  revision history belongs to a single versioned container (RM
+  `revision_history_item.adoc` §Description), so the counts that summed
+  EHR_STATUS and COMPOSITION versions now state what the EHR_STATUS container
+  holds: 2 for the deactivating case, 3 for the reactivating one. The
+  COMPOSITION-container half moves to two new cases that read that container's
+  own revision history by uid. `commit_contribution-delete` compares
+  `lifecycle_state` against `openehr::523|deleted|`, the term RM
+  `original_version.adoc` §Attributes types the attribute as, instead of the
+  bare code `523`. The catalogue carries 1141 case cores.
 - Three bench error variants (`FixturePin`, `UnknownProfile`, `NoProfiles`)
   carry the `PackId`/`FixtureKey` newtypes instead of bare strings, the
   posture-contradiction payload is boxed with the error-size posture recorded
@@ -78,7 +89,6 @@ version on.
   `requires` handle, instead of binding one hard-coded EHR id every entry
   shared; the design record now states the replay's judge-or-refuse contract
   on both seams (#261).
-
 - **A version envelope in hand must BE a version (#278).** The driver reused
   the step's own response body as the `ORIGINAL_VERSION` envelope whenever its
   `uid.value` matched the version under assertion. A `COMPOSITION` or `PERSON`

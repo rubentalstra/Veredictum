@@ -1,0 +1,108 @@
+# The COMPOSITION-container half of -reactivating_mixed_change_set. That case
+# reads the EHR_STATUS container, because a revision history is one container's
+# own: RM common revision_history_item.adoc §Description — "An entry in a
+# revision history, corresponding to a version from a versioned container".
+# The content member the reactivating act carried lands in a DIFFERENT
+# container, so the fact needs its own case and its own read.
+#
+# The RM grounds the act itself in the sibling case: the EHR_STATUS member is
+# always committable (ehr master04 §EHR Creation) and the commit is one atomic
+# act (RM common master06 §Committal and Audits), so a member setting
+# is_modifiable -> true admits the content member listed beside it. What THIS
+# case adds is where that content went: version 2 of the COMPOSITION's own
+# VERSIONED_OBJECT, with the deactivated stretch leaving no version behind.
+#
+# The content member is a MODIFICATION of a container this case created before
+# the deactivation, so the container uid is captured from a single-member
+# commit. The CONTRIBUTION's `versions` is a "Set of references" with no
+# released ordering, so a container uid read off a MIXED commit's response
+# would rest on an order no spec assigns.
+#
+# ORDER OF THE SERVED HISTORY: oldest first, the reading register AMB-68
+# carries (the class's own `most_recent_version` postcondition is
+# `items.last.version_id.value`).
+id: I_EHR_CONTRIBUTION.commit_contribution-reactivating_mixed_change_set_composition_container
+kind: functional
+component: EHR_CONTRIBUTION
+sm_operation: I_EHR_CONTRIBUTION.commit_contribution
+capabilities: [ChangeSets]
+exercises: [Versioning]
+profiles: [CORE]
+ambiguities: [AMB-68, AMB-225]
+test_purpose: >-
+  The content member of a reactivating mixed CONTRIBUTION lands in the
+  COMPOSITION's own VERSIONED_OBJECT, whose revision history then holds exactly
+  the creation and that update.
+description: "COMPOSITION container after a reactivating mixed CONTRIBUTION"
+spec_refs:
+  - "RM ehr §EHR Active Status (master04 — the EHR_STATUS object itself is always modifiable)"
+  - "RM common §Committal and Audits (master06 — the commit is one atomic act)"
+  - "RM common §revision_history_item (one entry per version of ONE versioned container)"
+  - "RM common §revision_history (items 1..1; the items.last postconditions)"
+  - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  templates: [cnf.opt.minimal_event]
+  ehr: { commits: none }                 # mints ${ehr_id}; its EHR_STATUS v1 is is_modifiable = true
+data_sets: [cnf.composition.minimal_event.v1, cnf.composition.minimal_event.v2]
+flow:
+  - step: 1                              # one member, so the served container uid is unambiguous
+    call: commit_contribution
+    with:
+      ehr_id: "${ehr_id}"
+      versions:
+        - { data: "${ds:cnf.composition.minimal_event.v1}", change_type: creation }
+    expect: created
+    capture:
+      v1_uid: created.first_version_uid
+      versioned_object_uid: created.first_versioned_object_uid   # addresses the released revision-history read
+  - step: 2
+    call: I_EHR_STATUS.get_ehr_status    # the payload the PUT modifies + the If-Match precondition
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid }
+  - step: 3                              # deactivate through the wire: is_modifiable -> false
+    call: I_EHR_STATUS.clear_ehr_modifiable
+    with: { ehr_id: "${ehr_id}", preceding_version_uid: "${status_version_uid}" }
+    expect: updated
+    capture: { status_version_uid: updated.status_version_uid }
+  - step: 4                              # content FIRST, the reactivating status member SECOND
+    call: commit_contribution
+    with:
+      ehr_id: "${ehr_id}"
+      versions:
+        - data: "${ds:cnf.composition.minimal_event.v2}"
+          change_type: modification
+          preceding_version_uid: "${v1_uid}"   # body property: OAS UpdateVersion.preceding_version_uid
+        - data:
+            _type: EHR_STATUS
+            archetype_node_id: "openEHR-EHR-EHR_STATUS.generic.v1"
+            archetype_details:
+              _type: ARCHETYPED
+              archetype_id: { _type: ARCHETYPE_ID, value: "openEHR-EHR-EHR_STATUS.generic.v1" }
+              rm_version: "1.2.0"
+            name: { value: "EHR Status" }
+            subject: { _type: PARTY_SELF }
+            is_modifiable: true
+            is_queryable: true
+          change_type: modification
+          preceding_version_uid: "${status_version_uid}"
+    expect: created
+  - step: 5                              # the COMPOSITION container's own history, read by uid
+    call: I_ITS_REST_REVISION_HISTORY.versioned_composition_revision_history
+    with: { ehr_id: "${ehr_id}", versioned_object_uid: "${versioned_object_uid}" }
+    expect: ok
+    assert:
+      - { assert: instance_of, rm_type: REVISION_HISTORY }
+      # oldest first — the items.last postconditions (AMB-68)
+      - { assert: field, path: "items[0]/version_id/value", equals: "${v1_uid}" }
+      - { assert: field, path: "items[1]/version_id/value", exists: true }
+      - { assert: field, path: "items[2]", absent: true }
+      # "there will always be at least one commit audit" (Audit_valid)
+      - { assert: field, path: "items[1]/audits[0]/time_committed/value", exists: true }
+postconditions:
+  - assert: state
+    text: >-
+      The COMPOSITION container holds the creation and the update the
+      reactivating act carried; the deactivated stretch left no version in it
