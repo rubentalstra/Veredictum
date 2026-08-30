@@ -22,12 +22,6 @@
 //! earlier stage) is an honest error observation — that IS the
 //! measurement.
 
-#![expect(
-    clippy::disallowed_types,
-    reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges), whose shapes belong to the artifacts and the SUT"
-)]
-
 use std::collections::HashMap;
 use std::sync::Mutex;
 
@@ -138,9 +132,10 @@ impl CaptureStore {
 
     fn drop_journey(&self, id: u64) {
         let shard = shard_of(id);
-        if let Some(mutex) = self.journeys.get(shard)
-            && let Ok(mut map) = mutex.lock()
-        {
+        if let Some(mutex) = self.journeys.get(shard) {
+            let mut map = mutex
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             map.remove(&id);
         }
     }
@@ -182,25 +177,26 @@ fn updated(status: StatusCode) -> bool {
 }
 
 /// Deterministic corpus addressing: a large odd stride cycles the pools.
-fn stride(arrival: u64) -> u64 {
-    arrival
-        .checked_mul(2_654_435_761)
-        .unwrap_or(arrival)
-        .max(arrival)
+///
+/// The product is formed in `u128`, where the widest possible operand pair
+/// (`u64::MAX` times the multiplier) needs 96 bits, so the multiply cannot
+/// overflow and no fallback value has to exist.
+fn stride(arrival: u64) -> u128 {
+    u128::from(arrival) * 2_654_435_761
 }
 
 /// The pool entry one arrival addresses: the stride reduced modulo the
 /// pool length, so the index addresses `0..len` and an empty pool addresses
 /// entry 0 (the caller reports the empty pool).
 ///
-/// The reduction happens in `u64`, so the full stride reaches the whole
+/// The reduction happens in `u128`, so the full stride reaches the whole
 /// pool on every supported target.
 fn pool_index(arrival: u64, len: usize) -> usize {
     #[expect(
         clippy::as_conversions,
         reason = "the pool length widens exactly: usize is at most 64 bits on every supported target"
     )]
-    let modulus = len.max(1) as u64;
+    let modulus = u128::from(len.max(1) as u64);
     #[expect(
         clippy::expect_used,
         reason = "the remainder is below `len`, itself a usize, so the narrowing should be total"
@@ -246,6 +242,10 @@ fn create_ehr(
 #[expect(
     clippy::too_many_lines,
     reason = "one match arm per closed-vocabulary operation"
+)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "the AQL request bodies this sends are wire JSON whose shape belongs to the SUT"
 )]
 pub(crate) fn perform(
     client: &PerfClient,
@@ -1099,6 +1099,10 @@ fn current_doc_object_uid(
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "the ixit fixtures are authored as wire JSON, the shape the loader reads"
+)]
 mod tests {
     use super::*;
 
@@ -1126,6 +1130,37 @@ mod tests {
         assert_eq!(
             store.patient(3, |s| s.gp_ovid.clone()).flatten().as_deref(),
             Some("g::s::2")
+        );
+    }
+
+    /// A poisoned shard is recovered on the CLEANUP path too. A worker that
+    /// panics while holding a shard poisons it for the rest of the window,
+    /// and a cleanup that skipped the poisoned lock would leak every entry
+    /// hashing there — the read path already recovers, so the two agree.
+    #[test]
+    fn the_cleanup_path_recovers_a_poisoned_shard() {
+        let store = CaptureStore::new();
+        store.journey(7, |s| s.ehr_id = Some("e-7".to_owned()));
+
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(|_| {}));
+        let panicked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let held = store.journeys[shard_of(7)].lock().unwrap();
+            assert!(held.contains_key(&7));
+            panic!("a worker dies holding the shard");
+        }));
+        std::panic::set_hook(previous);
+        assert!(panicked.is_err(), "the holder must have unwound");
+        assert!(
+            store.journeys[shard_of(7)].is_poisoned(),
+            "the shard must be poisoned for the test to mean anything"
+        );
+
+        store.drop_journey(7);
+        assert_eq!(
+            store.journey(7, |s| s.ehr_id.clone()).flatten(),
+            None,
+            "the poisoned shard leaked the dropped instance"
         );
     }
 
