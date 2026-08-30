@@ -33,10 +33,11 @@ const TAIL_CAP: usize = 200;
 /// A run's identity: a UUID, minted once when the run is allocated.
 ///
 /// Unique across processes and restarts, which is what makes it addressable:
-/// `/run/live/{run_id}` names one run, and [`job_dir`] gives that run its own
+/// `/run/live/{run_id}` names one run, and `job_dir` gives that run its own
 /// directory under the mounted output tree. Both compilation targets carry
 /// the type — the id crosses the server-fn wire and the browser reads it out
-/// of the URL.
+/// of the URL — so the reference to that server-only function is plain text
+/// rather than a link the featureless doc build cannot resolve.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RunId(uuid::Uuid);
