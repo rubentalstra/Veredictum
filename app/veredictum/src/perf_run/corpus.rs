@@ -397,7 +397,9 @@ fn preflight_pack(
         )?;
         if !created(reply.status) {
             return Err(format!(
-                "pack preflight: template {} example returned {} — the committed payload                  ground is invalid for this SUT; fix the pack (or the SUT's validation)                  before measuring",
+                "pack preflight: template {} example returned {} — the committed payload \
+                 ground is invalid for this SUT; fix the pack (or the SUT's validation) \
+                 before measuring",
                 template.key,
                 reply.status.as_u16()
             ));

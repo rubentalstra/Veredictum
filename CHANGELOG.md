@@ -18,6 +18,11 @@ version on.
 
 ## [Unreleased]
 
+### Fixed
+- The pack-preflight diagnostic for an invalid template example prints as one
+  normally spaced sentence; a lost line continuation had left runs of
+  mid-sentence spaces in the operator-facing message (#174).
+
 ## [0.1.1] - 2026-08-30
 
 ### Added
