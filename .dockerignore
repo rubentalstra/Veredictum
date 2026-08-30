@@ -1,5 +1,5 @@
 # The ONE build-context ignore file for every image built from this repository
-# root — docker/Dockerfile and Dockerfile.vercel both. A Dockerfile-adjacent
+# root — docker/Dockerfile and deploy/hosted/Dockerfile both. A Dockerfile-adjacent
 # `*.dockerignore` would SHADOW this file entirely
 # (https://docs.docker.com/build/concepts/context — a Dockerfile-specific
 # ignore-file takes precedence), and Vercel's buildah supports only this
@@ -7,7 +7,7 @@
 # so there is only this one — the FerroEHR shape.
 #
 # What the hosted console BAKES therefore must not be excluded here:
-# Dockerfile.vercel COPYs `artifacts/`, `specs/openehr/` and `party/` into
+# deploy/hosted/Dockerfile COPYs `artifacts/`, `specs/openehr/` and `party/` into
 # /work (Vercel has no volume), and the first sandbox build failed on exactly
 # an exclusion of those trees. They stay in the context; the price is that the
 # from-source operator build's `COPY . .` now carries them into its builder
@@ -38,7 +38,7 @@ target/
 
 # The published schemas, the verification pack and the brand assets — read by
 # no image. The catalogue (artifacts/), the vendored oracle (specs/) and the
-# party declarations (party/) are NOT listed: Dockerfile.vercel bakes them
+# party declarations (party/) are NOT listed: the hosted overlay bakes them
 # (header above), and the operator image simply never COPYs them.
 #
 # `assets/brand/` is the one exception, because it is a COMPILE input twice
