@@ -49,6 +49,12 @@ COPY --from=mkdirs --chown=65532:65532 /empty/ /work/
 ENV VEREDICTUM_PARTY=/work/party \
     VEREDICTUM_OUT=/work/out
 
+# The public posture (#390): anyone may name the endpoint this instance drives,
+# so a target only this container can reach is refused before a socket opens.
+# The console refuses to start on any other value, so a typo here fails the
+# deploy rather than dropping the guard.
+ENV VEREDICTUM_POSTURE=hosted
+
 # The console reads its bind address from LEPTOS_SITE_ADDR at startup and
 # defaults to loopback, which no host outside the container can reach. The
 # port is the base image's own EXPOSE, and `deploy/hosted/fly.toml` names the

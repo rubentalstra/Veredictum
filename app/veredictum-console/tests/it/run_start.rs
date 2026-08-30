@@ -189,6 +189,8 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
         }))),
         jobs: JobSlot::default(),
         client_ip_header: None,
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     };
 
@@ -306,8 +308,8 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
     clippy::panic_in_result_fn,
     reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
 )]
-#[test]
-fn starting_without_a_draft_is_refused_by_name() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn starting_without_a_draft_is_refused_by_name() -> Result<(), Box<dyn std::error::Error>> {
     let scratch = assert_fs::TempDir::new()?;
     let state = ConsoleState {
         root: engine_gate::repo_root().join("artifacts"),
@@ -320,13 +322,71 @@ fn starting_without_a_draft_is_refused_by_name() -> Result<(), Box<dyn std::erro
         draft: Arc::new(Mutex::new(veredictum_console::run_api::Drafts::new())),
         jobs: JobSlot::default(),
         client_ip_header: None,
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     };
     let refusal =
         veredictum_console::run_api::read::start_run(&state, engine_gate::gate_submitter())
+            .await
             .expect_err("no draft must refuse");
     assert!(refusal.contains("no connection draft"), "{refusal}");
     // And nothing was written: no job directory, no ixit.
+    assert_eq!(
+        std::fs::read_dir(scratch.path())?.count(),
+        0,
+        "the refusal wrote something"
+    );
+    Ok(())
+}
+
+/// A hosted instance refuses a drafted target only it can reach, at the start
+/// seam, before the engine is located and before anything is written.
+///
+/// The refusal precedes engine discovery, so this gate holds on a host with no
+/// engine mounted: what it proves is that no socket and no process was opened
+/// for a target the posture refuses.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[tokio::test]
+async fn a_hosted_instance_refuses_a_private_target_at_the_start_seam()
+-> Result<(), Box<dyn std::error::Error>> {
+    let scratch = assert_fs::TempDir::new()?;
+    let state = ConsoleState {
+        root: engine_gate::repo_root().join("artifacts"),
+        specs: engine_gate::repo_root().join("specs/openehr"),
+        party: engine_gate::repo_root().join("party"),
+        out: scratch.path().to_path_buf(),
+        sign_key: None,
+        verify_key: None,
+        catalogue: Arc::new(Err(String::from("unused by the start seam"))),
+        draft: Arc::new(Mutex::new(engine_gate::drafts_of(RunDraft {
+            base_url: String::from("http://127.0.0.1:8080/ehrbase/rest/openehr/v1"),
+            sut_name: String::from("start-gate"),
+            sut_version: String::from("0.0.0-gate"),
+            auth: AuthChoice::None,
+            credentials: Vec::new(),
+            probed_ok: true,
+            statement_json: None,
+            statement_product: None,
+            filter: Some(String::from(FILTER)),
+            record_exchanges: false,
+        }))),
+        jobs: JobSlot::default(),
+        client_ip_header: None,
+        posture: veredictum_console::posture::Posture::Hosted,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
+        capture: false,
+    };
+    let refusal =
+        veredictum_console::run_api::read::start_run(&state, engine_gate::gate_submitter())
+            .await
+            .expect_err("a hosted instance must refuse a loopback target");
+    assert!(refusal.contains("127.0.0.1"), "{refusal}");
+    assert!(refusal.contains("loopback"), "{refusal}");
+    assert!(refusal.contains("RFC 1122"), "{refusal}");
     assert_eq!(
         std::fs::read_dir(scratch.path())?.count(),
         0,

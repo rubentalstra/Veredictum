@@ -52,6 +52,24 @@ version on.
   the proxy, so the console reads a forwarded client address only from the
   header the operator names; unset, it uses the socket peer and reads no
   forwarded header at all.
+- **`VEREDICTUM_POSTURE`, and the targets a public instance refuses (#390).**
+  A hosted console drives whatever endpoint a visitor names, so it can be
+  pointed at addresses only it can reach. Set the variable to `hosted` and the
+  console refuses loopback, RFC 1918 private, link-local, unique-local,
+  unspecified and multicast targets in both address families, the IPv4-mapped
+  IPv6 forms included, before any socket opens; the name is resolved first and
+  every address it answers with is checked, because a hostname under the
+  visitor's control resolving to a private address is the whole attack. The
+  refusal names the address, the family and the RFC that defines it, and it
+  reaches the visitor as a notification. Both seams that reach a
+  visitor-named endpoint are covered: the reachability probe, and the run
+  start before the engine is spawned. Unset or `local` refuses nothing, so an
+  operator keeps driving a CDR at `localhost`; any other value refuses to
+  start, because a public instance that read a typo as `local` would drive
+  whatever a visitor named.
+- **Per-address rate limits on the probe and the run start (#390).** They read
+  the same submitter identity the concurrency caps use, and a refusal states
+  when the visitor may try again.
 - **The registry publishes a third kind of entry: `console` (#393).** A run
   performed at console.veredictum.eu, the official hosted instrument, against
   an endpoint the submitter named. Its verdicts are re-derived here from the

@@ -831,26 +831,45 @@ pub mod read {
 
     /// Starts this submitter's drafted run.
     ///
-    /// Locates and verifies the engine, then hands the drafted spec to
+    /// The public start seam: it spends this submitter's start budget and
+    /// puts the drafted target through the posture's guard BEFORE the engine
+    /// is located or spawned, then hands the drafted spec to
     /// [`start_run_with`].
     ///
     /// # Errors
-    /// "no connection draft" before S3, the engine's own locate/spawn
-    /// refusals, and the filesystem's verbatim failures. The per-submitter
-    /// refusal is an ANSWER ([`StartOutcome::AlreadyInFlight`]), not an
-    /// error, because it names the run the screen must link to.
-    pub fn start_run(state: &ConsoleState, submitter: Submitter) -> Result<StartOutcome, String> {
+    /// "no connection draft" before S3, the rate ledger's refusal with its
+    /// retry, the target guard's refusal naming the address family, the
+    /// engine's own locate/spawn refusals, and the filesystem's verbatim
+    /// failures. The per-submitter concurrency refusal is an ANSWER
+    /// ([`StartOutcome::AlreadyInFlight`]), not an error, because it names
+    /// the run the screen must link to.
+    pub async fn start_run(
+        state: &ConsoleState,
+        submitter: Submitter,
+    ) -> Result<StartOutcome, String> {
         // The no-draft refusal precedes engine discovery, so an unconnected
         // wizard is refused for what it is on a host with no engine mounted.
-        let connected = state
+        // The guard's lock is released before the awaits below: nothing here
+        // holds it across one.
+        let drafted = state
             .draft
             .lock()
             .map_err(|e| e.to_string())?
             .get(submitter)
-            .is_some();
-        if !connected {
+            .map(|draft| draft.base_url.clone());
+        let Some(base_url) = drafted else {
             return Err(String::from(NO_DRAFT));
-        }
+        };
+        state
+            .rates
+            .admit(submitter, crate::rate_limit::Metered::Start)
+            .map_err(|e| e.to_string())?;
+        // The target guard (#390), before the engine is spawned: a hosted
+        // instance refuses an address only it can reach, resolving the name
+        // first. The local posture refuses nothing.
+        crate::target_safety::check(state.posture, &base_url)
+            .await
+            .map_err(|e| e.to_string())?;
         let engine = crate::engine::locate().map_err(|e| e.to_string())?;
         start_run_with(state, submitter, &engine)
     }
@@ -1093,9 +1112,15 @@ pub mod fns {
     /// facts (the probe outcome seed-gates Continue client-side). The secret
     /// values enter the server-side draft and nothing else.
     ///
+    /// The probe is the one console-originated request to a CDR, so it is
+    /// also one of the two seams a visitor-named target reaches (#390): the
+    /// submitter's probe budget is spent and the posture's guard runs BEFORE
+    /// the request is built, and a refused target stores no draft at all.
+    ///
     /// # Errors
-    /// The draft-store failure, verbatim; an unreachable server is an
-    /// ANSWER, not an error.
+    /// The rate ledger's refusal with its retry, the target guard's refusal
+    /// naming the address family, and the draft-store failure — each
+    /// verbatim. An unreachable server is an ANSWER, not an error.
     #[server]
     pub async fn probe_and_save(
         base_url: String,
@@ -1107,6 +1132,14 @@ pub mod fns {
         token: String,
     ) -> Result<ProbeAnswer, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
+        let who = crate::submitter::current(&state);
+        state
+            .rates
+            .admit(who, crate::rate_limit::Metered::Probe)
+            .map_err(ServerFnError::new)?;
+        crate::target_safety::check(state.posture, &base_url)
+            .await
+            .map_err(ServerFnError::new)?;
         let answer = super::read::probe(&base_url, auth, &user, &password, &token).await;
         let probed_ok = matches!(answer, ProbeAnswer::Answered { ok: true, .. });
         let mut credentials = Vec::new();
@@ -1131,7 +1164,7 @@ pub mod fns {
         }
         super::read::save_connection(
             &state,
-            crate::submitter::current(&state),
+            who,
             super::RunDraft {
                 base_url,
                 sut_name,
@@ -1187,13 +1220,16 @@ pub mod fns {
     /// run's id and nothing is started, so the screen can send them to it.
     ///
     /// # Errors
-    /// "no connection draft" before S3, the engine's refusals, and
-    /// filesystem failures — each verbatim.
+    /// "no connection draft" before S3, the start budget's refusal, the
+    /// target guard's refusal, the engine's refusals, and filesystem
+    /// failures — each verbatim.
     #[server]
     pub async fn start_run() -> Result<StartOutcome, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         let who = crate::submitter::current(&state);
-        super::read::start_run(&state, who).map_err(ServerFnError::new)
+        super::read::start_run(&state, who)
+            .await
+            .map_err(ServerFnError::new)
     }
 
     /// What the live screen is looking at, for the run the URL names.

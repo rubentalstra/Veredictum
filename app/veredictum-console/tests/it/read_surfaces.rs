@@ -39,6 +39,8 @@ fn committed_state() -> ConsoleState {
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     }
 }
@@ -110,6 +112,8 @@ fn refused_state(reason: &str) -> ConsoleState {
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     }
 }
@@ -397,6 +401,7 @@ fn an_unknown_case_id_is_absence_rather_than_failure() -> Result<(), Box<dyn std
 /// server refusing to start.
 #[test]
 fn the_startup_read_falls_back_to_the_documented_mounts() {
+    use veredictum_console::posture::{POSTURE_ENV, Posture};
     use veredictum_console::state::{
         OUT_ENV, PARTY_ENV, ROOT_ENV, SIGN_KEY_ENV, SPECS_ENV, VERIFY_KEY_ENV,
     };
@@ -412,6 +417,7 @@ fn the_startup_read_falls_back_to_the_documented_mounts() {
         OUT_ENV,
         SIGN_KEY_ENV,
         VERIFY_KEY_ENV,
+        POSTURE_ENV,
     ]
     .into_iter()
     .filter(|name| std::env::var_os(name).is_some())
@@ -421,7 +427,12 @@ fn the_startup_read_falls_back_to_the_documented_mounts() {
         return;
     }
 
-    let state = ConsoleState::load();
+    let state = ConsoleState::load().expect("an unset posture is the local one, and it loads");
+    assert_eq!(
+        state.posture,
+        Posture::Local,
+        "an unset posture is the local one, which refuses no target"
+    );
     assert_eq!(state.root, Path::new("artifacts"));
     assert_eq!(state.specs, Path::new("specs/openehr"));
     assert_eq!(state.party, Path::new("party"));
