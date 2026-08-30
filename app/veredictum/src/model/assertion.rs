@@ -3,7 +3,7 @@
 
 //! The typed assertion vocabulary (`flow[].assert` + `postconditions`).
 //!
-//! Ten assertion forms, closed by schedule release. Semantics per the
+//! Eleven assertion forms, closed by schedule release. Semantics per the
 //! CNF 2.0 artifact-set design: `equivalent` is the master07 "content
 //! check" with normative ignore-sets; `version` asserts RM versioning facts
 //! (`RM common §change_control`); `result_set` compares under the normative

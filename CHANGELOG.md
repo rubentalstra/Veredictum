@@ -18,6 +18,12 @@ version on.
 
 ## [Unreleased]
 
+### Fixed
+- `validate` now finds a step-level `equivalent to: committed` assertion whose
+  flow commits no payload at or before the asserting step; the shape was a
+  drive-time failure charged against the row instead of a catalogue finding
+  (#256).
+
 ## [0.1.1] - 2026-08-30
 
 ### Added
