@@ -1480,6 +1480,7 @@ fn check_references(case: &CaseCore, who: &str, set: &ArtifactSet, findings: &mu
         .map(ToString::to_string)
         .collect();
 
+    let mut committed_so_far = false;
     for step in &case.flow {
         // `with` executes before the step's captures exist ...
         for (_, value) in step.with_entries() {
@@ -1487,6 +1488,7 @@ fn check_references(case: &CaseCore, who: &str, set: &ArtifactSet, findings: &mu
                 check_one_ref(r, &ctx, &defined, findings);
             }
         }
+        committed_so_far = committed_so_far || !step.with_entries().is_empty();
         // The SMART `scope` claim resolves on the same pre-step footing as
         // `with` (it is minted into the request's own Authorization header).
         for value in step.scope_templates() {
@@ -1501,6 +1503,23 @@ fn check_references(case: &CaseCore, who: &str, set: &ArtifactSet, findings: &mu
         for assertion in &step.assertions {
             for r in assertion_refs(assertion) {
                 check_one_ref(&r, &ctx, &defined, findings);
+            }
+            if let Assertion::Equivalent {
+                to: EquivalentTarget::Committed,
+                ..
+            } = assertion
+            {
+                // The driver compares against the LAST payload committed at
+                // that point in the flow, so a step-level `to: committed`
+                // needs a payload-carrying step at or before it.
+                if !committed_so_far {
+                    push(
+                        findings,
+                        CheckId::ReferenceGrammar,
+                        who,
+                        "equivalent to: committed, but no flow step commits a payload".to_owned(),
+                    );
+                }
             }
         }
     }
@@ -6605,6 +6624,43 @@ mod reference_grammar_tests {
             message.contains("equivalent to: committed, but no flow step commits a payload"),
             "{message}"
         );
+    }
+
+    /// The same comparison at STEP level is held to the same ground: the
+    /// driver reads the last payload committed at that point, so an assert
+    /// with no payload-carrying step at or before it is a catalogue finding,
+    /// never a drive-time failure charged against the row.
+    #[test]
+    fn a_step_level_committed_equivalence_needs_an_earlier_commit() {
+        let message = only_message(&serde_json::json!({
+            "flow": [
+                { "step": 1, "call": "create_ehr", "expect": "created",
+                  "assert": [{ "assert": "equivalent", "to": "committed" }] },
+                { "step": 2, "call": "create_ehr", "expect": "created",
+                  "with": { "subject": "s" } }
+            ]
+        }));
+        assert!(
+            message.contains("equivalent to: committed, but no flow step commits a payload"),
+            "{message}"
+        );
+    }
+
+    /// A payload committed at or before the asserting step satisfies it.
+    #[test]
+    fn a_step_level_committed_equivalence_after_a_commit_is_clean() {
+        let case = case_with(&serde_json::json!({
+            "flow": [
+                { "step": 1, "call": "create_ehr", "expect": "created",
+                  "with": { "subject": "s" } },
+                { "step": 2, "call": "create_ehr", "expect": "created",
+                  "assert": [{ "assert": "equivalent", "to": "committed" }] }
+            ]
+        }));
+        let set = ArtifactSet::default();
+        let mut findings = Vec::new();
+        check_references(&case, "RG-refs", &set, &mut findings);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 }
 

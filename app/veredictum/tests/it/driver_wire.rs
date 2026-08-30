@@ -483,7 +483,7 @@ fn a_body_carrying_commit_labels_its_payload_format() -> Fallible {
         "request": {
             "method": "POST",
             "path": "/ehr/{ehr_id}/composition",
-            "body": { "name": "composition" }
+            "body": "composition"
         },
         "outcomes": { "created": { "status": 201 } }
     })];

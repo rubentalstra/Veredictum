@@ -44,3 +44,12 @@ Three consequences, all of which cost a debugging session if forgotten:
 3. The `crates-io` environment's deployment policy must allow the `v*` TAG
    pattern, not only the `main` branch — otherwise a tag-triggered run cannot
    reach the environment at all and fails before the token exchange.
+
+**v0.1.1 cut (2026-08-30):** the `crates-io` reviewer pause is approvable from
+a session via `POST /repos/{o}/{r}/actions/runs/{id}/pending_deployments` with
+`{environment_ids, state: "approved", comment}` — used with the owner's
+explicit prior authorization, never otherwise. Two cut-time traps seen live:
+the release PR touches console `src/` (ENGINE_PIN), so it needs the
+`no-ui-visual-change` label IN the triggering payload (close/reopen after
+labeling); and the `verdicts` binary exits 1 on a static-review finding, which
+any lane wrapping it must tolerate the way the run step does.
