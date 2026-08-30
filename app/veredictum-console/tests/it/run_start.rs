@@ -151,14 +151,6 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
     std::fs::create_dir_all(&out)?;
     let (port, seen) = recording_sut()?;
 
-    // A sealed bundle left in the directory the first job will land in: the
-    // job counter restarts with the console process while the output mount
-    // persists, so this is the stale record a new run must never inherit.
-    let stale_bundle = veredictum_console::run_job::job_dir(&out, 1).join("export");
-    std::fs::create_dir_all(&stale_bundle)?;
-    let stale_manifest = stale_bundle.join(veredictum::record::MANIFEST_FILE);
-    std::fs::write(&stale_manifest, b"{}")?;
-
     let claim =
         std::fs::read_to_string(engine_gate::repo_root().join("party/ehrbase/statement.json"))?;
     let state = ConsoleState {
@@ -198,13 +190,25 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
 
     let id = veredictum_console::run_api::read::start_run_with(&state, &engine)
         .map_err(|e| format!("start: {e}"))?;
-    assert_eq!(id, 1, "a fresh slot's first job is job 1");
+    // The id the start answers with is the run's address: it reads back from
+    // its own spelling, which is what `/run/live/{run_id}` relies on (#386).
+    assert_eq!(
+        id.to_string()
+            .parse::<veredictum_console::run_job::RunId>()?,
+        id
+    );
     let job_dir = veredictum_console::run_job::job_dir(&out, id);
-
-    // The stale bundle is gone before the engine wrote a single row.
     assert!(
-        !stale_manifest.exists(),
-        "a run into the directory left an older run's sealed record behind"
+        job_dir.is_dir(),
+        "the run's own directory carries the id: {}",
+        job_dir.display()
+    );
+
+    // The seal lives inside the job directory, so the seam that creates it
+    // guarantees no bundle is in it before the engine writes a single row.
+    assert!(
+        !job_dir.join("export").exists(),
+        "a run started into a directory holding a sealed record"
     );
 
     // The ixit names the environment variables and carries no value.

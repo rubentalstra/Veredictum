@@ -227,6 +227,21 @@ impl Harness {
         self.wait_xpath_for(xpath, WAIT).await
     }
 
+    /// The path the browser is on, origin stripped, so a journey can navigate
+    /// back to an address the console itself produced.
+    ///
+    /// # Panics
+    /// When the current URL cannot be read.
+    async fn current_path(&self) -> String {
+        let url = self.driver.current_url().await.expect("current url");
+        let mut path = String::from(url.path());
+        if let Some(query) = url.query() {
+            path.push('?');
+            path.push_str(query);
+        }
+        path
+    }
+
     /// Waits until the current URL contains `fragment`.
     ///
     /// # Panics
@@ -726,9 +741,10 @@ async fn compose_tier_claim(h: &Harness) {
     );
 }
 
-/// Drives connect → probe → scope → start → live, returning with the run
-/// finished on the Live screen. Captures are the caller's business.
-async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>) {
+/// Drives connect → probe → scope → start → live, returning the run's own
+/// address with the run finished on the Live screen. Captures are the
+/// caller's business.
+async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>) -> String {
     h.goto("/run/connect").await;
     let base = h.wait_css("input#base-url").await;
     base.clear().await.expect("clear the base URL");
@@ -820,9 +836,43 @@ async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>
         .await
         .expect("to live");
 
-    h.wait_xpath("//h1[contains(., 'Live run')]").await;
+    let address = follow_the_run(h).await;
     h.wait_xpath_for("//span[contains(., 'finished')]", sut.finish_budget)
         .await;
+    address
+}
+
+/// Reads the run's own address off the live screen and reloads it mid-run,
+/// returning that address.
+///
+/// A reload must rejoin the SAME run (#386): before the URL carried the id,
+/// the page could only ask whether anything was in flight here, and answered
+/// "no run is in flight" about a run that was still executing.
+///
+/// The permalink is asserted by its href rather than by its text, because
+/// documentation capture mode pins the run id it DISPLAYS so an unchanged
+/// console rewrites no screenshot; the address the page is actually serving
+/// is the URL, and that is what a reload has to preserve.
+///
+/// # Panics
+/// When the live link carries no id, when the reload lands on another run, or
+/// when the screen offers no permalink at all.
+async fn follow_the_run(h: &Harness) -> String {
+    h.wait_xpath("//h1[contains(., 'Live run')]").await;
+    let address = h.current_path().await;
+    assert!(
+        address.starts_with("/run/live/") && address.len() > "/run/live/".len(),
+        "the live link must carry the run's id: {address}"
+    );
+    h.goto(&address).await;
+    h.wait_xpath("//h1[contains(., 'Live run')]").await;
+    h.wait_xpath("//a[starts-with(@href, '/run/live/')]").await;
+    assert_eq!(
+        h.current_path().await,
+        address,
+        "a reload mid-run follows the same run"
+    );
+    address
 }
 
 /// Walks the finished run's record: results with one URL-addressed detail,
@@ -880,7 +930,7 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
         continue_label: "Continue anyway",
         finish_budget: Duration::from_mins(1),
     };
-    drive_wizard(&h, &sut, Some("scope-light")).await;
+    let address = drive_wizard(&h, &sut, Some("scope-light")).await;
     h.capture("live-light").await;
     read_record(
         &h,
@@ -890,6 +940,14 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
         "verdicts-light",
     )
     .await;
+
+    // A link to the finished run's own id shows that run, after the reader
+    // walked away to the record surfaces (#386). The permalink is asserted by
+    // its href: capture mode pins the id the screen DISPLAYS, and the address
+    // being served is the URL.
+    h.goto(&address).await;
+    h.wait_xpath("//span[contains(., 'finished')]").await;
+    h.wait_xpath("//a[starts-with(@href, '/run/live/')]").await;
 
     // S8 and S9 ride this journey rather than a second driven one: the console
     // holds ONE run draft and ONE job slot, so a second wizard-driving journey
@@ -908,12 +966,42 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
     h.goto("/run/scope").await;
     h.wait_xpath("//h1[contains(., 'Scope')]").await;
     h.capture("scope-dark").await;
-    h.goto("/run/live").await;
+    h.goto(&address).await;
     h.wait_xpath("//span[contains(., 'finished')]").await;
     h.capture("live-dark").await;
     h.goto("/run/results").await;
     h.wait_xpath("//h1[contains(., 'Results')]").await;
     h.capture("results-dark").await;
+
+    h.assert_console_clean(&[]).await;
+    h.finish().await;
+}
+
+/// A run id this console never drove says so about the RUN, and never "no run
+/// is in flight", which is only true of a request that named none (#386). An
+/// address that is not a run id at all lands in the same state with the parse
+/// reason beside it, rather than a blank page or a panic.
+#[tokio::test]
+async fn e2e_an_unknown_run_id_says_so_in_its_own_words() {
+    let Some(h) = Harness::start("unknown-run").await else {
+        return;
+    };
+    // Addressed by id, so this journey is independent of whatever run another
+    // journey may be driving through the same console.
+    h.goto("/run/live/3f2504e0-4f89-41d3-9a0c-0305e82c3301")
+        .await;
+    h.wait_xpath("//body[contains(., 'knows nothing about run')]")
+        .await;
+    h.wait_xpath("//body[contains(., '3f2504e0-4f89-41d3-9a0c-0305e82c3301')]")
+        .await;
+
+    h.goto("/run/live/not-a-run-id").await;
+    h.wait_xpath("//body[contains(., 'does not name a run')]")
+        .await;
+    h.wait_xpath("//h1[contains(., 'Live run')]").await;
+    // The caveat is page furniture on every state of this screen (#388).
+    h.wait_xpath("//body[contains(., 'keeps nothing durable')]")
+        .await;
 
     h.assert_console_clean(&[]).await;
     h.finish().await;

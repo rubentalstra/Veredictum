@@ -57,13 +57,22 @@ leptos-use = "0.19"
 # targets.
 serde = { version = "1", features = ["derive"] }
 
+# A run's identity (#386). Both targets carry it: the id crosses the server-fn
+# wire and the browser reads it out of `/run/live/{run_id}`. GENERATION is
+# ssr-only — `uuid/v4` rides the ssr feature below, because a v4 mint needs a
+# getrandom backend and wasm32-unknown-unknown has none this crate may claim.
+uuid = { version = "1", default-features = false, features = ["serde", "std"] }
+
+# Typed errors on BOTH targets: a run id's parse refusal is read where the URL
+# is, which is the browser, so this one cannot ride the ssr gate.
+thiserror = "2"
+
 # server-only (behind `ssr`)
 # The reachability probe's HTTP client — the ONE console-originated request
 # to a CDR, the diagnostic carve-out the crate CLAUDE.md records. rustls,
 # never native TLS, matching the engine's own pin.
 reqwest = { version = "0.13", default-features = false, features = ["rustls"], optional = true }
 serde_json = { version = "1", optional = true }
-thiserror = { version = "2", optional = true }
 leptos_axum = { version = "0.8", optional = true }
 # `multipart` carries the /verify/upload reader: S9 takes a bundle from a
 # plain HTML form, which is the only zero-JS file upload there is.
@@ -104,7 +113,7 @@ ssr = [
     "dep:reqwest",
     "leptos-use/ssr",
     "dep:serde_json",
-    "dep:thiserror",
+    "uuid/v4",
     "leptos/ssr",
     "leptos_meta/ssr",
     "leptos_router/ssr",

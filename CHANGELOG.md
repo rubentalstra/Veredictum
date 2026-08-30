@@ -53,6 +53,22 @@ version on.
   (#393).** `schemas/registry-entry.schema.json` carries the third provenance
   branch, and an entry declares the versions it was accepted under as before.
 
+### Fixed
+- **A run in flight became unfollowable (#386).** A run's id was a counter that
+  restarted with the console process, and `/run/live` carried no run identity at
+  all, so the page could only ask whether this process held a job right now. On
+  a deployment that serves one service from several instances, a later request
+  reached an instance whose slot was empty and the page said "No run is in
+  flight" about a run that was still executing. A run id is now a UUID, minted
+  once, used as the run's job-directory name and carried by the URL as
+  `/run/live/{run_id}`. The live screen has four honest answers: this process is
+  driving the run, the run's own artifacts say this, this console knows nothing
+  about that run, and no run was named. A reload mid-run rejoins the same run, a
+  link to a finished run's id shows that run, and the screen prints the run's own
+  address as a copyable permalink. Cancel names the run it cancels. The screen
+  also states what the instance keeps: the artifacts live long enough to be
+  judged, shown and submitted, and a redeploy ends the runs in flight.
+
 ## [0.1.3] - 2026-08-30
 
 ### Changed

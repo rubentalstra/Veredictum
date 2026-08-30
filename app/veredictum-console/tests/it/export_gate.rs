@@ -91,10 +91,10 @@ fn driven(out: &Path) -> Result<Option<(ConsoleState, Engine)>, Box<dyn std::err
 
     let slot = JobSlot::default();
     let state = state_over(out, slot.clone());
-    let id = slot.allocate_id()?;
-    // The job directory shape the console's own start_run uses, so the export
-    // finds the statement and the results exactly where it looks for them.
-    let job_dir = out.join(format!("console-job-{id}"));
+    let id = slot.allocate_id();
+    // The run seam's ONE derivation of the path (#134), so the export finds
+    // the statement and the results exactly where it looks for them.
+    let job_dir = veredictum_console::run_job::job_dir(out, id);
     std::fs::create_dir_all(&job_dir)?;
     let port = engine_gate::fixture_sut()?;
     let ixit = engine_gate::write_ixit(&job_dir, port)?;

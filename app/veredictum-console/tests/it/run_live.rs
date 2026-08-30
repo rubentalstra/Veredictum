@@ -6,7 +6,7 @@
 //! carries env-var names only.
 
 use veredictum_console::engine::{Credential, Engine, RunSpec, Secret};
-use veredictum_console::run_api::{AuthChoice, RunDraft};
+use veredictum_console::run_api::{AuthChoice, RunDraft, RunScreen, read};
 use veredictum_console::run_job::{JobSlot, JobStatus};
 
 use crate::engine_gate;
@@ -46,7 +46,7 @@ fn a_job_supervises_a_run_to_its_finished_view() -> Result<(), Box<dyn std::erro
     std::fs::create_dir_all(&out)?;
 
     let slot = JobSlot::default();
-    let id = slot.allocate_id()?;
+    let id = slot.allocate_id();
     slot.start(
         id,
         &engine,
@@ -120,7 +120,7 @@ fn the_generated_ixit_carries_names_and_never_values() {
         filter: None,
         record_exchanges: false,
     };
-    let document = veredictum_console::run_api::read::ixit_document(&draft);
+    let document = read::ixit_document(&draft);
     assert!(document.contains("CONSOLE_SUT_USER"));
     assert!(document.contains("CONSOLE_SUT_PASS"));
     assert!(
@@ -191,7 +191,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
         jobs: JobSlot::default(),
         capture: false,
     };
-    let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
+    let id = state.jobs.allocate_id();
     state
         .jobs
         .start(
@@ -219,6 +219,19 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
         "tail: {:?}",
         terminal.tail
     );
+    assert_eq!(terminal.id, id, "the view answers under the allocated id");
+
+    // The run this process drove streams under its own address, and the bare
+    // address resolves to the same run (#386).
+    let RunScreen::Live(streamed) = read::run_screen(&state, Some(id))? else {
+        panic!("the process holding the run streams it");
+    };
+    assert_eq!(streamed.id, id);
+    assert_eq!(state.jobs.current().map_err(|e| e.to_string())?, Some(id));
+    let RunScreen::Live(bare) = read::run_screen(&state, None)? else {
+        panic!("a bare /run/live is the run this process holds");
+    };
+    assert_eq!(bare.id, id);
 
     // S6: the results screen reads the record red-first.
     let results = veredictum_console::record_api::read::results_screen(&state)
@@ -328,14 +341,12 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
 
     // The Scope step with the box ticked: the save is what carries the choice
     // onto the draft that start_run then reads.
-    let saved = veredictum_console::run_api::read::save_scope(&state, None, None, true)
-        .map_err(|e| format!("scope: {e}"))?;
+    let saved = read::save_scope(&state, None, None, true).map_err(|e| format!("scope: {e}"))?;
     assert_eq!(saved, None, "no claim was pasted, so there is no summary");
-    let view = veredictum_console::run_api::read::draft_view(&state)
-        .ok_or("the draft exists after the scope save")?;
+    let view = read::draft_view(&state).ok_or("the draft exists after the scope save")?;
     assert!(view.record_exchanges, "the ticked box reached the draft");
 
-    let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
+    let id = state.jobs.allocate_id();
     state
         .jobs
         .start(
@@ -406,5 +417,103 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
     );
     assert_eq!(first_exchange.status_line, "HTTP 500");
     assert_eq!(first_exchange.response_body.as_deref(), Some("no"));
+    Ok(())
+}
+
+/// A console state over one scratch output tree, with no catalogue: the live
+/// screen's resolver reads the slot and the output mount, and nothing else.
+fn state_over(out: &std::path::Path) -> veredictum_console::state::ConsoleState {
+    veredictum_console::state::ConsoleState {
+        root: engine_gate::repo_root().join("artifacts"),
+        specs: engine_gate::repo_root().join("specs/openehr"),
+        party: engine_gate::repo_root().join("party"),
+        out: out.to_path_buf(),
+        catalogue: std::sync::Arc::new(Err(String::from("unused by the live screen"))),
+        draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        sign_key: None,
+        verify_key: None,
+        jobs: JobSlot::default(),
+        capture: false,
+    }
+}
+
+/// The #386 gate: the live screen has three honest answers about a run this
+/// process is not driving, and "no run is in flight" is said only about a
+/// request that named none.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn the_live_screen_answers_for_a_run_this_process_never_drove()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Authored as bytes, the way the engine writes the document the console
+    // reads back, so a codec change fails here.
+    const RECORD: &str = r#"{
+        "sut": { "name": "recorded-cdr", "version": "9.9" },
+        "runner": {
+            "name": "veredictum",
+            "version": "0",
+            "verification_pack_status": "passed"
+        },
+        "schedule_release": "0",
+        "tech_profile": { "its": "its-rest", "formats": [] },
+        "ixit_digest": "0",
+        "outcomes": [
+            { "case": "A-a", "status": "passed", "rows_driven": 1, "rows_total": 1 },
+            { "case": "A-b", "status": "failed", "rows_driven": 1, "rows_total": 1 },
+            { "case": "A-c", "status": "errored", "rows_driven": 1, "rows_total": 1 },
+            {
+                "case": "A-d",
+                "status": "not_applicable",
+                "rows_driven": 0,
+                "rows_total": 1,
+                "citation": "ITS-REST"
+            }
+        ]
+    }"#;
+
+    let scratch = assert_fs::TempDir::new()?;
+    let state = state_over(scratch.path());
+    let id = state.jobs.allocate_id();
+
+    // Nothing named, nothing in flight: the one place that sentence is true.
+    assert_eq!(read::run_screen(&state, None)?, RunScreen::NoRunNamed);
+
+    // A named run with no directory: this instance knows nothing of it, and
+    // says so about the run rather than about itself.
+    assert_eq!(read::run_screen(&state, Some(id))?, RunScreen::Unknown(id));
+
+    // A directory with no results document is a recorded run that left none.
+    let dir = veredictum_console::run_job::job_dir(scratch.path(), id);
+    std::fs::create_dir_all(&dir)?;
+    let RunScreen::Recorded(empty) = read::run_screen(&state, Some(id))? else {
+        panic!("a job directory is a recorded run");
+    };
+    assert_eq!(empty.id, id);
+    assert_eq!(empty.results, None, "no results document, no outcome");
+    assert_eq!(empty.dir, dir.display().to_string());
+
+    // With the record beside it, the tally is the engine's own, read through
+    // the published lib.
+    std::fs::write(dir.join("results.json"), RECORD)?;
+    let RunScreen::Recorded(recorded) = read::run_screen(&state, Some(id))? else {
+        panic!("a job directory is a recorded run");
+    };
+    let results = recorded.results.ok_or("the record parses into a tally")?;
+    assert_eq!(results.sut_name, "recorded-cdr");
+    assert_eq!(
+        (
+            results.passed,
+            results.failed,
+            results.errored,
+            results.not_applicable
+        ),
+        (1, 1, 1, 1)
+    );
+    assert_eq!(
+        results.results_path,
+        dir.join("results.json").display().to_string()
+    );
     Ok(())
 }
