@@ -51,7 +51,7 @@ pub fn envelope_uid(envelope: &Value) -> Option<&str> {
 /// carries. A versioned item served on its own — a `COMPOSITION` under
 /// `Prefer: return=representation`, say — repeats the version's
 /// `OBJECT_VERSION_ID` at `uid.value` (RM common
-/// `UML/classes/version.adoc` §Attributes) while carrying no `commit_audit`,
+/// `UML/classes/version.adoc` §Functions) while carrying no `commit_audit`,
 /// so the uid alone cannot tell the envelope from its content.
 #[must_use]
 pub fn is_version_envelope(body: &Value) -> bool {
@@ -210,6 +210,9 @@ pub fn coded_text_term(coded: &Value) -> Option<String> {
 /// # Errors
 /// The envelope carries no coded `lifecycle_state`, or it names another term.
 pub fn eval_lifecycle_state(envelope: &Value, want: &str) -> Result<(), AssertionFailure> {
+    // TODO(#322): an IMPORTED_VERSION's lifecycle_state is effected from
+    // `item.lifecycle_state`, so this top-level read charges a wrapper the
+    // released ITS-JSON forbids from carrying the property.
     let Some(observed) = envelope.get("lifecycle_state").and_then(coded_text_term) else {
         return Err(AssertionFailure(
             "version lifecycle_state: the served envelope carries no coded lifecycle_state (RM common original_version.adoc: a DV_CODED_TEXT from the version lifecycle state group)"
@@ -339,6 +342,12 @@ mod tests {
         let uid = "a::s::2";
         assert!(is_version_envelope(&envelope("249", "532", uid)));
         assert!(is_version_envelope(&json!({ "_type": "IMPORTED_VERSION" })));
+        // An IMPORTED_VERSION carries no uid of its own: the released ITS-JSON
+        // closes it to contribution/commit_audit/signature/item, and `uid ()`
+        // is effected from `item.uid` (imported_version.adoc §Functions).
+        let imported = json!({ "_type": "IMPORTED_VERSION", "item": { "uid": { "value": uid } } });
+        assert!(is_version_envelope(&imported));
+        assert_eq!(envelope_uid(&imported), None);
         assert!(!is_version_envelope(&json!({
             "_type": "COMPOSITION", "uid": { "value": uid }
         })));
