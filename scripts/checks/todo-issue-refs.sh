@@ -5,33 +5,34 @@
 #
 # comment-style.sh enforces the `TODO(#NNNN):` form over hand-written `.rs`
 # files, and nothing enforced it anywhere else — a bare `# TODO:` sat in an
-# operation binding until the #264 sweep. This sibling guard reads every
-# committed hand-written file whose comment marker is `#` (YAML, shell, TOML)
-# and refuses a TODO that names no issue. The vendored trees are excluded:
+# operation binding until the #264 sweep. This guard reads every committed
+# hand-written file whose comment marker is `#` (YAML, shell, TOML) and
+# refuses a TODO that names no issue. The vendored trees are excluded:
 # acting on a finding inside vendored bytes is forbidden here.
+#
+# One awk process scans the whole file list (#333): the original
+# awk-per-file loop died with SIGBUS on macOS part-way through
+# `artifacts/schedule/`, and a per-file `return $count` would overflow a
+# shell return code past 255 findings anyway. The tally is printed, never
+# returned.
 #
 # Usage: scripts/checks/todo-issue-refs.sh            # whole tree
 #        scripts/checks/todo-issue-refs.sh --self-test # seeded-violation proof
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-scan() { # $1... = files
-  local failures=0 file
-  for file in "$@"; do
-    [[ -f "$file" ]] || continue
-    while IFS= read -r hit; do
-      [[ -n "$hit" ]] || continue
-      echo "${file}${hit}" >&2
-      failures=$((failures + 1))
-    done < <(awk '
-      /^[[:space:]]*#/ || /[[:space:]]#/ {
-        line = $0
-        sub(/^[^#]*#/, "#", line)
-        if (line ~ /^#+[[:space:]]*TODO/ && line !~ /TODO\(#[0-9]+\):/)
-          printf ":%d: TODO without an issue reference — the only sanctioned form is `TODO(#NNNN):`\n", NR
-      }' "$file")
-  done
-  return "$failures"
+scan() { # stdin: NUL-separated file list; prints findings, then a count line
+  xargs -0 awk '
+    /^[[:space:]]*#/ || /[[:space:]]#/ {
+      line = $0
+      sub(/^[^#]*#/, "#", line)
+      if (line ~ /^#+[[:space:]]*TODO/ && line !~ /TODO\(#[0-9]+\):/) {
+        printf "%s:%d: TODO without an issue reference — the only sanctioned form is `TODO(#NNNN):`\n", FILENAME, FNR
+        findings++
+      }
+    }
+    END { printf "count=%d\n", findings }
+  '
 }
 
 if [[ "${1:-}" == "--self-test" ]]; then
@@ -45,7 +46,7 @@ if [[ "${1:-}" == "--self-test" ]]; then
     echo 'path: "a#TODO-in-a-string-is-not-a-comment-start"'
     echo '# a TODO mentioned mid-sentence passes: the marker is leading-only'
   } >"$seeded"
-  out="$(scan "$seeded" 2>&1 >/dev/null || true)"
+  out="$(printf '%s\0' "$seeded" | scan)"
   fail=0
   for want in 1 2; do
     grep -q "seeded.yaml:$want: TODO without" <<<"$out" || {
@@ -59,22 +60,31 @@ if [[ "${1:-}" == "--self-test" ]]; then
       fail=1
     fi
   done
+  grep -q '^count=2$' <<<"$out" || {
+    echo "self-test: the tally is not 2:" >&2
+    grep '^count=' <<<"$out" >&2
+    fail=1
+  }
   [[ "$fail" -eq 0 ]] || exit 1
   echo "todo-issue-refs: self-test OK (2 seeded violations caught, 3 legitimate lines passed)."
   exit 0
 fi
 
-files=()
 # The guard excludes itself: the self-test above seeds literal bare TODOs,
 # which are test fixtures, not pending work.
-while IFS= read -r f; do [[ -f "$f" ]] && files+=("$f"); done < <(
-  git ls-files '*.yml' '*.yaml' '*.sh' '*.toml' \
-    ':(exclude)specs/**' ':(exclude)fuzz/corpus/**' ':(exclude)fuzz/seeds/**' \
-    ':(exclude)scripts/checks/todo-issue-refs.sh'
-)
-if scan "${files[@]}"; then
-  echo "todo-issue-refs: OK (${#files[@]} files)."
-else
-  echo "::error::bare TODOs found — give each its tracker issue as TODO(#NNNN):" >&2
+list="$(mktemp)"
+trap 'rm -f "$list"' EXIT
+git ls-files -z '*.yml' '*.yaml' '*.sh' '*.toml' \
+  ':(exclude)specs/**' ':(exclude)fuzz/corpus/**' ':(exclude)fuzz/seeds/**' \
+  ':(exclude)scripts/checks/todo-issue-refs.sh' >"$list"
+out="$(scan <"$list")"
+# xargs may split a long list into several awk invocations, one count line
+# each; the tally is their sum.
+count="$(grep '^count=' <<<"$out" | cut -d= -f2 | awk '{ sum += $1 } END { print sum + 0 }')"
+grep -v '^count=' <<<"$out" >&2 || true
+files="$(tr -cd '\0' <"$list" | wc -c | tr -d ' ')"
+if [[ "$count" -ne 0 ]]; then
+  echo "::error::${count} bare TODO(s) found — give each its tracker issue as TODO(#NNNN):" >&2
   exit 1
 fi
+echo "todo-issue-refs: OK (${files} files)."

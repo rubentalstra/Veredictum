@@ -19,6 +19,11 @@ version on.
 ## [Unreleased]
 
 ### Added
+- The dump/load authorization refusals drive without a declared
+  `dump_location`: the refusal is a role or authentication decision taken
+  before any path is consulted, so a literal placeholder location suffices
+  and the boundary is testable on every party that declares the admin split
+  (#286).
 - **Signing-on posture profiles (#335).** Every bench pack defines
   `minimal-signed-digest` and `minimal-signed-pgp` beside `minimal`, so a CDR
   that signs versions out of the box benches without switching a shipped
@@ -46,6 +51,17 @@ version on.
   so six images no longer churn with no interface change behind them. The mode
   changes what the screen displays and nothing that is written, sealed or
   signed, and it is off in every ordinary run.
+- **A `lifecycle_state` assert reads an `IMPORTED_VERSION` through the version
+  it wraps (#322).** The judge read the property off the top level of the
+  served envelope, which an imported version cannot carry: released ITS-JSON
+  `components/RM/Release-1.1.0/Common/IMPORTED_VERSION.json` requires
+  `contribution`, `commit_audit` and `item` under
+  `additionalProperties: false`, and RM common
+  `UML/classes/imported_version.adoc` §Functions effects `lifecycle_state ()`
+  from `_item.lifecycle_state_`. A conformant server was charged a failed row
+  for answering exactly as the release binds it. The row now resolves the fact
+  through `item`, a wrong term still fails, and `change_type` keeps reading the
+  wrapper's own `commit_audit`, which is a real property of the class.
 - **The measured path stops substituting silently for a defect (#293).** A
   workload stage naming an operation the vocabulary does not carry is now a
   named finding at the schedulable filter, so a typo'd `op` fails loud
