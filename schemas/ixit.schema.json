@@ -220,6 +220,10 @@
               "stable",
               "development"
             ]
+          },
+          "administrative": {
+            "description": "Whether this instance's principal holds administrative authorization (register AMB-228). SM master02-overview.adoc §Functional Style delegates access control to the implementation, so the posture is an IXIT declaration; a role-boundary case states the posture it needs in requires, and an undeclared or opposite declaration records it not-applicable with that citation. Absent => undeclared, never a default.",
+            "type": "boolean"
           }
         }
       }

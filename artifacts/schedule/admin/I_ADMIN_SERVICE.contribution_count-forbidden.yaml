@@ -27,7 +27,10 @@ applies: { rm: ">=1.0.2" }
 guards:
   - "EXTENSION ROUTE — no openEHR spec governs the /admin/report/* routes; our own design/extension, declared in vocab/wire_surface.yaml served_extensions and adjudicated by register AMB-33. The row gates the ActivityReport CAPABILITY verdict only, never ITS-REST wire conformance"
   - "ITS-REST Admin API is DEVELOPMENT-stage — admin.openapi.yaml carries x-status: DEVELOPMENT (not STABLE); guarded until the Admin API stabilises"
-requires: { server: any }
+requires:
+  server: any
+  instances:
+    sut: { administrative: false }         # the role-boundary premise, declared (register AMB-228)
 flow:
   - step: 1
     call: list_contributions
@@ -49,4 +52,4 @@ flow:
     on: sut
     with: { a_service: "Ehr" }
     expect: forbidden
-ambiguities: [AMB-33]
+ambiguities: [AMB-33, AMB-228]

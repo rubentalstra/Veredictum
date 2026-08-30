@@ -323,6 +323,18 @@ pub struct Instance {
     /// [`Instance::terminology`] follow. Absent => the party default applies.
     #[serde(default)]
     pub spec_profile: Option<SpecProfile>,
+    /// Whether THIS instance's principal holds administrative authorization.
+    ///
+    /// SM `master02-overview.adoc` §Functional Style delegates the "approach
+    /// to access control and authorisation" to the implementation, so which
+    /// roles a principal holds is an IXIT declaration and nothing on the wire
+    /// discloses it. A case whose premise is a role boundary (an ordinary
+    /// principal refused on an administrative operation) states the posture
+    /// it needs in `requires.instances`, and an undeclared or opposite
+    /// declaration records the case not-applicable with that citation.
+    /// Absent => undeclared, never a default.
+    #[serde(default)]
+    pub administrative: Option<bool>,
 }
 
 /// The environment block — mandatory for performance runs, informative
