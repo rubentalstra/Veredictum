@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The Vercel container build for the hosted console (#348,
+# console.veredictum.eu) — the name Dockerfile.vercel is Vercel's fixed
+# convention for its Container preset: the entrypoint accepts only the names
+# Dockerfile/Containerfile with the .vercel suffix, resolved against the
+# service's `root` (https://vercel.com/docs/functions/container-images
+# §Services — the FerroEHR#2945 lesson). Veredictum deploys ONE service, so
+# it roots at the repository top and this file lives here, where COPY reaches
+# the catalogue and the vendored specification oracle.
+#
+# FROM the PUBLISHED release image, so the hosted console runs the exact
+# release bytes and Vercel's build is a pull plus data layers. `:latest` is
+# the release pointer scan-and-tag moves on a real release tag only (never a
+# pre-release), and the ONLY deploy trigger is
+# .github/workflows/sandbox-deploy.yml, which a release pings AFTER that leg
+# succeeds — so this reference always resolves and no cut-time bump exists.
+#
+# The hosted posture is VIEW-ONLY BY CONSTRUCTION, not by configuration. The
+# image ships only the console binary; the engine is resolved from
+# VEREDICTUM_ENGINE or PATH and is deliberately absent here, so no visitor
+# can start a run that touches any network from this instance, and the
+# distroless nonroot user cannot write the root-owned baked tree. What a
+# visitor gets is the reading surface: the catalogue, the party statements,
+# and the specification oracle the expectations cite.
+
+FROM ghcr.io/rubentalstra/veredictum:latest
+
+# The base image already runs as uid 65532 (distroless nonroot); stated
+# explicitly so the posture is a property of THIS file too (trivy DS-0002).
+USER 65532:65532
+
+# The compose stack mounts the repository at /work; the hosted instance has
+# no volume, so the same paths are baked from the checkout Vercel builds.
+COPY artifacts/ /work/artifacts/
+COPY specs/openehr/ /work/specs/openehr/
+COPY party/ /work/party/
+
+# ROOT and SPECS are already /work-anchored in the base image; PARTY and OUT
+# default to paths relative to /app there, so both are pinned here. /work/out
+# does not exist, which is the same empty-runs posture a fresh local mount
+# starts from.
+ENV VEREDICTUM_PARTY=/work/party \
+    VEREDICTUM_OUT=/work/out
+
+# Vercel routes to the port the image declares; the console serves on 3000
+# (the base image's LEPTOS_SITE_ADDR).
+ENV PORT=3000
