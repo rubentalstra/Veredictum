@@ -1799,7 +1799,15 @@ A runner claims schedule compliance through:
    server answers the Nth matching request with the Nth response; matching =
    method + path + negotiated media type), including deliberate
    fail/N-A/skip/guard outcomes and the AMB-1 error-body variants. A fixture
-   server suffices.
+   server suffices. The replay JUDGES OR REFUSES, on both seams: a step's
+   assertions are evaluated from the recorded exchange or the entry is
+   refused naming the families the replay cannot judge, judged
+   postconditions are refused the same way (a transcript records the flow's
+   own exchanges and nothing else — no versioned read, no corpus resolution,
+   no instance posture), and a case that reads a provisioned `requires`
+   handle is refused, because the transcript records no provisioned handles
+   for a replayed value to be faithful to. A pack entry never claims a
+   verdict over an assertion the replay did not evaluate.
 2. **Live-SUT conformance** — drive ≥ 2 independent live SUTs (different
    vendors) from their `ixit.json` and produce results consistent with those
    SUTs' published baselines. Two SUTs, not one recording, so no single

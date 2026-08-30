@@ -43,11 +43,6 @@ version on.
 - Six `create_composition` roundtrip cases now bind the container uid their
   version assert reads, so the revision-history read resolves instead of
   erroring on an unbound path parameter (#280).
-
-### Removed
-- The `content_generation` registered-exception kind. Content cases execute
-  through the synthesized functional flow, so nothing could raise it and no
-  published record ever carried it (#248).
 - `validate` now finds a step-level `equivalent to: committed` assertion whose
   flow commits no payload at or before the asserting step; the shape was a
   drive-time failure charged against the row instead of a catalogue finding
@@ -55,6 +50,15 @@ version on.
 - The pack-preflight diagnostic for an invalid template example prints as one
   normally spaced sentence; a lost line continuation had left runs of
   mid-sentence spaces in the operator-facing message (#174).
+- The transcript replay refuses a pack case that reads a provisioned
+  `requires` handle, instead of binding one hard-coded EHR id every entry
+  shared; the design record now states the replay's judge-or-refuse contract
+  on both seams (#261).
+
+### Removed
+- The `content_generation` registered-exception kind. Content cases execute
+  through the synthesized functional flow, so nothing could raise it and no
+  published record ever carried it (#248).
 
 ## [0.1.1] - 2026-08-30
 
