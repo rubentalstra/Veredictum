@@ -149,8 +149,8 @@ const IXIT_DIGEST_BYTES: usize = 8;
 /// Returns the ixit digest recorded with a campaign, which binds the results
 /// to the exact declaration they were driven under.
 ///
-/// The digest is the leading [`IXIT_DIGEST_BYTES`] bytes of the SHA-256 over
-/// the ixit document's bytes exactly as they sit on disk, lowercase hex.
+/// The digest is the leading `IXIT_DIGEST_BYTES` (8) bytes of the SHA-256
+/// over the ixit document's bytes exactly as they sit on disk, lowercase hex.
 /// Nothing is canonicalized, reordered or reformatted first, so anyone
 /// holding the declaration a published record was driven under re-derives the
 /// recorded value with `sha256sum ixit.json | cut -c1-16`.
