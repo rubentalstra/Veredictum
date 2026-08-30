@@ -19,19 +19,6 @@ version on.
 ## [Unreleased]
 
 ### Fixed
-
-
-### Removed
-- The `content_generation` registered-exception kind. Content cases execute
-  through the synthesized functional flow, so nothing could raise it and no
-  published record ever carried it (#248).
-- `validate` now finds a step-level `equivalent to: committed` assertion whose
-  flow commits no payload at or before the asserting step; the shape was a
-  drive-time failure charged against the row instead of a catalogue finding
-  (#256).
-- The pack-preflight diagnostic for an invalid template example prints as one
-  normally spaced sentence; a lost line continuation had left runs of
-  mid-sentence spaces in the operator-facing message (#174).
 - Three bench error variants (`FixturePin`, `UnknownProfile`, `NoProfiles`)
   carry the `PackId`/`FixtureKey` newtypes instead of bare strings, the
   posture-contradiction payload is boxed with the error-size posture recorded
@@ -53,6 +40,21 @@ version on.
   which name failed. One principal set drives both what a measured window
   plans and what it fires, which is why `run_window` and `run_stress` no
   longer take one separately.
+- Six `create_composition` roundtrip cases now bind the container uid their
+  version assert reads, so the revision-history read resolves instead of
+  erroring on an unbound path parameter (#280).
+
+### Removed
+- The `content_generation` registered-exception kind. Content cases execute
+  through the synthesized functional flow, so nothing could raise it and no
+  published record ever carried it (#248).
+- `validate` now finds a step-level `equivalent to: committed` assertion whose
+  flow commits no payload at or before the asserting step; the shape was a
+  drive-time failure charged against the row instead of a catalogue finding
+  (#256).
+- The pack-preflight diagnostic for an invalid template example prints as one
+  normally spaced sentence; a lost line continuation had left runs of
+  mid-sentence spaces in the operator-facing message (#174).
 
 ## [0.1.1] - 2026-08-30
 
