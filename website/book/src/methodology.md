@@ -3,9 +3,7 @@
 <!-- toc -->
 
 A conformance verdict is only worth what its method is worth. This chapter sets
-out the method: what counts as authority, what happens when a run goes red, why
-the catalogue tests refusals as hard as it tests successes, and what the
-instrument does where the specification does not say.
+the method out.
 
 ## The oracle is the released specification text
 

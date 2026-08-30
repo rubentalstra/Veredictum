@@ -6,9 +6,9 @@ Every flag below is the one the binary declares. `veredictum <command> --help`
 prints the same list from the build you have installed, and that output is the
 authority if the two ever disagree.
 
-Three commands make the conformance record (`validate`, `run`, `verdicts`), two
-measure (`perf`, `stress`), `verify-record` checks a sealed bundle, and the rest
-render or explore.
+Three commands make the conformance record (`validate`, `run`, `verdicts`),
+three measure (`perf`, `stress`, `bench`), `verify-record` checks a sealed
+bundle, and the rest render or explore.
 
 ## validate
 
@@ -254,10 +254,10 @@ pinned fixtures, so a query figure and a read figure describe the same corpus.
 Its seed phase creates 50 EHRs and commits the composition 20 times into each,
 on a pool of 8 workers. The pack version pins that population, and it is sized
 for query shapes: large enough that a query has to choose an access path, small
-enough to load before a measured window opens. The
-measured phase is open-loop at 24 arrivals a second for 60s after a 15s warmup,
-over six query classes at equal share, so each class is offered at 4 arrivals a
-second and every class returns the same number of samples.
+enough to load before a measured window opens. The measured phase is open-loop
+at 24 arrivals a second for 60s after a 15s warmup, over six query classes at
+equal share, so each class is offered at 4 arrivals a second and every class
+returns the same number of samples.
 
 | Class | What it probes |
 |---|---|
@@ -306,9 +306,9 @@ therefore defines named posture profiles, and a run declares exactly one.
 `minimal` is the bare spec-conformant surface, and every pack defines it:
 no audit trail, unsigned versions, commits validated against the operational
 template, uncompressed responses, one tenant. Validation sits at `template`
-rather than at nothing because the specification puts it there — ITS-REST
+rather than at nothing because the specification puts it there: ITS-REST
 `specifications/responses/422.yaml` defines the commit refusal as the case
-where the template "is not validating the supplied resource" — so a server that
+where the template "is not validating the supplied resource". A server that
 accepts anything is below the floor rather than lightly configured.
 `community-vitals` also defines `clinical-default`, which is the same surface
 with an audit trail written.
@@ -328,7 +328,7 @@ beside it.
 | Item | How it is checked |
 |---|---|
 | `version_signing` | Versions committed by the run's OWN seed traffic are read back and their `signature` inspected. Sampling the measured population means a scheme switched on around a probe never reaches it. The openPGP armor header separates `pgp` from `digest` |
-| `commit_validation` | The pack's pinned invalid twin — that pack's own composition with the mandatory `COMPOSITION.composer` removed — is committed inside the run window, and the answer read |
+| `commit_validation` | The pack's pinned invalid twin (that pack's own composition with the mandatory `COMPOSITION.composer` removed) is committed inside the run window, and the answer read |
 | `authn` | One read with no `Authorization` header at all, which is the only way to see whether the declared mode is enforced |
 | `compression` | One read stating `Accept-Encoding` explicitly, over a client that does not decompress, so `Content-Encoding` survives to be read |
 | `tls` | The recorded base URL's own scheme |
@@ -422,9 +422,9 @@ sees the spread as well as the number.
 Every column header carries the machine the run was generated on, the worst
 failed-arrival share the run recorded beside the ceiling its pack pins, and a
 column that is not submittable names the requirements it misses rather than
-printing one bare `false`. Where the columns carry a relative index, it gets its own
-table below the header, at `p50` and `p99` per baseline: that is the part which
-survives a change of host.
+printing one bare `false`. Where the columns carry a relative index, it gets its
+own table below the header, at `p50` and `p99` per baseline: that is the part
+which survives a change of host.
 
 A mismatch is stated above the table, never under it: columns that ran different
 pack versions, columns generated from different hosts, columns that ran at
@@ -450,8 +450,8 @@ veredictum bench-packs --out <OUT>
 A pack is versioned data compiled into the binary, so the binary is the only
 honest source for a description of one. This command writes that description:
 per pack the id, the version, the seed every arrival stream draws from, the
-failed-arrival ceiling a record is judged against, each
-phase with its load discipline and its counts, each measured phase's operation
+failed-arrival ceiling a record is judged against, each phase with its load
+discipline and its counts, each measured phase's operation
 mix with the share and the probe rationale of every entry, each posture profile
 the pack defines with what it declares item by item, and each embedded fixture
 with its sha256 pin, its size and where the bytes came from. The document also

@@ -111,9 +111,9 @@
       <div class="prose">
         <p><b>Why a ratio and not milliseconds.</b> A latency in milliseconds describes a
           system and the machine it ran on at the same time, so two numbers taken on
-          different hardware cannot be compared. Every submission therefore measures the
-          reference CDRs on its own machine, in the same session, with the same pack at the
-          same seed. Dividing one median by the other cancels the machine out.</p>
+          different hardware cannot be compared. Dividing the submission&#39;s median by the
+          reference&#39;s, both measured in one session on one machine, cancels the machine
+          out.</p>
         <p><b>Why two references and not one.</b> A single reference makes the board a
           verdict about that one product. Two independent ones, measured under identical
           container ceilings in the same session, show whether a row is fast in general or
@@ -124,9 +124,8 @@
           that machine beside them. Read them as the scale of the work, never as a claim
           about what your deployment would do.</p>
         <p><b>What the references are.</b> Each submission composes the pinned reference CDRs
-          from image digests, under identical container ceilings. They are not a standard
-          of correctness. They are a ruler that happens to be the same length on every
-          machine.</p>
+          from image digests, under identical container ceilings. They are a ruler of the
+          same length on every machine, and they set no standard of correctness.</p>
         <p><b>Failed arrivals.</b> Every row states how many measured arrivals never
           produced an answer. A percentile computed over a run that was mostly failing
           describes the failures, so read the share before the milliseconds. The submission

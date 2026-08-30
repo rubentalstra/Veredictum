@@ -56,22 +56,20 @@ Scope takes the claim the run grades: the vendor's own statement.json (the
 ICS, the document that says which profiles and capabilities are claimed)
 pasted into the box, or a committed example loaded into it.
 
-The claim can also be built on the screen. The tier row offers CORE,
-STANDARD, OPTIONS and SEC-BASIC with the capabilities the capability matrix
-puts in each tier and the number of catalogue cases those capabilities gate,
-counted through the instrument's own matrix walk — the one the judgement
-computes each profile verdict from. Composing writes that claim into the same
-box, product identity taken from the Connect step, so the operator reads the
-exact document the run will be graded against. Option branches stay
-undeclared there: only the party running the server knows which branch it
-realizes.
+The claim can also be built on the screen. The tier row offers CORE, STANDARD,
+OPTIONS and SEC-BASIC with the capabilities the capability matrix puts in each
+tier and the number of catalogue cases those capabilities gate, counted through
+the same matrix walk the judgement computes each profile verdict from.
+Composing writes that claim into the same box, product identity taken from the
+Connect step, so the operator reads the exact document the run will be graded
+against. Option branches stay undeclared there: only the party running the
+server knows which branch it realizes.
 
-The document is
-held to the published statement schema before anything is stored, and saving
-answers with the claim overview — product, claimed tiers, capability count —
-beside the selection preview, so the screen says what will run before
-anything starts. An empty box is an honest no-claim run. The verdict later
-certifies exactly the pasted claim against the recorded evidence.
+The document is held to the published statement schema before anything is
+stored, and saving answers with the claim overview (product, claimed tiers,
+capability count) beside the selection preview, so the screen says what will run
+before anything starts. An empty box is an honest no-claim run. The verdict
+later certifies exactly the pasted claim against the recorded evidence.
 
 Scope also decides whether the run keeps its wire. "Record the wire exchanges"
 is off by default; ticked, the run writes `transcript.json` beside its
@@ -94,8 +92,8 @@ record.
 
 Results reads the finished run's own record, red rows first. A row links to
 its detail: the recorded reason beside the case's specification citations,
-because a red row names a defect in exactly one of three suspects — the
-server, the runner, or the catalogue — and the cited text is the reference.
+which is what [the attribution](methodology.md#when-a-run-goes-red) of that row
+turns on.
 
 The detail ends with the wire. A run driven with the recording box ticked
 shows each exchange as its request and response panes, verbatim, which is
@@ -126,8 +124,8 @@ rather than being a logo anyone could copy:
 
 - **The seal card** is the brand's certificate master with its three slots
   filled: the product under test, the profile verdict, and the moment the
-  verdict was spoken — read back from the signature's own creation time,
-  because the record carries no wall clock.
+  verdict was spoken, read back from the signature's own creation time because
+  the record carries no wall clock.
 - **The badge** is a compact SVG for a README, with the digest prefix in its
   title and the verify path in its source.
 - **The report** is one self-contained HTML file of everything the results and
@@ -248,11 +246,10 @@ nothing was judged, which is what the page says.
 
 ## Two real servers, side by side
 
-The same catalogue, the same wizard, the same judgement — driven against two
+The same catalogue, the same wizard and the same judgement, driven against two
 live CDRs pulled at their latest published images: FerroEHR's quickstart and
-EHRbase's official pairing. The run behind each column is the EHR-service
-case family. The point of the pairing is the comparison: one instrument, two
-records, and every difference below traces to a case id and its citation.
+EHRbase's official pairing. The run behind each column is the EHR-service case
+family, and every difference below traces to a case id and its citation.
 
 | FerroEHR (latest) | EHRbase (latest) |
 |---|---|

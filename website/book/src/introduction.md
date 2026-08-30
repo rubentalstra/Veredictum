@@ -6,8 +6,12 @@ the openEHR specification that server implements.
 
 It executes a machine-readable catalogue of 1143 spec-cited test cases against
 the server's own wire, records every exchange, and computes verdicts as pure
-functions over what it recorded. Functional conformance, measured performance
-and step-load stress come from the one tool.
+functions over what it recorded. Functional conformance, measured performance,
+step-load stress and the comparative-speed benchmark come from the one tool,
+and published results live on the public
+[conformance](https://veredictum.eu/conformance-board.html) and
+[benchmark](https://veredictum.eu/benchmarks.html) boards, submitted by pull
+request.
 
 The released openEHR specifications are the only authority the instrument
 accepts. Every expectation in the catalogue names the section it comes from, so
@@ -56,15 +60,13 @@ instrument](running.md) walks the three stages against a live server.
 
 ## Coverage is machine-checked
 
-A green run over a thin catalogue proves nothing. A coverage gate enumerates
-the wire surface from the released sources alone, the Service Model's platform
-interfaces crossed with their ITS-REST branches, and fails on any operation,
-status-code branch, header rule, negotiation variant or error family that has
-neither a covering case nor a cited exception. A behaviour the specification
-defines and the catalogue misses is a gap to close or an honest boundary in the
-register.
+A green run over a thin catalogue proves nothing, so a gate enumerates the wire
+surface from the released sources alone and fails on any behaviour that has
+neither a covering case nor a cited exception. Cases are added. They are never
+removed to make a run go green.
 
-Cases are added. They are never removed to make a run go green.
+[The conformance method](methodology.md) says what the gate reads and what
+happens to a gap it finds.
 
 > [!NOTE]
 > openEHR® is the registered trademark of the openEHR Foundation. Veredictum
