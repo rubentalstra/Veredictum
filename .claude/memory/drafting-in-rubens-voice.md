@@ -36,3 +36,5 @@ a "not X but Y" tell ("checkable rather than asserted"), and sign-off padding.
   come from them or from their own published posts. Their Discourse
   announcements (t/17230 FerroEHR, t/17238 Veredictum) are the source for
   their real positions and phrasing; reuse those words.
+- ZERO em dashes (and en dashes) in personal drafts. Not "budgeted", zero:
+  the owner swore at one. Commas, periods, parentheses, colons.
