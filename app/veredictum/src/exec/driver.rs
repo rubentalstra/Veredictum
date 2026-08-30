@@ -55,8 +55,50 @@ pub struct Exchange {
     pub status: StatusCode,
     /// The response headers, lower-cased names.
     pub headers: BTreeMap<String, String>,
-    /// The response body, parsed when it was JSON, else absent.
+    /// The response body: the parsed document when it parsed as JSON, the
+    /// served text verbatim as a [`Value::String`] when it did not, and
+    /// absent when the SUT served none.
     pub body: Option<Value>,
+    /// Which of those three [`Self::body`] is.
+    pub body_form: BodyForm,
+}
+
+/// How the driver read one response body off the wire.
+///
+/// The canonical JSON serialization spells every RM attribute as a member
+/// name, and the canonical XML serialization is the other bound document form
+/// (ITS-REST `specifications/docs/overview/Resources.md` §Data
+/// representation). This runner parses the JSON binding only, so the two must
+/// stay distinguishable: a member missing from a JSON body is a fact about the
+/// SUT, while a member "missing" from an unparsed body is a fact about the
+/// instrument.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BodyForm {
+    /// The SUT served no body, or an empty one.
+    Empty,
+    /// The body parsed as JSON, so every assertion family addresses it.
+    Json,
+    /// The body did not parse as JSON, so [`Exchange::body`] carries the
+    /// served text verbatim as a [`Value::String`].
+    Unparsed {
+        /// The `Content-Type` the SUT declared, when it declared one.
+        media_type: Option<String>,
+    },
+}
+
+impl Exchange {
+    /// The body as a JSON document, and only when it IS one.
+    ///
+    /// An unparsed body is a [`Value::String`] holding the served text, which
+    /// addresses no RM attribute; handing it to a seam that reads members
+    /// would report every fact as absent.
+    #[must_use]
+    pub fn json_body(&self) -> Option<&Value> {
+        match self.body_form {
+            BodyForm::Json => self.body.as_ref(),
+            BodyForm::Empty | BodyForm::Unparsed { .. } => None,
+        }
+    }
 }
 
 /// The row's last completed flow step: the ground the postcondition seam
@@ -387,12 +429,21 @@ impl<'a> HttpDriver<'a> {
             }
         }
         let text = response.text().map_err(|e| format!("transport: {e}"))?;
-        let response_body = if text.is_empty() {
-            None
+        // The parse outcome is RECORDED rather than inferred later: an
+        // unparsed body and a JSON string body are both `Value::String`, and
+        // only the seam that read the bytes can still tell them apart.
+        let (response_body, body_form) = if text.is_empty() {
+            (None, BodyForm::Empty)
         } else {
-            serde_json::from_str(&text)
-                .ok()
-                .or(Some(Value::String(text)))
+            match serde_json::from_str(&text) {
+                Ok(document) => (Some(document), BodyForm::Json),
+                Err(_) => (
+                    Some(Value::String(text)),
+                    BodyForm::Unparsed {
+                        media_type: response_headers.get("content-type").cloned(),
+                    },
+                ),
+            }
         };
         let exchange = Exchange {
             method: format!("{method:?}").to_uppercase(),
@@ -400,6 +451,7 @@ impl<'a> HttpDriver<'a> {
             status,
             headers: response_headers,
             body: response_body,
+            body_form,
         };
         self.record(headers, body, &exchange);
         // VEREDICTUM_DEBUG_EXCHANGES=1: dump every wire exchange to stderr (live
@@ -735,6 +787,10 @@ impl<'a> HttpDriver<'a> {
         let mut failures = Vec::new();
         let mut advisories = Vec::new();
         for assertion in assertions_list {
+            if let Some(refusal) = unjudgeable_on_unparsed_body(assertion, &exchange.body_form) {
+                failures.push(refusal);
+                continue;
+            }
             let body = exchange.body.as_ref().unwrap_or(&Value::Null);
             let result: Result<(), AssertionOutcome> = match assertion {
                 Assertion::Field {
@@ -866,7 +922,7 @@ impl<'a> HttpDriver<'a> {
                     uid_pattern,
                 } => self.eval_version_assertion(
                     case,
-                    exchange.body.as_ref(),
+                    exchange.json_body(),
                     VersionFacts {
                         of: of.as_ref(),
                         for_each: for_each.as_ref(),
@@ -1322,6 +1378,61 @@ fn template_ref_name(template: &Template) -> Option<&str> {
         ValueRef::Capture { name, .. } => Some(name.as_str()),
         _ => None,
     })
+}
+
+/// The refusal an assertion family that addresses JSON MEMBERS owes a
+/// response body the driver could not parse as JSON.
+///
+/// A canonical XML body carries the asserted fact in the other bound document
+/// form, which this runner does not parse into RM attributes (ITS-REST
+/// `specifications/docs/overview/Resources.md` §Data representation). Judging
+/// the fact absent there would charge the SUT for the instrument's own limit,
+/// so the outcome is the inconclusive channel and it names the media type.
+fn unjudgeable_on_unparsed_body(
+    assertion: &Assertion,
+    form: &BodyForm,
+) -> Option<AssertionOutcome> {
+    let BodyForm::Unparsed { media_type } = form else {
+        return None;
+    };
+    match assertion {
+        Assertion::Field { .. }
+        | Assertion::Equivalent { .. }
+        | Assertion::ResultSet { .. }
+        | Assertion::InstanceOf { .. }
+        | Assertion::Signature { .. } => {}
+        // xml_root judges the served document text itself and returns matches
+        // the body AS text, so both read an unparsed body correctly. version
+        // resolves its own envelope and refuses at that read instead, so a
+        // uid_pattern judged off the resolved identity still gates. The
+        // aggregate and informative families read no member at all.
+        Assertion::XmlRoot { .. }
+        | Assertion::Returns { .. }
+        | Assertion::Version { .. }
+        | Assertion::Unique { .. }
+        | Assertion::MessageExemplar { .. }
+        | Assertion::State { .. } => return None,
+    }
+    Some(AssertionOutcome::Unjudgeable(unparsed_body_reason(
+        assertion.family(),
+        media_type.as_deref(),
+    )))
+}
+
+/// The one refusal sentence, shared by the assertion dispatch and the
+/// versioned read so both name the served media type the same way.
+fn unparsed_body_reason(family: &str, media_type: Option<&str>) -> String {
+    let served = media_type.map_or_else(
+        || "a body carrying no declared media type".to_owned(),
+        |declared| format!("a {declared} body"),
+    );
+    format!(
+        "{family}: the SUT served {served}, which this runner does not parse into RM attributes — \
+         the canonical JSON serialization spells every RM attribute as a member name, and the \
+         canonical XML serialization is the other bound document form (ITS-REST \
+         specifications/docs/overview/Resources.md §Data representation), so the asserted fact is \
+         UNJUDGEABLE on this exchange rather than absent from it"
+    )
 }
 
 /// The equivalence-failure diagnostic: the first differing paths (path, got,
@@ -3926,6 +4037,12 @@ impl HttpDriver<'_> {
                 exchange.status.as_u16()
             )));
         }
+        if let BodyForm::Unparsed { media_type } = &exchange.body_form {
+            return Err(AssertionOutcome::Unjudgeable(unparsed_body_reason(
+                "version",
+                media_type.as_deref(),
+            )));
+        }
         let body = exchange
             .body
             .ok_or_else(|| fail(format!("the versioned read {call} served no body")))?;
@@ -3942,6 +4059,11 @@ impl HttpDriver<'_> {
     /// served under `Prefer: return=representation` repeats the same
     /// `OBJECT_VERSION_ID` and carries no `commit_audit`, so a uid match alone
     /// would judge `change_type` against a body that never holds it.
+    ///
+    /// `in_hand` is the step's JSON body only ([`Exchange::json_body`]): an
+    /// unparsed body addresses no member, so it can neither be recognized as
+    /// the envelope nor be judged as one, and the read below refuses loudly
+    /// when it comes back unparsed too.
     fn version_envelope(
         &mut self,
         case: &CaseCore,
@@ -4213,6 +4335,7 @@ mod tests {
             status: StatusCode::CONFLICT,
             headers: BTreeMap::new(),
             body: None,
+            body_form: BodyForm::Empty,
         };
         let message = HttpDriver::provisioning_refusal("an EHR", &refused, false)
             .expect("a 409 with conflict_is_ground=false is a refusal");
@@ -4238,6 +4361,96 @@ mod tests {
             failure.0,
             "returns: wire presence true != expected false (status 200)"
         );
+    }
+
+    /// One authored assertion document, as the catalogue spells it.
+    fn assertion(document: Value) -> Assertion {
+        serde_json::from_value(document).expect("the authored assertion parses")
+    }
+
+    /// A body the driver could not parse carries every RM attribute in the
+    /// other bound document form (ITS-REST `Resources.md` §Data
+    /// representation), so the families that address MEMBERS refuse it by
+    /// name instead of reporting the fact absent — the message names the
+    /// served media type, and the channel is the inconclusive one.
+    #[test]
+    fn an_unparsed_body_refuses_the_member_addressing_families() {
+        let xml = BodyForm::Unparsed {
+            media_type: Some("application/xml".to_owned()),
+        };
+        for document in [
+            serde_json::json!({ "assert": "field", "path": "context/setting", "exists": true }),
+            serde_json::json!({ "assert": "equivalent", "to": "committed" }),
+            serde_json::json!({ "assert": "instance_of", "rm_type": "COMPOSITION" }),
+            serde_json::json!({ "assert": "signature", "of": "${version_uid}", "present": true }),
+            serde_json::json!({ "assert": "result_set", "match": "count", "count": 1 }),
+        ] {
+            let assertion = assertion(document);
+            let outcome = unjudgeable_on_unparsed_body(&assertion, &xml)
+                .expect("an unparsed body addresses no RM attribute");
+            assert!(
+                matches!(outcome, AssertionOutcome::Unjudgeable(_)),
+                "the instrument's own limit is never a finding against the SUT: {outcome:?}"
+            );
+            let reason = outcome.reason();
+            assert!(reason.contains("application/xml"), "{reason}");
+            assert!(reason.contains("UNJUDGEABLE"), "{reason}");
+        }
+    }
+
+    /// The families that read the served body AS TEXT keep judging it: an
+    /// unparsed body is exactly what `xml_root` exists to grade, and `returns`
+    /// matches an error payload as a string. A `version` assertion resolves
+    /// its own envelope, so it refuses at that read rather than here — which
+    /// is what keeps a `uid_pattern` judged off the resolved identity gating.
+    #[test]
+    fn the_text_reading_families_still_judge_an_unparsed_body() {
+        let xml = BodyForm::Unparsed {
+            media_type: Some("application/xml".to_owned()),
+        };
+        for document in [
+            serde_json::json!({ "assert": "xml_root", "name": "composition" }),
+            serde_json::json!({ "assert": "returns", "matches": "not found" }),
+            serde_json::json!({
+                "assert": "version", "of": "${version_uid}",
+                "uid_pattern": "${versioned_object_uid}::<system>::1"
+            }),
+        ] {
+            let assertion = assertion(document);
+            assert!(
+                unjudgeable_on_unparsed_body(&assertion, &xml).is_none(),
+                "{assertion:?}"
+            );
+        }
+    }
+
+    /// A body that PARSED is judged as always, and a JSON string body stays
+    /// judgeable: the parse outcome is recorded at the seam that read the
+    /// bytes, so the two `Value::String` shapes never collapse into one.
+    #[test]
+    fn a_parsed_body_refuses_nothing_and_stays_addressable() {
+        let field =
+            assertion(serde_json::json!({ "assert": "field", "path": "x", "exists": true }));
+        assert!(unjudgeable_on_unparsed_body(&field, &BodyForm::Json).is_none());
+        assert!(unjudgeable_on_unparsed_body(&field, &BodyForm::Empty).is_none());
+
+        let quoted = Exchange {
+            method: "GET".into(),
+            url: "http://sut.invalid/ehr".into(),
+            status: StatusCode::OK,
+            headers: BTreeMap::new(),
+            body: Some(Value::String("a JSON string document".to_owned())),
+            body_form: BodyForm::Json,
+        };
+        assert_eq!(quoted.json_body(), quoted.body.as_ref());
+
+        let unparsed = Exchange {
+            body_form: BodyForm::Unparsed { media_type: None },
+            ..quoted
+        };
+        assert_eq!(unparsed.json_body(), None);
+        let reason = unparsed_body_reason("field", None);
+        assert!(reason.contains("no declared media type"), "{reason}");
     }
 
     /// Preconditions follow the DEPLOYMENT the flow addresses, and the
@@ -5131,6 +5344,7 @@ mod tests {
                 "W/\"8849182c-82ad-4088-a07f-48ead4180515::openEHRSys.example.com::1\"".to_owned(),
             )]),
             body: None,
+            body_form: BodyForm::Empty,
         };
         let spec: WireCapture = serde_json::from_value(serde_json::json!({
             "from": "header ETag", "strip": "weak-quotes"

@@ -36,6 +36,20 @@ version on.
   and a local quickstart is legitimately `http://localhost` (#296).
 
 ### Fixed
+- **An XML response body is refused as unjudgeable instead of read as an empty
+  document (#285).** The driver collapsed every body it could not parse as JSON
+  into a plain string, so an XML-negotiated read reached the `field`,
+  `equivalent`, `instance_of`, `result_set` and `signature` families as a value
+  with no members and each one reported the asserted fact absent — a failed row
+  charged to a server that answered exactly as it was asked to. Canonical XML
+  and canonical JSON are separate bound document forms (ITS-REST
+  `specifications/docs/overview/Resources.md` §Data representation) and this
+  runner parses the JSON binding only, so those families now take the
+  inconclusive channel with the served media type named, and the `version`
+  family refuses the same way when its `ORIGINAL_VERSION` envelope read comes
+  back unparsed. Nothing narrows on the JSON path, `xml_root` and `returns`
+  keep grading the served text, and a `uid_pattern` judged off the resolved
+  identity still gates.
 - **A `lifecycle_state` assert reads an `IMPORTED_VERSION` through the version
   it wraps (#322).** The judge read the property off the top level of the
   served envelope, which an imported version cannot carry: released ITS-JSON
