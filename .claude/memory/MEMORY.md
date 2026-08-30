@@ -35,3 +35,6 @@ apply" part so a future session can act on it without re-deriving it.
 - [Commit memory promptly](commit-memory-promptly.md) — memory files never
   float in the working tree; sweep and push them with the work that produced
   them
+- [Drafting in Ruben's voice](drafting-in-rubens-voice.md) — personal drafts
+  (emails, forum posts) lead with the point, short paragraphs, no structure
+  announcements, no AI tells; Discourse is markdown, Outlook is .txt
