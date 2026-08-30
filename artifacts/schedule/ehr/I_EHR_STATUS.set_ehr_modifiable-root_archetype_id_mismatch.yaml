@@ -1,0 +1,55 @@
+# THE ROOT NODE-ID IDENTITY RULE on the EHR_STATUS surface (issue #339): the
+# EHR_STATUS twin of the composition- and directory-seam mismatch cases.
+#
+# RM UML/classes/locatable.adoc §Attributes fixes the value of
+# `archetype_node_id` at a root verbatim: "At an archetype root point, the
+# value of this attribute is always the stringified form of the
+# `_archetype_id_` found in the `_archetype_details_` object." An EHR_STATUS
+# is UNCONDITIONALLY a root: RM UML/classes/ehr_status.adoc §Invariants
+# declares `Is_archetype_root: is_archetype_root` with no antecedent, exactly
+# as PARTY and COMPOSITION do. A root whose ARCHETYPED block names a DIFFERENT
+# archetype than its own archetype_node_id declares two archetype identities,
+# and no archetype-driven validation can decide which one governs it.
+#
+# WHICH BRANCH THE REFUSAL TAKES: every member the request-body schema
+# declares required is present and well-typed, so the body converts —
+# `responses/422.yaml`'s "could be converted to a resource, but there are
+# semantic validation errors" branch, exactly as the sibling
+# `-rm_version_empty` adjudicated on this class.
+id: I_EHR_STATUS.set_ehr_modifiable-root_archetype_id_mismatch
+kind: functional
+component: EHR
+sm_operation: I_EHR_STATUS.set_ehr_modifiable
+capabilities: [EhrStatus]
+profiles: [CORE]
+test_purpose: >-
+  Updating an EHR_STATUS whose root archetype_node_id contradicts its
+  archetype_details.archetype_id is rejected as a semantic error, so the
+  archetype-root identity rule is enforced on the EHR_STATUS surface and not
+  only on COMPOSITION and directory commits.
+description: "Update EHR_STATUS with a contradictory root archetype identity"
+spec_refs:
+  - "RM common §locatable (archetype_node_id; Archetyped_valid)"
+  - "RM ehr §EHR_STATUS (Is_archetype_root)"
+  - "SM openehr_platform §I_EHR_STATUS.set_ehr_modifiable"
+  - "SM openehr_platform §I_VALIDITY_CHECKER.content_valid"
+  - "ITS-REST overview Requests_and_responses §HTTP status codes"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  ehr: { commits: none }                 # mints ${ehr_id}
+data_sets: [cnf.ehr_status.invalid.root-archetype-id-mismatch]
+flow:
+  - step: 1
+    call: get_ehr_status                 # the current version, for the If-Match precondition
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid }
+  - step: 2
+    call: set_ehr_modifiable
+    variant: invalid_body                # the variant binding takes the case-supplied payload
+    with:
+      ehr_id: "${ehr_id}"
+      preceding_version_uid: "${status_version_uid}"
+      ehr_status: "${ds:cnf.ehr_status.invalid.root-archetype-id-mismatch}"
+    expect: validation_failed

@@ -19,6 +19,16 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **The archetype-root invariants reach every top-level class the release
+  makes a root (#339).** Two refusal cases with their invalid corpus twins:
+  an EHR_STATUS whose root `archetype_node_id` contradicts its
+  `archetype_details.archetype_id` (RM `EHR_STATUS` is unconditionally an
+  archetype root), and a directory FOLDER whose `archetype_node_id` is empty
+  (`Archetype_node_id_valid` binds every LOCATABLE). Template-level
+  validation of EHR_STATUS and FOLDER commits has no released wire binding —
+  the only released 422/template sentence reaches COMPOSITION and the
+  DEVELOPMENT demographic surface — so that boundary is register entry
+  AMB-230, reported upstream (#355), never an invented expectation.
 - **The hosted console (#348).** The released container image serves the
   public reading surface at `console.veredictum.eu` on Vercel: the catalogue,
   the party statements and the specification oracle, baked into the image
