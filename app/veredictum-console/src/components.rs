@@ -3,9 +3,8 @@
 
 //! The shared component kits (#63): one kit per repeated surface.
 //!
-//! A surface never gets a second, slightly different realization. The shapes
-//! are the FerroEHR console's proven kits, re-grounded on the Veredictum
-//! design tokens (`style/tailwind.css`).
+//! A surface never gets a second, slightly different realization. Every kit
+//! draws its colors from the design tokens in `style/tailwind.css`.
 
 pub mod data_table;
 pub mod empty_state;

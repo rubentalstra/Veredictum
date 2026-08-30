@@ -26,7 +26,7 @@ use crate::engine::{Canceller, Engine, Line, RunSpec};
 const TAIL_CAP: usize = 200;
 
 /// One parsed `--progress` line: `progress: <k>/<n>` with an optional case id
-/// (#81's documented grammar). Pure, unit-tested.
+/// (#81's documented grammar).
 #[must_use]
 pub fn parse_progress(line: &str) -> Option<(u64, u64, Option<String>)> {
     let rest = line.strip_prefix("progress: ")?;
@@ -39,8 +39,7 @@ pub fn parse_progress(line: &str) -> Option<(u64, u64, Option<String>)> {
 }
 
 /// The estimate over observed per-case durations: the moving median times
-/// the remaining count. Pure, unit-tested; the label "estimate" is the
-/// screen's duty.
+/// the remaining count. Labelling it an estimate is the screen's duty.
 #[must_use]
 pub fn eta_ms(durations_ms: &[u64], remaining: u64) -> Option<u64> {
     if durations_ms.is_empty() {
@@ -370,10 +369,8 @@ impl JobSlot {
 /// The engine's own tally over the typed record: passed / failed / errored /
 /// excused, counted on the lib's status enum itself.
 ///
-/// The match is exhaustive on purpose. A status the engine adds later breaks
-/// this build instead of landing in a catch-all, which is how a new
-/// vocabulary member would otherwise be counted as excused without anyone
-/// deciding that.
+/// The match is exhaustive on purpose: a status the engine adds later breaks
+/// this build instead of being counted as excused by a catch-all.
 #[cfg(feature = "ssr")]
 fn tally(results: &veredictum::party::Results) -> (u64, u64, u64, u64) {
     use veredictum::party::OutcomeStatus;
@@ -414,7 +411,7 @@ mod tests {
     #[test]
     fn the_tally_counts_every_recorded_status() -> Result<(), serde_json::Error> {
         // Authored as bytes, the way the engine writes the document the
-        // console reads back (testing.md: a wire input may be raw JSON).
+        // console reads back, so a codec change fails here.
         const RECORD: &str = r#"{
             "sut": { "name": "sut", "version": "1" },
             "runner": {

@@ -59,10 +59,8 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     // The hydration marker every browser journey waits on before driving a
-    // control: a click that lands before hydration attaches its listener is
-    // silently lost. An Effect never runs on the server, so the server pass
-    // and the first paint stay deterministic, and the marker sits on the root
-    // component so the routes' 404 fallback carries it too.
+    // control: a click landing before hydration attaches its listener is
+    // silently lost. On the root component, so the 404 fallback carries it.
     Effect::new(|_| {
         if let Some(body) = document().body() {
             let outcome = body.set_attribute("data-hydrated", "");
@@ -74,11 +72,9 @@ pub fn App() -> impl IntoView {
 
     view! {
         <Stylesheet id="leptos" href="/pkg/veredictum-console.css" />
-        // The icon set (#84), every file rendered from one of the two brand
-        // originals by `scripts/render/brand-icons.sh`. `favicon.ico` exists
-        // whether or not it is declared: a browser probes that path on every
-        // load, and the 404 it logs is a page error the journeys' console gate
-        // fails on.
+        // `favicon.ico` is declared because a browser probes that path on every
+        // load anyway, and the 404 it logs is a page error the journeys' console
+        // gate fails on (#84).
         <Link rel="icon" type_="image/svg+xml" href="/seal.svg" />
         <Link rel="icon" sizes="32x32" href="/favicon.ico" />
         <Link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />

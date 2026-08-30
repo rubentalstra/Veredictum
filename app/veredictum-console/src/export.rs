@@ -13,8 +13,7 @@
 //! reads them back.
 //!
 //! Every renderer in this module is a pure function of the record, so the
-//! same bundle bytes produce the same output bytes. The unit tests below are
-//! that property.
+//! same bundle bytes produce the same output bytes.
 
 use serde::{Deserialize, Serialize};
 
@@ -51,10 +50,9 @@ pub const DIGEST_PREFIX_CHARS: usize = 12;
 
 /// Everything the artwork states about one sealed record.
 ///
-/// Each field is read back from the bundle the engine wrote: nothing here is
-/// a console-side judgement, and nothing is a wall-clock reading — the
-/// signing time comes from the detached signature's own creation subpacket,
-/// which is what makes the card reproducible.
+/// Each field is read back from the bundle the engine wrote. Nothing is a
+/// wall-clock reading: the signing time comes from the detached signature's
+/// own creation subpacket, which is what makes the card reproducible.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SealFacts {
     /// The system under test, name and version, as the record spells it.
@@ -140,9 +138,8 @@ pub mod render {
 
     /// The seal-card master, compiled in.
     ///
-    /// The card is filled from the ONE brand original rather than a copy, the
-    /// same anti-fork discipline `public/seal.svg` applies to the icon.
-    /// Reading it at runtime would make the export depend on a mount the
+    /// The card is filled from the ONE brand original rather than a copy, and
+    /// reading it at runtime would make the export depend on a mount the
     /// container image does not carry.
     const SEAL_CARD_MASTER: &str = include_str!("../../../assets/brand/veredictum-seal-card.svg");
 
@@ -224,8 +221,7 @@ pub mod render {
     ///
     /// The result is the certificate a party publishes: the record's own
     /// facts in the artwork, the digest prefix tying it to the signed bundle,
-    /// and the independence line visible rather than only in the master's
-    /// source comment.
+    /// and the independence line rendered visibly.
     ///
     /// # Errors
     /// [`RenderError::MissingAnchor`] when the master no longer carries a

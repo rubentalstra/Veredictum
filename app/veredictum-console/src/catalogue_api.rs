@@ -172,9 +172,8 @@ pub mod read {
 
     /// Maps the startup state to the landing view.
     ///
-    /// The counts are the SAME expressions the CLI's summary line prints, so
-    /// the two cannot disagree (`app/veredictum/src/bin/veredictum.rs`, the
-    /// validate summary) — the integration test holds this mapping.
+    /// The counts are the SAME expressions the CLI's validate summary prints
+    /// (`app/veredictum/src/bin/veredictum.rs`), so the two cannot disagree.
     #[must_use]
     pub fn instrument_view(state: &ConsoleState) -> InstrumentView {
         match state.catalogue.as_ref() {
@@ -210,9 +209,8 @@ pub mod read {
             .collect())
     }
 
-    /// The tier tokens a case carries, in vocabulary order — the lib's own
-    /// serde names (CORE / STANDARD / OPTIONS / SEC-BASIC), never a mirrored
-    /// vocabulary.
+    /// The tier tokens a case carries, in vocabulary order: the lib's own
+    /// serde names, never a mirrored vocabulary.
     fn tier_tokens(case: &veredictum::model::case::CaseCore) -> Vec<String> {
         case.profiles
             .iter()
@@ -350,13 +348,11 @@ pub mod read {
 pub mod fns {
     //! The `#[server]` endpoints, one module for one inner suppression.
     //!
-    //! The suppression covers what the macro expands: `unused_async` (the
-    //! server-fn contract requires async whether or not a body awaits) and
-    //! `missing_docs` (the macro mints an argument struct whose fields cannot
-    //! carry doc comments). Both fire only in SOME expansions, so `#[expect]`
-    //! would itself warn through `unfulfilled_lint_expectations` in the quiet
-    //! ones (<https://doc.rust-lang.org/rustc/lints/levels.html#expect>);
-    //! module-scoped, signed off in the pull request.
+    //! The suppression covers what the macro expands: `unused_async`, and
+    //! `missing_docs` on the argument struct it mints. Both fire only in SOME
+    //! expansions, so `#[expect]` would itself warn through
+    //! `unfulfilled_lint_expectations` in the quiet ones
+    //! (<https://doc.rust-lang.org/rustc/lints/levels.html#expect>).
     #![allow(
         clippy::unused_async,
         missing_docs,

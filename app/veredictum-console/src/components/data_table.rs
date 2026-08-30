@@ -6,8 +6,7 @@
 //! Table classes, the loading skeleton, the page size and the pagination
 //! footer. Page state lives in the URL (`?page=`), so a listing is shareable,
 //! refresh-safe and works without WASM loaded
-//! (<https://book.leptos.dev/router/20_form.html>); the row math is pure and
-//! unit-tested.
+//! (<https://book.leptos.dev/router/20_form.html>).
 
 use leptos::prelude::{
     AddAnyAttr, ClassAttribute, CollectView, ElementChild, IntoView, Memo, StyleAttribute, With,
@@ -35,11 +34,10 @@ pub const TD: &str = "border-t border-edge px-3 py-2 text-ink";
 
 /// Reads the 1-based page number from the URL's `?page=`.
 ///
-/// A private-helper read on purpose: calling `use_query_map()` directly in a
-/// `#[component]` body stops `clippy::must_use_candidate`
-/// (<https://rust-lang.github.io/rust-clippy/master/index.html#must_use_candidate>)
-/// firing on that fn, turning the component's own `#[expect]` of it into an
-/// `unfulfilled_lint_expectations` build failure.
+/// A helper on purpose: `use_query_map()` called directly in a `#[component]`
+/// body stops `clippy::must_use_candidate` firing on that fn, turning the
+/// component's own `#[expect]` of it into an `unfulfilled_lint_expectations`
+/// build failure.
 #[must_use]
 pub fn page_from_url() -> Memo<usize> {
     let query = use_query_map();
@@ -112,8 +110,7 @@ pub fn TableFooter(
     let pages = page_count(total);
     let previous_href = format!("{base}?page={}", page.saturating_sub(1));
     let next_href = format!("{base}?page={}", page + 1);
-    // Both hrefs are built; consuming the prop here keeps the by-value
-    // component signature honest for the lint.
+    // Both hrefs are built, so the by-value prop is spent here.
     drop(base);
     let previous = (page > 1).then(|| {
         let href = previous_href;
@@ -152,8 +149,7 @@ mod tests {
         assert_eq!(page_window(1, 10), (0, 10));
         assert_eq!(page_window(1, PAGE_SIZE + 1), (0, PAGE_SIZE));
         assert_eq!(page_window(2, PAGE_SIZE + 1), (PAGE_SIZE, PAGE_SIZE + 1));
-        // A page past the end clamps to the last page rather than an empty
-        // window: a stale link still shows data.
+        // A page past the end clamps, so a stale link still shows data.
         assert_eq!(page_window(99, PAGE_SIZE + 1), (PAGE_SIZE, PAGE_SIZE + 1));
         assert_eq!(page_count(PAGE_SIZE * 3), 3);
     }

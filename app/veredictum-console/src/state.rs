@@ -78,9 +78,8 @@ pub struct ConsoleState {
     pub jobs: crate::run_job::JobSlot,
     /// Whether the documentation capture mode is on
     /// ([`crate::capture::CAPTURE_ENV`]): the facts a run stamps then render
-    /// as fixed stand-ins, so a capture pass over an unchanged console
-    /// produces identical screenshots. It changes what the surfaces DISPLAY
-    /// and nothing that is written, sealed or signed.
+    /// as fixed stand-ins. It changes what the surfaces DISPLAY and nothing
+    /// that is written, sealed or signed.
     pub capture: bool,
 }
 

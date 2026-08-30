@@ -333,10 +333,9 @@ pub fn Scope() -> impl IntoView {
     let filter = RwSignal::new(String::new());
     let record_exchanges = RwSignal::new(false);
     // Every mutation below reports BOTH outcomes as a toast and keeps its
-    // inline pane, where a diagnostic is worth reading line by line. The
-    // answers land in each action's own async continuation: the dispatch is
-    // the user event, so no Effect mediates (the Leptos book discourages
-    // signal-writing effects — book/reactivity/working_with_signals §4).
+    // inline pane. The answers land in each action's own async continuation,
+    // so no signal-writing Effect mediates
+    // (<https://book.leptos.dev/reactivity/working_with_signals.html>).
     let previewed = RwSignal::new(None::<Result<ScopePreview, String>>);
     let preview = Action::new(move |filter: &String| {
         let filter = filter.clone();

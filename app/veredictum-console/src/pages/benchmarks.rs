@@ -15,8 +15,8 @@
 //! travels with it.
 //!
 //! The upload is a plain `<form method="post" enctype="multipart/form-data">`
-//! posting to a server-owned axum route, which redirects back here. Uploaded
-//! records are transient and swept; the console keeps no state of its own.
+//! posting to a server-owned axum route. Uploaded records are transient and
+//! swept; the console keeps no state of its own.
 
 use leptos::prelude::{
     AddAnyAttr, ClassAttribute, CollectView, ElementChild, Get, GlobalAttributes, IntoAny,
@@ -53,10 +53,9 @@ struct UrlParams {
 
 /// The four query parameters this surface reads.
 ///
-/// Read in a private helper rather than in the component body: reading the
-/// query map directly in a `#[component]` fn silences
-/// `clippy::must_use_candidate` on that fn, which then turns the crate's
-/// `#[expect]` idiom into an unfulfilled-expectation build failure (rules §2).
+/// A helper rather than the component body: reading the query map inside a
+/// `#[component]` fn silences `clippy::must_use_candidate` there, turning the
+/// crate's `#[expect]` idiom into an unfulfilled-expectation build failure.
 fn params_from_url() -> Memo<UrlParams> {
     let query = use_query_map();
     Memo::new(move |_| {

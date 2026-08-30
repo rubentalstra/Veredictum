@@ -3,9 +3,10 @@
 
 //! The verbatim pane: the ONE way the console shows a raw body.
 //!
-//! Payloads, diagnostics and documents render monospace, scrollable, never
-//! rewritten, with a copy affordance. Syntax highlighting arrives with the
-//! exchange rendering (#67); this kit's contract is verbatimness.
+//! Payloads, diagnostics and documents render monospace, scrollable and never
+//! rewritten, with a copy affordance. Verbatimness is the contract.
+
+// TODO(#67): syntax highlighting, landing with the exchange rendering.
 
 use leptos::prelude::{
     ClassAttribute, ElementChild, Get, GlobalAttributes, IntoView, OnAttribute, component, view,
