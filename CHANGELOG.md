@@ -18,6 +18,18 @@ version on.
 
 ## [Unreleased]
 
+### Fixed
+- **Every server function answered 404 in the published image (#381).** A
+  server-function URL is `xxh64` over the crate's absolute manifest directory
+  unless `SERVER_FN_OVERRIDE_KEY` says otherwise, and the release pipeline
+  builds the two halves in different places: the server binary inside a job
+  container, the WASM bundle on the host runner. The 0.1.2 image therefore
+  registered one set of paths and requested another, so every call the
+  hydrated console made fell through to the not-found page. A workspace
+  `.cargo/config.toml` fixes the key for every build, and the image smoke now
+  diffs the shipped binary's path set against the shipped bundle's and
+  refuses any difference.
+
 ## [0.1.2] - 2026-08-30
 
 ### Added
