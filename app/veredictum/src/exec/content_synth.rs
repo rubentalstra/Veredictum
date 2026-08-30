@@ -1000,9 +1000,10 @@ fn item_container_cardinality(
     let is_cluster = rm_class == "CLUSTER";
     // RM `data_structures` §CLUSTER makes `items` 1..*, and AOM2 VCACA makes
     // a stated cardinality legal only when same-or-narrower than the RM's —
-    // so a lower bound of 0 is unstatable on CLUSTER: `any` emits NO
-    // cardinality (the RM default IS the constraint) and `opt` is refused
-    // rather than silently widened into a spec-illegal template.
+    // so a lower bound of 0 is unstatable on CLUSTER. `C_MULTIPLE_ATTRIBUTE`
+    // types `cardinality` 1..1 (AOM1.4 class table; the released Archetype.xsd
+    // element is mandatory), so `any` restates the RM's own 1..* (same-as-RM
+    // is legal) and `opt` is refused rather than silently widened.
     let card = match token {
         CardinalityToken::Opt if is_cluster => {
             return Err(axis_refusal(
@@ -1011,7 +1012,7 @@ fn item_container_cardinality(
                  makes that template invalid, so the row is unauthorable",
             ));
         }
-        CardinalityToken::Any if is_cluster => String::new(),
+        CardinalityToken::Any if is_cluster => cardinality(1, None),
         _ => token.cardinality(),
     };
     let exist = if is_cluster {
@@ -1185,9 +1186,10 @@ mod tests {
 
     /// CLUSTER.items is 1..* in the RM, and AOM2 VCACA makes a stated
     /// cardinality legal only when same-or-narrower: `opt` (0..1) is refused
-    /// rather than synthesized into a spec-illegal template, and `any` emits
-    /// no cardinality element at all — the RM default is the constraint
-    /// (adjudicated on #283).
+    /// rather than synthesized into a spec-illegal template, and `any`
+    /// restates the RM's own 1..*, because `C_MULTIPLE_ATTRIBUTE.cardinality`
+    /// is 1..1 and cannot be omitted (adjudicated on #283; the omission
+    /// variant shipped schema-invalid OPTs the second reproduction refused).
     #[test]
     fn cluster_items_never_widens_the_rm_floor() {
         let c = cols(&["cardinality", "member_count", "expected", "violates"]);
@@ -1221,14 +1223,25 @@ mod tests {
             &any_cells,
         )
         .expect("`any` on CLUSTER.items synthesizes without a stated cardinality");
-        // Exactly TWO cardinality elements survive: the ITEM_TREE wrapper's
-        // 0..* and the template's outer container (both floors ARE 0..*).
-        // CLUSTER.items must carry none, so a third is the widening
-        // regression this pin exists to catch.
+        // Three cardinality elements: the ITEM_TREE wrapper's 0..*, the
+        // template's outer container (both floors ARE 0..*), and the
+        // CLUSTER's own items restating the RM's 1..*. A missing third is
+        // the schema-invalid omission; three with no 1..* interval is the
+        // widening regression.
+        let cardinalities: Vec<&str> = xml
+            .split("<cardinality>")
+            .skip(1)
+            .filter_map(|rest| rest.split("</cardinality>").next())
+            .collect();
+        assert_eq!(cardinalities.len(), 3, "{xml}");
         assert_eq!(
-            xml.matches("<cardinality>").count(),
-            2,
-            "the RM default must not be restated on CLUSTER.items: {xml}"
+            cardinalities
+                .iter()
+                .filter(|c| c.contains("<lower>1</lower>")
+                    && c.contains("<upper_unbounded>true</upper_unbounded>"))
+                .count(),
+            1,
+            "exactly one cardinality restates the RM's 1..*: {cardinalities:?}"
         );
     }
 

@@ -31,7 +31,8 @@ version on.
   type-narrowing refusal rows move to option-tagged sibling cases under
   register AMB-229 and the matched halves stay gating. The structural
   synthesizer stops emitting VCACA-illegal templates on `CLUSTER.items`:
-  `any` states no cardinality (the RM default is the constraint) and `opt`
+  `any` restates the RM's own 1..* (`C_MULTIPLE_ATTRIBUTE.cardinality` is
+  1..1, so one is always stated; same-as-RM is VCACA-legal) and `opt`
   refuses loudly, with the four unauthorable rows dropped under that
   citation; the ADL1.4/AOM2 divergence on open occurrences bounds is
   reported upstream as #308.
