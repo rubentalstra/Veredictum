@@ -141,14 +141,14 @@ pub fn ehr_status(
     Ok(Some(status))
 }
 
-/// The deterministic client `ehr_id` for `ehr_id: provided` rows
-/// (contract: pure function of the row index — UUID v4-shaped, seeded from
-/// the index so two runners mint identical ids).
+/// The deterministic client `ehr_id` for an `ehr_id: provided` row.
+///
+/// A version-5 UUID over the recipe namespace (itself a version-5 UUID of
+/// `cnf.create_ehr` under the URL namespace) and the name
+/// `<case id>/<row index>` — pure and case-scoped, so two runners mint
+/// identical ids while distinct cases sharing one SUT never collide.
 #[must_use]
 pub fn deterministic_ehr_id(case: &str, row_index: usize) -> String {
-    // UUIDv5 over the recipe namespace and "<case>/<row>" — pure and
-    // case-scoped, so two runners mint identical ids while distinct cases
-    // sharing one SUT never collide.
     let ns = uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_URL, b"cnf.create_ehr");
     uuid::Uuid::new_v5(&ns, format!("{case}/{row_index}").as_bytes()).to_string()
 }
@@ -1208,6 +1208,22 @@ mod tests {
         assert_eq!(
             c9["content"][0]["data"]["events"][0]["data"]["items"][0]["value"]["magnitude"],
             serde_json::json!(190)
+        );
+        // The COMPOSITION name varies with k and the OBSERVATION name does
+        // not: both are contract terms, so both are pinned here.
+        assert_eq!(c0["name"]["value"], serde_json::json!("blood pressure 0"));
+        assert_eq!(c9["name"]["value"], serde_json::json!("blood pressure 9"));
+        assert_eq!(
+            c0["content"][0]["name"]["value"],
+            c9["content"][0]["name"]["value"]
+        );
+        assert_eq!(
+            c0["context"]["start_time"]["value"],
+            serde_json::json!("2026-01-01T00:00:00Z")
+        );
+        assert_eq!(
+            c9["context"]["start_time"]["value"],
+            serde_json::json!("2026-01-01T09:00:00Z")
         );
         assert!(bp_series(10).is_err());
         assert_eq!(bp_series(4).unwrap(), query_bp(4).unwrap());

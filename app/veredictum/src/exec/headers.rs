@@ -40,11 +40,11 @@
 //! - `latest-version-uid` — the stale-precondition rule (overview §"If-Match
 //!   and accidental overwrites": the 412 "SHOULD return also latest
 //!   `version_uid` in the `ETag`"): the entity-tag's payload (weak/quoted
-//!   wrapper stripped) equals the latest version uid this row committed,
-//!   compared case-insensitively (BASE `master05` §Composite Identifiers and
-//!   Case). When the row committed nothing the runner can compare against
-//!   (no tracked uid), the matcher degrades to `present` — honest, never a
-//!   false red.
+//!   wrapper stripped) equals the latest version uid this row committed FOR
+//!   THE VERSIONED OBJECT the request addressed, compared case-insensitively
+//!   (BASE `master05` §Composite Identifiers and Case). When the row
+//!   committed nothing to that object, the matcher degrades to `present` —
+//!   honest, never a false red.
 //! - `pattern:<regex>` — full-value match after `<name>` placeholders resolve
 //!   (`resolve_placeholders`): a STRUCTURAL token substitutes its released
 //!   grammar, any other name substitutes the regex-escaped scalar of the
@@ -70,8 +70,10 @@ use crate::party::SpecVersions;
 pub struct RequestContext<'a> {
     /// The `Accept` value the driver sent (the negotiated type).
     pub accept: Option<&'a str>,
-    /// The latest version uid committed on this row (the newest successful
-    /// `version_uid` binding capture), for `latest-version-uid`.
+    /// The latest version uid committed on this row FOR THE VERSIONED OBJECT
+    /// this request addressed (the newest successful `version_uid` binding
+    /// capture naming that object), for `latest-version-uid`. `None` when the
+    /// row committed nothing to it.
     pub last_version_uid: Option<&'a str>,
     /// The party statement's declared spec versions — the right-hand side of
     /// a version-dated expectation's `applies` floor. `None` (a
@@ -182,9 +184,9 @@ fn judge(
                     Some(latest) => Some(format!(
                         "header {name}: expected the latest version uid {latest:?}, got {payload:?}"
                     )),
-                    // Nothing committed on this row to compare against —
-                    // presence + non-emptiness is all the runner can
-                    // soundly assert.
+                    // Nothing committed on this row to the object this
+                    // request addressed — presence + non-emptiness is all
+                    // the runner can soundly assert.
                     None => None,
                 }
             }
@@ -244,7 +246,7 @@ fn media_token(value: &str) -> &str {
 /// stripped (`W/"x"` → `x`; `"x"` → `x`; bare stays bare) — the same
 /// tolerance the SUT-side decode grants (overview §"`ETag` and Last-Modified"
 /// weak form + §"Deprecated headers" bare form).
-fn strip_entity_tag(value: &str) -> &str {
+pub(crate) fn strip_entity_tag(value: &str) -> &str {
     let v = value.trim();
     let v = v
         .strip_prefix("W/")

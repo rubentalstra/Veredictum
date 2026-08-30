@@ -1,0 +1,5 @@
+cnf.defect.unknown_digest_algorithm:
+  generated_by: { recipe: bp_series, digest: "md5:d41d8cd98f00b204e9800998ecf8427e" }
+  format: canonical-json
+  validity: { verdict: valid }
+  provenance: "seeded defect: the pinned digest names an algorithm the gate does not compute"

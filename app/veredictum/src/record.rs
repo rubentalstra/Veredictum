@@ -545,7 +545,7 @@ fn is_plain_file_name(name: &str) -> bool {
 }
 
 /// Lowercase hex, the encoding every digest in a manifest carries.
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().fold(
         String::with_capacity(bytes.len().saturating_mul(2)),
         |mut out, byte| {

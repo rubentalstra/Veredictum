@@ -133,6 +133,13 @@ defects! {
         ("case-bad-structural-token.yaml", "schedule/zz-defect.yaml", "content-synthesis"),
     corpus_missing_source =>
         ("corpus-missing-source.yaml", "corpus/MANIFEST.yaml", "corpus-integrity"),
+    // A generated set's provenance is only worth the digest behind it: a pin
+    // that no longer matches its committed recipe contract fails here, and an
+    // algorithm token the gate cannot compute is refused rather than skipped.
+    corpus_stale_recipe_digest =>
+        ("corpus-stale-recipe-digest.yaml", "corpus/MANIFEST.yaml", "recipe-digest"),
+    corpus_unknown_digest_algorithm =>
+        ("corpus-unknown-digest-algorithm.yaml", "corpus/MANIFEST.yaml", "recipe-digest"),
     outcomes_wrong_class => ("outcomes-wrong-class.yaml", "vocab/outcomes.yaml", "vocab-drift"),
     wire_surface_empty =>
         ("wire-surface-empty.yaml", "vocab/wire_surface.yaml", "surface-coverage"),
