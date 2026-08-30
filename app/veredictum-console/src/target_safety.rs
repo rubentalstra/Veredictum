@@ -54,6 +54,10 @@ pub enum RefusedFamily {
     Unspecified,
     /// `224.0.0.0/4` and `ff00::/8`.
     Multicast,
+    /// `100.64.0.0/10`, the shared space a carrier hands its own subscribers.
+    Shared,
+    /// `255.255.255.255`.
+    Broadcast,
 }
 
 impl RefusedFamily {
@@ -67,6 +71,8 @@ impl RefusedFamily {
             Self::UniqueLocal => "a unique-local address (RFC 4193 §3)",
             Self::Unspecified => "the unspecified address (RFC 1122 §3.2.1.3, RFC 4291 §2.5.2)",
             Self::Multicast => "a multicast address (RFC 1112 §4, RFC 4291 §2.7)",
+            Self::Shared => "a shared carrier address (RFC 6598 §7)",
+            Self::Broadcast => "the broadcast address (RFC 919 §7)",
         }
     }
 }
@@ -156,6 +162,16 @@ fn refused_v4(address: Ipv4Addr) -> Option<RefusedFamily> {
     }
     if address.is_multicast() {
         return Some(RefusedFamily::Multicast);
+    }
+    if address.is_broadcast() {
+        return Some(RefusedFamily::Broadcast);
+    }
+    // RFC 6598 §7 assigns 100.64.0.0/10 to carrier-grade NAT, so an address in
+    // it is reachable from inside one carrier's network and from nowhere else
+    // — the same property as the private ranges, under a different registry.
+    let [first, second, _, _] = address.octets();
+    if first == 100 && (64..128).contains(&second) {
+        return Some(RefusedFamily::Shared);
     }
     None
 }
@@ -300,7 +316,7 @@ mod tests {
     /// test would pass on `10.0.0.1` and miss `::ffff:10.0.0.1`.
     #[test]
     fn every_refused_family_is_refused_by_address() {
-        let cases: [(&str, RefusedFamily); 16] = [
+        let cases: [(&str, RefusedFamily); 21] = [
             ("127.0.0.1", RefusedFamily::Loopback),
             ("127.255.255.254", RefusedFamily::Loopback),
             ("::1", RefusedFamily::Loopback),
@@ -317,6 +333,11 @@ mod tests {
             ("::", RefusedFamily::Unspecified),
             ("224.0.0.1", RefusedFamily::Multicast),
             ("ff02::1", RefusedFamily::Multicast),
+            ("100.64.0.1", RefusedFamily::Shared),
+            ("100.127.255.254", RefusedFamily::Shared),
+            ("::ffff:100.64.0.1", RefusedFamily::Shared),
+            ("255.255.255.255", RefusedFamily::Broadcast),
+            ("::ffff:255.255.255.255", RefusedFamily::Broadcast),
         ];
         for (text, family) in cases {
             let address: IpAddr = text.parse().expect("a literal address");
@@ -345,7 +366,16 @@ mod tests {
     /// refusing everything.
     #[test]
     fn a_public_address_passes() {
-        for text in ["198.51.100.7", "203.0.113.9", "2001:db8::1", "8.8.8.8"] {
+        // `100.63.x` and `100.128.x` sit either side of the shared block, so
+        // the boundary is driven rather than assumed.
+        for text in [
+            "198.51.100.7",
+            "203.0.113.9",
+            "2001:db8::1",
+            "8.8.8.8",
+            "100.63.255.255",
+            "100.128.0.0",
+        ] {
             let address: IpAddr = text.parse().expect("a literal address");
             assert_eq!(refused_family(address), None, "{text}");
         }

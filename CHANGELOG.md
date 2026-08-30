@@ -56,8 +56,8 @@ version on.
   A hosted console drives whatever endpoint a visitor names, so it can be
   pointed at addresses only it can reach. Set the variable to `hosted` and the
   console refuses loopback, RFC 1918 private, link-local, unique-local,
-  unspecified and multicast targets in both address families, the IPv4-mapped
-  IPv6 forms included, before any socket opens; the name is resolved first and
+  unspecified, multicast, RFC 6598 shared and broadcast targets in both address
+  families, the IPv4-mapped IPv6 forms included, before any socket opens; the name is resolved first and
   every address it answers with is checked, because a hostname under the
   visitor's control resolving to a private address is the whole attack. The
   refusal names the address, the family and the RFC that defines it, and it
