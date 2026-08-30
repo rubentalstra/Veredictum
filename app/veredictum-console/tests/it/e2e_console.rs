@@ -197,11 +197,12 @@ impl Harness {
         }
     }
 
-    /// Waits for the first element matching `xpath`, within [`WAIT`].
+    /// Waits for an xpath under an explicit budget (a driven run's finish).
     ///
     /// # Panics
-    /// When the element never appears.
-    /// Waits for an xpath under an explicit budget (a driven run's finish).
+    /// When the element never appears — with the page and a failure
+    /// screenshot in the message, exactly like the CSS waits, because a
+    /// timeout with no picture is the one failure this suite cannot read.
     async fn wait_xpath_for(&self, xpath: &str, budget: Duration) -> WebElement {
         match self
             .driver
@@ -211,24 +212,19 @@ impl Harness {
             .await
         {
             Ok(element) => element,
-            Err(e) => panic!("waiting {budget:?} for xpath `{xpath}`: {e}"),
-        }
-    }
-
-    async fn wait_xpath(&self, xpath: &str) -> WebElement {
-        match self
-            .driver
-            .query(By::XPath(xpath))
-            .wait(WAIT, POLL)
-            .first()
-            .await
-        {
-            Ok(element) => element,
             Err(e) => panic!(
-                "waiting for xpath `{xpath}` {}: {e}",
+                "waiting {budget:?} for xpath `{xpath}` {}: {e}",
                 self.evidence("wait").await
             ),
         }
+    }
+
+    /// Waits for the first element matching `xpath`, within [`WAIT`].
+    ///
+    /// # Panics
+    /// When the element never appears.
+    async fn wait_xpath(&self, xpath: &str) -> WebElement {
+        self.wait_xpath_for(xpath, WAIT).await
     }
 
     /// Waits until the current URL contains `fragment`.

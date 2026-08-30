@@ -76,6 +76,12 @@ pub struct ConsoleState {
     pub draft: Arc<std::sync::Mutex<Option<crate::run_api::RunDraft>>>,
     /// The one run-job slot (#66).
     pub jobs: crate::run_job::JobSlot,
+    /// Whether the documentation capture mode is on
+    /// ([`crate::capture::CAPTURE_ENV`]): the facts a run stamps then render
+    /// as fixed stand-ins, so a capture pass over an unchanged console
+    /// produces identical screenshots. It changes what the surfaces DISPLAY
+    /// and nothing that is written, sealed or signed.
+    pub capture: bool,
 }
 
 impl ConsoleState {
@@ -105,6 +111,8 @@ impl ConsoleState {
             catalogue: Arc::new(catalogue),
             draft: Arc::new(std::sync::Mutex::new(None)),
             jobs: crate::run_job::JobSlot::default(),
+            capture: std::env::var(crate::capture::CAPTURE_ENV)
+                .is_ok_and(|value| !value.is_empty()),
         }
     }
 }

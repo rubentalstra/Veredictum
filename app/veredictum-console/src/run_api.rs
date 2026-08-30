@@ -943,7 +943,8 @@ pub mod fns {
     #[server]
     pub async fn fetch_job() -> Result<Option<crate::run_job::JobView>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        state.jobs.view().map_err(ServerFnError::new)
+        let view = state.jobs.view().map_err(ServerFnError::new)?;
+        Ok(crate::capture::job(&state, view))
     }
 
     /// Cancels the in-flight run.

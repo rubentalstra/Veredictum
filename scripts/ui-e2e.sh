@@ -22,9 +22,15 @@
 #   UI_E2E_CHROMEDRIVER   path to a local chromedriver; selects the loopback
 #                         alternative described above instead of the container.
 #   UI_E2E_DOCS_SHOTS     when set, the journeys also write the book's
-#                         screenshots into website/book/src/console/img.
-#   UI_E2E_NO_BUILD       skip the cargo-leptos build and use target/site plus
-#                         target/debug/veredictum-console as they stand.
+#                         screenshots into website/book/src/console/img, and
+#                         the console is served in capture mode: the facts one
+#                         run stamps (its clock, the record digest, the signing
+#                         time) render as fixed stand-ins, so a pass over an
+#                         unchanged console rewrites no committed image. The
+#                         run's own record, manifest and signature are real.
+#   UI_E2E_NO_BUILD       skip the builds and reuse the binaries the last
+#                         harness run copied into target/ui-e2e, plus
+#                         target/site as it stands.
 #   UI_E2E_KEEP_UP        skip teardown (local debugging).
 #   UI_E2E_PORT           the console's port (default 3300).
 #   UI_E2E_REAL_SUTS      when set, compose the two real CDRs — FerroEHR's own
@@ -107,26 +113,34 @@ wait_http() { # url, tries, what
 }
 
 # ── 1. The console under test ───────────────────────────────────────────────
+# The server runs from a COPY, because the journeys' own `cargo nextest`
+# compile rebuilds the bin target and overwrites target/debug/veredictum-console
+# mid-run. The two builds are not interchangeable: a plain cargo build has no
+# LEPTOS_OUTPUT_NAME in its environment, so leptos emits a bootstrap naming
+# `<name>_bg.wasm` while cargo-leptos ships `<name>.wasm`, and the only symptom
+# is a page that loads and never hydrates. That is also why UI_E2E_NO_BUILD
+# reuses these copies rather than target/debug: any cargo command between two
+# harness runs replaces target/debug/veredictum-console with such a build.
+CONSOLE_BIN="$ROOT/target/ui-e2e/veredictum-console"
+ENGINE_BIN="$ROOT/target/ui-e2e/veredictum"
+mkdir -p "$ROOT/target/ui-e2e"
+
 if [[ -z "${UI_E2E_NO_BUILD:-}" ]]; then
   echo "── building the console (cargo leptos build)"
   # The Tailwind pin is single-sourced from the image build, so the harness
   # and the shipped bundle cannot style differently.
   TAILWIND_VERSION="$(grep -E '^ARG TAILWIND_VERSION=' docker/Dockerfile | head -1 | cut -d= -f2)"
   (cd app/veredictum-console && LEPTOS_TAILWIND_VERSION="$TAILWIND_VERSION" cargo leptos build)
+  for artifact in "$ROOT/target/debug/veredictum-console" "$ROOT/target/site/pkg"; do
+    [[ -e "$artifact" ]] || { echo "FATAL: $artifact is missing after the build" >&2; exit 1; }
+  done
+  cp "$ROOT/target/debug/veredictum-console" "$CONSOLE_BIN"
+else
+  for artifact in "$CONSOLE_BIN" "$ROOT/target/site/pkg"; do
+    [[ -e "$artifact" ]] \
+      || { echo "FATAL: $artifact is missing — run once without UI_E2E_NO_BUILD" >&2; exit 1; }
+  done
 fi
-for artifact in "$ROOT/target/debug/veredictum-console" "$ROOT/target/site/pkg"; do
-  [[ -e "$artifact" ]] || { echo "FATAL: $artifact is missing — drop UI_E2E_NO_BUILD" >&2; exit 1; }
-done
-
-# The server runs from a COPY, because the journeys' own `cargo nextest`
-# compile rebuilds the bin target and overwrites target/debug/veredictum-console
-# mid-run. The two builds are not interchangeable: a plain cargo build has no
-# LEPTOS_OUTPUT_NAME in its environment, so leptos emits a bootstrap naming
-# `<name>_bg.wasm` while cargo-leptos ships `<name>.wasm`, and the only symptom
-# is a page that loads and never hydrates.
-CONSOLE_BIN="$ROOT/target/ui-e2e/veredictum-console"
-mkdir -p "$ROOT/target/ui-e2e"
-cp "$ROOT/target/debug/veredictum-console" "$CONSOLE_BIN"
 
 # The driven-run journey spawns the instrument itself, and the console only
 # ever runs the engine version it PINS. The pin IS the workspace engine version
@@ -134,14 +148,16 @@ cp "$ROOT/target/debug/veredictum-console" "$CONSOLE_BIN"
 # refuses to run at all rather than driving nothing when that stops holding.
 echo "── the console's engine pin names this tree's engine"
 bash scripts/release/check-console-pin.sh
-ENGINE_BIN="$ROOT/target/ui-e2e/veredictum"
 if [[ -z "${UI_E2E_NO_BUILD:-}" ]]; then
   echo "── building the engine (cargo build -p veredictum)"
   cargo build --locked -p veredictum --bin veredictum
+  [[ -e "$ROOT/target/debug/veredictum" ]] \
+    || { echo "FATAL: target/debug/veredictum is missing after the build" >&2; exit 1; }
+  cp "$ROOT/target/debug/veredictum" "$ENGINE_BIN"
+else
+  [[ -e "$ENGINE_BIN" ]] \
+    || { echo "FATAL: $ENGINE_BIN is missing — run once without UI_E2E_NO_BUILD" >&2; exit 1; }
 fi
-[[ -e "$ROOT/target/debug/veredictum" ]] \
-  || { echo "FATAL: target/debug/veredictum is missing — drop UI_E2E_NO_BUILD" >&2; exit 1; }
-cp "$ROOT/target/debug/veredictum" "$ENGINE_BIN"
 # An arm64 macOS binary carries an ad-hoc signature that a copy invalidates,
 # and the kernel then SIGKILLs the copy at exec. Re-signing is a no-op
 # elsewhere, because `codesign` exists only on macOS.
@@ -165,6 +181,7 @@ VEREDICTUM_OUT="target/ui-e2e/out" \
 VEREDICTUM_ENGINE="$ENGINE_BIN" \
 VEREDICTUM_SIGN_KEY="artifacts/corpus/keys/cnf-signing.sec.asc" \
 VEREDICTUM_VERIFY_KEY="artifacts/corpus/keys/cnf-signing.pub.asc" \
+VEREDICTUM_CAPTURE_MODE="${UI_E2E_DOCS_SHOTS:-}" \
   "$CONSOLE_BIN" &
 CONSOLE_PID=$!
 wait_http "$PROBE_URL/healthz" 90 "the console"

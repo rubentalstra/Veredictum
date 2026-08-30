@@ -57,6 +57,7 @@ fn state_over(out: &Path, jobs: JobSlot) -> ConsoleState {
         catalogue: std::sync::Arc::new(catalogue),
         draft: std::sync::Arc::new(std::sync::Mutex::new(None)),
         jobs,
+        capture: false,
     }
 }
 
@@ -657,5 +658,62 @@ fn the_card_states_claimed_verdicts_and_not_unclaimed_tiers()
     )?;
     assert!(card.contains(&summary.profile_summary));
     assert!(!card.contains("not_claimed"));
+    Ok(())
+}
+
+/// Capture mode changes what the browser is TOLD and nothing that is sealed.
+///
+/// The book's screenshots are refreshed by driving this console, and a real
+/// digest and signing time make every capture pass rewrite committed images.
+/// The stand-ins therefore live at the answering seam: the manifest, the
+/// signature and the three rendered files keep the record's own facts, which
+/// is what a party publishes and a stranger re-checks.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn capture_mode_pins_the_answer_and_never_the_seal() -> Result<(), Box<dyn std::error::Error>> {
+    use veredictum_console::capture::{self, PINNED_DIGEST, PINNED_TIME};
+
+    let scratch = assert_fs::TempDir::new()?;
+    let Some((mut state, engine)) = driven(scratch.path())? else {
+        return Ok(());
+    };
+    let sealed = prepare::run_with(&state, &engine)?;
+    assert_ne!(sealed.digest, PINNED_DIGEST);
+    assert_ne!(sealed.signed_at, PINNED_TIME);
+
+    state.capture = true;
+    let shown = capture::export_summary(&state, sealed.clone());
+    assert_eq!(shown.digest, PINNED_DIGEST);
+    assert_eq!(shown.signed_at, PINNED_TIME);
+    // What the surface is FOR survives: the verdicts, the SUT, the file list.
+    assert_eq!(shown.profile_summary, sealed.profile_summary);
+    assert_eq!(shown.sut, sealed.sut);
+    assert_eq!(shown.sealed_files, sealed.sealed_files);
+
+    // The bundle on disk is the run's own record, unpinned and still valid.
+    let bundle = prepare::job_dir(&state)?
+        .ok_or("no job dir")?
+        .join(prepare::EXPORT_DIR);
+    let card = std::fs::read_to_string(bundle.join("seal-card.svg"))?;
+    assert!(
+        card.contains(&sealed.digest_prefix),
+        "the sealed card must name the real record"
+    );
+    assert!(
+        !card.contains(&shown.digest_prefix),
+        "a capture stand-in reached a published artifact"
+    );
+    let report = std::fs::read_to_string(bundle.join("record-report.html"))?;
+    assert!(report.contains(&sealed.digest), "the real full digest");
+    assert!(!report.contains(PINNED_DIGEST));
+    let verification = veredictum::record::verify_bundle(&bundle, &key("cnf-signing.pub.asc"))?;
+    assert!(
+        verification.is_clean(),
+        "findings: {:?}",
+        verification.findings()
+    );
     Ok(())
 }
