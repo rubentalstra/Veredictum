@@ -5,7 +5,7 @@
   },
   "runner": {
     "name": "veredictum",
-    "version": "0.1.0-alpha.4",
+    "version": "0.1.1",
     "verification_pack_status": "not_run"
   },
   "schedule_release": "cnf-2.0-w2",
@@ -15,7 +15,7 @@
       "canonical-json"
     ]
   },
-  "ixit_digest": "5006bc5ec7bff606",
+  "ixit_digest": "bba2d36669004a3e",
   "restapi_specs_version": "1.1.0",
   "outcomes": [
     {

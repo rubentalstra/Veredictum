@@ -142,14 +142,41 @@ impl RunOutcome {
     }
 }
 
+/// The digest's width in bytes, which renders as twice that many hex
+/// characters.
+const IXIT_DIGEST_BYTES: usize = 8;
+
 /// Returns the ixit digest recorded with a campaign, which binds the results
-/// to the exact topology they were driven from.
+/// to the exact declaration they were driven under.
+///
+/// The digest is the leading [`IXIT_DIGEST_BYTES`] bytes of the SHA-256 over
+/// the ixit document's bytes exactly as they sit on disk, lowercase hex.
+/// Nothing is canonicalized, reordered or reformatted first, so anyone
+/// holding the declaration a published record was driven under re-derives the
+/// recorded value with `sha256sum ixit.json | cut -c1-16`.
+///
+/// ```
+/// use veredictum::pipeline::conformance::ixit_digest;
+///
+/// // `printf '{}' | sha256sum` prints 44136fa355b3678a…
+/// assert_eq!(ixit_digest("{}"), "44136fa355b3678a");
+/// ```
 #[must_use]
 pub fn ixit_digest(ixit_text: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    ixit_text.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    use std::fmt::Write as _;
+
+    use sha2::{Digest as _, Sha256};
+
+    Sha256::digest(ixit_text.as_bytes())
+        .iter()
+        .take(IXIT_DIGEST_BYTES)
+        .fold(
+            String::with_capacity(IXIT_DIGEST_BYTES.saturating_mul(2)),
+            |mut out, byte| {
+                let _ = write!(out, "{byte:02x}");
+                out
+            },
+        )
 }
 
 /// Drives the catalogue against a live SUT and assembles the party results.
@@ -449,6 +476,33 @@ mod tests {
         assert_ne!(ixit_digest(text), ixit_digest(r#"{"instances":{ }}"#));
         assert_eq!(ixit_digest(text).len(), 16, "16 lowercase hex characters");
         assert!(ixit_digest(text).chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    /// A declaration in the shape the reproduction lane feeds the runner: the
+    /// clinical principal and the unauthenticated one, and nothing else.
+    const FIXTURE_IXIT: &str = r#"{
+  "instances": {
+    "sut": {
+      "base_url": "http://127.0.0.1:8080/rest/openehr/v1",
+      "auth": { "mode": "basic", "user_env": "SUT_USER", "password_env": "SUT_PASS" }
+    },
+    "unauthenticated": {
+      "base_url": "http://127.0.0.1:8080/rest/openehr/v1",
+      "auth": { "mode": "none" }
+    }
+  }
+}
+"#;
+
+    /// A published record's digest is worth something only if a reader
+    /// holding the declaration re-derives it, so the recipe is pinned against
+    /// values an outside tool produced: `sha256sum <fixture> | cut -c1-16`.
+    #[test]
+    fn the_ixit_digest_is_the_leading_sha256_bytes_of_the_declaration() {
+        serde_json::from_str::<crate::ixit::Ixit>(FIXTURE_IXIT)
+            .expect("the pinned fixture is a real declaration, not just bytes");
+        assert_eq!(ixit_digest(r#"{"instances":{}}"#), "b6d92d2643a85d0c");
+        assert_eq!(ixit_digest(FIXTURE_IXIT), "bfbf6ece2dea6ef0");
     }
 
     #[test]

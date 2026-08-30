@@ -305,6 +305,10 @@ pub enum ArtifactRole {
     Signature,
     /// A rendered report or statement document.
     Report,
+    /// The ixit declaration the run was driven under, which is what the
+    /// results' `ixit_digest` is taken over and the only thing that explains
+    /// which principals the deployment had.
+    Ixit,
 }
 
 impl ArtifactRole {
@@ -317,6 +321,7 @@ impl ArtifactRole {
         ArtifactRole::RecordManifest,
         ArtifactRole::Signature,
         ArtifactRole::Report,
+        ArtifactRole::Ixit,
     ];
 
     /// The token an entry names this role by.
@@ -330,6 +335,7 @@ impl ArtifactRole {
             ArtifactRole::RecordManifest => "record-manifest",
             ArtifactRole::Signature => "signature",
             ArtifactRole::Report => "report",
+            ArtifactRole::Ixit => "ixit",
         }
     }
 

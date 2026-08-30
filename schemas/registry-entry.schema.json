@@ -257,7 +257,8 @@
               "bench-result",
               "record-manifest",
               "signature",
-              "report"
+              "report",
+              "ixit"
             ]
           },
           "path": {
