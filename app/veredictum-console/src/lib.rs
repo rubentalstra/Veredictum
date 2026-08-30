@@ -32,7 +32,7 @@ compile_error!("features \"hydrate\" and \"ssr\" cannot be enabled at the same t
 /// (`veredictum = "=…"`; the engine module's unit test holds the two
 /// together). The shell footer shows it, and the ssr-side engine seam
 /// refuses a binary reporting anything else.
-pub const ENGINE_PIN: &str = "0.1.1";
+pub const ENGINE_PIN: &str = "0.1.2";
 
 pub mod app;
 pub mod bench_api;

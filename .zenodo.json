@@ -5,7 +5,7 @@
   "title": "Veredictum",
   "description": "<p>The independent conformance instrument for openEHR clinical data repositories: a machine-readable catalogue of spec-cited test cases, executed against any running CDR, judged by pure-function verdicts. Functional conformance, measured performance, and step-load stress in one tool. The released openEHR specifications are the only authority it accepts.</p>",
   "publication_date": "2026-08-30",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "creators": [
     {
       "name": "Talstra, Ruben",
@@ -33,7 +33,7 @@
       "resource_type": "publication-softwaredocumentation"
     },
     {
-      "identifier": "https://github.com/rubentalstra/Veredictum/tree/v0.1.1",
+      "identifier": "https://github.com/rubentalstra/Veredictum/tree/v0.1.2",
       "relation": "isSupplementTo",
       "resource_type": "software"
     },
