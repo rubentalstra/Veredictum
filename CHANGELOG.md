@@ -19,6 +19,25 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **The error-response surface the released ITS-REST actually pins gains its
+  coverage (#340).** A new `present-with-body` header matcher carries the
+  `Resources.md` §JSON Format MUST in its own shape — the header is asserted
+  when the response carries a content body and carries no criterion when it
+  does not — and the demographic create binding's 400 outcome now declares it
+  for `Content-Type`, with the media type itself grounded on the OAS
+  (`specifications/responses/400.yaml`, `content: application/json`) because
+  the docs text names no media type for an error body. Register AMB-217 is
+  untouched: the error body's members stay unpinned. The new
+  `create_party-error_body_content_type` case and the
+  `error-body-content-type` wire-surface element name the behaviour, so a red
+  row localizes to it.
+- **One header may declare several expectations.** The `outcomes.*.headers`
+  value now accepts a sequence beside the single form, so two rules of
+  different strength or different dating on the same header each keep their own
+  ground. Every `412` outcome that expects the latest `version_uid` in `ETag`
+  now also asserts the `W/` weakness indicator behind
+  `applies: { its_rest: ">=1.1.0" }`, which ratchets that MUST from one
+  binding to thirteen.
 - **The archetype-root invariants reach every top-level class the release
   makes a root (#339).** Two refusal cases with their invalid corpus twins:
   an EHR_STATUS whose root `archetype_node_id` contradicts its

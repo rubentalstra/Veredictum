@@ -277,7 +277,8 @@ impl Tier {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Disposition {
-    /// Assert loosely (e.g. AMB-1: at most a `message` string).
+    /// Assert only the part every defensible reading shares (e.g. the one
+    /// member both published error-body shapes carry, a `message` string).
     LooseAssert,
     /// Real latitude existed; the entry pins this catalogue's choice,
     /// encoded directly in bindings/cases.

@@ -1107,6 +1107,10 @@ elements:
     description: "For 4xx/5xx, services MAY return additional error details ({message, code, errors[]}) when Prefer: return=representation is present; the runner asserts at most a message string (loose)."
     source: "ITS-REST Requests_and_responses.md §HTTP status codes (4xx/5xx MAY carry additional error details under Prefer: return=representation)"
     covered_by: [I_EHR_COMPOSITION.create_composition-invalid_event, I_EHR_CONTRIBUTION.commit_contribution-full_ehr_status]
+  - id: error-body-content-type
+    description: "A 4xx response that carries a content body declares that body's media type in Content-Type; a 4xx that carries no body is under no such obligation."
+    source: "ITS-REST Resources.md §JSON Format (\"Proper header Content-Type: application/json MUST be present in the response of the service unless the response has no content body (HTTP status code 204)\"); the exemption names the no-content case, so the MUST binds every response that does carry content, an error response among them"
+    covered_by: [I_DEMOGRAPHIC_SERVICE.create_party-error_body_content_type]
   - id: deprecated-media-conditional
     description: "Support for the deprecated pre-1.1.0 SDT-era simplified-format media types is implementation-defined (supported → commit succeeds; unsupported → 415)."
     source: "ITS-REST simplified_formats master02-overview.adoc §MIME Types + §Overview (SDT superseded at 1.1.0); register AMB-39"

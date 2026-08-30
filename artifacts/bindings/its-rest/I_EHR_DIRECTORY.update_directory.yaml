@@ -56,7 +56,10 @@ outcomes:
     body: error_loose                     # ITS-REST overview §HTTP status codes — for 4xx/5xx, services MAY return additional error details if Prefer: return=representation
   precondition_failed:
     status: 412                           # 412_directory.yaml (stale If-Match)
-    headers: { ETag: latest-version-uid }
+    headers:
+      ETag:
+        - latest-version-uid
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
   precondition_missing: { status: 400 }   # If-Match absent when required -> 400.yaml (overview Requests_and_responses)
   conflict:
     # A content write into a DEACTIVATED EHR. RM ehr master04 §EHR Active

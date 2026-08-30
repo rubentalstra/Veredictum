@@ -641,8 +641,9 @@ impl Assertion {
     pub fn postcondition_role(&self) -> PostconditionRole {
         match self {
             Self::Unique { .. } => PostconditionRole::Aggregate,
-            // `message_exemplar` is the schedule's prose (AMB-1) and `state`
-            // carries its own `verified_by` case, so neither is pass/fail.
+            // `message_exemplar` is the error body's own text (AMB-217) and
+            // `state` carries its own `verified_by` case, so neither is
+            // pass/fail.
             Self::MessageExemplar { .. } | Self::State { .. } => PostconditionRole::Informative,
             Self::InstanceOf { .. }
             | Self::Field { .. }

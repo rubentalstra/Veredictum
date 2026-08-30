@@ -978,9 +978,9 @@ pub enum Judgement {
     /// Judged once per case, after the last row (interpreter law e).
     Aggregate,
     /// Carries no pass/fail criterion of its own. Exactly two members, both
-    /// adjudicated: `message_exemplar` (register AMB-1 — the schedule's error
-    /// prose is never a criterion) and `state`, whose machine verification is
-    /// the case its `verified_by` names.
+    /// adjudicated: `message_exemplar` (register AMB-217 — an error body is a
+    /// MAY, so its text is never a criterion) and `state`, whose machine
+    /// verification is the case its `verified_by` names.
     Informative,
 }
 

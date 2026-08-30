@@ -180,8 +180,8 @@ pub struct WireCapture {
 }
 
 /// The value-side of a header expectation (closed matcher vocabulary):
-/// `present` · `absent` · `negotiated` · `latest-version-uid` ·
-/// `pattern:<regex>` · a literal string.
+/// `present` · `present-with-body` · `absent` · `negotiated` ·
+/// `latest-version-uid` · `pattern:<regex>` · a literal string.
 ///
 /// `present?` is NOT a member: it is the authored shorthand for
 /// [`HeaderExpectation`]'s `{ match: present, optional: true }`, so
@@ -191,6 +191,12 @@ pub struct WireCapture {
 pub enum HeaderMatcher {
     /// The header must be present, with any value.
     Present,
+    /// The header must be present with any value WHEN the response carries a
+    /// content body, and carries no criterion when it does not — the exact
+    /// shape of the ITS-REST `Resources.md` §JSON Format sentence "Proper
+    /// header `Content-Type: application/json` MUST be present in the response
+    /// of the service unless the response has no content body".
+    PresentWithBody,
     /// The header must not be present.
     Absent,
     /// Equals the negotiated media type.
@@ -221,6 +227,7 @@ impl HeaderMatcher {
                         .to_owned(),
                 );
             }
+            "present-with-body" => Self::PresentWithBody,
             "absent" => Self::Absent,
             "negotiated" => Self::Negotiated,
             "latest-version-uid" => Self::LatestVersionUid,
@@ -354,6 +361,58 @@ impl<'de> Deserialize<'de> for HeaderExpectation {
     }
 }
 
+/// Every expectation declared for ONE response header, judged conjunctively.
+///
+/// The authored form is a single expectation (a bare matcher string or the
+/// mapping form) or a SEQUENCE of them. A sequence exists because the released
+/// text can put two rules of DIFFERENT strength or DIFFERENT dating on the same
+/// header, and one expectation carries one `optional` and one `applies`. The
+/// stale-precondition `ETag` is the case: ITS-REST
+/// `Requests_and_responses.md` §"If-Match and accidental overwrites" makes the
+/// value the latest `version_uid` for every release, while §"Deprecated
+/// headers" makes the `W/` weakness indicator a MUST that §"`ETag` and
+/// Last-Modified" dates to Release 1.1.0. Folding them into one expectation
+/// would either date the identity rule out of scope for a 1.0.3 party or apply
+/// the form rule to it; declared as two, each keeps its own ground.
+#[derive(Debug, Clone)]
+pub struct HeaderExpectations(Vec<HeaderExpectation>);
+
+impl HeaderExpectations {
+    /// The declared expectations, in authored order.
+    #[must_use]
+    pub fn all(&self) -> &[HeaderExpectation] {
+        &self.0
+    }
+}
+
+impl From<Vec<HeaderExpectation>> for HeaderExpectations {
+    fn from(expectations: Vec<HeaderExpectation>) -> Self {
+        Self(expectations)
+    }
+}
+
+impl<'de> Deserialize<'de> for HeaderExpectations {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let declared = match value {
+            serde_json::Value::Array(items) => {
+                if items.is_empty() {
+                    return Err(D::Error::custom(
+                        "a header's expectation sequence declares at least one matcher — \
+                         an empty sequence asserts nothing",
+                    ));
+                }
+                items
+                    .into_iter()
+                    .map(|item| serde_json::from_value(item).map_err(D::Error::custom))
+                    .collect::<Result<Vec<HeaderExpectation>, D::Error>>()?
+            }
+            single => vec![serde_json::from_value(single).map_err(D::Error::custom)?],
+        };
+        Ok(Self(declared))
+    }
+}
+
 /// The `<name>` placeholders a matcher pattern declares, in order.
 ///
 /// The compile probe below only proves the WILDCARDED form parses as a regex;
@@ -402,7 +461,8 @@ pub enum BodySelector {
     /// (ITS-REST `Requests_and_responses.md` §Prefer).
     #[serde(rename = "prefer_conditional")]
     PreferConditional,
-    /// AMB-1: assert at most that a `message` string is present.
+    /// Register AMB-217: assert at most that a `message` string is present,
+    /// the one member both published error-body shapes carry.
     #[serde(rename = "error_loose")]
     ErrorLoose,
     /// The `RESULT_SET` schema (named distinctly from the `result_set`
@@ -436,7 +496,7 @@ pub struct WireExpectation {
     pub alt_status: Option<Vec<StatusCode>>,
     /// Per-header expectations, in declaration order.
     #[serde(default, deserialize_with = "crate::model::de::optional_ordered_map")]
-    pub headers: Option<Vec<(String, HeaderExpectation)>>,
+    pub headers: Option<Vec<(String, HeaderExpectations)>>,
     /// The body shape the outcome must carry.
     #[serde(default)]
     pub body: Option<BodySelector>,
@@ -996,6 +1056,45 @@ mod tests {
             .is_err()
         );
         assert!(serde_json::from_value::<HeaderExpectation>(serde_json::json!(7)).is_err());
+    }
+
+    /// `present-with-body` is a member of the closed vocabulary, so a typo of
+    /// it is a literal-value expectation and never a silent presence pass.
+    #[test]
+    fn present_with_body_is_a_vocabulary_member() {
+        let m: HeaderMatcher =
+            serde_json::from_value(serde_json::json!("present-with-body")).unwrap();
+        assert_eq!(m, HeaderMatcher::PresentWithBody);
+        let typo: HeaderMatcher =
+            serde_json::from_value(serde_json::json!("present-with-bodies")).unwrap();
+        assert!(matches!(typo, HeaderMatcher::Literal(_)), "{typo:?}");
+    }
+
+    /// One header may declare a SEQUENCE of expectations, each with its own
+    /// modifiers; an empty sequence is refused because it asserts nothing.
+    #[test]
+    fn a_header_declares_one_expectation_or_a_sequence() {
+        let single: HeaderExpectations =
+            serde_json::from_value(serde_json::json!("present")).unwrap();
+        assert_eq!(single.all().len(), 1);
+
+        let many: HeaderExpectations = serde_json::from_value(serde_json::json!([
+            "latest-version-uid",
+            { "match": "pattern:W/\"[^\"]+\"", "applies": { "its_rest": ">=1.1.0" } }
+        ]))
+        .unwrap();
+        assert_eq!(many.all().len(), 2);
+        assert_eq!(many.all()[0].matcher, HeaderMatcher::LatestVersionUid);
+        assert!(many.all()[1].applies.is_some());
+
+        assert!(
+            serde_json::from_value::<HeaderExpectations>(serde_json::json!([])).is_err(),
+            "an empty sequence asserts nothing"
+        );
+        assert!(
+            serde_json::from_value::<HeaderExpectations>(serde_json::json!(["present", 7]))
+                .is_err()
+        );
     }
 
     #[test]

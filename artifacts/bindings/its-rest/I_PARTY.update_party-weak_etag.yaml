@@ -52,7 +52,9 @@ outcomes:
     # also latest version_uid in the ETag response headers"; §Location keeps
     # Location off a non-creation response.
     headers:
-      ETag: latest-version-uid
+      ETag:
+        - latest-version-uid
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
       Location: { match: absent, applies: { its_rest: ">=1.1.0" } }
 captures:
   version_uid:

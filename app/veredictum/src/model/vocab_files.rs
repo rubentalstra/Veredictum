@@ -168,6 +168,7 @@ pub const BODY_SELECTOR_TOKENS: &[&str] = &[
 pub const HEADER_MATCHER_FORMS: &[&str] = &[
     "present",
     "present?",
+    "present-with-body",
     "absent",
     "negotiated",
     "latest-version-uid",

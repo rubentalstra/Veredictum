@@ -35,7 +35,9 @@ outcomes:
     # service "SHOULD return also latest version_uid in the ETag response
     # headers"; §Location keeps Location off a non-creation response.
     headers:
-      ETag: latest-version-uid
+      ETag:
+        - latest-version-uid
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
       Location: { match: absent, applies: { its_rest: ">=1.1.0" } }
   precondition_missing: { status: 400 }   # If-Match absent -> SHOULD 400 (Requests_and_responses)
   not_found: { status: 404 }              # unknown party (versioned_object_does_not_exist)
@@ -75,7 +77,9 @@ outcomes:
     # only"). §Location keeps Location off a non-creation response.
     status: 412
     headers:
-      ETag: latest-version-uid
+      ETag:
+        - latest-version-uid
+        - { match: 'pattern:W/"[^"]+"', applies: { its_rest: ">=1.1.0" } }  # the weakness indicator is a MUST — overview §Deprecated headers
       Location: { match: absent, applies: { its_rest: ">=1.1.0" } }
   validation_failed: { status: 422, body: error_loose }   # content_invalid / definition_unknown
 captures:

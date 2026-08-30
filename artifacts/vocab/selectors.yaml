@@ -2,7 +2,7 @@
 # ignore-set registry the `equivalent` assertion resolves — normative, never
 # runner judgment.
 body_selectors: [prefer_conditional, error_loose, result_set_body, negotiated, present, absent]
-header_matchers: ["present", "present?", "absent", "negotiated", "latest-version-uid", "pattern:<regex>", "<literal>"]
+header_matchers: ["present", "present?", "present-with-body", "absent", "negotiated", "latest-version-uid", "pattern:<regex>", "<literal>"]
 ignore_sets:
   server_assigned:
     per_binding: true
