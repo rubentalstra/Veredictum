@@ -625,6 +625,23 @@ jobs:
       digest: ${{ needs.image.outputs.digest }}
       tags: ${{ needs.image.outputs.tags }}
 
+  # ── hosted console ──────────────────────────────────────────────────────────
+  # The Vercel build is `FROM ghcr.io/rubentalstra/veredictum:latest`, so the
+  # ping rides the leg that MOVES `:latest` — scan-and-tag — and only for a
+  # real release, because a pre-release moves no `:latest` and so changes
+  # nothing to deploy. A failure here reddens `announce` with the recovery
+  # named; it can never un-publish anything the release already published.
+  sandbox:
+    name: hosted console
+    needs: [plan, scan-and-tag]
+    if: needs.plan.outputs.is-release == 'true'
+    permissions: {}
+    uses: ./.github/workflows/sandbox-deploy.yml
+    with:
+      expected-version: ${{ needs.plan.outputs.version }}
+    secrets:
+      SANDBOX_DEPLOY_HOOK_URL: ${{ secrets.SANDBOX_DEPLOY_HOOK_URL }}
+
   # ── crates.io ───────────────────────────────────────────────────────────────
   # LAST on purpose, and after the release is otherwise complete. A crates.io
   # version is immutable — it can be yanked, never replaced — so it is the one
@@ -703,6 +720,7 @@ jobs:
       - image
       - image-smoke
       - scan-and-tag
+      - sandbox
       - publish-crate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -724,6 +742,7 @@ jobs:
           R_IMAGE: ${{ needs.image.result }}
           R_IMAGE_SMOKE: ${{ needs.image-smoke.result }}
           R_SCAN_AND_TAG: ${{ needs.scan-and-tag.result }}
+          R_SANDBOX: ${{ needs.sandbox.result }}
           R_CRATE: ${{ needs.publish-crate.result }}
         run: |
           set -uo pipefail
@@ -746,6 +765,13 @@ jobs:
           check "image" "$R_IMAGE"
           check "image smoke" "$R_IMAGE_SMOKE"
           check "scan + tag" "$R_SCAN_AND_TAG"
+          # A pre-release moves no `:latest`, so the sandbox leg is SKIPPED by
+          # design there and skipped is the correct outcome, not a failure.
+          if [ "$IS_RELEASE" = "true" ]; then
+            check "hosted console" "$R_SANDBOX"
+          else
+            rows="${rows}| hosted console | skipped — pre-release moves no \`:latest\` |"$'\n'
+          fi
           check "crates.io" "$R_CRATE"
 
           repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
@@ -777,6 +803,9 @@ jobs:
                 '  beside the one naming `publish-crates.yml`. Add it, then re-run this leg.' \
                 '- **crates.io published and a later step failed**: that version is public and' \
                 '  immutable. Do NOT try to replace it — yank it and cut the next version.' \
+                '- **hosted console failed**: nothing published is affected. Read the step'"'"'s' \
+                '  own diagnosis (stale `:latest`, empty hook secret, or a Vercel-side build),' \
+                '  fix that half, then redeploy with `gh workflow run "Sandbox deploy"`.' \
                 ''
             fi
           } >> "$GITHUB_STEP_SUMMARY"

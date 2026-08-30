@@ -19,6 +19,14 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **The hosted console (#348).** The released container image serves the
+  public reading surface at `console.veredictum.eu` on Vercel: the catalogue,
+  the party statements and the specification oracle, baked into the image
+  from the checkout. The posture is view-only by construction, because the
+  image ships no engine binary. Deploys ride the project's Deploy Hook only —
+  a real release pings it after the image tags apply, a posture push and a
+  manual dispatch redeploy the same image — and the verification polls the
+  served `engine X.Y.Z` footer, never a bare 200.
 - The dump/load authorization refusals drive without a declared
   `dump_location`: the refusal is a role or authentication decision taken
   before any path is consulted, so a literal placeholder location suffices
