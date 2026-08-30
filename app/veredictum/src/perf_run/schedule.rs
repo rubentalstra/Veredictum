@@ -22,13 +22,6 @@
 //! floors' peak factor already cites: `arrival_rate` is the BUSY-HOUR
 //! peak, the day curve scales the off-peak troughs below it.
 
-#![allow(
-    clippy::disallowed_types,
-    reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges), whose shapes belong to the artifacts and the SUT; the carriers \
-              here are cfg(test)-only, so #[expect] would be unfulfilled in the non-test build"
-)]
-
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -120,13 +113,16 @@ impl JourneyWorkload<'_> {
     /// floor. The dropped journeys are named to the caller so the run
     /// record says what the party's declaration cost it.
     ///
-    /// A share naming a journey the catalogue does not carry is a NAMED
-    /// finding here, never a silently kept share: a journey name is a
-    /// closed vocabulary, so an unknown token fails loud at the filter that
-    /// reads it.
+    /// A share naming a journey the catalogue does not carry, and a stage
+    /// naming an operation the vocabulary does not carry, are both NAMED
+    /// findings here, never a silently kept or silently dropped share: both
+    /// fields are closed vocabularies, so an unknown token fails loud at the
+    /// filter that reads it. An unparsable `op` is a catalogue defect, so it
+    /// can never be read as "this journey is not runnable here", which is
+    /// what the declared-principal test means.
     ///
     /// # Errors
-    /// A message naming the unknown journey.
+    /// A message naming the unknown journey or the unknown stage operation.
     fn schedulable(&self) -> Result<SchedulableShares, String> {
         let mut kept: Vec<(String, Percent)> = Vec::new();
         let mut dropped: Vec<String> = Vec::new();
@@ -135,9 +131,11 @@ impl JourneyWorkload<'_> {
                 .catalogue
                 .get(name)
                 .ok_or_else(|| format!("workload names unknown journey {name:?}"))?;
-            let runnable = journey.stages.iter().all(|stage| {
-                PerfOp::parse(&stage.op).is_ok_and(|op| self.principals.declares(op.principal()))
-            });
+            let mut runnable = true;
+            for stage in &journey.stages {
+                let op = PerfOp::parse(&stage.op)?;
+                runnable = runnable && self.principals.declares(op.principal());
+            }
             if runnable {
                 kept.push((name.clone(), *share));
             } else {
@@ -612,6 +610,10 @@ pub(crate) fn build_schedule(
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "the ixit and template fixtures are authored as wire JSON, the shape the loaders read"
+)]
 mod tests {
     use super::*;
     use crate::ixit::Ixit;
@@ -805,6 +807,36 @@ mod tests {
         assert!(
             filtered.contains("ward_rounds_typo"),
             "the filter does not name the unknown journey: {filtered}"
+        );
+        let built = build_schedule(&workload, 10.0, 0, 60, 100).unwrap_err();
+        assert_eq!(built, filtered);
+    }
+
+    /// A stage operation is a closed vocabulary the same way: a typo'd `op`
+    /// is a named finding at the schedulable filter, never a journey quietly
+    /// dropped as "not runnable here" — that reading belongs to an
+    /// undeclared principal, and a typo would have inherited it silently.
+    #[test]
+    fn a_stage_naming_an_unknown_operation_is_a_named_finding() {
+        let catalogue: JourneyCatalogue = serde_saphyr::from_str(
+            "chart_review:\n  description: d\n  derivation: g\n  stages:\n    - { op: composition_reed, at: PT0S }\n",
+        )
+        .unwrap();
+        let pack = pack();
+        let principals = stub_principals(true);
+        let shares = vec![("chart_review".to_owned(), Percent(100.0))];
+        let workload = JourneyWorkload {
+            catalogue: &catalogue,
+            shares: &shares,
+            pack: &pack,
+            curve: ArrivalCurve::Uniform,
+            principals: &principals,
+        };
+
+        let filtered = workload.schedulable().unwrap_err();
+        assert!(
+            filtered.contains("composition_reed"),
+            "the filter does not name the unknown operation: {filtered}"
         );
         let built = build_schedule(&workload, 10.0, 0, 60, 100).unwrap_err();
         assert_eq!(built, filtered);

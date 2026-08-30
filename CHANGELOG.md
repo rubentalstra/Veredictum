@@ -19,6 +19,16 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+- **The measured path stops substituting silently for a defect (#293).** A
+  workload stage naming an operation the vocabulary does not carry is now a
+  named finding at the schedulable filter, so a typo'd `op` fails loud
+  instead of dropping its journey from the mix and quietly shrinking the
+  offered load. The corpus stride forms its product in `u128`, where the
+  widest operand pair needs 96 bits, so the overflow fallback that stopped
+  striding past ~6.9e9 arrivals is gone rather than proven unreachable. The
+  capture store's cleanup path recovers a poisoned shard the way its read
+  path already did, so a worker that panics mid-window cannot leak every
+  instance hashing to that shard.
 - **The `latest-version-uid` ETag comparison names the object it is about
   (#235).** The driver kept one `last_version_uid` slot for the whole row, so
   a row that wrote object A and then provoked an error on object B graded B's

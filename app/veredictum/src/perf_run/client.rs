@@ -11,13 +11,6 @@
 //! the SMART Platform base. A principal the ixit does not declare is not a
 //! runner guess: the journeys that need it are simply not scheduled.
 
-#![allow(
-    clippy::disallowed_types,
-    reason = "dev/verification tooling over JSON artifacts (the catalogue, results, wire \
-              exchanges), whose shapes belong to the artifacts and the SUT; the carriers \
-              here are cfg(test)-only, so #[expect] would be unfulfilled in the non-test build"
-)]
-
 use std::io::Read;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
@@ -469,6 +462,10 @@ pub(crate) fn object_uid_of(version_uid: &str) -> String {
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "the ixit fixtures are authored as wire JSON, the shape the loader reads"
+)]
 mod tests {
     use super::*;
 
