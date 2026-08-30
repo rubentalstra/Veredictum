@@ -22,6 +22,11 @@ version on.
 - The pack-preflight diagnostic for an invalid template example prints as one
   normally spaced sentence; a lost line continuation had left runs of
   mid-sentence spaces in the operator-facing message (#174).
+- Three bench error variants (`FixturePin`, `UnknownProfile`, `NoProfiles`)
+  carry the `PackId`/`FixtureKey` newtypes instead of bare strings, the
+  posture-contradiction payload is boxed with the error-size posture recorded
+  on the enum, and the template-linkage test asserts the structural read
+  (#218).
 
 ### Removed
 - The `content_generation` registered-exception kind. Content cases execute

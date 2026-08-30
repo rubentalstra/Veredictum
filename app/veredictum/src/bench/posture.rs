@@ -449,6 +449,25 @@ pub struct CanaryReading {
     pub evidence: String,
 }
 
+/// A canary reading that contradicts the run's declaration.
+///
+/// Carried boxed by [`BenchError::PostureContradiction`], so the error type
+/// stays small enough for every `Result` in the engine to return it by value
+/// (the `RootMismatch` shape, one module over).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PostureDisagreement {
+    /// The disclosed item that disagrees.
+    pub item: String,
+    /// What the run declared for it.
+    pub declared: String,
+    /// Which bracket read it.
+    pub bracket: String,
+    /// What that bracket observed.
+    pub observed: String,
+    /// The exchange the reading came from.
+    pub evidence: String,
+}
+
 /// One disclosed posture item: what was declared, how far it is stood behind,
 /// and the two readings behind that label.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -996,13 +1015,15 @@ pub fn settle(
         let second = reading_of(after, item, Bracket::After)?;
         for reading in [first, second] {
             if reading.outcome == CanaryOutcome::Contradicted {
-                return Err(BenchError::PostureContradiction {
-                    item: item.as_str().to_owned(),
-                    declared,
-                    bracket: reading.bracket.as_str().to_owned(),
-                    observed: reading.observed.clone(),
-                    evidence: reading.evidence.clone(),
-                });
+                return Err(BenchError::PostureContradiction(Box::new(
+                    PostureDisagreement {
+                        item: item.as_str().to_owned(),
+                        declared,
+                        bracket: reading.bracket.as_str().to_owned(),
+                        observed: reading.observed.clone(),
+                        evidence: reading.evidence.clone(),
+                    },
+                )));
             }
         }
         if first.outcome != second.outcome || first.observed != second.observed {
@@ -1276,7 +1297,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            matches!(error, BenchError::PostureContradiction { .. }),
+            matches!(error, BenchError::PostureContradiction(_)),
             "{error}"
         );
         assert!(error.to_string().contains("commit_validation"), "{error}");

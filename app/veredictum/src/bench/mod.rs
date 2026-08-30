@@ -69,6 +69,15 @@ pub const METHODOLOGY: &str = "Seed once, measure N times. Measured phases are o
 /// that only needs to show the problem prints the error and stops. Individual
 /// arrival faults inside a measured phase are NOT errors here: they are
 /// counted by class in the result.
+///
+/// Size posture: `clippy::result_large_err` fires crate-wide at 128 bytes, and
+/// this enum sits under it on purpose. A variant needing several owned strings
+/// boxes them behind one payload struct ([`PostureContradiction`] and
+/// [`FixtureRoot`] are the shape) rather than raising the threshold or
+/// spreading `#[expect]`s.
+///
+/// [`PostureContradiction`]: BenchError::PostureContradiction
+/// [`FixtureRoot`]: BenchError::FixtureRoot
 #[derive(Debug, Error)]
 pub enum BenchError {
     /// The requested pack is not one this binary embeds.
@@ -94,7 +103,7 @@ pub enum BenchError {
     #[error("unknown posture profile {requested:?} for pack {pack} (defined: {known})")]
     UnknownProfile {
         /// The pack that was asked.
-        pack: String,
+        pack: pack::PackId,
         /// The token the caller asked for.
         requested: String,
         /// The profile names the pack defines, comma-separated.
@@ -105,27 +114,17 @@ pub enum BenchError {
     #[error("bench pack {pack} defines no posture profile, so a run has nothing to declare")]
     NoProfiles {
         /// The pack with no profile.
-        pack: String,
+        pack: pack::PackId,
     },
     /// A posture canary observed something other than what the run declared.
     /// The run is refused: a published speed number never carries a footnote
     /// saying the disclosure was wrong.
     #[error(
-        "posture canary contradicts the declaration: `{item}` is declared `{declared}` and the \
-         {bracket} canary observed `{observed}` — {evidence}"
+        "posture canary contradicts the declaration: `{}` is declared `{}` and the \
+         {} canary observed `{}` — {}",
+        .0.item, .0.declared, .0.bracket, .0.observed, .0.evidence
     )]
-    PostureContradiction {
-        /// The disclosed item that disagrees.
-        item: String,
-        /// What the run declared for it.
-        declared: String,
-        /// Which bracket read it.
-        bracket: String,
-        /// What that bracket observed.
-        observed: String,
-        /// The exchange the reading came from.
-        evidence: String,
-    },
+    PostureContradiction(Box<posture::PostureDisagreement>),
     /// A posture canary read one thing before the measured window and another
     /// after it, so the numbers straddle two different systems.
     #[error(
@@ -154,9 +153,9 @@ pub enum BenchError {
     )]
     FixturePin {
         /// The pack carrying the fixture.
-        pack: String,
+        pack: pack::PackId,
         /// The fixture key.
-        fixture: String,
+        fixture: pack::FixtureKey,
         /// The declared pin.
         expected: String,
         /// What the embedded bytes actually hash to.
