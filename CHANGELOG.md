@@ -19,6 +19,9 @@ version on.
 ## [Unreleased]
 
 ### Added
+- `bench` warns once when a credential rides a plain-`http` base URL that is
+  not loopback; the run proceeds, because the operator names the transport
+  and a local quickstart is legitimately `http://localhost` (#296).
 
 
 ### Fixed
