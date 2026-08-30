@@ -79,16 +79,15 @@ impl RunReport {
     }
 }
 
-/// Whether every operation the case's flow calls is unrealized on this ITS.
+/// The citations of every flow step whose binding is unrealized on this ITS.
 ///
-/// Shared with the `claim-completeness` gate ([`crate::validate`]), which
-/// needs the same catalogue-side predicate to tell a case that can carry
-/// executed evidence from one that will always resolve excused.
+/// ANY unrealized step makes the whole case not-applicable: the flow cannot
+/// reach its expectation without the missing wire, so a verdict would be
+/// meaningless. Shared with the `claim-completeness` gate
+/// ([`crate::validate`]), which needs the same catalogue-side predicate to
+/// tell a case that can carry executed evidence from one that will always
+/// resolve excused.
 pub(crate) fn fully_unrealized(set: &ArtifactSet, case: &CaseCore) -> Option<String> {
-    // ANY unrealized step makes the whole case not-applicable on this ITS:
-    // the flow cannot reach its expectation without the missing wire, so a
-    // verdict would be meaningless — the case is excused with the machine-
-    // readable citation the binding declares.
     let anchor = case.sm_operation.as_ref()?;
     let mut citations = Vec::new();
     for step in &case.flow {
@@ -132,9 +131,8 @@ fn step_binding<'a>(
     bindings.find(|b| b.sm_operation == op && b.variant.is_none())
 }
 
-/// The OPERATION-level spec-version floors this party does not meet
-/// (`OperationBinding::applies`, issue FerroEHR#629 — the field was deserialized and
-/// read by nothing).
+/// The OPERATION-level spec-version floors this party does not meet, read
+/// from each driven binding's `OperationBinding::applies`.
 ///
 /// A binding declares a floor when the WIRE itself arrived in a later
 /// release: driving it against a party that declares an earlier one asks a
@@ -227,14 +225,7 @@ fn capabilities_claiming_family(set: &ArtifactSet, family: &str) -> Vec<Capabili
 /// replay is an EXTENSION route (ITS-REST 1.1.0 publishes no MESSAGE /
 /// EHR-Extract API at all — register AMB-34), so a party that claims none of
 /// the capabilities that family's cases gate has no import to precondition
-/// with.
-///
-/// The scoping is the same law the extension arm of
-/// [`selection_exception`] applies to a case's FLOW, moved to its
-/// PRECONDITION: the case's own subject is a released read, and driving it
-/// against a party that serves no import route would record a red row for a
-/// ground that party never offered to establish. Excused at SELECTION time —
-/// never as a drive-time provisioning refusal, which reads like a SUT defect.
+/// with. [`unservable_provisioning`] carries the scoping law.
 ///
 /// # Errors
 /// An interpreter defect: one of the SM operation anchors this arm is written
@@ -653,6 +644,22 @@ fn needs_smart_lane(case: &CaseCore) -> bool {
             .is_some_and(|op| op.interface() == SMART_PSEUDO_INTERFACE)
 }
 
+/// The set's cases in drive order: exclusive-server cases first.
+///
+/// A global-state ground (an empty template list, a globally-absent artefact)
+/// holds only on a freshly reset, exclusively-owned SUT, and only before other
+/// cases provision templates or queries.
+fn exclusive_server_first(set: &ArtifactSet) -> Vec<&CaseCore> {
+    let mut ordered: Vec<&CaseCore> = set.cases.iter().map(|(_, c)| c).collect();
+    ordered.sort_by_key(|c| {
+        !matches!(
+            c.requires.server,
+            Some(crate::vocab::ServerState::Exclusive)
+        )
+    });
+    ordered
+}
+
 fn not_applicable_record(case: &CaseCore, citation: &str) -> CaseRecord {
     CaseRecord {
         case: case.id.clone(),
@@ -666,11 +673,6 @@ fn not_applicable_record(case: &CaseCore, citation: &str) -> CaseRecord {
     }
 }
 
-/// The drive-time selection law (ISO/IEC 9646 ICS-driven selection + the
-/// ixit declaration law): the FIRST ground that excuses `case` on this
-/// party/deployment, or `None` when the case drives. Each arm carries its
-/// citation inside the returned [`Exception`]; the caller records the same
-/// citation as the case's single not-applicable row.
 /// The EXTENSION arm of [`selection_exception`], covering both places an
 /// extension route can enter a case: its FLOW (the case drives the route) and
 /// its PRECONDITION (a received EHR-Extract, a provisioned party
@@ -751,6 +753,14 @@ fn unclaimed_capabilities(
     ))
 }
 
+/// The drive-time selection law (ISO/IEC 9646 ICS-driven selection plus the
+/// ixit declaration law): the FIRST ground that excuses `case` on this
+/// party/deployment, or `None` when the case drives.
+///
+/// Each arm carries its citation inside the returned [`Exception`]; the caller
+/// records the same citation as the case's single not-applicable row. Each
+/// arm's own predicate documents why that ground excuses a case.
+///
 /// # Errors
 /// An interpreter defect propagated from the extension arm (a malformed SM
 /// operation anchor in the selection law).
@@ -766,10 +776,6 @@ fn selection_exception(
     if let Some(citation) = unserved_extension(set, statement, case)? {
         return Ok(Some(Exception::Unrealized(citation)));
     }
-    // The general form of the arm above, and the same predicate the verdict
-    // pipeline selects on: a case gating only unclaimed capabilities is out of
-    // the scope this party's own ICS declares, so it is excused HERE with the
-    // citation rather than driven into a red row no verdict will ever read.
     if let Some(citation) = unclaimed_capabilities(statement, case) {
         return Ok(Some(Exception::Guarded(citation)));
     }
@@ -788,11 +794,8 @@ fn selection_exception(
     }
     // Case-level spec-version floors (`CaseCore.applies`): a behaviour the
     // spec dates to a release the party does not declare is out of scope for
-    // it — `Applies::satisfied_by`, the one polarity every consumer of the
-    // floor uses (`verdict` selection re-applies the same predicate).
-    // Driving such a case records a spurious failure against behaviour the
-    // party never claimed (the 2026-07-28 java run drove 127 red rows and 13
-    // spuriously green ones this way).
+    // it, so driving it records a spurious failure against behaviour the party
+    // never claimed. `verdict` selection re-applies the same predicate.
     if let Some(stmt) = statement
         && !case.applies.satisfied_by(&stmt.spec_versions)
     {
@@ -808,10 +811,6 @@ fn selection_exception(
             declared.join(", ")
         ))));
     }
-    // Operation-level spec-version floors (`OperationBinding.applies`): a
-    // wire a later release introduced is not this party's behaviour to
-    // answer for — the same selection question the option branch is, with
-    // the binding's own declared range as the citation.
     if let Some(stmt) = statement {
         let unmet = unmet_binding_floors(set, case, &stmt.spec_versions);
         if !unmet.is_empty() {
@@ -822,13 +821,9 @@ fn selection_exception(
             ))));
         }
     }
-    // The SMART lane is a party declaration, exactly like the ixit facts
-    // below: the CDR is a SMART resource server that never issues tokens
-    // (ITS-REST docs/smart_app_launch/master06-authentication.adoc
-    // §Supported Authentication Flows), so a chosen `scope` claim exists
-    // only where the party declares a trusted test issuer to mint against.
-    // Undeclared => not-applicable with the citation, never a spurious
-    // failure against a deployment that legitimately does not run SMART.
+    // NOTE: ITS-REST docs/smart_app_launch/master06-authentication.adoc
+    // §Supported Authentication Flows makes the CDR a resource server that
+    // never issues tokens, so a scope claim needs a party-declared issuer.
     if needs_smart_lane(case) && ixit.smart.is_none() {
         return Ok(Some(Exception::Guarded(
             "the ixit declares no `smart` lane — the case needs a SMART-enabled \
@@ -837,37 +832,21 @@ fn selection_exception(
                 .to_owned(),
         )));
     }
-    // The terminology deployment is a party declaration exactly like the
-    // SMART lane above: released ITS-REST surfaces no terminology resource,
-    // so nothing on the wire says which terminology servers a deployment
-    // holds open or how it treats a value set it cannot resolve. Undeclared
-    // or differently declared => not-applicable with the citation, never a
-    // red row against a deployment that legitimately runs the other posture.
     if let Some(citation) = unsatisfied_terminology(case, ixit) {
         return Ok(Some(Exception::Guarded(format!(
             "{citation}; ISO/IEC 9646 test selection"
         ))));
     }
-    // The openEHR specification generation set is the same class of party
-    // declaration: no released operation discloses which one a deployment
-    // runs, and one running server implements exactly one.
     if let Some(citation) = unsatisfied_spec_profile(case, ixit) {
         return Ok(Some(Exception::Guarded(format!(
             "{citation}; ISO/IEC 9646 test selection"
         ))));
     }
-    // A role-boundary premise is the same class again: SM delegates access
-    // control, so whether a principal is administrative is a declaration,
-    // and an undeclared or opposite posture is coverage lost, never a red
-    // row against a deployment that legitimately runs one principal.
     if let Some(citation) = unsatisfied_administrative(case, ixit) {
         return Ok(Some(Exception::Guarded(format!(
             "{citation}; ISO/IEC 9646 test selection"
         ))));
     }
-    // A flow step addressing an instance this party does not declare has no
-    // ground to run on (the deployment or principal simply does not exist
-    // here).
     let missing_instances = undeclared_instances(case, ixit);
     if !missing_instances.is_empty() {
         return Ok(Some(Exception::Guarded(format!(
@@ -876,9 +855,6 @@ fn selection_exception(
             missing_instances.join(", ")
         ))));
     }
-    // A case reading a party-declared SUT fact this ixit does not carry
-    // cannot be driven: the fact is not on the wire, so the alternative to a
-    // declaration is a guess.
     let missing = undeclared_ixit_facts(case, ixit);
     if !missing.is_empty() {
         return Ok(Some(Exception::Guarded(format!(
@@ -968,16 +944,7 @@ pub fn execute(
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<RunReport, String> {
     let mut report = RunReport::default();
-    // Exclusive-server cases (global-state grounds like an empty template
-    // list) run FIRST: on a freshly reset, exclusively-owned SUT their
-    // ground holds only before other cases provision templates/queries.
-    let mut ordered: Vec<&CaseCore> = set.cases.iter().map(|(_, c)| c).collect();
-    ordered.sort_by_key(|c| {
-        !matches!(
-            c.requires.server,
-            Some(crate::vocab::ServerState::Exclusive)
-        )
-    });
+    let ordered = exclusive_server_first(set);
     let total = ordered.len();
     progress(Progress::Selected { total });
     for (index, case) in ordered.into_iter().enumerate() {
@@ -1007,8 +974,6 @@ pub fn execute(
             continue;
         }
         let runnable = if matches!(case.kind, crate::vocab::CaseKind::Content) {
-            // One executor serves both: a content row is a generate→commit→
-            // expect functional execution over the synthesized flow.
             synthesize_content_case(case)
         } else {
             case.clone()
@@ -1040,17 +1005,7 @@ pub fn execute(
 #[must_use]
 pub fn coverage_accounting(set: &ArtifactSet) -> RunReport {
     let mut report = RunReport::default();
-    // Exclusive-server cases (global-state grounds like an empty template
-    // list) run FIRST: on a freshly reset, exclusively-owned SUT their
-    // ground holds only before other cases provision templates/queries.
-    let mut ordered: Vec<&CaseCore> = set.cases.iter().map(|(_, c)| c).collect();
-    ordered.sort_by_key(|c| {
-        !matches!(
-            c.requires.server,
-            Some(crate::vocab::ServerState::Exclusive)
-        )
-    });
-    for case in ordered {
+    for case in exclusive_server_first(set) {
         report.considered += 1;
         if !matches!(case.status, CaseStatus::Active) {
             report.exceptions.push((
@@ -1142,12 +1097,12 @@ fn matrix_rows_from_decision_table(
 
 /// Synthesizes the functional execution of a content case.
 ///
-/// The decision
-/// table becomes a matrix (rows drive `${row.*}`), the flow is one commit of
-/// the generated instance against the constraint context's template, and the
-/// per-row `expected` column is the outcome expectation: `accepted` →
-/// `created`, and `rejected` → `bad_request` or `validation_failed` by
-/// `refused_at_parse`.
+/// The decision table becomes a matrix (rows drive `${row.*}`), and the flow
+/// is one commit of the generated instance against the constraint context's
+/// template. The reserved matrix `expected` column carries the per-row outcome
+/// the interpreter applies over the flow's inherited `created` default:
+/// `accepted` becomes `created`, and `rejected` splits into `bad_request` or
+/// `validation_failed` by the row's own mandatory-attribute discriminator.
 #[must_use]
 pub fn synthesize_content_case(case: &CaseCore) -> CaseCore {
     let mut synthesized = case.clone();
@@ -1192,9 +1147,6 @@ pub fn synthesize_content_case(case: &CaseCore) -> CaseCore {
         }
     ]))
     .unwrap_or_default();
-    // The per-row expectation rides the reserved matrix `expected` column,
-    // which the interpreter resolves as the normative per-row override; the
-    // flow's `created` is the inherited default.
     synthesized
 }
 
@@ -1228,8 +1180,7 @@ mod tests {
     /// invalid … content"), while a value that converts and then fails a
     /// constraint, an RM invariant, or its lexical form is the 422 branch
     /// (`responses/422.yaml`, "could be converted to a resource"). Row 1 is
-    /// the malformed-URI class issue FerroEHR#1899 adjudicated onto the 422 side and
-    /// register AMB-209 records.
+    /// the malformed-URI class register AMB-209 places on the 422 side.
     #[test]
     fn a_rejected_row_splits_on_its_violation_class() {
         let case: CaseCore = serde_json::from_value(serde_json::json!({
@@ -1283,10 +1234,9 @@ mod tests {
         );
     }
 
-    /// `OperationBinding.applies` is LIVE (issue FerroEHR#629): a binding declaring a
-    /// spec-version floor the party does not meet takes its cases out of
-    /// scope with the binding's own declared range as the citation, and a
-    /// binding without a floor is untouched.
+    /// A binding declaring a spec-version floor the party does not meet takes
+    /// its cases out of scope with the binding's own declared range as the
+    /// citation, and a binding without a floor is untouched.
     #[test]
     fn operation_version_floors_are_enforced_at_selection() {
         let floored: crate::model::binding::OperationBinding =

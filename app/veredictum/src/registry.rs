@@ -12,8 +12,7 @@
 //! the supplier's-declaration rung (ISO/IEC 17050), a reproduced entry is the
 //! witnessed-verification rung one step up, and neither is a certificate.
 //!
-//! Two properties make the registry worth reading, and both live in this
-//! module rather than in prose:
+//! Two properties make the registry worth reading:
 //!
 //! 1. **An entry is evidence plus identity, never a restated number.** Every
 //!    figure a board prints comes out of the artifacts the entry points at,
@@ -25,11 +24,6 @@
 //!    identity of the workflow that performed the run, which is the only thing
 //!    this repository can say first-hand. No long-lived signing key exists on
 //!    either side.
-//!
-//! [`entry_defects`] is the pure half of the gate: everything checkable from
-//! one entry document alone. The filesystem half — digests recomputed, paths
-//! resolved, ids unique across the tree, superseded entries present — belongs
-//! to the integration gate, because it reads the committed tree.
 
 use std::collections::BTreeMap;
 use std::fmt;

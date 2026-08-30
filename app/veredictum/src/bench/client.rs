@@ -389,12 +389,10 @@ pub fn location_last_segment(location: &str) -> Option<String> {
 ///
 /// A `return=identifier` reply carries a body of one `uid` attribute
 /// (ITS-REST `docs/overview/Requests_and_responses` §"Prefer only
-/// identifier"), a `return=minimal` reply carries the identifying headers
-/// instead, and the same operation answers differently across the two
-/// preferences. The order below reads the body first, because it is the only
-/// source the identifier preference guarantees, and falls back to the two
-/// headers a create sends. Returns `None` when the reply discloses no
-/// identifier at all, which is the caller's failure to report.
+/// identifier"), while `return=minimal` carries the identifying headers
+/// instead. The body is read first, because it is the only source the
+/// identifier preference guarantees. Returns `None` when the reply discloses
+/// no identifier at all.
 #[must_use]
 #[expect(
     clippy::disallowed_types,
