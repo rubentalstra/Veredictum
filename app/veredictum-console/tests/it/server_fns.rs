@@ -38,6 +38,7 @@ fn state_over(out: &Path) -> ConsoleState {
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        capture: false,
     }
 }
 

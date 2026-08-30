@@ -36,6 +36,21 @@ version on.
   and a local quickstart is legitimately `http://localhost` (#296).
 
 ### Fixed
+- **One judgement per sealed record (#243).** Preparing the console's export
+  ran the full judgement five times over the same run — once per fact the
+  summary, the seal card, the badge and the HTML report each asked for — and
+  reading the export section ran it twice more. One judgement of a
+  1,147-outcome campaign costs about 2.7 seconds on an unloaded developer
+  machine and far more on a busy one, so the repeats were most of the wait
+  between the engine's manifest and the rendered files. The judgement now runs
+  once and feeds all of them. What the bundle contains is unchanged: the same
+  manifest, the same signature, the same three presentation files.
+- **The book's console screenshots stop changing on every capture pass
+  (#243).** A capture pass now serves the console in capture mode, where the
+  run clock, the record digest and the signing time render as fixed stand-ins,
+  so six images no longer churn with no interface change behind them. The mode
+  changes what the screen displays and nothing that is written, sealed or
+  signed, and it is off in every ordinary run.
 - **An XML response body is refused as unjudgeable instead of read as an empty
   document (#285).** The driver collapsed every body it could not parse as JSON
   into a plain string, so an XML-negotiated read reached the `field`,

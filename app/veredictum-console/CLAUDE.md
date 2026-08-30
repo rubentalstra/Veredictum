@@ -103,3 +103,11 @@ client panic ever surfaces. With `UI_E2E_DOCS_SHOTS=1` the same run refreshes
 the book's screenshots under `website/book/src/console/img/`; a pull request
 touching `src/` or `style/` must commit refreshed captures or carry the
 `no-ui-visual-change` label, which the `ui-screenshot-guard` CI job enforces.
+
+That same flag serves the console with `VEREDICTUM_CAPTURE_MODE` set, and
+`src/capture.rs` then answers the run clock, the record digest and the signing
+time as fixed stand-ins. Without it every capture pass rewrote six images with
+no interface change at all, so the guard could not tell a real visual diff from
+a re-run. The pinning happens where a value is SENT TO A BROWSER: the record,
+the manifest, the signature and the three rendered presentation files always
+carry the run's own facts, and nothing outside capture mode is ever pinned.

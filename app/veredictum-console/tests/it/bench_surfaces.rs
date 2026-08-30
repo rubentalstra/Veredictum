@@ -50,6 +50,7 @@ fn state_over_fixtures(
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        capture: false,
     })
 }
 
@@ -346,6 +347,7 @@ fn an_uploaded_batch_lands_in_the_listing_and_is_marked_transient()
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        capture: false,
     };
     assert!(listing(&state).records.is_empty());
 
@@ -386,6 +388,7 @@ fn bare_state(out: &Path) -> veredictum_console::state::ConsoleState {
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        capture: false,
     }
 }
 

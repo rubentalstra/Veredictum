@@ -189,6 +189,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
         sign_key: None,
         verify_key: None,
         jobs: JobSlot::default(),
+        capture: false,
     };
     let id = state.jobs.allocate_id().map_err(|e| e.to_string())?;
     state
@@ -322,6 +323,7 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
         sign_key: None,
         verify_key: None,
         jobs: JobSlot::default(),
+        capture: false,
     };
 
     // The Scope step with the box ticked: the save is what carries the choice

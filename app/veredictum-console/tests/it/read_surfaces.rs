@@ -36,6 +36,7 @@ fn committed_state() -> ConsoleState {
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        capture: false,
     }
 }
 
@@ -103,6 +104,7 @@ fn refused_state(reason: &str) -> ConsoleState {
         sign_key: None,
         verify_key: None,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        capture: false,
     }
 }
 
