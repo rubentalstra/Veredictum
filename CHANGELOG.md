@@ -18,6 +18,8 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-08-30
+
 ### Added
 - **A public results registry with signed submissions and two labelled tiers
   (#158).** Published results now live in one append-only tree, conformance and
@@ -1344,7 +1346,8 @@ tag stands; 0.1.0-alpha.6 ships the same tree plus the pipeline fix.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.6...v0.1.0
 [0.1.0-alpha.6]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.5...v0.1.0-alpha.6
 [0.1.0-alpha.5]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0-alpha.4...v0.1.0-alpha.5
