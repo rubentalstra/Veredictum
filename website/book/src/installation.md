@@ -134,7 +134,7 @@ veredictum validate --root artifacts --specs specs/openehr
 A working install over an intact clone prints one line and exits zero:
 
 ```text
-1139 case(s), 249 binding(s), 2 party statement(s), 0 finding(s)
+1141 case(s), 249 binding(s), 2 party statement(s), 0 finding(s)
 ```
 
 Any finding count above zero is a failure of the catalogue, not of your setup,

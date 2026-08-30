@@ -32,6 +32,7 @@ description: "Commit reactivating mixed CONTRIBUTION into a deactivated EHR"
 spec_refs:
   - "RM ehr §EHR Active Status (master04 — the EHR_STATUS object itself is always modifiable)"
   - "RM common §Committal and Audits (master06 — the commit is one atomic act)"
+  - "RM common §revision_history_item (one entry per version of ONE versioned container)"
   - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
 applies: { rm: ">=1.0.2" }
 requires:
@@ -82,4 +83,10 @@ postconditions:
     text: >-
       The reactivating mixed commit landed atomically: the EHR holds the
       reactivated EHR_STATUS lineage and both COMPOSITIONs
-  - { assert: version, count: 5 }        # 3 EHR_STATUS versions (default, deactivation, reactivation) + 2 COMPOSITIONs
+  # A revision history is one container's own: RM common revision_history_item.adoc
+  # §Description — "An entry in a revision history, corresponding to a version from
+  # a versioned container". The family this flow resolves is the EHR_STATUS
+  # container: its default version, the deactivation, the reactivation. Each
+  # COMPOSITION creation opens a container of its own, asserted by the twin case
+  # -reactivating_mixed_change_set_composition_container.
+  - { assert: version, count: 3 }

@@ -1,0 +1,111 @@
+# The COMPOSITION-container half of -deactivating_mixed_change_set. That case
+# reads the EHR_STATUS container, because a revision history is one container's
+# own: RM common revision_history_item.adoc §Description — "An entry in a
+# revision history, corresponding to a version from a versioned container".
+# The content member the deactivating act carried lands in a DIFFERENT
+# container, so the fact needs its own case and its own read.
+#
+# The scenario is the RM's own (ehr master04 §EHR Active Status: "the patient
+# has died, and no further updates (typically relating to the death) are
+# required"): a COMPOSITION already under care is updated one last time by the
+# very act that sets is_modifiable -> false, and the write that follows is
+# refused. So the COMPOSITION container ends at two versions — the creation and
+# the final update — and the refusal adds nothing to it.
+#
+# The content member is a MODIFICATION of a container this case created in its
+# own first act, so the container uid is captured from a single-member commit.
+# The CONTRIBUTION's `versions` is a "Set of references" with no released
+# ordering, so a container uid read off a MIXED commit's response would rest on
+# an order no spec assigns.
+#
+# ORDER OF THE SERVED HISTORY: oldest first, the reading register AMB-68
+# carries (the class's own `most_recent_version` postcondition is
+# `items.last.version_id.value`).
+id: I_EHR_CONTRIBUTION.commit_contribution-deactivating_mixed_change_set_composition_container
+kind: functional
+component: EHR_CONTRIBUTION
+sm_operation: I_EHR_CONTRIBUTION.commit_contribution
+capabilities: [ChangeSets]
+exercises: [Versioning]
+profiles: [CORE]
+ambiguities: [AMB-68, AMB-82, AMB-225]
+test_purpose: >-
+  The content member of a deactivating mixed CONTRIBUTION lands in the
+  COMPOSITION's own VERSIONED_OBJECT, whose revision history then holds exactly
+  the creation and that final update; the refused follow-up commit adds no
+  version to it.
+description: "COMPOSITION container after a deactivating mixed CONTRIBUTION"
+spec_refs:
+  - "RM ehr §EHR Active Status (master04 — the deactivation scenarios; the scope of is_modifiable)"
+  - "RM common §Committal and Audits (master06 — the commit is one atomic act)"
+  - "RM common §revision_history_item (one entry per version of ONE versioned container)"
+  - "RM common §revision_history (items 1..1; the items.last postconditions)"
+  - "SM openehr_platform §I_EHR_CONTRIBUTION.commit_contribution"
+applies: { rm: ">=1.0.2" }
+requires:
+  server: any
+  templates: [cnf.opt.minimal_event]
+  ehr: { commits: none }                 # mints ${ehr_id}; its EHR_STATUS v1 is is_modifiable = true
+data_sets: [cnf.composition.minimal_event.v1, cnf.composition.minimal_event.v2]
+flow:
+  - step: 1                              # one member, so the served container uid is unambiguous
+    call: commit_contribution
+    with:
+      ehr_id: "${ehr_id}"
+      versions:
+        - { data: "${ds:cnf.composition.minimal_event.v1}", change_type: creation }
+    expect: created
+    capture:
+      v1_uid: created.first_version_uid
+      versioned_object_uid: created.first_versioned_object_uid   # addresses the released revision-history read
+  - step: 2
+    call: I_EHR_STATUS.get_ehr_status    # the precedent the EHR_STATUS member updates
+    with: { ehr_id: "${ehr_id}" }
+    expect: ok
+    capture: { status_version_uid: ok.status_version_uid }
+  - step: 3                              # the final content update + the deactivating status member, one act
+    call: commit_contribution
+    with:
+      ehr_id: "${ehr_id}"
+      versions:
+        - data: "${ds:cnf.composition.minimal_event.v2}"
+          change_type: modification
+          preceding_version_uid: "${v1_uid}"   # body property: OAS UpdateVersion.preceding_version_uid
+        - data:
+            _type: EHR_STATUS
+            archetype_node_id: "openEHR-EHR-EHR_STATUS.generic.v1"
+            archetype_details:
+              _type: ARCHETYPED
+              archetype_id: { _type: ARCHETYPE_ID, value: "openEHR-EHR-EHR_STATUS.generic.v1" }
+              rm_version: "1.2.0"
+            name: { value: "EHR Status" }
+            subject: { _type: PARTY_SELF }
+            is_modifiable: false
+            is_queryable: true
+          change_type: modification
+          preceding_version_uid: "${status_version_uid}"
+    expect: created
+  - step: 4                              # the deactivation binds from the next act on
+    call: commit_contribution
+    with:
+      ehr_id: "${ehr_id}"
+      versions:
+        - { data: "${ds:cnf.composition.minimal_event.v1}", change_type: creation }
+    expect: conflict
+  - step: 5                              # the COMPOSITION container's own history, read by uid
+    call: I_ITS_REST_REVISION_HISTORY.versioned_composition_revision_history
+    with: { ehr_id: "${ehr_id}", versioned_object_uid: "${versioned_object_uid}" }
+    expect: ok
+    assert:
+      - { assert: instance_of, rm_type: REVISION_HISTORY }
+      # oldest first — the items.last postconditions (AMB-68)
+      - { assert: field, path: "items[0]/version_id/value", equals: "${v1_uid}" }
+      - { assert: field, path: "items[1]/version_id/value", exists: true }
+      - { assert: field, path: "items[2]", absent: true }
+      # "there will always be at least one commit audit" (Audit_valid)
+      - { assert: field, path: "items[1]/audits[0]/time_committed/value", exists: true }
+postconditions:
+  - assert: state
+    text: >-
+      The COMPOSITION container ends at the creation and the final update the
+      deactivating act carried; the refused follow-up added nothing to it
