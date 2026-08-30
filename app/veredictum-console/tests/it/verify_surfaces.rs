@@ -38,6 +38,7 @@ fn state_over(out: &Path, verify_key: Option<PathBuf>) -> ConsoleState {
         sign_key: None,
         verify_key,
         jobs: veredictum_console::run_job::JobSlot::default(),
+        capture: false,
     }
 }
 
@@ -551,6 +552,54 @@ async fn the_upload_route_redirects_to_the_page_either_way()
         location(&unnamed).contains("no%20file%20was%20chosen"),
         "{}",
         location(&unnamed)
+    );
+    Ok(())
+}
+
+/// Capture mode pins what a photograph of this page would otherwise change:
+/// the signing time and every file digest. The outcomes, the findings and the
+/// signer stay exactly as verification found them, so a capture still
+/// documents the console's real answer.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn capture_mode_pins_the_signing_time_and_the_digests() -> Result<(), Box<dyn std::error::Error>> {
+    use veredictum_console::capture::{self, PINNED_DIGEST, PINNED_TIME};
+
+    let scratch = assert_fs::TempDir::new()?;
+    let mut state = state_over(scratch.path(), Some(key("cnf-signing.pub.asc")));
+    let sealed = scratch.path().join("sealed");
+    seal_into(&sealed, &[("CONFORMANCE_REPORT.md", b"# a report\n")])?;
+    let live = checked(&state, &sealed)?;
+    assert_ne!(live.signed_at.as_deref(), Some(PINNED_TIME));
+    assert!(live.files.iter().all(|file| file.digest != PINNED_DIGEST));
+
+    // Off, the page answers with what verification actually found.
+    let VerifyScreen::Checked(off) =
+        capture::verification(&state, VerifyScreen::Checked(Box::new(live.clone())))
+    else {
+        panic!("a checked bundle stays checked");
+    };
+    assert_eq!(*off, live);
+
+    state.capture = true;
+    let VerifyScreen::Checked(on) =
+        capture::verification(&state, VerifyScreen::Checked(Box::new(live.clone())))
+    else {
+        panic!("a checked bundle stays checked");
+    };
+    assert_eq!(on.signed_at.as_deref(), Some(PINNED_TIME));
+    assert!(on.files.iter().all(|file| file.digest == PINNED_DIGEST));
+    assert_eq!(on.is_clean, live.is_clean);
+    assert_eq!(on.fingerprint, live.fingerprint);
+    assert_eq!(
+        on.files.iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
+        live.files
+            .iter()
+            .map(|f| f.name.clone())
+            .collect::<Vec<_>>()
     );
     Ok(())
 }

@@ -533,7 +533,8 @@ pub mod fns {
     #[server]
     pub async fn fetch_verification(bundle: Option<String>) -> Result<VerifyScreen, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        Ok(super::read::screen(&state, bundle.as_deref()))
+        let screen = super::read::screen(&state, bundle.as_deref());
+        Ok(crate::capture::verification(&state, screen))
     }
 }
 

@@ -38,6 +38,24 @@ version on.
   now also asserts the `W/` weakness indicator behind
   `applies: { its_rest: ">=1.1.0" }`, which ratchets that MUST from one
   binding to thirteen.
+- **The archetype-root invariants reach every top-level class the release
+  makes a root (#339).** Two refusal cases with their invalid corpus twins:
+  an EHR_STATUS whose root `archetype_node_id` contradicts its
+  `archetype_details.archetype_id` (RM `EHR_STATUS` is unconditionally an
+  archetype root), and a directory FOLDER whose `archetype_node_id` is empty
+  (`Archetype_node_id_valid` binds every LOCATABLE). Template-level
+  validation of EHR_STATUS and FOLDER commits has no released wire binding —
+  the only released 422/template sentence reaches COMPOSITION and the
+  DEVELOPMENT demographic surface — so that boundary is register entry
+  AMB-230, reported upstream (#355), never an invented expectation.
+- **The hosted console (#348).** The released container image serves the
+  public reading surface at `console.veredictum.eu` on Vercel: the catalogue,
+  the party statements and the specification oracle, baked into the image
+  from the checkout. The posture is view-only by construction, because the
+  image ships no engine binary. Deploys ride the project's Deploy Hook only —
+  a real release pings it after the image tags apply, a posture push and a
+  manual dispatch redeploy the same image — and the verification polls the
+  served `engine X.Y.Z` footer, never a bare 200.
 - The dump/load authorization refusals drive without a declared
   `dump_location`: the refusal is a role or authentication decision taken
   before any path is consulted, so a literal placeholder location suffices
@@ -55,6 +73,35 @@ version on.
   and a local quickstart is legitimately `http://localhost` (#296).
 
 ### Fixed
+- **One judgement per sealed record (#243).** Preparing the console's export
+  ran the full judgement five times over the same run — once per fact the
+  summary, the seal card, the badge and the HTML report each asked for — and
+  reading the export section ran it twice more. One judgement of a
+  1,147-outcome campaign costs about 2.7 seconds on an unloaded developer
+  machine and far more on a busy one, so the repeats were most of the wait
+  between the engine's manifest and the rendered files. The judgement now runs
+  once and feeds all of them. What the bundle contains is unchanged: the same
+  manifest, the same signature, the same three presentation files.
+- **The book's console screenshots stop changing on every capture pass
+  (#243).** A capture pass now serves the console in capture mode, where the
+  run clock, the record digest and the signing time render as fixed stand-ins,
+  so six images no longer churn with no interface change behind them. The mode
+  changes what the screen displays and nothing that is written, sealed or
+  signed, and it is off in every ordinary run.
+- **An XML response body is refused as unjudgeable instead of read as an empty
+  document (#285).** The driver collapsed every body it could not parse as JSON
+  into a plain string, so an XML-negotiated read reached the `field`,
+  `equivalent`, `instance_of`, `result_set` and `signature` families as a value
+  with no members and each one reported the asserted fact absent — a failed row
+  charged to a server that answered exactly as it was asked to. Canonical XML
+  and canonical JSON are separate bound document forms (ITS-REST
+  `specifications/docs/overview/Resources.md` §Data representation) and this
+  runner parses the JSON binding only, so those families now take the
+  inconclusive channel with the served media type named, and the `version`
+  family refuses the same way when its `ORIGINAL_VERSION` envelope read comes
+  back unparsed. Nothing narrows on the JSON path, `xml_root` and `returns`
+  keep grading the served text, and a `uid_pattern` judged off the resolved
+  identity still gates.
 - **A `lifecycle_state` assert reads an `IMPORTED_VERSION` through the version
   it wraps (#322).** The judge read the property off the top level of the
   served envelope, which an imported version cannot carry: released ITS-JSON

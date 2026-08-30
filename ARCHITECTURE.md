@@ -41,7 +41,7 @@ and the checkable claims were re-verified 2026-08-27 against this repository
 and its tracker. The reference runner is shipped: `veredictum`, published on
 crates.io (0.1.0-alpha.4 at the re-verification), with signed releases, the
 container image (carrying the web console, #6), the docs site, and a
-catalogue of 1143 case cores and 249 operation bindings that passes every
+catalogue of 1146 case cores and 249 operation bindings that passes every
 validate gate. A party's measured artifacts are emitted to the output
 directory a run is given.*
 
@@ -93,7 +93,7 @@ the 2021–2022 community's work. The deltas are five: one-file-per-case data
 with generated prose; CI enforcement of the derivation chain; computable
 Statement/results schemas with mechanically computed verdicts; the
 governance/resourcing charter; and the ISO/EHDS grounding. The working
-implementation is this repository's published instrument (1143 case cores,
+implementation is this repository's published instrument (1146 case cores,
 249 operation bindings, both wire formats, machine-computed verdicts on the
 CNF profiles model; grown from FerroEHR's ECC draft of 394 cases) — and it
 is explicitly not "the standard": the standard is community-owned,
@@ -178,7 +178,7 @@ Service Model", his alone). Those three revisions made master06–09 the
 fleshed core §8 draws on, and
 `guide/master00-amendment_record.adoc` names him with T Beale on the
 Conformance Guide's initial writing. Recounted against this repository on
-2026-08-29: **127 of the 1143 case cores cite master06, master07, master08 or
+2026-08-29: **127 of the 1146 case cores cite master06, master07, master08 or
 master09** (22 / 31 / 40 / 34 respectively), and 349 cite some chapter of the
 Test Schedule.
 
@@ -2889,7 +2889,7 @@ proposing a format and demonstrating one.
   `docs/query/{Request,Response}.md` (all vendored).
 - Our instrument: this repository (`app/veredictum/`), published as
   `veredictum` on crates.io (0.1.0-alpha.4 at the 2026-08-27
-  re-verification); the catalogue holds 1143 case cores and 249 operation
+  re-verification); the catalogue holds 1146 case cores and 249 operation
   bindings and passes every validate gate. Its predecessor, the ECC
   (FerroEHR's `tools/conformance/`, 394 active catalogue cases; final
   committed baseline `docs/conformance/ferroehr/CONFORMANCE_REPORT.md`, 402

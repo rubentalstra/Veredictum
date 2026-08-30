@@ -1,0 +1,187 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The ONE owner of hosted-console delivery (#348, console.veredictum.eu).
+# Vercel's git-triggered deployments are fully OFF (vercel.json
+# `git.deploymentEnabled: false`) and no ignore script exists: the hosted
+# console deploys exactly when this workflow pings the project's Deploy Hook,
+# which is a plain trigger URL (no account token, no API scope). Ordering is
+# explicit by construction — the ping happens only AFTER the release image
+# exists, so no skip-until-exists guard and no image race can occur. The
+# pattern is FerroEHR's sandbox lane (FerroEHR#2724/#2846/#2945), minus the
+# database half: this instance is a stateless viewer with everything baked
+# into the image, so no reseed leg exists.
+#
+# Triggers:
+#   - workflow_call from the release pipeline (release.yml), after the
+#     scan-and-tag leg that applies the image tags. The Vercel build is
+#     `FROM ghcr.io/rubentalstra/veredictum:latest`, which that leg moves on
+#     a real release tag, so nothing is hand-bumped at a cut. The caller
+#     passes `expected-version`, and it calls only for a real release: a
+#     pre-release moves no `:latest`, so there is nothing to deploy.
+#   - push to main touching the hosted posture (Dockerfile.vercel,
+#     vercel.json, deploy/vercel/**): a posture change redeploys the same
+#     release image with the new posture and the current main's baked data.
+#   - workflow_dispatch: a manual redeploy.
+#
+# Provisioning (owner action, once): create a Deploy Hook on the Vercel
+# project (Settings → Git → Deploy Hooks, branch `main`) and store its URL
+# with `gh secret set SANDBOX_DEPLOY_HOOK_URL`. An empty secret is a hard
+# failure here, never a skip: the job already runs only on the upstream
+# repository, so a missing hook is always a misconfiguration, and a green
+# run must mean a deploy actually happened (the FerroEHR#2755 ruling).
+#
+# A failure here can never redden CI; when the release pipeline calls this
+# workflow it reddens that pipeline's `announce` leg — which names the
+# recovery — rather than anything the release already published.
+
+name: Sandbox deploy
+
+on:
+  workflow_call:
+    inputs:
+      expected-version:
+        description: >-
+          The version string the hosted console must serve before the deploy
+          counts as done (`X.Y.Z`, no `v`). Empty means "derive it from the
+          `:latest` image's own version label" — which is what a posture push
+          or a manual redeploy wants, since neither changes the image.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      SANDBOX_DEPLOY_HOOK_URL:
+        description: The Vercel Deploy Hook URL for the hosted-console project.
+        required: true
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile.vercel
+      - vercel.json
+      - deploy/vercel/**
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sandbox-deploy
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/rubentalstra/veredictum
+  SANDBOX_BASE: https://console.veredictum.eu
+
+jobs:
+  deploy:
+    name: ping the deploy hook and verify
+    # Upstream only: a fork has no hook and no Vercel project.
+    if: github.repository == 'rubentalstra/Veredictum'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions: {}
+    steps:
+      # The needs-edge's guarantee, re-asserted at the point of use (the
+      # FerroEHR#2846 ruling): a release call means `:latest` must ALREADY be
+      # the tag's image, because the Vercel build is `FROM …:latest`. A stale
+      # tag fails here, before any ping — never as a 20-minute blind poll.
+      # Anonymous registry reads: the image is public.
+      - name: The :latest tag is the release image
+        if: inputs.expected-version != ''
+        env:
+          EXPECTED: ${{ inputs.expected-version }}
+        run: |
+          set -euo pipefail
+          tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+          digest_of() {
+            curl -fsS -o /dev/null -w '%{header_json}' \
+              -H "Authorization: Bearer ${tok}" \
+              -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/$1" \
+              | sed -nE 's/.*"docker-content-digest":\["([^"]+)"\].*/\1/p'
+          }
+          latest=$(digest_of latest)
+          tagged=$(digest_of "$EXPECTED")
+          if [ -z "$latest" ] || [ -z "$tagged" ] || [ "$latest" != "$tagged" ]; then
+            echo "::error::${IMAGE}:latest (${latest:-unreadable}) is not the ${EXPECTED} image (${tagged:-unreadable}) — the deploy would rebuild the OLD release; the tag-apply leg must land first." >&2
+            exit 1
+          fi
+          echo "${IMAGE}:latest == ${EXPECTED} (${latest})"
+
+      # The hook response is CAPTURED, not discarded: it carries the created
+      # job's id — the only handle linking this run to the deployment it
+      # triggered.
+      - name: Trigger the Vercel deploy
+        id: ping
+        env:
+          HOOK_URL: ${{ secrets.SANDBOX_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$HOOK_URL" ]; then
+            echo "::error::SANDBOX_DEPLOY_HOOK_URL is empty — create the Deploy Hook on the Vercel project (Settings → Git → Deploy Hooks, branch main) and run: gh secret set SANDBOX_DEPLOY_HOOK_URL" >&2
+            exit 1
+          fi
+          body=$(curl -fsS -X POST "$HOOK_URL")
+          job_id=$(printf '%s' "$body" | sed -nE 's/.*"id":"([^"]+)".*/\1/p')
+          echo "job-id=${job_id}" >> "$GITHUB_OUTPUT"
+          echo "hosted-console deploy triggered (hook job ${job_id:-<no id in response>})"
+
+      # NOTE: no deployment-state watch exists, deliberately (the
+      # FerroEHR#2846 ruling): Vercel offers no read-only tokens, so watching
+      # the triggered deployment would cost a stored full-access credential —
+      # refused; the version poll below is the verification, and its timeout
+      # message carries the diagnosis.
+      #
+      # A bare 200 is NOT proof of the new deployment — the OLD one answers
+      # 200 too (FerroEHR measured that twice, at 4.0.4 and 4.0.10). The
+      # console's server-rendered shell footer carries `engine X.Y.Z`, and
+      # the engine pin equals the console version by the check-console-pin
+      # guard, so the served footer IS the deployed version. A release run is
+      # told the version the tag names; every other run derives its
+      # expectation from the `:latest` image's own version label, anonymously
+      # — the deploy always builds FROM `:latest`, so what that image
+      # declares is exactly what a successful promotion must serve.
+      - name: Wait for the hosted console to serve the expected version
+        env:
+          EXPECTED: ${{ inputs.expected-version }}
+          JOB_ID: ${{ steps.ping.outputs.job-id }}
+        run: |
+          set -euo pipefail
+          expected="${EXPECTED:-}"
+          if [ -z "$expected" ]; then
+            tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+            idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+              -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/latest")
+            child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
+            cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+              -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
+            expected=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
+              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
+              | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
+            if [ -z "$expected" ]; then
+              echo "::error::could not derive the expected version from :latest's org.opencontainers.image.version label — a verification that cannot decide must not pass (build-image.yml stamps the label, so an unreadable label is a registry/read defect to look at, not a shrug)." >&2
+              exit 1
+            fi
+            echo "expectation derived from :latest — waiting for '${expected}'"
+          fi
+          deadline=$(( $(date +%s) + 1200 ))
+          sleep 60
+          while :; do
+            body=$(curl -sS -m 30 "$SANDBOX_BASE/" || true)
+            # `|| true` on the extraction too: under `set -e -o pipefail` a
+            # no-match grep exits 1 and would kill the loop on its FIRST poll
+            # (measured: run 33314783993 died on one DNS miss instead of
+            # retrying to the deadline).
+            served=$(printf '%s' "$body" | grep -oE 'engine [0-9][0-9A-Za-z.+-]*' | head -1 | cut -d' ' -f2 || true)
+            if [ -n "$served" ] && [ "$served" = "$expected" ]; then
+              echo "hosted console is serving engine ${served}"
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::the hosted console serves '${served:-nothing}' (expected '${expected}') 20 minutes after the deploy ping. The image side was proven correct before the ping (:latest == the release image), so the failing half is Vercel's own build or promotion — read the build log on the Vercel dashboard (hook job ${JOB_ID:-unknown})." >&2
+              exit 1
+            fi
+            echo "hosted console serves '${served:-nothing}'; waiting for '${expected}'"
+            sleep 20
+          done

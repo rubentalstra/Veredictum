@@ -173,7 +173,8 @@ pub mod prepare {
         }
         let bundle = dir.join(EXPORT_DIR);
         if bundle.join(veredictum::record::MANIFEST_FILE).is_file() {
-            return summarize(state, &bundle).map(|s| ExportScreen::Prepared(Box::new(s)));
+            let facts = record_facts(state)?;
+            return summarize(state, &bundle, &facts).map(|s| ExportScreen::Prepared(Box::new(s)));
         }
         Ok(ExportScreen::Ready)
     }
@@ -234,19 +235,26 @@ pub mod prepare {
             })
             .map_err(|e| e.to_string())?;
 
-        let summary = summarize(state, &bundle)?;
-        render_presentation(state, &bundle, &summary)?;
+        // ONE judgement feeds the summary AND the three presentation files:
+        // the lib judges the whole campaign, so re-deriving these facts per
+        // consumer costs the seal a full judgement each time.
+        let facts = record_facts(state)?;
+        let summary = summarize(state, &bundle, &facts)?;
+        render_presentation(&bundle, &summary, &facts)?;
         Ok(summary)
     }
 
     /// Reads one sealed bundle back through the published lib and derives
     /// everything the surfaces and the artwork state about it.
-    fn summarize(state: &ConsoleState, bundle: &Path) -> Result<ExportSummary, String> {
+    fn summarize(
+        state: &ConsoleState,
+        bundle: &Path,
+        facts: &RecordFacts,
+    ) -> Result<ExportSummary, String> {
         let manifest_path = bundle.join(veredictum::record::MANIFEST_FILE);
         let manifest_bytes = std::fs::read(&manifest_path)
             .map_err(|e| format!("{}: {e}", manifest_path.display()))?;
         let digest = hex(&Sha256::digest(&manifest_bytes));
-        let digest_prefix = export::prefix_of(&digest);
 
         let verify_key = state
             .verify_key
@@ -266,14 +274,13 @@ pub mod prepare {
             ));
         }
 
-        let (sut, profile_summary, _) = record_facts(state)?;
         Ok(ExportSummary {
+            digest_prefix: export::prefix_of(&digest),
             digest,
-            digest_prefix: digest_prefix.clone(),
             fingerprint: record.signer_fingerprint.clone(),
             signed_at: record.signed_at.to_string(),
-            sut,
-            profile_summary,
+            sut: facts.sut.clone(),
+            profile_summary: facts.profile_summary.clone(),
             sealed_files: verification
                 .files
                 .iter()
@@ -285,19 +292,58 @@ pub mod prepare {
         })
     }
 
-    /// The record's own identity, its profile summary, and the top tier's
-    /// verdict — all through the lib's judgement, never a console tally.
-    fn record_facts(state: &ConsoleState) -> Result<(String, String, (String, bool)), String> {
+    /// What one judgement of the finished run establishes for the export.
+    ///
+    /// The judgement is the seal's expensive step, so it runs once and every
+    /// consumer — the summary, the seal card, the badge, the report — reads
+    /// its facts from this value.
+    #[derive(Debug)]
+    struct RecordFacts {
+        /// The system under test the record names.
+        sut: String,
+        /// The card's profile slot: claimed tier verdicts, then the measured
+        /// classes, joined as the artwork prints them.
+        profile_summary: String,
+        /// The badge's label and whether it reads as a pass.
+        badge: (String, bool),
+        /// Profile verdicts: tier token → verdict token.
+        profiles: Vec<(String, String)>,
+        /// Capability evidence: name → evidence token.
+        capabilities: Vec<(String, String)>,
+        /// The results screen the HTML report renders.
+        results: crate::record_api::ResultsScreen,
+    }
+
+    /// The record's own identity and every judged fact the export states.
+    fn record_facts(state: &ConsoleState) -> Result<RecordFacts, String> {
         let results = crate::record_api::read::results_screen(state)?
             .ok_or_else(|| String::from("no finished run"))?;
-        let screen = crate::record_api::read::verdicts_screen(state)?;
-        let crate::record_api::VerdictsScreen::Judged { profiles, .. } = &screen else {
+        let crate::record_api::read::JudgedRun::Judged(judged) =
+            crate::record_api::read::judged(state)?
+        else {
             return Err(String::from("the run carries no judgeable claim"));
         };
-        // Only CLAIMED tiers reach the card: an unclaimed tier has no verdict
-        // to state, and listing it pushes the slot's one line across the rule
-        // the master draws for it. The console's own matrix still shows every
-        // tier, so nothing is hidden — this is the certificate's line length.
+        let (profile_summary, badge) = card_slot(&judged.profiles, &judged.performance);
+        Ok(RecordFacts {
+            sut: results.sut.clone(),
+            profile_summary,
+            badge,
+            profiles: judged.profiles,
+            capabilities: judged.capabilities,
+            results,
+        })
+    }
+
+    /// The card's profile slot and its badge, from one judgement's verdicts.
+    ///
+    /// Only CLAIMED tiers reach the card: an unclaimed tier has no verdict to
+    /// state, and listing it pushes the slot's one line across the rule the
+    /// master draws for it. The console's own matrix still shows every tier,
+    /// so nothing is hidden — this is the certificate's line length.
+    fn card_slot(
+        profiles: &[(String, String)],
+        performance: &[String],
+    ) -> (String, (String, bool)) {
         let claimed: Vec<&(String, String)> = profiles
             .iter()
             .filter(|(_, verdict)| verdict != "not_claimed")
@@ -306,9 +352,7 @@ pub mod prepare {
             .iter()
             .map(|(tier, verdict)| format!("{tier} {verdict}"))
             .collect();
-        for class in measured_classes(state)? {
-            summary.push(class);
-        }
+        summary.extend(performance.iter().cloned());
         let badge = claimed.first().map_or_else(
             || (String::from("no profile claimed"), false),
             |(tier, verdict)| (format!("{tier} {verdict}"), verdict == "pass"),
@@ -316,47 +360,16 @@ pub mod prepare {
         if summary.is_empty() {
             summary.push(String::from("no profile claimed"));
         }
-        Ok((results.sut, summary.join(" · "), badge))
-    }
-
-    /// The measured performance classes the judgement earned, when the
-    /// campaign carried measured runs at all.
-    fn measured_classes(state: &ConsoleState) -> Result<Vec<String>, String> {
-        let Some(dir) = job_dir(state)? else {
-            return Ok(Vec::new());
-        };
-        let statement = dir.join("statement.json");
-        let results = dir.join("results.json");
-        if !statement.is_file() {
-            return Ok(Vec::new());
-        }
-        let judgement = veredictum::pipeline::judgement::judge(
-            &veredictum::pipeline::judgement::JudgementRequest {
-                statement: &statement,
-                results: &results,
-                root: &state.root,
-            },
-        )
-        .map_err(|e| e.to_string())?;
-        judgement
-            .report
-            .performance
-            .iter()
-            .map(|verdict| {
-                let outcome = crate::engine::token(&verdict.verdict)?;
-                Ok(format!("class {} {outcome}", verdict.class.token()))
-            })
-            .collect::<Result<Vec<String>, serde_json::Error>>()
-            .map_err(|e| format!("a measured class verdict did not render: {e}"))
+        (summary.join(" · "), badge)
     }
 
     /// Writes the three presentation files beside the sealed set.
     fn render_presentation(
-        state: &ConsoleState,
         bundle: &Path,
         summary: &ExportSummary,
+        facts: &RecordFacts,
     ) -> Result<(), String> {
-        let (_, _, badge) = record_facts(state)?;
+        let badge = facts.badge.clone();
         let seal = SealFacts {
             sut: summary.sut.clone(),
             profile_summary: summary.profile_summary.clone(),
@@ -368,21 +381,10 @@ pub mod prepare {
             badge_pass: badge.1,
         };
         let card = export::render::seal_card(&seal).map_err(|e| e.to_string())?;
-        let results = crate::record_api::read::results_screen(state)?
-            .ok_or_else(|| String::from("no finished run"))?;
-        let screen = crate::record_api::read::verdicts_screen(state)?;
-        let (profiles, capabilities) = match screen {
-            crate::record_api::VerdictsScreen::Judged {
-                profiles,
-                capabilities,
-                ..
-            } => (profiles, capabilities),
-            _ => (Vec::new(), Vec::new()),
-        };
         let report = export::render::html_report(&ReportFacts {
-            results,
-            profiles,
-            capabilities,
+            results: facts.results.clone(),
+            profiles: facts.profiles.clone(),
+            capabilities: facts.capabilities.clone(),
             seal: seal.clone(),
         });
 
@@ -443,6 +445,60 @@ pub mod prepare {
         }
         writer.finish().map_err(|e| e.to_string())?;
         Ok(buffer.into_inner())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::card_slot;
+
+        /// One judgement's profile verdicts, as the reader tokenizes them.
+        fn profiles() -> Vec<(String, String)> {
+            [
+                ("CORE", "pass"),
+                ("STANDARD", "not_claimed"),
+                ("SEC_BASIC", "fail"),
+            ]
+            .into_iter()
+            .map(|(tier, verdict)| (tier.to_owned(), verdict.to_owned()))
+            .collect()
+        }
+
+        /// The card states the claimed verdicts and the measured classes, in
+        /// that order, and never an unclaimed tier.
+        #[test]
+        fn the_slot_states_claimed_verdicts_then_measured_classes() {
+            let (summary, badge) = card_slot(&profiles(), &[String::from("class C1 pass")]);
+            assert_eq!(summary, "CORE pass · SEC_BASIC fail · class C1 pass");
+            assert_eq!(badge, (String::from("CORE pass"), true));
+        }
+
+        /// A campaign with no measured runs states the claim alone.
+        #[test]
+        fn no_measured_class_leaves_the_claim_alone() {
+            let (summary, _) = card_slot(&profiles(), &[]);
+            assert_eq!(summary, "CORE pass · SEC_BASIC fail");
+        }
+
+        /// A claim nobody made is stated as such rather than as an empty slot,
+        /// and its badge never reads as a pass.
+        #[test]
+        fn an_unclaimed_record_says_so() {
+            let unclaimed = vec![(String::from("CORE"), String::from("not_claimed"))];
+            let (summary, badge) = card_slot(&unclaimed, &[]);
+            assert_eq!(summary, "no profile claimed");
+            assert_eq!(badge, (String::from("no profile claimed"), false));
+        }
+
+        /// The badge reads the FIRST claimed tier, pass or not.
+        #[test]
+        fn a_failed_first_claim_is_not_a_pass_badge() {
+            let failed = vec![
+                (String::from("CORE"), String::from("fail")),
+                (String::from("STANDARD"), String::from("pass")),
+            ];
+            let (_, badge) = card_slot(&failed, &[]);
+            assert_eq!(badge, (String::from("CORE fail"), false));
+        }
     }
 }
 
@@ -515,7 +571,8 @@ pub mod fns {
     #[server]
     pub async fn fetch_export() -> Result<ExportScreen, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::prepare::screen(&state).map_err(ServerFnError::new)
+        let screen = super::prepare::screen(&state).map_err(ServerFnError::new)?;
+        Ok(crate::capture::export_screen(&state, screen))
     }
 
     /// Seals the finished run's record and renders what a party publishes.
@@ -526,6 +583,10 @@ pub mod fns {
     #[server]
     pub async fn prepare_export() -> Result<ExportSummary, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::prepare::run(&state).map_err(ServerFnError::new)
+        // The seal itself is never pinned: `run` writes the real digest and
+        // the real signing time into the bundle, and only the answer this
+        // endpoint hands the browser carries the capture stand-ins.
+        let summary = super::prepare::run(&state).map_err(ServerFnError::new)?;
+        Ok(crate::capture::export_summary(&state, summary))
     }
 }

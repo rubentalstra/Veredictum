@@ -377,14 +377,42 @@ pub mod read {
         }))
     }
 
-    /// The verdicts screen: the lib's own judgement over the finished run
-    /// and the draft's statement — the CLI's bodies by construction.
+    /// Everything one judgement of the finished run establishes.
+    ///
+    /// The judgement reads the whole campaign, so it is the expensive step of
+    /// every surface that needs a verdict. A caller that needs more than one
+    /// of these facts takes this value and reads all of them from it.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct JudgedFacts {
+        /// Profile verdicts: tier token → verdict token.
+        pub profiles: Vec<(String, String)>,
+        /// Capability evidence: name → evidence token.
+        pub capabilities: Vec<(String, String)>,
+        /// The rendered documents.
+        pub documents: Vec<DocumentView>,
+        /// The measured performance classes, `class <token> <outcome>` each,
+        /// empty when the campaign carried no measured runs.
+        pub performance: Vec<String>,
+    }
+
+    /// The finished run's judgement, or the honest reason there is none.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum JudgedRun {
+        /// The judgement ran.
+        Judged(Box<JudgedFacts>),
+        /// The run was driven without a statement, so no claim exists.
+        NoStatement,
+        /// No finished run exists yet.
+        NoRun,
+    }
+
+    /// Runs the lib's judgement over the finished run ONCE.
     ///
     /// # Errors
     /// The verbatim judgement failure.
-    pub fn verdicts_screen(state: &ConsoleState) -> Result<VerdictsScreen, String> {
+    pub fn judged(state: &ConsoleState) -> Result<JudgedRun, String> {
         let Some((_, results_path)) = finished_results(state)? else {
-            return Ok(VerdictsScreen::NoRun);
+            return Ok(JudgedRun::NoRun);
         };
         // The claim travels with the run: start_run writes the accepted
         // statement beside the results, so the judgement certifies exactly
@@ -394,7 +422,7 @@ pub mod read {
             .map(|dir| dir.join("statement.json"))
             .filter(|path| path.is_file());
         let Some(statement_path) = statement_path else {
-            return Ok(VerdictsScreen::NoStatement);
+            return Ok(JudgedRun::NoStatement);
         };
         let judgement = veredictum::pipeline::judgement::judge(
             &veredictum::pipeline::judgement::JudgementRequest {
@@ -404,7 +432,7 @@ pub mod read {
             },
         )
         .map_err(|e| e.to_string())?;
-        Ok(VerdictsScreen::Judged {
+        Ok(JudgedRun::Judged(Box::new(JudgedFacts {
             profiles: judgement
                 .report
                 .profiles
@@ -427,6 +455,33 @@ pub mod read {
                     body: document.body.clone(),
                 })
                 .collect(),
+            performance: judgement
+                .report
+                .performance
+                .iter()
+                .map(|verdict| {
+                    let outcome = token(&verdict.verdict)?;
+                    Ok(format!("class {} {outcome}", verdict.class.token()))
+                })
+                .collect::<Result<Vec<String>, serde_json::Error>>()
+                .map_err(|e| format!("a measured class verdict did not render: {e}"))?,
+        })))
+    }
+
+    /// The verdicts screen: the lib's own judgement over the finished run
+    /// and the draft's statement — the CLI's bodies by construction.
+    ///
+    /// # Errors
+    /// The verbatim judgement failure.
+    pub fn verdicts_screen(state: &ConsoleState) -> Result<VerdictsScreen, String> {
+        Ok(match judged(state)? {
+            JudgedRun::Judged(facts) => VerdictsScreen::Judged {
+                profiles: facts.profiles,
+                capabilities: facts.capabilities,
+                documents: facts.documents,
+            },
+            JudgedRun::NoStatement => VerdictsScreen::NoStatement,
+            JudgedRun::NoRun => VerdictsScreen::NoRun,
         })
     }
 }

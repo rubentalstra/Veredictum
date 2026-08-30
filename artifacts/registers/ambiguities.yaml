@@ -10225,3 +10225,37 @@ AMB-229:
   disposition: option_select
   options: [unmatched-member-refused, unmatched-member-accepted]
   upstream_issue: 307
+AMB-230:
+  ambiguity: >-
+    Whether a server must apply template-level validation to an EHR_STATUS or
+    directory FOLDER commit is unstated: the RM contemplates a template at the
+    top of any top-level structure and BASE guarantees every top-level type is
+    an archetype root point, but the only released sentence tying an HTTP
+    outcome to template validation is the OAS 422 description, referenced by
+    the composition operations (STABLE) and the demographic create/updates
+    (DEVELOPMENT) and by nothing else. ehr_status_update, directory_create and
+    directory_update declare no 422 and mention neither archetype nor
+    template, and SM defines no data-versus-template validation operation, so
+    no released ground exists for a case asserting "the server rejects an
+    EHR_STATUS/FOLDER that violates template T".
+  source: >-
+    RM UML/classes/archetyped.adoc §Attributes (template_id 0..1, "Normally, a
+    template would only be used at the top of a top-level structure");
+    BASE architecture_overview/master10-archetypes.adoc §"Relationship of
+    Archetypes and Templates to Data" ("Each top-level type is always
+    guaranteed to be an archetype root point");
+    ITS-REST specifications/responses/422.yaml ("the underlying template is
+    not known or is not validating the supplied resource") CONTRASTED with
+    specifications/operations/ehr_status_update.yaml,
+    directory_create.yaml and directory_update.yaml, which declare no '422'
+    and contain neither "archetype" nor "template". ALL CONFIRMED first-hand
+    2026-08-30.
+  handling: >-
+    report_only. Catalogue coverage for EHR_STATUS and FOLDER commits stops at
+    the RM class invariants the released text does define (Archetyped_valid,
+    Archetype_node_id_valid, the root identity rule, Rm_version_valid — the
+    -root_archetype_id_mismatch, -root_node_id_empty and -rm_version_empty
+    case families); template-level enforcement on these classes is asserted
+    by no case in either direction, and the silence is reported upstream.
+  disposition: report_only
+  upstream_issue: 355

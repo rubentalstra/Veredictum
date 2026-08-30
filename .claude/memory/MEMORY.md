@@ -38,3 +38,4 @@ apply" part so a future session can act on it without re-deriving it.
 - [Drafting in Ruben's voice](drafting-in-rubens-voice.md) — personal drafts
   (emails, forum posts) lead with the point, short paragraphs, no structure
   announcements, no AI tells; Discourse is markdown, Outlook is .txt
+- [Hosted console on Vercel](hosted-console-vercel.md) — console.veredictum.eu, view-only by construction (no engine in the image), deploy-hook only, FerroEHR#2945 service-root lesson

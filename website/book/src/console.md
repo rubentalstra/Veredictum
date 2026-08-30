@@ -10,6 +10,14 @@ Every screenshot below is captured by the console's own browser journeys
 window, light and dark. They are refreshed in the pull request that changes the
 interface, so what you see here is the interface that shipped.
 
+A capture pass serves the console in capture mode, where the three facts one
+run stamps show fixed stand-ins: the run clock reads `00:00`, a record digest
+reads as all zeros, and a signing time reads `1970-01-01T00:00:00Z`. Your own
+runs show the real values, and a sealed record always carries them: the mode
+changes what the screen displays, never what is written, sealed or signed. It
+exists so a capture pass over an unchanged interface produces identical
+images, which is what makes a screenshot diff mean something.
+
 ## The landing
 
 The four counts are the catalogue's own: case cores, operation bindings, party

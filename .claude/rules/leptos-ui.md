@@ -296,7 +296,12 @@ is the precedent to imitate, not a path in this tree.
 - **The capture pass is the visual feedback loop.** With
   `UI_E2E_DOCS_SHOTS=1` the journeys photograph every surface in one fixed
   1440×900 window, light and dark, into `website/book/src/console/img/`,
-  which the book's console chapter embeds. The `ui-screenshot-guard` CI job
+  which the book's console chapter embeds. The same flag serves the console
+  in capture mode (`VEREDICTUM_CAPTURE_MODE`, `src/capture.rs`), where the
+  facts one run stamps — its clock, the record digest, the signing time —
+  answer as fixed stand-ins, so a pass over an unchanged console rewrites no
+  image; the pinning happens where a value is sent to a browser, never in
+  what is written, sealed or signed. The `ui-screenshot-guard` CI job
   holds the two together: a pull request touching the console's `src/` or
   `style/` either commits refreshed captures or carries the
   `no-ui-visual-change` label.

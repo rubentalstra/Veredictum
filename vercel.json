@@ -1,0 +1,23 @@
+{
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "git": {
+        "deploymentEnabled": {
+            "**": false
+        }
+    },
+    "build": {
+        "env": {
+            "VERCEL_FORCE_NO_BUILD_CACHE": "1"
+        }
+    },
+    "services": {
+        "console": {
+            "root": ".",
+            "entrypoint": "Dockerfile.vercel",
+            "runtime": "container"
+        }
+    },
+    "rewrites": [
+        { "source": "/(.*)", "destination": { "service": "console" } }
+    ]
+}
