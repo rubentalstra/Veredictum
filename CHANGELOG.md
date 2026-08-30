@@ -55,6 +55,16 @@ version on.
   shared; the design record now states the replay's judge-or-refuse contract
   on both seams (#261).
 
+- **A version envelope in hand must BE a version (#278).** The driver reused
+  the step's own response body as the `ORIGINAL_VERSION` envelope whenever its
+  `uid.value` matched the version under assertion. A `COMPOSITION` or `PERSON`
+  served under `Prefer: return=representation` repeats that same
+  `OBJECT_VERSION_ID` and carries no `commit_audit`, so 20 rows of the first
+  registry reproduction reported "carries no commit_audit.change_type" against
+  a server that serves the audit correctly. The shortcut now also requires the
+  `_type` the released ITS-JSON binds a `VERSION` to, and any other body falls
+  through to the family's envelope read.
+
 ### Removed
 - The `content_generation` registered-exception kind. Content cases execute
   through the synthesized functional flow, so nothing could raise it and no

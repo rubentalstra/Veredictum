@@ -3370,7 +3370,8 @@ impl StepDriver for HttpDriver<'_> {
         // The signature assertions verify against the posture of the instance
         // THIS step ran on (RM common master06 §Digital Signature: the mode is
         // a deployment fact), so a party running two postures as two instances
-        // is judged per instance, never against one party-wide default.
+        // is judged per instance, and the party-wide declaration fills in only
+        // where the instance itself declares none.
         let signing = self.ixit.signing_of(instance);
         self.record_exchange_bookkeeping(binding, request_spec, body.as_ref(), &exchange, signing);
 
@@ -3383,11 +3384,6 @@ impl StepDriver for HttpDriver<'_> {
 
         // Post-step assertions only when the expectation held (the caller
         // aborts otherwise, law b) — evaluate optimistically here.
-        // The signature assertions verify against the posture of the instance
-        // THIS step ran on (RM common master06 §Digital Signature: the mode is
-        // a deployment fact), so a party running two postures as two instances
-        // is judged per instance, never against one party-wide default.
-        let signing = self.ixit.signing_of(instance);
         let mut assertions =
             self.eval_assertions(case, binding, &step.assertions, &exchange, signing, vars);
         // The expected outcome's declared header matchers and body selector
@@ -3842,6 +3838,13 @@ impl HttpDriver<'_> {
 
     /// The `ORIGINAL_VERSION` envelope of one version: the step's own body
     /// when that body already IS the envelope, else the family's version read.
+    ///
+    /// Being the envelope takes both the matching `uid.value` and the `_type`
+    /// the released ITS-JSON binds a `VERSION` to
+    /// ([`crate::exec::versioned::is_version_envelope`]). A versioned item
+    /// served under `Prefer: return=representation` repeats the same
+    /// `OBJECT_VERSION_ID` and carries no `commit_audit`, so a uid match alone
+    /// would judge `change_type` against a body that never holds it.
     fn version_envelope(
         &mut self,
         case: &CaseCore,
@@ -3851,6 +3854,7 @@ impl HttpDriver<'_> {
         vars: &VarStore,
     ) -> Result<Value, AssertionOutcome> {
         if let Some(body) = in_hand
+            && crate::exec::versioned::is_version_envelope(body)
             && crate::exec::versioned::envelope_uid(body) == Some(version_uid)
         {
             return Ok(body.clone());
