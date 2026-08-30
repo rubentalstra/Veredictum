@@ -44,6 +44,10 @@ COPY party/ /work/party/
 ENV VEREDICTUM_PARTY=/work/party \
     VEREDICTUM_OUT=/work/out
 
-# Vercel routes to the port the image declares; the console serves on 3000
-# (the base image's LEPTOS_SITE_ADDR).
-ENV PORT=3000
+# Vercel forwards to $PORT and its default is 80 — an image-level PORT does
+# not change what the platform expects (FerroEHR#2947 measured it live:
+# "could not connect to $PORT=80 … detected ports your server listened on:
+# 3000", the exact init-timeout this instance hit too). The console reads its
+# bind address from LEPTOS_SITE_ADDR at startup, so it is rebound to 80 here.
+ENV LEPTOS_SITE_ADDR=0.0.0.0:80
+ENV PORT=80
