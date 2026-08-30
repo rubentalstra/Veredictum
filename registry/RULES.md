@@ -114,7 +114,8 @@ board is a number typed into the entry: the boards read the artifacts. So the
 list is complete by role.
 
 - A **conformance** entry carries `results` and `verdicts`, and may carry a
-  `transcript`, a `record-manifest` and rendered `report` documents.
+  `transcript`, a `record-manifest`, rendered `report` documents and the
+  `ixit` declaration the run was driven under.
 - A **benchmark** entry carries one `bench-result`.
 - A **self-reported** entry carries the `signature` file too, and the artifact
   it signs must be one of the entry's own.
@@ -150,6 +151,14 @@ end, declared under `registry/topologies/<id>/topology.json`. Nothing a
 submitter wrote is executed in a job that holds an OIDC token, which is why the
 lane will not compose an image or a compose file that arrived in a pull
 request.
+
+A topology declares the principals its composed deployment actually has, which
+is narrower than the party's own declaration: the quickstarts stand up one
+clinical principal, so every case addressing an admin or read-only principal is
+recorded not-applicable at selection time. The bundle therefore carries that
+declaration as `ixit.json`, attested beside the results, and the run record's
+`ixit_digest` is the leading 8 bytes of the SHA-256 over its bytes. Anybody
+re-derives it with `sha256sum ixit.json | cut -c1-16`.
 
 The lane runs on a pull request that touches the registry, and on demand. It
 selects entries whose deployment names a committed topology, composes it,

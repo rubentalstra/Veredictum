@@ -76,8 +76,8 @@ profile change is made when the scope is actually wrong, never to move a number.
 ## Setup facts (so they are not rediscovered)
 
 - Analysis is **CI-based**, not Automatic Analysis. The two are mutually
-  exclusive per project, and Automatic Analysis cannot read Rust, so the mode is
-  already the one the code migration needs.
+  exclusive per project, and Automatic Analysis cannot read Rust, so CI-based
+  analysis is the only mode that reads this tree.
 - The lane authenticates with a `SONAR_TOKEN` repository secret. A fork's pull
   request cannot read it, so the lane skips a fork and the guard tier in
   `ci.yml`, which needs no secret, is what gates that contribution.

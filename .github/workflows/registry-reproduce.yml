@@ -165,9 +165,12 @@ jobs:
           SUT_VERSION: ${{ matrix.version }}
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/registry/reproduce.sh "$TOPOLOGY" reproduction "$SUT_VERSION"
-      # The attestation covers the three documents a tier-1 entry stands on:
-      # what the run recorded, what the judgement computed, and which images
-      # actually answered.
+      # The attestation covers the four documents a tier-1 entry stands on:
+      # what the run recorded, what the judgement computed, which images
+      # actually answered, and the ixit declaration the run was driven under.
+      # Without that last one the record's `ixit_digest` resolves to nothing,
+      # and a case recorded not-applicable for an undeclared principal cannot
+      # be checked by anybody.
       - name: Attest the reproduction
         id: attestation
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -176,6 +179,7 @@ jobs:
             reproduction/run/results.json
             reproduction/judgement/verdicts.json
             reproduction/deployment.json
+            reproduction/ixit.json
       - name: State what a maintainer commits
         shell: bash
         env:

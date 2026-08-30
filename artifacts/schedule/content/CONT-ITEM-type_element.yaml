@@ -1,6 +1,7 @@
-# CATALOGUE ADDITION: the ELEMENT-narrowed member of the CONT-ITEM-type_*
-# family, the mirror of CONT-ITEM-type_cluster. A member slot narrowed to
-# ELEMENT refuses the grouping CLUSTER subtype of the abstract ITEM class.
+# The ELEMENT-narrowed member of the CONT-ITEM-type_* family, the mirror of
+# CONT-ITEM-type_cluster: a committed ELEMENT satisfies the narrowed slot.
+# The unmatched-member direction is register AMB-229's option pair, never a
+# gating row here.
 id: CONT-ITEM-type_element
 kind: content
 component: CONTENT
@@ -10,7 +11,8 @@ capabilities: [ArchetypeValidation]
 profiles: [CORE]
 test_purpose: >-
   ITEM is ELEMENT: an ITEM_TREE member slot narrowed to ELEMENT accepts a
-  committed ELEMENT and rejects the CLUSTER sibling (class not allowed).
+  committed ELEMENT (the matched-member half; the unmatched half is register
+  AMB-229's option pair).
 description: "ITEM_TREE.items member type against an ELEMENT-narrowed archetype slot"
 spec_refs:
   - "AM AOM1.4 §C_OBJECT (rm_type_name) — the reference-model type a node constrains"
@@ -26,4 +28,3 @@ decision_table:
   columns: [slot_type, committed_type, expected, violates]
   rows:
     - ["ELEMENT", "ELEMENT", accepted, []]
-    - ["ELEMENT", "CLUSTER", rejected, ["constraint(C_OBJECT.rm_type_name): CLUSTER is not an allowed type for an ELEMENT-narrowed slot"]]

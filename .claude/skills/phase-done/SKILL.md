@@ -41,9 +41,8 @@ exist is worse than no step, because it reports green.
 4. **Specification-adherence check.** For work that shipped spec-facing
    behaviour — an expectation, a citation, a verdict rule — confirm the governing
    released section was read first-hand and is cited, and that the citation
-   resolves. Until the spec text is vendored here, the citation names the
-   FerroEHR checkout it was read in. An expectation with no citation is not
-   reviewable and is not closable.
+   resolves against `specs/openehr/` in this repository. An expectation with no
+   citation is not reviewable and is not closable.
 
 5. **Changelog check.** If the work changed a user-visible surface — the CLI, the
    published artifact schemas, verdict semantics, the container image, or

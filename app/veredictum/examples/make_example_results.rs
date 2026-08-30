@@ -145,7 +145,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|errors| format!("example violates its own invariants: {errors:?}"))?;
 
     let json = serde_json::to_string_pretty(&results)?;
-    std::fs::write("examples/results.example.json", json + "\n")?;
+    // The catalogue is read from the working directory and the document is
+    // written beside this file, so the one documented invocation reaches both.
+    let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples")
+        .join("results.example.json");
+    std::fs::write(out, json + "\n")?;
     Ok(())
 }
 

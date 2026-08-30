@@ -4,9 +4,8 @@
 # .claude/hooks/catalogue_attribution_guard.sh
 #
 # Ported from FerroEHR's cnf_attribution_guard.sh at the Veredictum split
-# (FerroEHR#2789), renamed for this repository and re-pointed at the planned
-# artifact paths. It stays dormant until the catalogue lands, because the paths
-# it matches do not exist yet.
+# (FerroEHR#2789), renamed for this repository and re-pointed at this tree's
+# artifact paths.
 #
 # Claude Code PreToolUse hook (matcher: Write|Edit|NotebookEdit). NON-BLOCKING
 # reminder fired when a catalogue EXPECTATION artifact is edited

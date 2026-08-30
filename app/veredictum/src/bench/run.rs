@@ -348,6 +348,9 @@ pub fn execute(
         return Err(BenchError::Repetitions(run.repetitions));
     }
     run.pack.verify_pins()?;
+    if let Some(warning) = plain_http_credential_warning(run.base_url, run.auth) {
+        progress(warning);
+    }
     let client = BenchClient::with_credential(run.base_url, run.auth, run.user, run.credential)?;
     let started_at = jiff::Timestamp::now().to_string();
 
@@ -516,6 +519,36 @@ fn one_repetition(
         phases,
         sweeps,
     })
+}
+
+/// The one-line warning for credentials over plain HTTP to a non-loopback
+/// host, or `None` where the transport is the operator's own machine or
+/// carries no credential.
+///
+/// The base URL is operator-supplied and a local quickstart is legitimately
+/// `http://localhost`, so this never refuses the run — it says out loud what
+/// the transport does with the credential (#296).
+fn plain_http_credential_warning(base_url: &str, auth: AuthKind) -> Option<String> {
+    if matches!(auth, AuthKind::None) {
+        return None;
+    }
+    let rest = base_url.strip_prefix("http://")?;
+    let authority = rest.split(['/', '?']).next().unwrap_or_default();
+    // A bracketed IPv6 authority keeps its colons; otherwise the first colon
+    // starts the port (RFC 3986 §3.2.2 host grammar).
+    let host = authority
+        .strip_prefix('[')
+        .and_then(|inside| inside.split(']').next())
+        .unwrap_or_else(|| authority.split(':').next().unwrap_or_default());
+    let loopback = host == "localhost" || host.starts_with("127.") || host == "::1";
+    if loopback {
+        return None;
+    }
+    Some(format!(
+        "warning: the credential rides plain http to {host} — every request sends it \
+         unencrypted across the network; prefer an https base URL for any target that \
+         is not this machine"
+    ))
 }
 
 /// Refuses the run unless the whole write-then-read path answers.
@@ -1538,6 +1571,30 @@ fn measure_phase(
 mod tests {
     use super::*;
     use crate::bench::pack;
+
+    /// Credentials over plain http to a non-loopback host warn once and never
+    /// refuse; loopback quickstarts, https targets and credential-less runs
+    /// stay silent (#296).
+    #[test]
+    fn plain_http_credentials_warn_beyond_loopback() {
+        let warns = |url: &str, auth: AuthKind| plain_http_credential_warning(url, auth);
+        let warning = warns("http://cdr.example:8080/openehr/v1", AuthKind::Basic)
+            .expect("a remote plain-http credential warns");
+        assert!(warning.contains("cdr.example"), "{warning}");
+        assert!(
+            warns("http://[2001:db8::1]:8080/v1", AuthKind::Bearer).is_some(),
+            "a bracketed remote IPv6 host warns"
+        );
+        for silent in [
+            ("http://localhost:8080/openehr/v1", AuthKind::Basic),
+            ("http://127.0.0.1:8080/v1", AuthKind::Bearer),
+            ("http://[::1]:8080/v1", AuthKind::Basic),
+            ("https://cdr.example/openehr/v1", AuthKind::Basic),
+            ("http://cdr.example/openehr/v1", AuthKind::None),
+        ] {
+            assert!(warns(silent.0, silent.1).is_none(), "{silent:?}");
+        }
+    }
 
     /// The schedule is a pure function of the pack seed and the phase index,
     /// so two repetitions offer the same work in the same order.

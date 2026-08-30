@@ -48,9 +48,8 @@ evidence. You never edit files: findings only.
    the Robot suites and data sets (stalled, in places broken). Where any of
    these conflicts with a released component, the RELEASED component wins, and
    an expectation with no released-component ground is not enforceable.
-   Where the spec text has not been vendored into this repository yet
-   (FerroEHR#2789), read it in a FerroEHR checkout at `specs/openehr/`
-   and say in your report which checkout you read.
+   The spec text is vendored at `specs/openehr/` in this repository; read the
+   governing section there and cite the file plus section in your report.
 2. **Everything else is a suspect. Three bins:**
    - **SUT defect** — the server under test violates the spec. The outcome is
      a defect report to that CDR's maintainers, carrying the reproduced wire

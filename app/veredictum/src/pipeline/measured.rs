@@ -333,9 +333,7 @@ pub fn run_stress(
         progress,
     )
     .map_err(|e| Error::Instrument(format!("stress run failed: {e}")))?;
-    if perf_run::rate_limited_observed() {
-        return Err(Error::Instrument(perf_run::rate_limited_refusal("stress")));
-    }
+    perf_run::refuse_rate_limited_record("stress").map_err(Error::Instrument)?;
     Ok(report)
 }
 
@@ -553,9 +551,7 @@ pub fn run_measured(
         }
         // A limiter-shaped window is not a measurement of this server, so it
         // never reaches the results record.
-        if perf_run::rate_limited_observed() {
-            return Err(Error::Instrument(perf_run::rate_limited_refusal("perf")));
-        }
+        perf_run::refuse_rate_limited_record("perf").map_err(Error::Instrument)?;
         merge_measurement(request, &loaded, measurement.clone(), observe)?;
         run.measurements.push(measurement);
     }

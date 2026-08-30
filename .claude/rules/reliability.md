@@ -4,8 +4,7 @@
 > (FerroEHR#2789) and trimmed to the generic Rust rules. The CDR-specific
 > entries (clinical payload handling, the Helm chart, the compose stack, the
 > generated spec-model rules, crates.io publication posture) were dropped, and
-> the enforcement column says honestly which lints and jobs arrive with the
-> code.
+> every rule below names the lint or job that enforces it here.
 
 This tool speaks verdicts about other people's products, so a silent wrong
 answer is the worst thing it can do. Every rule below pairs with the check that
@@ -139,9 +138,9 @@ rustdoc books.
   yield `&[Vec<T>]`, a slice of zero-or-one *vectors* rather than `&[T]`, and
   they keep compiling after a field's shape flips between `Vec<T>` and
   `Option<Vec<T>>`. Spell it `.as_deref().unwrap_or_default()` or match on the
-  `Option`; `Vec::as_slice` stays fine. The full list is instantiated in
-  `clippy.toml` when the code lands (#2789). A legitimate exception site
-  carries a scoped `#[expect(clippy::disallowed_methods, reason)]`.
+  `Option`; `Vec::as_slice` stays fine. `clippy.toml` carries the full list,
+  each entry with the reason it was banned. A legitimate exception site carries
+  a scoped `#[expect(clippy::disallowed_methods, reason)]`.
 - **Errors are types, not strings, at every boundary that branches.** A caller
   that needs to distinguish outcomes gets an enum variant, not a substring
   match. String context belongs in the display text, not the discriminant.

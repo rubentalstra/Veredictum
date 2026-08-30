@@ -23,8 +23,7 @@
 # CI-based analysis rather than Automatic Analysis, and that is a decision:
 # Automatic Analysis would serve a YAML-and-HTML tree with no workflow at all,
 # but it cannot analyze Rust, and the two modes are mutually exclusive per
-# project. Standing this lane up now means the code migration does not also have
-# to flip the project's analysis mode
+# project, so this lane is the only mode that reads the Rust in this tree
 # (https://docs.sonarsource.com/sonarqube-cloud/getting-started/github/).
 #
 # SONAR_HOST_URL is not set: it is not needed for SonarQube Cloud

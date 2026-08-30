@@ -50,7 +50,7 @@ pub struct Exchange {
     /// The HTTP method the driver sent.
     pub method: String,
     /// The absolute request URL.
-    pub path: String,
+    pub url: String,
     /// The status code the SUT answered with.
     pub status: StatusCode,
     /// The response headers, lower-cased names.
@@ -396,7 +396,7 @@ impl<'a> HttpDriver<'a> {
         };
         let exchange = Exchange {
             method: format!("{method:?}").to_uppercase(),
-            path: url.to_owned(),
+            url: url.to_owned(),
             status,
             headers: response_headers,
             body: response_body,
@@ -414,7 +414,7 @@ impl<'a> HttpDriver<'a> {
                 eprintln!(
                     "[exchange] {} {} -> {} | {}",
                     exchange.method,
-                    exchange.path,
+                    exchange.url,
                     exchange.status.as_u16(),
                     exchange
                         .body
@@ -449,7 +449,7 @@ impl<'a> HttpDriver<'a> {
             row: self.row,
             request: RecordedRequest {
                 method: exchange.method.clone(),
-                url: exchange.path.clone(),
+                url: exchange.url.clone(),
                 headers: recorded_headers(request_headers),
                 body: request_body.cloned(),
             },
@@ -4209,7 +4209,7 @@ mod tests {
     fn rendered_statuses_stay_bare_wire_numbers() {
         let refused = Exchange {
             method: "POST".into(),
-            path: "/ehr".into(),
+            url: "http://sut.invalid/ehr".into(),
             status: StatusCode::CONFLICT,
             headers: BTreeMap::new(),
             body: None,
@@ -5124,7 +5124,7 @@ mod tests {
     fn capture_extraction_strips_and_transforms() {
         let exchange = Exchange {
             method: "POST".into(),
-            path: "/ehr".into(),
+            url: "http://sut.invalid/ehr".into(),
             status: StatusCode::CREATED,
             headers: BTreeMap::from([(
                 "etag".to_owned(),

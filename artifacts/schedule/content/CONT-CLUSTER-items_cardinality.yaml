@@ -26,6 +26,7 @@ spec_refs:
   - "AM AOM1.4 §C_ATTRIBUTE (existence) — whether the attribute field must be present"
   - "RM data_structures §CLUSTER (items: List<ITEM>, 1..1 — ordered list of items, CLUSTER or ELEMENT objects, under this CLUSTER)"
   - "RM data_structures §ITEM_TREE (items: List<ITEM>, 0..1 — the carrier the constrained CLUSTER is a member of)"
+  - "AM AOM2 master04.5 §Class Definitions (VCACA) — a stated cardinality must be the same or narrower than the reference model's, so a 0-lower-bound interval is unstatable on CLUSTER.items"
 applies: { rm: ">=1.0.2" }
 constraint_context:
   # C_MULTIPLE_ATTRIBUTE.cardinality on CLUSTER.items, varied per row.
@@ -39,10 +40,11 @@ decision_table:
     - ["any", 1, accepted, []]
     - ["any", 3, accepted, []]
     - ["any", 6, accepted, []]
-    - ["opt", 0, rejected, ["rm_schema: items is mandatory"]]
-    - ["opt", 1, accepted, []]
-    - ["opt", 3, rejected, ["constraint(C_MULTIPLE_ATTRIBUTE.cardinality): items count above the interval upper bound (1)"]]
-    - ["opt", 6, rejected, ["constraint(C_MULTIPLE_ATTRIBUTE.cardinality): items count above the interval upper bound (1)"]]
+    # No `opt` rows: cardinality 0..1 widens CLUSTER.items past the RM's 1..*
+    # floor, and AOM2 VCACA ("the same or narrower" than the reference model)
+    # makes such a template invalid — the shape is unauthorable, not untested
+    # (adjudicated on #283; the ITEM_TREE/ITEM_LIST twins keep their opt rows,
+    # their RM floor being 0..1).
     - ["mand", 0, rejected, ["rm_schema: items is mandatory", "constraint(C_MULTIPLE_ATTRIBUTE.cardinality): items count below the interval lower bound (1)"]]
     - ["mand", 1, accepted, []]
     - ["mand", 3, rejected, ["constraint(C_MULTIPLE_ATTRIBUTE.cardinality): items count above the interval upper bound (1)"]]

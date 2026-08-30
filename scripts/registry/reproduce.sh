@@ -21,8 +21,17 @@
 #
 # Writes into <out-dir>:
 #   deployment.json   the images the run actually composed, by digest
+#   ixit.json         the declaration the run was driven under, byte for byte
 #   run/results.json  the recorded catalogue run
 #   judgement/…       verdicts.json and the rendered documents
+#
+# WHY THE IXIT TRAVELS WITH THE BUNDLE. A topology declares the principals its
+# composed deployment actually has, which is narrower than a party's own
+# declaration: the quickstarts stand up one clinical principal, so every case
+# addressing an admin or read-only principal is recorded not-applicable at
+# selection time. A reader cannot check that reason against a digest alone, so
+# the bundle carries the declaration the digest was taken over and the run
+# record's `ixit_digest` is re-derived from it below.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -30,6 +39,18 @@ ROOT="$PWD"
 
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 1; }
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
+
+# The runner records the leading 8 bytes of the SHA-256 over the ixit
+# document, so the check below needs whichever of the two spellings this
+# machine carries: coreutils on a runner, BSD on a workstation.
+if command -v sha256sum >/dev/null; then
+  sha256_of() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null; then
+  sha256_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+else
+  echo "sha256sum or shasum is required" >&2
+  exit 1
+fi
 
 if [[ $# -lt 2 ]]; then
   echo "usage: $0 <topology-id> <out-dir> [<sut-version>]" >&2
@@ -62,6 +83,10 @@ mkdir -p "$WORK"
 field() { jq -r --arg name "$1" '.[$name] // ""' "$DECLARATION"; }
 
 IXIT="$(field ixit)"
+if [[ -z "$IXIT" || ! -f "$ROOT/$IXIT" ]]; then
+  echo "::error::$TOPOLOGY names the ixit '${IXIT:-<none>}', which this tree does not carry" >&2
+  exit 1
+fi
 STATEMENT="$(field statement)"
 READY_URL="$(field ready_url)"
 COMPOSE_FILE="$(field compose_file)"
@@ -129,6 +154,10 @@ docker compose -p "$PROJECT" -f "$WORK/compose.yaml" ps --format json \
         services: [ .[] | {service: .Service, image: .Image, state: .State} ]}' \
   > "$OUT/deployment.json"
 
+# The declaration the run is about to be driven under, byte for byte, so the
+# bundle answers "which principals did this deployment have" on its own.
+cp "$ROOT/$IXIT" "$OUT/ixit.json"
+
 while IFS=$'\t' read -r key value; do
   [[ -n "$key" ]] || continue
   export "$key=$value"
@@ -162,6 +191,17 @@ if [[ ! -f "$OUT/run/results.json" ]]; then
   exit 1
 fi
 
+# The bundle's own digest check, run here so a mismatch stops the lane instead
+# of shipping a record nobody can resolve. This is the same derivation a reader
+# performs over the carried declaration.
+recorded_digest="$(jq -r '.ixit_digest // ""' "$OUT/run/results.json")"
+carried_digest="$(sha256_of "$OUT/ixit.json" | cut -c1-16)"
+if [[ "$recorded_digest" != "$carried_digest" ]]; then
+  echo "::error::the record's ixit_digest $recorded_digest does not re-derive from the carried declaration ($carried_digest)" >&2
+  exit 1
+fi
+echo "reproduce: ixit_digest $recorded_digest re-derives from $OUT/ixit.json"
+
 echo "reproduce: judging the results"
 judge_args=(
   verdicts
@@ -191,4 +231,4 @@ if [[ ! -f "$OUT/judgement/verdicts.json" ]]; then
   exit 1
 fi
 
-echo "reproduce: wrote $OUT/run/results.json and $OUT/judgement/verdicts.json"
+echo "reproduce: wrote $OUT/ixit.json, $OUT/run/results.json and $OUT/judgement/verdicts.json"

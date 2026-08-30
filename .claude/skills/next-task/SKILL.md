@@ -37,7 +37,7 @@ project-board move, deferred at the split, is back since #1 landed the board.
 2. **Turn the task into a plan**, stating:
    - **What** the task requires, in one or two sentences.
    - **Which files** are involved. Search for them rather than guessing paths;
-     the layout table in `CLAUDE.md` § Migration state names every tree.
+     the layout table in `CLAUDE.md` § Layout names every tree.
    - **Which of the three the change touches** — the runner machinery under
      `app/veredictum/src/`, the catalogue under `artifacts/`, or the repository's own
      machinery. The attribution law turns on that distinction, so the plan

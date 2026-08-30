@@ -18,9 +18,6 @@ version on.
 
 ## [Unreleased]
 
-### Added
-
-
 ### Fixed
 - **The `latest-version-uid` ETag comparison names the object it is about
   (#235).** The driver kept one `last_version_uid` slot for the whole row, so
@@ -38,6 +35,23 @@ version on.
   behind it. The gate immediately caught the `scale_ladder` pin, which had
   never matched its committed contract, and the `bp_series` contract's "all
   other fields fixed" claim while the generator varies the COMPOSITION name.
+- `CONT-DV_URI-validate_list` drives the list constraint it declares: the case
+  rode the pattern-baking template, so both rows passed under the pattern by
+  coincidence; a script-generated `cnf.tpl.dv_uri_list` twin (the
+  `dv_ehr_uri_list` split, applied one family over) now bakes the case's own
+  `C_STRING.list`, and the generator's key exemption for the deliberately
+  invalid twins is stated instead of implicit (#267).
+- **The unmatched-container-member posture becomes a declared option
+  (#283).** No released AM sentence decides whether a data member matching no
+  constraint node is invalid (reported upstream as #307), so the two
+  type-narrowing refusal rows move to option-tagged sibling cases under
+  register AMB-229 and the matched halves stay gating. The structural
+  synthesizer stops emitting VCACA-illegal templates on `CLUSTER.items`:
+  `any` restates the RM's own 1..* (`C_MULTIPLE_ATTRIBUTE.cardinality` is
+  1..1, so one is always stated; same-as-RM is VCACA-legal) and `opt`
+  refuses loudly, with the four unauthorable rows dropped under that
+  citation; the ADL1.4/AOM2 divergence on open occurrences bounds is
+  reported upstream as #308.
 - **A role-boundary premise is a declaration, never a presumption (#281).**
   The IXIT instance block gains an `administrative` posture (SM delegates
   access control, so nothing on the wire discloses a principal's roles), the
@@ -60,6 +74,31 @@ version on.
   mounts the working directory; every release from the next cut attaches it
   beside the binaries, `check-console-pin.sh` holds its image tag to the one
   engine value, and the release pipeline refuses to publish without it.
+- **A reproduction carries the IXIT it ran under, and its digest is
+  re-derivable (#284).** `ixit_digest` is now the leading 8 bytes of the
+  SHA-256 over the declaration's bytes, lowercase hex, so a reader checks a
+  published record with `sha256sum ixit.json | cut -c1-16`; the previous value
+  came from `DefaultHasher`, whose algorithm the standard library leaves
+  unspecified across releases, so nothing outside one build could reproduce
+  it. The reproduce lane copies the topology's ixit into the bundle as
+  `ixit.json`, attests it beside `results.json`, and fails the run when the
+  recorded digest does not re-derive from the carried bytes. Registry entries
+  gain an `ixit` artifact role so a committed entry pins that declaration, and
+  the results schema pins `ixit_digest` to 16 lowercase hex characters. The
+  first reproduction recorded `186989ede4f387fc` with no way to resolve it,
+  which left 40-odd admin rows not-applicable for a reason no reader could
+  check.
+- **The 429 publish guard is pinned in both directions, the driver's exchange
+  names its URL, and a failed statement reset no longer poisons a probe's
+  attribution (#145).** The rule that a rate-limited window never becomes a
+  published measurement now lives in one `refuse_rate_limited_record` seam
+  that the measured and stress instruments both call, with a test for each
+  direction: a latched 429 withholds the record, a clean window publishes.
+  The recorded exchange's field is `url`, which is what it has always held
+  and what the transcript already publishes. `aql-probe` reports a failed
+  `pg_stat_statements_reset` and withholds that probe's statement rows,
+  where it used to drop the failure and charge one probe with the previous
+  probe's cost.
 - **An undeclared signing posture no longer reds the row against the server
   (#279).** A `signature` assertion asking for `verifiable` where the ixit
   declares no `signing` at party or instance level now records the row
@@ -123,6 +162,11 @@ version on.
   a server that serves the audit correctly. The shortcut now also requires the
   `_type` the released ITS-JSON binds a `VERSION` to, and any other body falls
   through to the family's envelope read.
+
+### Added
+- `bench` warns once when a credential rides a plain-`http` base URL that is
+  not loopback; the run proceeds, because the operator names the transport
+  and a local quickstart is legitimately `http://localhost` (#296).
 
 ### Removed
 - The `content_generation` registered-exception kind. Content cases execute

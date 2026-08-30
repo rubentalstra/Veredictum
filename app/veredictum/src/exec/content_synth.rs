@@ -997,8 +997,24 @@ fn item_container_cardinality(
     row: &Cells<'_>,
 ) -> Result<String, SynthError> {
     let token = CardinalityToken::read(row, "cardinality")?;
-    let card = token.cardinality();
     let is_cluster = rm_class == "CLUSTER";
+    // RM `data_structures` §CLUSTER makes `items` 1..*, and AOM2 VCACA makes
+    // a stated cardinality legal only when same-or-narrower than the RM's —
+    // so a lower bound of 0 is unstatable on CLUSTER. `C_MULTIPLE_ATTRIBUTE`
+    // types `cardinality` 1..1 (AOM1.4 class table; the released Archetype.xsd
+    // element is mandatory), so `any` restates the RM's own 1..* (same-as-RM
+    // is legal) and `opt` is refused rather than silently widened.
+    let card = match token {
+        CardinalityToken::Opt if is_cluster => {
+            return Err(axis_refusal(
+                "cardinality",
+                "`opt` (0..1) widens CLUSTER.items past the RM's 1..* floor — AOM2 VCACA \
+                 makes that template invalid, so the row is unauthorable",
+            ));
+        }
+        CardinalityToken::Any if is_cluster => cardinality(1, None),
+        _ => token.cardinality(),
+    };
     let exist = if is_cluster {
         (1, 1)
     } else {
@@ -1166,6 +1182,67 @@ mod tests {
         assert!(xml.contains("<lower>3</lower>"));
         assert!(xml.contains("<upper>5</upper>"));
         assert!(xml.contains("openEHR-EHR-COMPOSITION.minimal.v1"));
+    }
+
+    /// CLUSTER.items is 1..* in the RM, and AOM2 VCACA makes a stated
+    /// cardinality legal only when same-or-narrower: `opt` (0..1) is refused
+    /// rather than synthesized into a spec-illegal template, and `any`
+    /// restates the RM's own 1..*, because `C_MULTIPLE_ATTRIBUTE.cardinality`
+    /// is 1..1 and cannot be omitted (adjudicated on #283; the omission
+    /// variant shipped schema-invalid OPTs the second reproduction refused).
+    #[test]
+    fn cluster_items_never_widens_the_rm_floor() {
+        let c = cols(&["cardinality", "member_count", "expected", "violates"]);
+        let opt_cells = vec![
+            lit("opt"),
+            MatrixCell::Literal(json!(1)),
+            lit("accepted"),
+            lit("[]"),
+        ];
+        let refused = synthesize_opt(
+            "CONT-CLUSTER-items_cardinality",
+            "CLUSTER",
+            "cnf.tpl.x.r0",
+            &c,
+            &opt_cells,
+        )
+        .expect_err("`opt` on CLUSTER.items must refuse, never widen");
+        assert!(format!("{refused:?}").contains("VCACA"), "{refused:?}");
+
+        let any_cells = vec![
+            lit("any"),
+            MatrixCell::Literal(json!(1)),
+            lit("accepted"),
+            lit("[]"),
+        ];
+        let xml = synthesize_opt(
+            "CONT-CLUSTER-items_cardinality",
+            "CLUSTER",
+            "cnf.tpl.x.r0",
+            &c,
+            &any_cells,
+        )
+        .expect("`any` on CLUSTER.items synthesizes without a stated cardinality");
+        // Three cardinality elements: the ITEM_TREE wrapper's 0..*, the
+        // template's outer container (both floors ARE 0..*), and the
+        // CLUSTER's own items restating the RM's 1..*. A missing third is
+        // the schema-invalid omission; three with no 1..* interval is the
+        // widening regression.
+        let cardinalities: Vec<&str> = xml
+            .split("<cardinality>")
+            .skip(1)
+            .filter_map(|rest| rest.split("</cardinality>").next())
+            .collect();
+        assert_eq!(cardinalities.len(), 3, "{xml}");
+        assert_eq!(
+            cardinalities
+                .iter()
+                .filter(|c| c.contains("<lower>1</lower>")
+                    && c.contains("<upper_unbounded>true</upper_unbounded>"))
+                .count(),
+            1,
+            "exactly one cardinality restates the RM's 1..*: {cardinalities:?}"
+        );
     }
 
     #[test]
