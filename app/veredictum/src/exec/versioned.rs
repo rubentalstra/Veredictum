@@ -3,11 +3,14 @@
 
 //! The pure judges behind the `version` assertion family.
 //!
-//! Every fact the family declares lives on one of two served representations,
-//! so each judge here takes the representation and the authored expectation
-//! and returns a failure that names both sides:
+//! Every fact the family declares lives on one of three served
+//! representations, so each judge here takes the representation and the
+//! authored expectation and returns a failure that names both sides:
 //!
-//! - the `ORIGINAL_VERSION` envelope — `uid`, `commit_audit.change_type` and
+//! - the version identity the row resolved — the `ETag` or the commit body's
+//!   uid, judged against a `uid_pattern` (BASE `base_types` master05
+//!   §Syntaxes);
+//! - the `ORIGINAL_VERSION` envelope — `commit_audit.change_type` and
 //!   `lifecycle_state` (RM common `UML/classes/version.adoc` §Attributes,
 //!   `original_version.adoc` §Attributes, `audit_details.adoc` §Attributes);
 //! - the `REVISION_HISTORY` — one `REVISION_HISTORY_ITEM` per version, which
@@ -82,21 +85,26 @@ pub fn expand_uid_literal(literal: &str) -> Result<String, String> {
     Ok(out)
 }
 
-/// Judge an envelope's `uid.value` against a compiled `uid_pattern`.
+/// Judge the version identity the row RESOLVED against a compiled
+/// `uid_pattern`.
+///
+/// The value judged is the one the row already holds — the served `ETag` or
+/// the uid of a commit body — never a re-read envelope addressed BY that same
+/// uid, which a conformant server echoes back unchanged.
 ///
 /// # Errors
-/// The envelope carries no `uid.value`, or the value does not match.
+/// The row resolved an empty uid, or the value does not match.
 pub fn eval_uid_pattern(
-    envelope: &Value,
+    uid: &str,
     pattern: &regex::Regex,
     authored: &str,
 ) -> Result<(), AssertionFailure> {
-    let Some(uid) = envelope_uid(envelope) else {
+    if uid.is_empty() {
         return Err(AssertionFailure(
-            "version uid_pattern: the served envelope carries no uid.value (RM common version.adoc: VERSION.uid is an OBJECT_VERSION_ID)"
+            "version uid_pattern: the row resolved an empty uid (BASE base_types master05 §Syntaxes: object_version_id = object_id, '::', creating_system_id, '::', version_tree_id)"
                 .into(),
         ));
-    };
+    }
     if pattern.is_match(uid) {
         Ok(())
     } else {
@@ -329,9 +337,11 @@ mod tests {
     fn a_representation_that_carries_nothing_fails_rather_than_passes() -> Result<(), String> {
         let bare = json!({ "_type": "ORIGINAL_VERSION" });
         assert_eq!(envelope_uid(&bare), None);
+        // An empty resolved uid matches even a permissive pattern, so it is
+        // refused before the match rather than passing on nothing.
         let pattern = regex::Regex::new("^.*$").map_err(|e| e.to_string())?;
-        let uid = eval_uid_pattern(&bare, &pattern, "<uuid>").unwrap_err();
-        assert!(uid.0.contains("carries no uid.value"), "{}", uid.0);
+        let uid = eval_uid_pattern("", &pattern, "<uuid>").unwrap_err();
+        assert!(uid.0.contains("empty uid"), "{}", uid.0);
 
         let lifecycle = eval_lifecycle_state(&bare, "openehr::532|complete|").unwrap_err();
         assert!(
@@ -379,24 +389,17 @@ mod tests {
     }
 
     #[test]
-    fn a_uid_pattern_judges_the_served_uid() -> Result<(), Box<dyn std::error::Error>> {
+    fn a_uid_pattern_judges_the_resolved_uid() -> Result<(), Box<dyn std::error::Error>> {
         let literal = expand_uid_literal("<uuid>::<system>::2")?;
         let pattern = regex::Regex::new(&format!("^{literal}$"))?;
-        let served = envelope(
-            "251",
-            "532",
-            "8849182c-82ad-4088-a07f-48ead4180515::s.example::2",
-        );
+        let resolved = "8849182c-82ad-4088-a07f-48ead4180515::s.example::2";
         assert_eq!(
-            eval_uid_pattern(&served, &pattern, "<uuid>::<system>::2"),
+            eval_uid_pattern(resolved, &pattern, "<uuid>::<system>::2"),
             Ok(())
         );
-        let wrong = envelope(
-            "251",
-            "532",
-            "8849182c-82ad-4088-a07f-48ead4180515::s.example::3",
-        );
-        assert!(eval_uid_pattern(&wrong, &pattern, "<uuid>::<system>::2").is_err());
+        let wrong = "8849182c-82ad-4088-a07f-48ead4180515::s.example::3";
+        let failure = eval_uid_pattern(wrong, &pattern, "<uuid>::<system>::2").unwrap_err();
+        assert!(failure.0.contains("::3"), "{}", failure.0);
         Ok(())
     }
 

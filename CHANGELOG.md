@@ -31,6 +31,13 @@ version on.
   posture-contradiction payload is boxed with the error-size posture recorded
   on the enum, and the template-linkage test asserts the structural read
   (#218).
+- **`uid_pattern` judges the version identity the row resolved (#263).** The
+  assertion compared its pattern against a version envelope read that is
+  addressed by the same uid, so a conformant server echoed the value back and
+  the comparison could never bite; it now judges the `ETag` or commit-body uid
+  directly, which also makes the fact judgeable for the directory delete, the
+  two demographic party-relationship rows, and a contribution spanning two
+  containers.
 
 ### Removed
 - The `content_generation` registered-exception kind. Content cases execute
