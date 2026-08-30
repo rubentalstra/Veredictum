@@ -55,6 +55,16 @@ check "$bindings" '"n">[0-9]+</span><span class="l">operation bindings' "binding
 check "$statements" '[0-9]+ party statement\(s\)' "party statements"
 check "$outcomes" 'There are [0-9]+ of them' "outcome kinds"
 
+# The credits section counts how many case cores cite the CNF Test Schedule
+# and its Pazos-raised chapters, and how many corpus records carry provenance.
+# Each is derivable from the tree, so each is held to it.
+schedule_citers=$(grep -rlE 'platform_test_schedule' artifacts/schedule --include='*.yaml' | wc -l | tr -d ' ')
+pazos_citers=$(grep -rlE 'platform_test_schedule master(06|07|08|09)' artifacts/schedule --include='*.yaml' | wc -l | tr -d ' ')
+provenance_records=$(grep -cE '^[[:space:]]+provenance: ' artifacts/corpus/MANIFEST.yaml | tr -d ' ')
+check "$schedule_citers" '[0-9]+ of the [0-9]+ case cores here cite' "Test Schedule citers"
+check "$pazos_citers" '[0-9]+ of the [0-9]+ case cores cite' "Pazos-chapter citers"
+check "$provenance_records" 'the [0-9]+ corpus provenance records' "corpus provenance records"
+
 # The install snippets name the published crate version by hand, in several
 # copies; hold every copy to the workspace manifest so a release bump cannot
 # leave a page installing the superseded version.

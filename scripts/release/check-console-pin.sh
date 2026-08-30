@@ -20,8 +20,12 @@
 #   1. the console's exact dependency pin,
 #   2. `ENGINE_PIN` in the console's lib,
 #   3. `[package] version` of `app/veredictum`,
-#   4. and `Cargo.lock`, which must carry NO registry-sourced `veredictum` —
-#      the byte-level proof that the patch took.
+#   4. `Cargo.lock`, which must carry NO registry-sourced `veredictum` —
+#      the byte-level proof that the patch took,
+#   5. and the operator compose file's image tag (#297), which every release
+#      attaches as a downloadable asset — the image tags are the BARE version
+#      (build-image.yml publishes `0.1.1`, never `v0.1.1`), so the tag IS the
+#      one value.
 #
 # Usage: scripts/release/check-console-pin.sh [version]
 #   With no argument (the every-pull-request call) the three versions must
@@ -43,6 +47,7 @@ CONSOLE_LIB=app/veredictum-console/src/lib.rs
 ENGINE_MANIFEST=app/veredictum/Cargo.toml
 ROOT_MANIFEST=Cargo.toml
 LOCK=Cargo.lock
+COMPOSE=docker/docker-compose.yml
 
 dep_pin="$(sed -nE 's/^veredictum = \{.*version = "=([^"]+)".*$/\1/p' "$CONSOLE_MANIFEST" | head -1)"
 engine_pin="$(sed -nE 's/^pub const ENGINE_PIN: &str = "([^"]+)";$/\1/p' "$CONSOLE_LIB" | head -1)"
@@ -85,6 +90,20 @@ fi
 # against crates.io, which is the silent fallback above.
 if grep -A2 '^name = "veredictum"$' "$LOCK" | grep -q '^source = "registry'; then
   echo "::error::${LOCK} carries a registry-sourced \`veredictum\` entry, so the [patch.crates-io] redirect went unused and the console links a published engine rather than this tree's. Re-run \`cargo check\` after making the pin and ${ENGINE_MANIFEST} agree." >&2
+  exit 1
+fi
+
+# The operator compose file (#297) rides every release as an asset, and the
+# image tags are the bare version, so its tag is the same one value. A drifted
+# tag would hand operators a release page whose compose file starts a
+# different console.
+compose_tag="$(sed -nE 's|^[[:space:]]+image: ghcr\.io/rubentalstra/veredictum:([^ ]+)$|\1|p' "$COMPOSE" | head -1)"
+if [[ -z "$compose_tag" ]]; then
+  echo "::error::could not read the console image tag from ${COMPOSE} — the seam is \`image: ghcr.io/rubentalstra/veredictum:X\` and this check reads that shape" >&2
+  exit 1
+fi
+if [[ "$compose_tag" != "$engine_version" ]]; then
+  echo "::error::${COMPOSE} starts ghcr.io/rubentalstra/veredictum:v${compose_tag} while the workspace engine version is ${engine_version}. The compose file ships on the release page, so its tag moves with the cut like every other copy of the one value." >&2
   exit 1
 fi
 

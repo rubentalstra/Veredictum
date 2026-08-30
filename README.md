@@ -69,7 +69,7 @@ invocation that checks it.
 Veredictum grades openEHR servers. Point it at a running clinical data
 repository (CDR) and it tells you, with a specification citation on every
 finding, which parts of the released openEHR specifications that server
-actually implements, and what load it sustains while doing so.
+actually implements, what load it sustains, and how fast it answers.
 
 It ships as two products over one engine:
 
@@ -83,6 +83,10 @@ It ships as two products over one engine:
   the verdicts. The image is the console, never the CLI — a static binary
   needs no container.
 
+Both are pre-1.0. The 0.1.x line publishes working releases and makes no
+API-stability claim yet; every claim a release does make is checked, signed
+and reproducible, which is the stability that matters for a verdict.
+
 ## What it does
 
 The instrument is one binary plus a data tree. The data tree is a
@@ -90,23 +94,22 @@ machine-readable catalogue of 1139 test cases. Each case cites the
 specification section it enforces, and the released specification text is
 vendored in this repository, so every citation resolves against text you can
 read. The case and binding counts on this page are the line
-`veredictum validate` prints over `artifacts/`.
+`veredictum validate` prints over `artifacts/`, and a CI guard fails the
+build when a count here disagrees with the catalogue.
 
-A grading run is three commands:
+One command surface answers four different questions about a server:
 
-1. **`validate`** checks the catalogue itself before any server is involved:
-   id uniqueness, citation resolution against the vendored specs, binding
-   completeness, and coverage of the enumerated wire surface. Zero findings
-   is the only passing result.
-2. **`run`** drives the applicable cases against your server over its own
-   REST wire and records every request and response.
-3. **`verdicts`** computes the verdict from those recordings and renders the
-   report and certificate documents.
+| Question | Commands |
+|---|---|
+| **Does it conform?** | `validate` checks the catalogue itself before any server is involved; zero findings is the only passing result. `run` drives the applicable cases against the server over its own REST wire and records every request and response. `verdicts` computes the verdict from those recordings, as a pure function, and renders the report and certificate documents. |
+| **What class does it sustain?** | `perf` seeds the population-scale corpus and holds a class's offered load for the sustained window, open-loop, merging the measured record into the results. |
+| **Where does it break?** | `stress` steps load up to the maximum sustainable throughput; `stress-compare` overlays two committed stress reports; `aql-probe` explores AQL behaviour over the seeded corpus with per-statement database attribution. All three are exploration and never produce a conformance record. |
+| **How fast is it?** | `bench` runs an embedded benchmark pack against any reachable CDR from a base URL and credentials; `bench-compare` aligns committed results into one table; `bench-packs` writes the byte-deterministic description of what every pack runs. Comparative speed only, never a conformance verdict. |
 
-Three further subcommands share the same catalogue and recordings
-discipline: `perf` measures a hospital-simulation workload against the
-performance-class thresholds, `stress` finds the knee of the throughput
-curve under stepped load, and `aql-probe` explores a server's AQL behaviour.
+Three more subcommands serve the records themselves: `verify-record` checks
+a sealed bundle, `emit-schemas` writes the published JSON Schemas, and
+`perf-assets` / `conformance-assets` render the published charts from
+committed artifacts. `veredictum --help` is the authoritative list.
 
 `run` and `verdicts` take `--sign-key`, which seals the documents they emit
 with a SHA-256 digest manifest and a detached OpenPGP signature over it.
@@ -114,7 +117,116 @@ with a SHA-256 digest manifest and a detached OpenPGP signature over it.
 public key you supply, so a published record is tamper-evident to anyone who
 has the key. The bundle is ordinary files, so `gpg --verify` and `sha256sum`
 answer the same questions without this tool.
-`veredictum --help` lists everything.
+
+## Quick start
+
+Fastest first: the console with `docker compose up`, the CLI from cargo, the
+signed bare-metal binaries. Grading a server end to end needs the catalogue,
+which lives in this repository — that path closes the section.
+
+### docker compose up — the console
+
+```bash
+curl -LO https://raw.githubusercontent.com/rubentalstra/Veredictum/main/docker/docker-compose.yml
+docker compose up
+```
+
+Open <http://127.0.0.1:3210>. The image carries the console and the pinned
+engine; started beside an empty directory it comes up and says what it is
+missing, and started beside a checkout of this repository it reads the
+catalogue, the specification oracle and the party declarations from the
+mount. The console has no login, so the compose file binds it to loopback;
+exposing it further is the operator's decision, behind their own gate. From
+the next release onward the same file also sits in the release assets,
+pinned to that release's image.
+[The console chapter](https://veredictum.eu/docs/console.html) shows what it
+does today.
+
+### cargo install
+
+```bash
+cargo install veredictum
+```
+
+That puts the `veredictum` command on your `PATH`. The library target is
+published with the binary, so an integrator can consume the typed artifact
+model and the published JSON Schemas directly instead of reimplementing the
+format.
+
+### Bare-metal binaries
+
+Prebuilt binaries for `x86_64` and `aarch64` Linux are attached to each
+[release](https://github.com/rubentalstra/Veredictum/releases), each with a
+`sha256sum`, a CycloneDX dependency SBOM and a Sigstore bundle you can check:
+
+```bash
+gh attestation verify veredictum-<tag>-<target>.tar.gz \
+    -R rubentalstra/Veredictum \
+    --signer-workflow rubentalstra/Veredictum/.github/workflows/release-build.yml
+```
+
+### Benchmark a CDR in one command
+
+The benchmark needs no clone and no declaration files: the packs are
+embedded in the binary, pinned by digest, and described by `bench-packs`.
+
+```bash
+# The credential is read from the environment. It never rides argv.
+export VEREDICTUM_BENCH_PASSWORD=…
+
+veredictum bench \
+  --base-url https://cdr.example/openehr/v1 \
+  --auth basic --user <user> \
+  --pack community-vitals \
+  --repetitions 3 \
+  --with-baselines \
+  --out ./bench \
+  --label "Your CDR 1.2.3"
+```
+
+`community-vitals` reproduces the openEHR community's vital-signs harness
+and then measures the same population a second way, open-loop, so a stall
+shows up in the percentiles instead of quietly reducing the request count.
+`--with-baselines` composes the two pinned reference CDRs, EHRbase and
+FerroEHR, from image digests on your machine and drives the same pack at the
+same seed against each, so the record carries one relative index per
+reference — the only kind of number that means anything across machines. A
+declared posture profile is checked by canaries on both sides of the
+measured window, and a run whose deployment disagrees with its declaration
+is refused rather than recorded.
+[`benchmarks/SUBMITTING.md`](https://github.com/rubentalstra/Veredictum/blob/main/benchmarks/SUBMITTING.md)
+takes the record from there to the public board.
+
+### Run the full conformance catalogue
+
+A conformance run reads the catalogue and the vendored specification oracle
+as paths. The published crate carries the code; those two trees are over
+300 MB of data no registry accepts, and this repository is where they live —
+so grading a server starts from a clone:
+
+```bash
+git clone https://github.com/rubentalstra/Veredictum
+cd Veredictum
+
+# 1. Check the catalogue itself. Zero findings is the only passing result.
+veredictum validate --root artifacts --specs specs/openehr
+
+# 2. Declare your deployment: copy an example and edit the endpoints, the
+#    credential variable names and the postures your server actually serves.
+cp -r party/ehrbase party/mine
+
+# 3. Drive the catalogue against your running server.
+veredictum run --root artifacts --ixit party/mine/ixit.json --out out/ \
+    --sut-name my-cdr --sut-version 1.2.3 --statement party/mine/statement.json
+
+# 4. Compute the verdicts and render the submission documents.
+veredictum verdicts --root artifacts --statement party/mine/statement.json \
+    --results out/results.json --out out/
+```
+
+No installed binary? `cargo run -- <subcommand> …` from the clone does the
+same; the toolchain pins itself from `rust-toolchain.toml`, and the only
+extra tool is `cargo-nextest`, only if you intend to run the test suite.
 
 ## Why an independent instrument
 
@@ -146,82 +258,34 @@ The first live triage attributed 7 of 7 diagnosed defects to the runner and
 none to the server under test. An instrument that presumes itself correct is
 worth nothing to the people who rely on its verdicts.
 
-## Quick start
+## The public results registry
 
-Work from a clone. The published crate carries the code; the catalogue and
-the vendored specification oracle are over 300 MB of data no registry accepts, so
-`veredictum` reads both as paths you pass it, and this repository is where
-they live.
+Published results live in this repository as one append-only tree,
+conformance runs on [one board](https://veredictum.eu/conformance-board.html)
+and benchmark runs on [another](https://veredictum.eu/benchmarks.html). A
+submission is a pull request that adds one entry, CI validates it before
+anybody reads the numbers, and the merge is the publication. Every entry
+records who submitted it, their relationship to the system, the deployment
+with its image digests, the instrument version, the machine, and the
+artifacts it stands on by digest.
 
-```bash
-git clone https://github.com/rubentalstra/Veredictum
-cd Veredictum
+Every entry carries one of two tiers, and the tier is a property of who
+performed the run. A **reproduced** entry was produced by this repository's
+own workflow: it composed the deployment from a recipe committed under
+`registry/topologies/`, drove the catalogue against it, and attested the
+bundle. A **self-reported** entry was run and signed by its submitter; the
+signature proves who submitted the file and that the bytes have not moved,
+and it never proves the run happened as described. The tier is the
+discriminant of the entry's provenance block, so it cannot be claimed
+without the evidence its variant requires.
 
-# 1. Check the catalogue itself. Zero findings is the only passing result.
-cargo run -- validate --root artifacts --specs specs/openehr
-
-# 2. Declare your deployment: copy an example and edit the endpoints, the
-#    credential variable names and the postures your server actually serves.
-cp -r party/ehrbase party/mine
-
-# 3. Drive the catalogue against your running server.
-cargo run -- run --root artifacts --ixit party/mine/ixit.json --out out/ \
-    --sut-name my-cdr --sut-version 1.2.3 --statement party/mine/statement.json
-
-# 4. Compute the verdicts and render the submission documents.
-cargo run -- verdicts --root artifacts --statement party/mine/statement.json \
-    --results out/results.json --out out/
-```
-
-The toolchain pins itself from `rust-toolchain.toml`. The only extra tool is
-`cargo-nextest`, and only if you intend to run the test suite.
-
-### Without a Rust toolchain
-
-Prebuilt binaries for `x86_64` and `aarch64` Linux are attached to each
-[release](https://github.com/rubentalstra/Veredictum/releases), each with a
-`sha256sum`, a CycloneDX dependency SBOM and a Sigstore bundle:
-
-```bash
-gh attestation verify veredictum-<tag>-<target>.tar.gz \
-    -R rubentalstra/Veredictum \
-    --signer-workflow rubentalstra/Veredictum/.github/workflows/release-build.yml
-```
-
-### The web console
-
-The container image is the web console: a browser frontend over the same
-instrument, served by its own binary. Start it against a clone and it serves
-on port 3000:
-
-```bash
-docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD:/work" \
-    ghcr.io/rubentalstra/veredictum:<tag>
-```
-
-The catalogue and the specification oracle are deliberately not baked into
-the image: the instrument reads every root as a path, and a party may
-legitimately point at their own. The console has no login, so the publish
-flag binds it to loopback; exposing it further is the operator's decision,
-behind their own gate. One caveat while the console's first release is
-pending: every image tag published so far predates it and still carries the
-CLI as the payload — the console serves from its first release tag onward,
-and [the console chapter](https://veredictum.eu/docs/console.html) shows
-what it does today.
-
-### With cargo
-
-Installing from crates.io puts the command on your `PATH`, which is the path
-to take if you already have a catalogue checkout to point it at:
-
-```bash
-cargo install veredictum
-veredictum validate --root <catalogue> --specs <spec-tree>
-```
-
-The library target is published with the binary, so an integrator can
-consume the typed artifact model and the published JSON Schemas directly
-instead of reimplementing the format.
+**A test report is not a certificate.** An entry says what happened when a
+named version of a named system was driven by a named version of this
+instrument on a named machine. Certification is the openEHR Foundation's to
+grant, and the registry is deliberately shaped to hand over: the rules
+([`registry/RULES.md`](https://github.com/rubentalstra/Veredictum/blob/main/registry/RULES.md), versioned, changed prospectively)
+are public, the entries carry their own evidence, and no step of the
+pipeline is proprietary.
 
 ## What is in the box
 
@@ -232,6 +296,7 @@ instead of reimplementing the format.
 | **The vocabularies** | `artifacts/vocab/` — the capability matrix behind the CORE, STANDARD and OPTIONS profiles, the wire surface the coverage gate enumerates, the outcome and selector grammars, and the journey catalogue the measured workload decomposes through |
 | **The corpora** | `artifacts/corpus/` — payload fixtures with their adjudicated verdicts, plus breadth packs vendored verbatim from upstream clinical-model libraries. Every invalid shape is kept as its own negative case, so a lenient server that accepts it fails |
 | **The ambiguity register** | `artifacts/registers/ambiguities.yaml` — every place the specification is silent or contradicts itself, each with a typed disposition and, where we reported it, the upstream issue |
+| **The results registry** | `registry/` and `benchmarks/` — the versioned submission rules, the deployment topologies the reproduction lane composes, and the committed entries the public boards render from |
 | **The published schemas** | `schemas/` — JSON Schema for every artifact family, emitted by the instrument and drift-tested, so an integrator can author against the format |
 | **The verification pack** | `verification-pack/` — a recorded transcript with adjudicated verdicts. A runner claiming to implement this catalogue replays it and must reproduce every verdict, so no harness, this one included, is trusted on its word |
 | **The oracle** | `specs/openehr/` — the released specification text, vendored verbatim, plus the released XSD, JSON Schema and OpenAPI bundles a citation resolves against |
@@ -373,8 +438,8 @@ below says what that work contributed to this catalogue.
   files the CNF component vendored name Wladislaw Wagner (Vitasystems GmbH),
   Pablo Pazos and Jake Smolka (Hannover Medical School) in their copyright
   headers, and the team maintains that set as its
-  [integration tests](https://github.com/ehrbase/integration-tests). 135 of
-  the 453 corpus provenance records here name that set as the source of the
+  [integration tests](https://github.com/ehrbase/integration-tests). 154 of
+  the 459 corpus provenance records here name that set as the source of the
   entry's bytes or of its template skeleton, each one re-adjudicated against
   the released specifications.
 - **The openEHR Foundation:** the
