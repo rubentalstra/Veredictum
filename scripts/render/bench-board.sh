@@ -414,9 +414,9 @@ render_body() {
     "      <div class=\"prose\">\n" +
     "        <p><b>Why a ratio and not milliseconds.</b> A latency in milliseconds describes a\n" +
     "          system and the machine it ran on at the same time, so two numbers taken on\n" +
-    "          different hardware cannot be compared. Every submission therefore measures the\n" +
-    "          reference CDRs on its own machine, in the same session, with the same pack at the\n" +
-    "          same seed. Dividing one median by the other cancels the machine out.</p>\n" +
+    "          different hardware cannot be compared. Dividing the submission&#39;s median by the\n" +
+    "          reference&#39;s, both measured in one session on one machine, cancels the machine\n" +
+    "          out.</p>\n" +
     "        <p><b>Why two references and not one.</b> A single reference makes the board a\n" +
     "          verdict about that one product. Two independent ones, measured under identical\n" +
     "          container ceilings in the same session, show whether a row is fast in general or\n" +
@@ -427,9 +427,8 @@ render_body() {
     "          that machine beside them. Read them as the scale of the work, never as a claim\n" +
     "          about what your deployment would do.</p>\n" +
     "        <p><b>What the references are.</b> Each submission composes " + ($reference_names | @html) + "\n" +
-    "          from image digests, under identical container ceilings. They are not a standard\n" +
-    "          of correctness. They are a ruler that happens to be the same length on every\n" +
-    "          machine.</p>\n" +
+    "          from image digests, under identical container ceilings. They are a ruler of the\n" +
+    "          same length on every machine, and they set no standard of correctness.</p>\n" +
     "        <p><b>Failed arrivals.</b> Every row states how many measured arrivals never\n" +
     "          produced an answer. A percentile computed over a run that was mostly failing\n" +
     "          describes the failures, so read the share before the milliseconds. The submission\n" +

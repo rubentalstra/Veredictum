@@ -479,8 +479,7 @@ $body
       <span>Veredictum</span>
     </a>
     <p>This page is generated from <a href="./bench-packs.json">bench-packs.json</a>, which
-      the <code>veredictum</code> binary emits from the packs it embeds. Nothing on it is
-      typed by hand, and a pack change that left it stale fails the build.</p>
+      the <code>veredictum</code> binary emits from the packs it embeds.</p>
     <div class="fine">
       <p>openEHR® is the registered trademark of the openEHR Foundation.
         Veredictum is an independent, community-driven conformance instrument:
