@@ -25,6 +25,8 @@ guards:
 requires:
   server: any
   party: cnf.demographic.person.v1         # mints ${party_id} — a REAL target, so 403 is no disguised 404
+  instances:
+    sut: { administrative: false }         # the role-boundary premise, declared (register AMB-228)
 data_sets: [cnf.demographic.person.v1]
 flow:
   - step: 1
@@ -38,4 +40,4 @@ postconditions:
       The named Party is not archived; that it stays addressable is what the
       -archive_twice sibling drives.
     verified_by: I_ADMIN_ARCHIVE.archive_parties-archive_twice
-ambiguities: [AMB-33]
+ambiguities: [AMB-33, AMB-228]

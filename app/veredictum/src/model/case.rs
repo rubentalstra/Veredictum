@@ -398,6 +398,12 @@ pub struct Requires {
     /// a deployment running the other set.
     #[serde(default)]
     pub spec_profile: Option<crate::ixit::SpecProfile>,
+    /// The administrative-authorization posture the case's premise rests on,
+    /// matched against the addressed instance's `ixit.administrative`
+    /// declaration at selection time (SM `master02-overview.adoc` §Functional
+    /// Style delegates access control, so the posture is an IXIT fact).
+    #[serde(default)]
+    pub administrative: Option<bool>,
     /// Multi-instance cases state `requires` per named instance.
     #[serde(default)]
     pub instances: Option<std::collections::BTreeMap<InstanceName, Requires>>,

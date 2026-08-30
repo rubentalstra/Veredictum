@@ -189,6 +189,10 @@ fn requires_def() -> Value {
                 "description": "The openEHR specification GENERATION SET the case's expectation rests on, matched against the addressed instance's ixit.spec_profile declaration at SELECTION time. No released operation discloses which set a deployment runs (the openEHR release strategy makes a minor release a compatible superset, so the sets differ only in accepted surface); a case needing one the party does not declare is not-applicable with that citation. A multi-instance case states a per-instance need under `instances`; this case-level form binds every addressed instance.",
                 "enum": tokens(crate::ixit::SpecProfile::ALL)
             },
+            "administrative": {
+                "description": "The administrative-authorization posture the case's premise rests on, matched against the addressed instance's ixit.administrative declaration at SELECTION time (register AMB-228). SM master02-overview.adoc §Functional Style delegates access control to the implementation, so which roles a principal holds is an IXIT declaration and nothing on the wire discloses it; a case needing a posture the party does not declare — or declares oppositely — is not-applicable with that citation. A multi-instance case states a per-instance need under `instances`; this case-level form binds every addressed instance.",
+                "type": "boolean"
+            },
             "instances": { "type": "object",
                 "propertyNames": { "pattern": IDENT_PATTERN },
                 "additionalProperties": { "$ref": "#/$defs/requires" } }
@@ -1117,7 +1121,11 @@ fn ixit_instances_def() -> Value {
                 ),
                 "spec_profile": spec_profile_def(
                     "THIS instance's openEHR specification generation set, when it differs from the party default. One running deployment implements exactly one set, so a party claiming both runs two deployments and declares each one's set on its own instance — the same law the `signing` and `terminology` blocks follow. Absent => the top-level `spec_profile` applies."
-                )
+                ),
+                "administrative": {
+                    "description": "Whether this instance's principal holds administrative authorization (register AMB-228). SM master02-overview.adoc §Functional Style delegates access control to the implementation, so the posture is an IXIT declaration; a role-boundary case states the posture it needs in requires, and an undeclared or opposite declaration records it not-applicable with that citation. Absent => undeclared, never a default.",
+                    "type": "boolean"
+                }
             }
         }
     })

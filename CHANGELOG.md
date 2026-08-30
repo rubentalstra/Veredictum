@@ -19,6 +19,14 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **A role-boundary premise is a declaration, never a presumption (#281).**
+  The IXIT instance block gains an `administrative` posture (SM delegates
+  access control, so nothing on the wire discloses a principal's roles), the
+  five role-boundary refusal cases require `sut` declared non-administrative,
+  and selection records them not-applicable with register AMB-228's citation
+  wherever the posture is undeclared or opposite. The first reproduction
+  charged exactly those five rows against a server whose posture nothing had
+  declared.
 - **`docker compose up` starts the console with no clone and no build
   (#297).** The operator compose file `docker/docker-compose.yml` pins the
   console image to the workspace version, binds loopback port 3210, and

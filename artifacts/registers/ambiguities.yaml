@@ -10151,3 +10151,43 @@ AMB-227:
   disposition: option_select
   options: [aql-nonnumeric-aggregate-refused, aql-nonnumeric-aggregate-executed]
   upstream_issue: 229
+AMB-228:
+  ambiguity: >-
+    Whether a role boundary exists between an ordinary authenticated principal
+    and administrative operations — and therefore whether a 403 refusal of the
+    ordinary principal on an administrative operation is observable at all —
+    is not fixed by any released text. The five role-boundary refusal cases
+    (the I_ADMIN_ARCHIVE/-SERVICE `-forbidden` rows and the two ADL
+    `-clinical_forbidden` rows) presume the party's `sut` principal holds no
+    administrative authorization; a deployment that legitimately runs one
+    all-powerful principal serves those operations to it, and the first
+    registry reproduction (issue #270) drove exactly that premise undeclared,
+    charging red rows against a server whose posture nothing had declared.
+  source: >-
+    SM docs/openehr_platform/master02-overview.adoc §"Functional Style" —
+    "approach to access control and authorisation" is listed among the
+    dimensions where "In real implementations, different choices will be
+    made", and "Authentication and authorisation is assumed to have been dealt
+    with before any particular call has been made by a combination of standard
+    authentication technologies (e.g. OAuth, RFC 7235) and role-based access
+    control.";
+    ITS-REST overview Requests_and_responses.md §"Authentication and
+    authorization" — the framework itself is a SHOULD, and the MUST fixes
+    only WHICH code a refusal uses ("returning `403 Forbidden`, `401
+    Unauthorized` or `407 Proxy Authentication` as applicable"), never which
+    request must be refused;
+    SM UML/classes/i_admin_archive.adoc §"Functions" — only
+    `*_does_not_exist` errors are declared. ALL CONFIRMED first-hand.
+  handling: >-
+    The premise becomes a DECLARATION. The IXIT instance block carries an
+    `administrative` posture (nothing on the wire discloses a principal's
+    roles, so it is an instance parameter in the ISO/IEC 9646 sense), the five
+    cases state `requires: instances: { sut: { administrative: false } }`, and
+    selection records the case not-applicable with this entry's citation
+    wherever the posture is undeclared or declares the principal
+    administrative. The rows keep gating their capability verdicts only —
+    the routes are extension surface (AMB-33, AMB-41) and the 403 mapping is
+    the universal outcome table — so no ITS-REST wire-conformance claim ever
+    rested on them. Nothing is deleted: a party that declares the split runs
+    the boundary exactly as before.
+  disposition: statement_declared

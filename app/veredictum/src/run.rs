@@ -586,6 +586,53 @@ fn unsatisfied_spec_profile(case: &CaseCore, ixit: &Ixit) -> Option<String> {
     None
 }
 
+/// Why THIS party's declared administrative posture does not satisfy the
+/// case's `requires` — the selection guard for every role-boundary premise.
+///
+/// SM `master02-overview.adoc` §Functional Style delegates the "approach to
+/// access control and authorisation" to the implementation, so which roles a
+/// principal holds is an IXIT declaration and nothing on the wire discloses
+/// it. A case whose premise is a role boundary (an ordinary principal
+/// refused on an administrative operation) can only be driven where the
+/// party declares that boundary exists; an undeclared or opposite
+/// declaration costs COVERAGE, never correctness (register AMB-228).
+fn unsatisfied_administrative(case: &CaseCore, ixit: &Ixit) -> Option<String> {
+    let per_instance = case.requires.instances.as_ref();
+    for name in addressed_instances(case) {
+        // An undeclared instance is the `undeclared_instances` guard's
+        // business; skip it here so one case never reports two citations.
+        let Some(instance) = ixit.instance(&name) else {
+            continue;
+        };
+        let required = per_instance
+            .and_then(|map| map.get(&name))
+            .and_then(|requires| requires.administrative)
+            .or(case.requires.administrative);
+        let Some(required) = required else {
+            continue;
+        };
+        match instance.administrative {
+            None => {
+                return Some(format!(
+                    "instance {name}: the ixit declares no `administrative` posture — the \
+                     case's premise is a role boundary, and SM master02-overview.adoc \
+                     §Functional Style delegates access control to the implementation, so \
+                     nothing on the wire discloses which roles a principal holds"
+                ));
+            }
+            Some(declared) if declared != required => {
+                return Some(format!(
+                    "instance {name}: the ixit declares `administrative: {declared}` while \
+                     the case's premise needs `{required}` — the role boundary the case \
+                     drives does not exist on this deployment as declared"
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    None
+}
+
 /// The reserved catalogue pseudo-interface anchoring the SMART Platform
 /// operations the SM models no interface for (pinned in
 /// `validate::NON_SM_REST_OPERATIONS`; register AMB-161 adjudicates the
@@ -805,6 +852,15 @@ fn selection_exception(
     // declaration: no released operation discloses which one a deployment
     // runs, and one running server implements exactly one.
     if let Some(citation) = unsatisfied_spec_profile(case, ixit) {
+        return Ok(Some(Exception::Guarded(format!(
+            "{citation}; ISO/IEC 9646 test selection"
+        ))));
+    }
+    // A role-boundary premise is the same class again: SM delegates access
+    // control, so whether a principal is administrative is a declaration,
+    // and an undeclared or opposite posture is coverage lost, never a red
+    // row against a deployment that legitimately runs one principal.
+    if let Some(citation) = unsatisfied_administrative(case, ixit) {
         return Ok(Some(Exception::Guarded(format!(
             "{citation}; ISO/IEC 9646 test selection"
         ))));
@@ -1868,6 +1924,67 @@ mod tests {
         assert!(
             citation.contains("declares no `spec_profile`"),
             "{citation}"
+        );
+    }
+
+    /// The administrative posture is the same class of DECLARED deployment
+    /// fact (register AMB-228): an undeclared posture and an opposite one are
+    /// each a selection outcome with a citation — never a red row against a
+    /// deployment that legitimately runs one all-powerful principal.
+    #[test]
+    fn administrative_requirements_are_selected_against_the_declaration() {
+        let case = |requires: serde_json::Value| -> CaseCore {
+            serde_json::from_value(serde_json::json!({
+                "id": "X-role", "kind": "functional", "component": "ADMIN",
+                "sm_operation": "I_ADMIN_ARCHIVE.archive_ehrs",
+                "test_purpose": "t", "description": "d", "spec_refs": [],
+                "requires": requires,
+                "flow": [{ "step": 1, "call": "archive_ehrs", "expect": "forbidden" }]
+            }))
+            .unwrap()
+        };
+        let ixit = |sut: serde_json::Value| -> Ixit {
+            serde_json::from_value(serde_json::json!({ "instances": { "sut": sut } })).unwrap()
+        };
+        let non_admin = ixit(serde_json::json!({
+            "base_url": "http://x", "auth": { "mode": "none" }, "administrative": false
+        }));
+        let admin = ixit(serde_json::json!({
+            "base_url": "http://x", "auth": { "mode": "none" }, "administrative": true
+        }));
+        let undeclared = ixit(serde_json::json!({
+            "base_url": "http://x", "auth": { "mode": "none" }
+        }));
+        let needs_non_admin = serde_json::json!({
+            "instances": { "sut": { "administrative": false } }
+        });
+
+        // A case with no role premise is untouched, whatever the declaration.
+        assert!(unsatisfied_administrative(&case(serde_json::json!({})), &admin).is_none());
+        // The declared split satisfies the premise, so the case runs.
+        assert!(unsatisfied_administrative(&case(needs_non_admin.clone()), &non_admin).is_none());
+        // An undeclared posture is a selection outcome with the citation.
+        let citation = unsatisfied_administrative(&case(needs_non_admin.clone()), &undeclared)
+            .expect("undeclared posture is a selection outcome");
+        assert!(
+            citation.contains("declares no `administrative`") && citation.contains("sut"),
+            "{citation}"
+        );
+        // An administrative principal cannot drive the boundary: the premise
+        // is absent, and the citation names both postures.
+        let citation = unsatisfied_administrative(&case(needs_non_admin), &admin)
+            .expect("an opposite posture is a selection outcome");
+        assert!(
+            citation.contains("administrative: true") && citation.contains("`false`"),
+            "{citation}"
+        );
+        // The case-level form binds the addressed instance the same way.
+        assert!(
+            unsatisfied_administrative(
+                &case(serde_json::json!({ "administrative": false })),
+                &admin
+            )
+            .is_some()
         );
     }
 

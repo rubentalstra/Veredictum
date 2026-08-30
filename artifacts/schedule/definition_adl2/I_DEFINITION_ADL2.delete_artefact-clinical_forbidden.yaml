@@ -35,8 +35,10 @@ spec_refs:
 applies: { rm: ">=1.0.2" }
 guards:
   - "EXTENSION ROUTE — no openEHR spec governs the ADL 2 archetype/artefact routes (/definition/archetype/adl2*, /definition/artefact/adl2*); our own design/extension, declared in vocab/wire_surface.yaml served_extensions and adjudicated by register AMB-37. The row gates the Adl2ArchetypeProvisioning CAPABILITY verdict only, never ITS-REST wire conformance"
-  - "addresses the ixit `sut` instance — the ordinary authenticated principal, which carries no ADMIN role; a party whose default principal IS an administrator cannot drive this boundary and records the case not-applicable with that citation (ISO/IEC 9646 test selection)"
-requires: { server: any }
+requires:
+  server: any
+  instances:
+    sut: { administrative: false }         # the role-boundary premise, declared (register AMB-228)
 flow:
   # Addressed at an id the store does not hold: the refusal is a role decision
   # taken before the store is consulted, so a server that answered not_found
@@ -49,4 +51,4 @@ flow:
   - step: 2
     call: list_artefacts
     expect: ok
-ambiguities: [AMB-37]
+ambiguities: [AMB-37, AMB-228]

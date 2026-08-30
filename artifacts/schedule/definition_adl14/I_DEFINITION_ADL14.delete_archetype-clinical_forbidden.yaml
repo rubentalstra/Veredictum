@@ -35,8 +35,10 @@ spec_refs:
 applies: { rm: ">=1.0.2" }
 guards:
   - "EXTENSION ROUTE — no openEHR spec governs the /definition/archetype/adl1.4* routes; our own design/extension, declared in vocab/wire_surface.yaml served_extensions (family adl14-archetype) and adjudicated by register AMB-41. The row gates the Adl14ArchetypeProvisioning CAPABILITY verdict only, never ITS-REST wire conformance"
-  - "addresses the ixit `sut` instance — the ordinary authenticated principal, which carries no ADMIN role; a party whose default principal IS an administrator cannot drive this boundary and records the case not-applicable with that citation (ISO/IEC 9646 test selection)"
-requires: { server: any }
+requires:
+  server: any
+  instances:
+    sut: { administrative: false }         # the role-boundary premise, declared (register AMB-228)
 data_sets: [cnf.archetype.adl14.medication]
 flow:
   # Addressed at an id the store does not hold: the refusal is a role decision
@@ -51,4 +53,4 @@ flow:
     call: upload_archetype
     with: { archetype_adl14: "${ds:cnf.archetype.adl14.medication}" }
     expect: created
-ambiguities: [AMB-41]
+ambiguities: [AMB-41, AMB-228]
