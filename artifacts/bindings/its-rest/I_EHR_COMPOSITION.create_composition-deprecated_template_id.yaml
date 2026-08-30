@@ -49,4 +49,7 @@ captures:
   version_uid:
     from: header ETag
     strip: weak-quotes
+  versioned_object_uid:
+    from: capture version_uid
+    transform: root-uid
 server_assigned: [uid, context/_uid, "composer/external_ref", territory/terminology_id]

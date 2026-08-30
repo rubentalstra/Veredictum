@@ -41,6 +41,8 @@ flow:
     variant: deprecated_template_id      # sends openEHR-TEMPLATE_ID instead of openehr-template-id
     with: { ehr_id: "${ehr_id}", composition: "${ds:cnf.flat.vitals.minimal_ctx}" }
     expect: created                      # §Deprecated headers: "remain available for backward compatibility"
-    capture: { version_uid: created.version_uid }
+    capture:
+      version_uid: created.version_uid
+      versioned_object_uid: created.versioned_object_uid
 postconditions:
   - { assert: version, of: "${version_uid}", change_type: CREATE }

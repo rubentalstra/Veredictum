@@ -209,6 +209,15 @@ jobs:
       - name: Comment style — seeded-violation proof
         run: bash scripts/checks/comment-style.sh --self-test
 
+      # The TODO(#NNNN) rule outside the Rust tree (#264): YAML, shell and
+      # TOML comments carry the same form, over every hand-written file —
+      # a bare `# TODO:` sat in an operation binding with nothing to catch it.
+      - name: TODOs name their issue outside .rs too
+        run: bash scripts/checks/todo-issue-refs.sh
+
+      - name: TODOs name their issue — seeded-violation proof
+        run: bash scripts/checks/todo-issue-refs.sh --self-test
+
       # The console's engine pin is ONE value, the workspace engine version
       # (#179). The root manifest's `[patch.crates-io]` only redirects the
       # console's exact crates.io pin to `app/veredictum` while the two agree,

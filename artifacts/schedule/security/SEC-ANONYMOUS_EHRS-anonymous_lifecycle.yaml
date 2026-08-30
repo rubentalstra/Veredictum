@@ -29,20 +29,22 @@ flow:
   - step: 1
     call: I_EHR_SERVICE.create_ehr        # EHR_STATUS omitted => default anonymous PARTY_SELF subject
     expect: created
-    capture: { new_ehr_id: created.ehr_id }
+    capture: { ehr_id: created.ehr_id }
   - step: 2
     call: I_EHR_COMPOSITION.create_composition
     with:
-      ehr_id: "${new_ehr_id}"
+      ehr_id: "${ehr_id}"
       composition: "${ds:cnf.composition.minimal_event.v1}"
     expect: created
-    capture: { version_uid: created.version_uid }
+    capture:
+      version_uid: created.version_uid
+      versioned_object_uid: created.versioned_object_uid
     assert:
       - { assert: version, of: "${version_uid}", change_type: CREATE }
   - step: 3
     call: I_QUERY_SERVICE.execute_ad_hoc_query
     with:
-      q: "SELECT c/uid/value FROM EHR e[ehr_id/value='${new_ehr_id}'] CONTAINS COMPOSITION c"
+      q: "SELECT c/uid/value FROM EHR e[ehr_id/value='${ehr_id}'] CONTAINS COMPOSITION c"
       fetch: 10
     expect: ok
     assert:
