@@ -10,9 +10,11 @@
 //! - the version identity the row resolved — the `ETag` or the commit body's
 //!   uid, judged against a `uid_pattern` (BASE `base_types` master05
 //!   §Syntaxes);
-//! - the `ORIGINAL_VERSION` envelope — `commit_audit.change_type` and
-//!   `lifecycle_state` (RM common `UML/classes/version.adoc` §Attributes,
-//!   `original_version.adoc` §Attributes, `audit_details.adoc` §Attributes);
+//! - the served `VERSION` envelope — `commit_audit.change_type` and
+//!   `lifecycle_state`, the latter effected from `item` on an
+//!   `IMPORTED_VERSION` (RM common `UML/classes/version.adoc` §Attributes,
+//!   `original_version.adoc` §Attributes, `imported_version.adoc` §Functions,
+//!   `audit_details.adoc` §Attributes);
 //! - the `REVISION_HISTORY` — one `REVISION_HISTORY_ITEM` per version, which
 //!   is the only released wire surface disclosing how many versions a
 //!   container holds (RM common `UML/classes/revision_history_item.adoc`
@@ -36,7 +38,10 @@ use crate::vocab::ChangeType;
 ///
 /// `VERSION.uid` is an `OBJECT_VERSION_ID` (RM common
 /// `UML/classes/version.adoc` §Functions), served as the canonical
-/// `{ "value": … }` object id.
+/// `{ "value": … }` object id. An `IMPORTED_VERSION` carries none of its own —
+/// `uid ()` is effected with `Result = item.uid` (`imported_version.adoc`
+/// §Functions) — so this reads `None` there and a caller matching an in-hand
+/// body against a resolved uid falls through to the envelope read.
 #[must_use]
 pub fn envelope_uid(envelope: &Value) -> Option<&str> {
     envelope.get("uid")?.get("value")?.as_str()
@@ -55,10 +60,33 @@ pub fn envelope_uid(envelope: &Value) -> Option<&str> {
 /// so the uid alone cannot tell the envelope from its content.
 #[must_use]
 pub fn is_version_envelope(body: &Value) -> bool {
-    matches!(
-        body.get("_type").and_then(Value::as_str),
-        Some("ORIGINAL_VERSION" | "IMPORTED_VERSION")
-    )
+    version_class(body).is_some()
+}
+
+/// The concrete `VERSION` descendant a served body names in its `_type`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VersionClass {
+    /// `ORIGINAL_VERSION`, which carries `lifecycle_state` itself (RM common
+    /// `UML/classes/original_version.adoc` §Attributes).
+    Original,
+    /// `IMPORTED_VERSION`, whose `lifecycle_state` is effected from the
+    /// wrapped `ORIGINAL_VERSION` (RM common
+    /// `UML/classes/imported_version.adoc` §Functions).
+    Imported,
+}
+
+/// The class a served body declares, or `None` when the body is no served
+/// `VERSION` at all.
+///
+/// The vocabulary is CLOSED to the two classes the released ITS-JSON binds a
+/// `_type` `const` to, and an unrecognized token names none of them rather
+/// than falling back to one.
+fn version_class(body: &Value) -> Option<VersionClass> {
+    match body.get("_type").and_then(Value::as_str)? {
+        "ORIGINAL_VERSION" => Some(VersionClass::Original),
+        "IMPORTED_VERSION" => Some(VersionClass::Imported),
+        _ => None,
+    }
 }
 
 /// The regex fragment a `<name>` token of a `uid_pattern` denotes.
@@ -155,6 +183,14 @@ pub fn change_class(code: &str) -> Option<ChangeType> {
 
 /// Judge an envelope's `commit_audit.change_type` against the asserted class.
 ///
+/// `commit_audit` is read at the top level for both served classes.
+/// `IMPORTED_VERSION` inherits it from `VERSION`, "providing imported versions
+/// with their own audit trail and Contribution, distinct from those of the
+/// imported `ORIGINAL_VERSION`" (RM common
+/// `UML/classes/imported_version.adoc` §Description), and released ITS-JSON
+/// `components/RM/Release-1.1.0/Common/IMPORTED_VERSION.json` requires it on
+/// the wrapper, so the trail judged is the import's own.
+///
 /// # Errors
 /// The envelope carries no coded `commit_audit.change_type`, the code is
 /// outside the three classes the schedule asserts, or it names another class.
@@ -200,22 +236,42 @@ pub fn coded_text_term(coded: &Value) -> Option<String> {
     Some(format!("{terminology}::{code_string}|{rubric}|"))
 }
 
+/// The `DV_CODED_TEXT` an envelope's `lifecycle_state` resolves to, following
+/// the effected function where the served class declares one.
+///
+/// An `ORIGINAL_VERSION` carries the attribute itself. An `IMPORTED_VERSION`
+/// cannot: released ITS-JSON
+/// `components/RM/Release-1.1.0/Common/IMPORTED_VERSION.json` gives it
+/// `contribution`, `commit_audit`, `signature` and `item` under
+/// `additionalProperties: false`, and RM common
+/// `UML/classes/imported_version.adoc` §Functions types `lifecycle_state ()`
+/// as effected, "Lifecycle state of the content item in wrapped
+/// `ORIGINAL_VERSION`, derived as `_item.lifecycle_state_`". A body naming
+/// neither class keeps the top-level read, which is where a server that omits
+/// `_type` puts the attribute.
+fn envelope_lifecycle_state(envelope: &Value) -> Option<&Value> {
+    match version_class(envelope) {
+        Some(VersionClass::Imported) => envelope.get("item")?.get("lifecycle_state"),
+        Some(VersionClass::Original) | None => envelope.get("lifecycle_state"),
+    }
+}
+
 /// Judge an envelope's `lifecycle_state` against the asserted coded term.
 ///
 /// `ORIGINAL_VERSION.lifecycle_state` is a `DV_CODED_TEXT` "coded by openEHR
 /// vocabulary `version lifecycle state`" (RM common
 /// `UML/classes/original_version.adoc` §Attributes), so the comparison is over
-/// the full coded term, never the rubric alone.
+/// the full coded term, never the rubric alone. An `IMPORTED_VERSION` carries
+/// no `lifecycle_state` of its own and is judged on the state of the version
+/// it wraps, which `imported_version.adoc` §Functions effects as
+/// `_item.lifecycle_state_`.
 ///
 /// # Errors
 /// The envelope carries no coded `lifecycle_state`, or it names another term.
 pub fn eval_lifecycle_state(envelope: &Value, want: &str) -> Result<(), AssertionFailure> {
-    // TODO(#322): an IMPORTED_VERSION's lifecycle_state is effected from
-    // `item.lifecycle_state`, so this top-level read charges a wrapper the
-    // released ITS-JSON forbids from carrying the property.
-    let Some(observed) = envelope.get("lifecycle_state").and_then(coded_text_term) else {
+    let Some(observed) = envelope_lifecycle_state(envelope).and_then(coded_text_term) else {
         return Err(AssertionFailure(
-            "version lifecycle_state: the served envelope carries no coded lifecycle_state (RM common original_version.adoc: a DV_CODED_TEXT from the version lifecycle state group)"
+            "version lifecycle_state: the served envelope carries no coded lifecycle_state (RM common original_version.adoc: a DV_CODED_TEXT from the version lifecycle state group; imported_version.adoc §Functions effects it from item.lifecycle_state)"
                 .into(),
         ));
     };
@@ -332,6 +388,52 @@ mod tests {
         );
         assert!(eval_lifecycle_state(&served, "openehr::532|complete|").is_err());
         assert!(eval_lifecycle_state(&served, "complete").is_err());
+    }
+
+    /// An `IMPORTED_VERSION` is judged on the lifecycle state of the version
+    /// it wraps: `lifecycle_state ()` is effected, "derived as
+    /// `_item.lifecycle_state_`" (RM common
+    /// `UML/classes/imported_version.adoc` §Functions), and the released
+    /// ITS-JSON closes the wrapper against carrying one of its own. A wrong
+    /// term still fails, so the resolution judges rather than excuses.
+    #[test]
+    fn an_imported_versions_lifecycle_state_resolves_through_its_item() {
+        let imported = json!({
+            "_type": "IMPORTED_VERSION",
+            "commit_audit": { "change_type": {
+                "value": "creation",
+                "defining_code": {
+                    "terminology_id": { "value": "openehr" },
+                    "code_string": "249"
+                }
+            } },
+            "item": envelope("250", "532", "a::s::2")
+        });
+        assert_eq!(
+            eval_lifecycle_state(&imported, "openehr::532|complete|"),
+            Ok(())
+        );
+        let wrong = eval_lifecycle_state(&imported, "openehr::523|deleted|").unwrap_err();
+        assert!(wrong.0.contains("532"), "{}", wrong.0);
+        // The wrapper's own audit trail is the one judged, never the item's.
+        assert_eq!(eval_change_type(&imported, ChangeType::Create), Ok(()));
+        // A wrapper serving no item has no lifecycle state to resolve, and
+        // that is a loud failure rather than a silent pass.
+        let itemless = json!({ "_type": "IMPORTED_VERSION" });
+        assert!(eval_lifecycle_state(&itemless, "openehr::532|complete|").is_err());
+        // A body naming no class keeps the top-level read, which is where a
+        // server that omits `_type` puts the attribute.
+        let untyped = json!({ "lifecycle_state": {
+            "value": "complete",
+            "defining_code": {
+                "terminology_id": { "value": "openehr" },
+                "code_string": "532"
+            }
+        } });
+        assert_eq!(
+            eval_lifecycle_state(&untyped, "openehr::532|complete|"),
+            Ok(())
+        );
     }
 
     /// Only the two concrete `VERSION` classes the released ITS-JSON binds a
