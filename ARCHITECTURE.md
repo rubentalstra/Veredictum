@@ -2310,6 +2310,32 @@ gates, and nothing in this pipeline promotes one into the other: the
 certificate reports the earned class with its environment (§8.14), never a
 relative index.
 
+**The neutral-host model (#331).** The credibility end state, proposed from the
+community side: the load generator on hardware no vendor controls, every CDR
+reached the same way, through its public API. The design, ahead of the funding
+that builds it:
+
+- *The instance prescription.* A published spec a vendor deployment must match
+  to be comparable: one machine class (vCPU count, memory, disk class), the
+  container ceilings the reproduction lane already pins, and one region so the
+  network leg is the same for every row. The prescription is versioned data
+  beside the packs; a record names the prescription version it ran under.
+- *The network leg is a record field.* Today every record is loopback-class
+  (`same-host`); a neutral-host run adds `same-zone` and `cross-region` values,
+  disclosed beside the environment fingerprint, because a ratio only cancels
+  the machine when both sides rode the same leg. A record naming no leg reads
+  as `same-host`, which keeps every existing record honest.
+- *The two tiers already fit.* A neutral-host conformance run is the reproduced
+  tier on different iron: the lane composes from a committed recipe, attests
+  from its workflow identity, and nothing about that changes when the runner is
+  Foundation-funded instead of GitHub-hosted. A neutral-host bench run stays a
+  bench record with its leg disclosed.
+- *What waits, and why.* The one funded piece is the load-generator instance;
+  vendor instances are the vendors' own per the prescription. Until the compute
+  conversation lands (the Foundation proposal in motion), the same-machine
+  relative index remains the design's answer to no shared hardware, and the
+  trust page below is the answer to "is it safe to run on my machine".
+
 ## 9. Certification governance — the ladder as a conformity-assessment scheme
 
 **Scheme owner: openEHR International** (the CIC that operationally runs the
