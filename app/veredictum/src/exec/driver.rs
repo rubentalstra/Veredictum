@@ -3868,6 +3868,11 @@ impl HttpDriver<'_> {
     }
 
     /// Evaluate one `version` assertion.
+    ///
+    /// `uid_pattern` judges the identity the row RESOLVED — the served `ETag`
+    /// or the uid of a commit body — so it costs no read and needs no
+    /// container. `change_type` and `lifecycle_state` live on the
+    /// `ORIGINAL_VERSION` envelope, and only they resolve a family.
     fn eval_version_assertion(
         &mut self,
         case: &CaseCore,
@@ -3875,8 +3880,8 @@ impl HttpDriver<'_> {
         facts: VersionFacts<'_>,
         vars: &VarStore,
     ) -> Result<(), AssertionOutcome> {
-        let family = self.version_family(case)?;
         if let Some(want) = facts.count {
+            let family = self.version_family(case)?;
             let call = family.revision_history_read().ok_or_else(|| {
                 AssertionOutcome::Unjudgeable(format!(
                     "version count: the released ITS-REST realizes no REVISION_HISTORY read for the {family:?} family, so the version count is unjudgeable here"
@@ -3886,17 +3891,28 @@ impl HttpDriver<'_> {
             crate::exec::versioned::eval_count(&history, want)?;
         }
         let targets = self.version_targets(&facts, vars)?;
+        let pattern = match facts.uid_pattern {
+            Some(template) => Some((self.uid_pattern_regex(template, vars)?, template.raw())),
+            None => None,
+        };
+        let envelope_facts = facts.change_type.is_some() || facts.lifecycle_state.is_some();
+        let family = if envelope_facts {
+            Some(self.version_family(case)?)
+        } else {
+            None
+        };
         for version_uid in targets {
-            let envelope = self.version_envelope(case, family, in_hand, &version_uid, vars)?;
-            if let Some(template) = facts.uid_pattern {
-                let pattern = self.uid_pattern_regex(template, vars)?;
-                crate::exec::versioned::eval_uid_pattern(&envelope, &pattern, template.raw())?;
+            if let Some((pattern, authored)) = pattern.as_ref() {
+                crate::exec::versioned::eval_uid_pattern(&version_uid, pattern, authored)?;
             }
-            if let Some(want) = facts.change_type {
-                crate::exec::versioned::eval_change_type(&envelope, want)?;
-            }
-            if let Some(want) = facts.lifecycle_state {
-                crate::exec::versioned::eval_lifecycle_state(&envelope, want)?;
+            if let Some(family) = family {
+                let envelope = self.version_envelope(case, family, in_hand, &version_uid, vars)?;
+                if let Some(want) = facts.change_type {
+                    crate::exec::versioned::eval_change_type(&envelope, want)?;
+                }
+                if let Some(want) = facts.lifecycle_state {
+                    crate::exec::versioned::eval_lifecycle_state(&envelope, want)?;
+                }
             }
         }
         Ok(())

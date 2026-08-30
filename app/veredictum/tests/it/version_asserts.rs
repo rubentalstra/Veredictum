@@ -158,12 +158,23 @@ fn drive(
     case_document: Value,
     vars: &mut VarStore,
 ) -> Result<Vec<AssertionOutcome>, Box<dyn std::error::Error>> {
+    drive_outcome(sut, bindings, case_document, vars, OutcomeKind::Created)
+}
+
+/// Drive the single step of a case against the outcome the step declares.
+fn drive_outcome(
+    sut: &FakeSut,
+    bindings: &[Value],
+    case_document: Value,
+    vars: &mut VarStore,
+    expected: OutcomeKind,
+) -> Result<Vec<AssertionOutcome>, Box<dyn std::error::Error>> {
     let set = artifact_set(bindings);
     let topology = ixit(&sut.base_url());
     let core = case(case_document);
     let step = core.flow.first().ok_or("the case declares no flow step")?;
     let mut driver = HttpDriver::new(&set, &topology, None)?;
-    let observed = driver.perform(&core, step, OutcomeKind::Created, 0, vars)?;
+    let observed = driver.perform(&core, step, expected, 0, vars)?;
     Ok(observed.assertion_failures)
 }
 
@@ -876,5 +887,290 @@ fn a_case_without_a_family_anchor_reads_it_off_its_committed_members() -> Fallib
         "{reason}"
     );
     assert!(reason.contains("WIRE-contribution_version"), "{reason}");
+    Ok(())
+}
+
+/// The version identity a success answer carries, as the fake SUT serves it:
+/// a weak entity tag over the named version tree ordinal.
+fn weak_etag(tree: u32) -> String {
+    format!("W/\"{}\"", version_uid(tree))
+}
+
+/// The `ETag` capture every extension route below reads its version identity
+/// through (ITS-REST overview `Requests_and_responses.md` §`ETag` and
+/// `Last-Modified`: the tag "acts as a unique identifier for a specific
+/// version of a resource").
+fn etag_capture() -> Value {
+    json!({ "version_uid": { "from": "header ETag", "strip": "weak-quotes" } })
+}
+
+/// The directory delete, whose family the released ITS-REST gives no
+/// `ORIGINAL_VERSION` read for.
+fn delete_directory_binding() -> Value {
+    json!({
+        "sm_operation": "I_EHR_DIRECTORY.delete_directory",
+        "its": "its-rest",
+        "request": { "method": "DELETE", "path": "/ehr/{ehr_id}/directory" },
+        "outcomes": { "deleted": { "status": 204 } },
+        "captures": etag_capture()
+    })
+}
+
+/// The directory delete case shape: capture the deleted version's uid off the
+/// 204 and assert the tree ordinal the delete must have committed.
+fn delete_directory_case(pattern: &str) -> Value {
+    json!({
+        "id": "WIRE-directory_uid_pattern", "kind": "functional",
+        "component": "EHR_DIRECTORY",
+        "sm_operation": "I_EHR_DIRECTORY.delete_directory",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [{
+            "step": 1, "call": "delete_directory", "expect": "deleted",
+            "with": { "ehr_id": "${ehr_id}" },
+            "capture": { "deleted_uid": "deleted.version_uid" },
+            "assert": [{
+                "assert": "version", "of": "${deleted_uid}", "uid_pattern": pattern
+            }]
+        }]
+    })
+}
+
+/// A family the released ITS-REST realizes no `ORIGINAL_VERSION` read for
+/// still JUDGES its `uid_pattern`: the value under test is the uid the row
+/// resolved, which the delete's own `ETag` carried.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_family_without_an_envelope_read_still_judges_its_uid_pattern() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("DELETE"))
+            .and(path(format!("/ehr/{EHR_ID}/directory")))
+            .respond_with(ResponseTemplate::new(204).insert_header("ETag", weak_etag(2).as_str())),
+    );
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive_outcome(
+        &sut,
+        &[delete_directory_binding()],
+        delete_directory_case("${versioned_object_uid}::<system>::2"),
+        &mut vars,
+        OutcomeKind::Deleted,
+    )?;
+    assert!(outcomes.is_empty(), "{outcomes:?}");
+    assert_eq!(
+        sut.requests().len(),
+        1,
+        "the uid_pattern judged the resolved uid, so it cost no second exchange"
+    );
+    Ok(())
+}
+
+/// The same shape with the WRONG ordinal served: an `ETag` naming the
+/// addressed version rather than the one the delete committed is a finding
+/// against the server.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_uid_pattern_over_a_wrong_resolved_uid_fails_the_row() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("DELETE"))
+            .and(path(format!("/ehr/{EHR_ID}/directory")))
+            // …::1 is the ADDRESSED version, not the one the delete committed.
+            .respond_with(ResponseTemplate::new(204).insert_header("ETag", weak_etag(1).as_str())),
+    );
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive_outcome(
+        &sut,
+        &[delete_directory_binding()],
+        delete_directory_case("${versioned_object_uid}::<system>::2"),
+        &mut vars,
+        OutcomeKind::Deleted,
+    )?;
+    let first = outcomes.first().ok_or("a wrong version ordinal passed")?;
+    assert!(
+        matches!(first, AssertionOutcome::Mismatch(_)),
+        "a resolved uid that misses the pattern is a finding against the SUT: {first:?}"
+    );
+    let reason = first.reason();
+    assert!(
+        reason.contains("uid_pattern") && reason.contains(&version_uid(1)),
+        "the finding names neither side: {reason}"
+    );
+    Ok(())
+}
+
+/// Both party-relationship rows judge their `uid_pattern`: the created
+/// version is the container's first, the updated one its second, and each is
+/// read off the identity the row itself resolved.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_party_relationship_rows_judge_their_version_ordinal() -> Fallible {
+    let bindings = [
+        json!({
+            "sm_operation": "I_DEMOGRAPHIC_SERVICE.create_party_relationship",
+            "its": "its-rest",
+            "request": { "method": "POST", "path": "/demographic/party_relationship" },
+            "outcomes": { "created": { "status": 201 } },
+            "captures": etag_capture()
+        }),
+        json!({
+            "sm_operation": "I_PARTY_RELATIONSHIP.update_party_relationship",
+            "its": "its-rest",
+            "request": {
+                "method": "PUT",
+                "path": "/demographic/party_relationship/{versioned_object_uid}"
+            },
+            "outcomes": { "updated": { "status": 200 } },
+            "captures": etag_capture()
+        }),
+    ];
+
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/demographic/party_relationship"))
+            .respond_with(ResponseTemplate::new(201).insert_header("ETag", weak_etag(1).as_str())),
+    );
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive(
+        &sut,
+        &bindings,
+        json!({
+            "id": "WIRE-party_relationship_create", "kind": "functional",
+            "component": "DEMOGRAPHIC",
+            "sm_operation": "I_DEMOGRAPHIC_SERVICE.create_party_relationship",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{
+                "step": 1, "call": "create_party_relationship", "expect": "created",
+                "capture": { "version_uid": "created.version_uid" },
+                "assert": [{
+                    "assert": "version", "of": "${version_uid}",
+                    "uid_pattern": "${versioned_object_uid}::<system>::1"
+                }]
+            }]
+        }),
+        &mut vars,
+    )?;
+    assert!(outcomes.is_empty(), "{outcomes:?}");
+
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("PUT"))
+            .and(path(format!("/demographic/party_relationship/{OBJECT_ID}")))
+            .respond_with(ResponseTemplate::new(200).insert_header("ETag", weak_etag(2).as_str())),
+    );
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive_outcome(
+        &sut,
+        &bindings,
+        json!({
+            "id": "WIRE-party_relationship_update", "kind": "functional",
+            "component": "DEMOGRAPHIC",
+            "sm_operation": "I_PARTY_RELATIONSHIP.update_party_relationship",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{
+                "step": 1, "call": "update_party_relationship", "expect": "updated",
+                "with": { "versioned_object_uid": "${versioned_object_uid}" },
+                "capture": { "v2_uid": "updated.version_uid" },
+                "assert": [{
+                    "assert": "version", "of": "${v2_uid}",
+                    "uid_pattern": "${versioned_object_uid}::<system>::2"
+                }]
+            }]
+        }),
+        &mut vars,
+        OutcomeKind::Updated,
+    )?;
+    assert!(outcomes.is_empty(), "{outcomes:?}");
+    Ok(())
+}
+
+/// A contribution committing members of TWO versioned families names no
+/// single container, so an envelope fact stays unaddressable there while the
+/// `uid_pattern` over the row's own resolved uid is judged, because it needs
+/// no container at all.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_multi_container_contribution_judges_its_uid_pattern() -> Fallible {
+    let document = |facts: Value| {
+        json!({
+            "id": "WIRE-multi_container", "kind": "functional",
+            "component": "EHR_CONTRIBUTION",
+            "sm_operation": "I_EHR_CONTRIBUTION.create_contribution",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "flow": [{
+                "step": 1, "call": "create_contribution", "expect": "created",
+                "with": {
+                    "ehr_id": "${ehr_id}",
+                    "versions": [
+                        { "change_type": "creation", "data": { "_type": "COMPOSITION" } },
+                        { "change_type": "creation", "data": { "_type": "FOLDER" } }
+                    ]
+                },
+                "capture": { "version_uid": "created.version_uid" },
+                "assert": facts
+            }]
+        })
+    };
+    let mount = |sut: &FakeSut| {
+        sut.mount(
+            Mock::given(method("POST"))
+                .and(path(format!("/ehr/{EHR_ID}/contribution")))
+                .respond_with(
+                    ResponseTemplate::new(201).insert_header("ETag", weak_etag(1).as_str()),
+                ),
+        );
+    };
+    let binding = json!({
+        "sm_operation": "I_EHR_CONTRIBUTION.create_contribution",
+        "its": "its-rest",
+        "request": {
+            "method": "POST", "path": "/ehr/{ehr_id}/contribution", "body": "contribution"
+        },
+        "outcomes": { "created": { "status": 201 } },
+        "captures": etag_capture()
+    });
+
+    let sut = FakeSut::start();
+    mount(&sut);
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive(
+        &sut,
+        std::slice::from_ref(&binding),
+        document(json!([{
+            "assert": "version", "of": "${version_uid}",
+            "uid_pattern": "${versioned_object_uid}::<system>::1"
+        }])),
+        &mut vars,
+    )?;
+    assert!(outcomes.is_empty(), "{outcomes:?}");
+
+    // The envelope facts still need one container, and two members name none.
+    let sut = FakeSut::start();
+    mount(&sut);
+    let mut vars = provisioned_vars()?;
+    let outcomes = drive(
+        &sut,
+        &[binding],
+        document(json!([{
+            "assert": "version", "of": "${version_uid}", "change_type": "CREATE"
+        }])),
+        &mut vars,
+    )?;
+    assert!(
+        only(&outcomes)?.contains("no single versioned-object family"),
+        "{outcomes:?}"
+    );
     Ok(())
 }
