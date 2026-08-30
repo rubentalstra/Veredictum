@@ -23,6 +23,11 @@ version on.
   normally spaced sentence; a lost line continuation had left runs of
   mid-sentence spaces in the operator-facing message (#174).
 
+### Removed
+- The `content_generation` registered-exception kind. Content cases execute
+  through the synthesized functional flow, so nothing could raise it and no
+  published record ever carried it (#248).
+
 ## [0.1.1] - 2026-08-30
 
 ### Added

@@ -33,10 +33,6 @@ pub enum Exception {
     /// Every binding of the case's operations is `unrealized` on this ITS —
     /// not-applicable with the binding's citation.
     Unrealized(String),
-    /// `kind: content` — decision-table execution needs the row-to-instance
-    /// generation seam (the registered recipes cover the committed corpus;
-    /// per-row template projection is the remaining glue).
-    ContentGeneration(String),
     /// A guard excludes the case on this SUT (citation carried).
     Guarded(String),
     /// The case is `draft`/`retired` — never verdict-bearing.
@@ -946,10 +942,9 @@ pub fn execute(
         }
         if let Some(exception) = selection_exception(set, ixit, statement, case)? {
             let citation = match &exception {
-                Exception::Unrealized(c)
-                | Exception::ContentGeneration(c)
-                | Exception::Guarded(c)
-                | Exception::Status(c) => c.clone(),
+                Exception::Unrealized(c) | Exception::Guarded(c) | Exception::Status(c) => {
+                    c.clone()
+                }
             };
             report.records.push(not_applicable_record(case, &citation));
             report.exceptions.push((case.id.clone(), exception));
