@@ -979,6 +979,15 @@ cnf.directory.invalid.root_archetype_id_mismatch:
     defect: "RM: a root FOLDER whose archetype_node_id (openEHR-EHR-FOLDER.generic.v1) contradicts its archetype_details.archetype_id (openEHR-EHR-FOLDER.other.v1) — an archetype root carries its archetype identifier AS its node id"
     spec_ref: "RM UML/classes/locatable.adoc §Attributes (archetype_node_id) + §Invariants Archetyped_valid"
   provenance: "derived 2026-08-04 from cnf.directory.root_only by adding an ARCHETYPED archetype_details whose archetype_id names a DIFFERENT archetype than the root archetype_node_id, leaving the payload well-formed and convertible with exactly ONE semantic defect — the 422-class twin beside the seam's 400-class fixtures"
+cnf.directory.invalid.root_node_id_empty:
+  source: fixtures/directory/root_node_id_empty.json
+  format: canonical-json
+  rm_versions: [">=1.0.2"]
+  validity:
+    verdict: invalid
+    defect: "RM: the FOLDER carries an empty archetype_node_id — Archetype_node_id_valid binds every LOCATABLE unconditionally"
+    spec_ref: "RM UML/classes/locatable.adoc §Invariants (Archetype_node_id_valid: not archetype_node_id.is_empty)"
+  provenance: "authored 2026-08-30 (issue #339) from cnf.directory.root_only by emptying archetype_node_id, leaving the payload well-formed and convertible with exactly ONE class-invariant defect — the directory sibling of the composition item-level empty-node-id fixture"
 cnf.directory.invalid.items_by_value:
   source: fixtures/directory/items_by_value.json
   format: canonical-json
@@ -1826,6 +1835,15 @@ cnf.ehr_status.invalid.empty-rm-version:
     defect: "RM: the ARCHETYPED block carries an empty rm_version — Rm_version_valid"
     spec_ref: "RM UML/classes/archetyped.adoc §Invariants (Rm_version_valid: not rm_version.is_empty)"
   provenance: "authored 2026-08-01 by emptying ARCHETYPED.rm_version on the otherwise-valid minimal EHR_STATUS — a defect BELOW the root, which only a whole-instance RM class-invariant pass reaches"
+cnf.ehr_status.invalid.root-archetype-id-mismatch:
+  source: fixtures/ehr/invalid/ehr_status.root_archetype_id_mismatch.json
+  format: canonical-json
+  rm_versions: [">=1.0.2"]
+  validity:
+    verdict: invalid
+    defect: "RM: the root archetype_node_id (openEHR-EHR-EHR_STATUS.generic.v1) contradicts archetype_details.archetype_id (openEHR-EHR-EHR_STATUS.other.v1) — an archetype root carries its archetype identifier AS its node id"
+    spec_ref: "RM UML/classes/locatable.adoc §Attributes (archetype_node_id) + §Invariants Archetyped_valid; RM UML/classes/ehr_status.adoc §Invariants (Is_archetype_root)"
+  provenance: "authored 2026-08-30 (issue #339) from the otherwise-valid minimal EHR_STATUS by pointing archetype_details.archetype_id at a DIFFERENT archetype than the root archetype_node_id, leaving the payload well-formed and convertible with exactly ONE semantic defect — the EHR_STATUS twin of cnf.directory.invalid.root_archetype_id_mismatch"
 # Corpus additions for the Security / Signing (SEC-BASIC + Signing) schedule
 # cases. Merged into corpus/MANIFEST.yaml by the validate harness; same entry
 # schema as MANIFEST.yaml (never edit MANIFEST.yaml directly here).

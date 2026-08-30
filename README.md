@@ -41,7 +41,7 @@
 </p>
 
 <p align="center">
-<strong>the released openEHR specifications, version-aware per case</strong> &nbsp;·&nbsp; <strong>1143 spec-cited cases</strong> &nbsp;·&nbsp; <strong>249 operation bindings</strong>
+<strong>the released openEHR specifications, version-aware per case</strong> &nbsp;·&nbsp; <strong>1145 spec-cited cases</strong> &nbsp;·&nbsp; <strong>249 operation bindings</strong>
 </p>
 
 <!--
@@ -90,7 +90,7 @@ and reproducible, which is the stability that matters for a verdict.
 ## What it does
 
 The instrument is one binary plus a data tree. The data tree is a
-machine-readable catalogue of 1143 test cases. Each case cites the
+machine-readable catalogue of 1145 test cases. Each case cites the
 specification section it enforces, and the released specification text is
 vendored in this repository, so every citation resolves against text you can
 read. The case and binding counts on this page are the line
@@ -291,7 +291,7 @@ pipeline is proprietary.
 
 | | |
 |---|---|
-| **1143 case cores** | `artifacts/schedule/` — one small isolated case per behaviour, so a red row names one defect. Grouped by chapter: EHR, composition, content, contribution, directory, query, definition, demographic, admin, messaging, security, SMART, simplified formats, system. `schedule/performance/` holds the four measured-workload journey definitions, which are their own family and are not case cores |
+| **1145 case cores** | `artifacts/schedule/` — one small isolated case per behaviour, so a red row names one defect. Grouped by chapter: EHR, composition, content, contribution, directory, query, definition, demographic, admin, messaging, security, SMART, simplified formats, system. `schedule/performance/` holds the four measured-workload journey definitions, which are their own family and are not case cores |
 | **249 operation bindings** | `artifacts/bindings/` — a case core says what an operation means, in the Service Model's own vocabulary; a binding says how it reaches the wire. A case core carries no status code, header or media type, so a new protocol adds binding files, never a new catalogue |
 | **The vocabularies** | `artifacts/vocab/` — the capability matrix behind the CORE, STANDARD and OPTIONS profiles, the wire surface the coverage gate enumerates, the outcome and selector grammars, and the journey catalogue the measured workload decomposes through |
 | **The corpora** | `artifacts/corpus/` — payload fixtures with their adjudicated verdicts, plus breadth packs vendored verbatim from upstream clinical-model libraries. Every invalid shape is kept as its own negative case, so a lenient server that accepts it fails |
@@ -421,7 +421,7 @@ below says what that work contributed to this catalogue.
   behaviours a platform product has to be tested for. The schedule's
   amendment record names T Beale, B Naess, I McNicoll, C Chevalley,
   H Frankel, S Iancu, B Lah and W Wagner across its revisions, beside
-  P Pazos. 349 of the 1143 case cores here cite one of its Test Schedule
+  P Pazos. 349 of the 1145 case cores here cite one of its Test Schedule
   chapters.
 - **Pablo Pazos (CaboLabs):** the fleshed EHR, COMPOSITION, CONTRIBUTION and
   DIRECTORY chapters of that schedule, which are its usable core. The
@@ -432,14 +432,14 @@ below says what that work contributed to this catalogue.
   [openEHR conformance verification framework](https://github.com/ppazos/openehr-conformance-verification)
   is the expanded continuation of that work, carrying a conformance testing
   specification of its own. He has argued the case for openEHR conformance
-  testing on the community forums for years. 127 of the 1143 case cores cite
+  testing on the community forums for years. 127 of the 1145 case cores cite
   the four chapters those revisions wrote.
 - **The EHRbase and vitasystems team:** the executable battery. The 223 Robot
   files the CNF component vendored name Wladislaw Wagner (Vitasystems GmbH),
   Pablo Pazos and Jake Smolka (Hannover Medical School) in their copyright
   headers, and the team maintains that set as its
   [integration tests](https://github.com/ehrbase/integration-tests). 156 of
-  the 460 corpus provenance records here name that set as the source of the
+  the 462 corpus provenance records here name that set as the source of the
   entry's bytes or of its template skeleton, each one re-adjudicated against
   the released specifications.
 - **The openEHR Foundation:** the
