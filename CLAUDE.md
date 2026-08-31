@@ -285,33 +285,29 @@ merge-queue entry, behind one required `conclusion` check
 (`.github/workflows/ci.yml`; `scripts/checks/ci-conclusion-complete.sh` refuses
 a job that runs without gating the merge).
 
-The guard tier, ungated because its inputs exist on every change:
-
-```bash
-bash scripts/checks/comment-style.sh --all        # comment form and budgets
-bash scripts/checks/todo-issue-refs.sh            # TODO(#N) outside .rs (YAML/shell/TOML)
-bash scripts/checks/changelog-structure.sh        # Keep a Changelog structure
-bash scripts/checks/hosted-instrument-language.sh # no surface calls it a demo
-bash scripts/checks/ci-conclusion-complete.sh     # no CI job runs ungated
-zizmor --min-severity=low .github/workflows/      # workflow security posture
-actionlint                                        # workflow correctness + shellcheck
-reuse lint                                        # REUSE 3.3 licensing
-```
-
-The Rust tier. **One script runs the whole battery**, and it is the battery:
+**One script runs the whole battery**, and it is the battery:
 
 ```bash
 scripts/checks/gates.sh            # the guard tier and the rust tier
-scripts/checks/gates.sh --all      # everything, including deny, MSRV, machete
+scripts/checks/gates.sh --all      # everything, the console and the slow lanes
+scripts/checks/gates.sh --guards   # the guard tier alone (no cargo)
 scripts/checks/gates.sh --console  # the console's own two targets
 scripts/checks/gates.sh --list     # what it runs, without running it
 ```
 
-That script exists because this list used to be prose in four places and nothing
+That script exists because the list used to be prose in four places and nothing
 ran it. On 2026-08-31 five changes reached CI with a rustdoc failure the local
 run had not caught, every one because whoever ran "the gates" ran the cargo
 commands they remembered. Two were the session model's own. Run the script; do
-not reconstruct the list.
+not reconstruct the list, and do not copy it here — `--list` prints it, and
+`scripts/checks/gates-cover-ci.sh` fails the build when `ci.yml` runs a command
+the script does not. The first version of the script was itself a subset: it
+ran 7 of the 22 script invocations in `ci.yml`, and two of the four failures on
+a pull request that same day were commands in the gap.
+
+A gate whose tool is missing locally prints `SKIPPED: <tool> is not installed`
+and is counted in the summary. A skip that looks like a pass is the failure
+this whole mechanism exists to prevent.
 
 Three things it encodes that are easy to get wrong on your own:
 
