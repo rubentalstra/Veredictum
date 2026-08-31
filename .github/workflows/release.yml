@@ -712,9 +712,6 @@ jobs:
     uses: ./.github/workflows/hosted-deploy.yml
     with:
       expected-version: ${{ needs.plan.outputs.version }}
-    secrets:
-      HOSTED_SSH_KEY: ${{ secrets.HOSTED_SSH_KEY }}
-      HOSTED_KNOWN_HOSTS: ${{ secrets.HOSTED_KNOWN_HOSTS }}
 
   # ── crates.io ───────────────────────────────────────────────────────────────
   # LAST on purpose, and after the release is otherwise complete. A crates.io

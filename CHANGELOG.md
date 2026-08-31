@@ -123,9 +123,11 @@ version on.
   URL to serve the expected engine version — a bare 200 is not proof, since the
   deployment being replaced answers 200 too. A scheduled watch asks every fifteen
   minutes whether the instrument is up and serving the right release, opening one
-  issue and reusing it until it recovers. No Hetzner API token exists as a
-  repository secret: the deploy talks to the host and nothing else, so a leaked
-  deploy key cannot destroy the server.
+  issue and reusing it until it recovers. The deploy key and the host key are
+  ENVIRONMENT secrets in an environment the deploy job names, so nothing else in
+  this repository can reach them, and no Hetzner API token exists at all — the
+  deploy talks to the host and nothing else, so a leaked deploy key cannot
+  destroy the server.
 - **The console sweeps its own run artifacts (#412).** A disposable filesystem
   discarded them every few hours; a box that does not restart would let them grow
   until the disk is gone. Directories older than `ARTIFACTS_KEPT` go hourly,

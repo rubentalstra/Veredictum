@@ -35,8 +35,9 @@
 #   - workflow_dispatch: a manual redeploy.
 #
 # Provisioning is #403, once: the box, the DNS, and a deploy key restricted to
-# one command. An empty secret is a hard failure here rather than a skip — the
-# job runs only on the upstream repository, so a missing key is always a
+# one command, stored in the `hosted` ENVIRONMENT rather than as repository
+# secrets. An empty secret is a hard failure here rather than a skip — the job
+# runs only on the upstream repository, so a missing key is always a
 # misconfiguration, and a green run must mean a deploy actually happened (the
 # FerroEHR#2755 ruling).
 #
@@ -56,13 +57,6 @@ on:
         required: false
         type: string
         default: ""
-    secrets:
-      HOSTED_SSH_KEY:
-        description: The deploy key for the box, restricted to one command.
-        required: true
-      HOSTED_KNOWN_HOSTS:
-        description: The box's host key, as ssh-keyscan prints it.
-        required: true
   push:
     branches: [main]
     paths:
@@ -89,6 +83,11 @@ jobs:
     if: github.repository == 'rubentalstra/Veredictum'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # The deploy key and the host key are ENVIRONMENT secrets, not repository
+    # ones, so they are reachable only from a job that names this environment —
+    # and the environment's own protection rules are what stands in front of
+    # them. A caller does not hold them and cannot pass the wrong ones.
+    environment: hosted
     permissions:
       contents: read
       # The overlay is pushed to this repository's own registry namespace.

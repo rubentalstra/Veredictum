@@ -109,6 +109,13 @@ Four layers, each answering a different question:
 
 #403, once: buy the box with `cloud-init.yaml` as its user data, point
 `console.veredictum.eu` at it, and store a deploy key restricted to one command
-as `HOSTED_SSH_KEY` with the host's key as `HOSTED_KNOWN_HOSTS`. No Hetzner API
-token is created for CI at all — the deploy talks to the host and nothing else,
-so a key that leaks cannot destroy the server.
+as `HOSTED_SSH_KEY` with the host's key as `HOSTED_KNOWN_HOSTS`.
+
+**Both are environment secrets, in an environment named `hosted`, not
+repository secrets.** The deploy job names that environment, so nothing else in
+this repository can reach the key, and the environment's own protection rules
+are what stands in front of it. It is the same posture the registry signing key
+has, for the same reason.
+
+No Hetzner API token is created for CI at all — the deploy talks to the host and
+nothing else, so a key that leaks cannot destroy the server.
