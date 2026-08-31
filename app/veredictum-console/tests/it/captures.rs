@@ -27,6 +27,7 @@ const SLUG_OF: &[(&str, &str)] = &[
     ("run/live/:run_id", "live"),
     ("run/results", "results"),
     ("run/verdicts", "verdicts"),
+    ("run/submit", "submit"),
     ("verify", "verify"),
     ("benchmarks", "benchmarks"),
 ];

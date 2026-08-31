@@ -95,6 +95,12 @@ tokio = { version = "1", features = ["rt-multi-thread", "signal"], optional = tr
 # `anyhow` stays legal in binary entry points only, and the ssr main is one;
 # library code returns typed `thiserror` errors.
 anyhow = { version = "1", optional = true }
+# The registry App's identity (#391): a GitHub App authenticates with an RS256
+# JWT signed by its own key, exchanged for a short-lived installation token
+# (https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app).
+# The engine already carries this exact version for its SMART lane, so the
+# console adds no crate the workspace had not already resolved and licensed.
+jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"], optional = true }
 
 # browser-only (behind `hydrate`)
 wasm-bindgen = { version = "0.2", optional = true }
@@ -124,6 +130,7 @@ ssr = [
     "dep:sha2",
     "dep:tokio",
     "dep:anyhow",
+    "dep:jsonwebtoken",
 ]
 
 [dev-dependencies]
@@ -152,6 +159,11 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
 # outcome. Unconditional for the reason `zip` and `reqwest` above are: the test
 # target compiles in the featureless clippy pass, where the ssr copy is absent.
 serde_json = "1"
+# The registry client's request sequence, asserted against a stub API (#391).
+# Nobody can hand a test a GitHub App, so what IS testable is that every blob,
+# tree, commit, ref and pull request carries the method, path and body the Git
+# Data API documents. The engine already carries this pin for its fake SUTs.
+wiremock = "0.6.5"
 
 [lints]
 workspace = true

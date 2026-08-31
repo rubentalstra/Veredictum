@@ -153,6 +153,45 @@ The console asks for both because it will not print a signing time it has not
 checked: after sealing, it verifies its own bundle before stating who signed
 it and when. With neither mounted the section says so and offers no button.
 
+## Submit: the run publishes itself
+
+A finished run at the hosted instrument becomes a published record by being
+committed to the public results registry. The submit step asks for the
+disclosure the submission rules make mandatory and states everything the run
+already knows.
+
+![The submission step in light mode](console/img/submit-light.png)
+![The submission step in dark mode](console/img/submit-dark.png)
+
+The instrument drove an endpoint you named, so it can say what that server
+answered and nothing about the host behind it. That is the split the form is
+built on. The run supplies the endpoint it drove, the moment it started, the
+catalogue revision its results record names, and the engine version the
+console links. You supply who is publishing, the machine the graded server
+runs on, what was switched on behind the result, and the conflict-of-interest
+sentence the rules give no "not applicable" for. An empty mandatory field is
+refused by name before anything is opened.
+
+The submission adds one entry and the five record files a re-derivation reads:
+the results, the verdicts, the recorded exchanges, the topology they were
+driven under and the claim they were judged against. Each is listed by role
+with the SHA-256 of the exact committed bytes. The entry carries no provenance
+block, because a performer does not state its own: CI recomputes the verdicts
+from the submitted transcript, refuses a mismatch, signs the record with a key
+the instrument never holds, and writes that block itself.
+
+No credential the run was driven under reaches the branch. The ixit the record
+carries names environment variables, never values, and the recorded exchanges
+withhold the credential header.
+
+The identity that opens the pull request is a GitHub App:
+`VEREDICTUM_GITHUB_APP_ID`, `VEREDICTUM_GITHUB_APP_KEY`,
+`VEREDICTUM_GITHUB_INSTALLATION_ID` and `VEREDICTUM_REGISTRY_REPO`. Its
+installation token is short-lived and revocable, which a signing key on a
+public host would not be, and it is the only identity permitted to open a
+`console` entry. With any of the four unset the step says what to configure
+and offers no button.
+
 ## Verify: checking a record without trusting us
 
 `/verify` is public. It needs no run, no server and no account: upload a

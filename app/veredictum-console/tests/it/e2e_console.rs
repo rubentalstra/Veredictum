@@ -959,6 +959,10 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
     // the per-submitter cap gives it one run in flight at a time.
     let clean_url = export_and_verify(&h).await;
 
+    // S10 rides it too: the finished run states what it can submit, and asks
+    // for the disclosure only its submitter knows (#391).
+    read_submission(&h).await;
+
     // The dark pass re-walks the finished run's surfaces: the job state
     // persists, so each page renders the same record in the other theme.
     h.enable_dark().await;
@@ -977,9 +981,51 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
     h.goto("/run/results").await;
     h.wait_xpath("//h1[contains(., 'Results')]").await;
     h.capture("results-dark").await;
+    h.goto("/run/submit").await;
+    h.wait_xpath("//h1[contains(., 'Submit to the registry')]")
+        .await;
+    h.capture("submit-dark").await;
 
     h.assert_console_clean(&[]).await;
     h.finish().await;
+}
+
+/// S10 — the submission screen states what the run knows and asks for the
+/// disclosure the rules make mandatory.
+///
+/// The journey never opens a submission: the harness holds no real GitHub App,
+/// and a screen that reached the API would be writing to a repository this test
+/// does not own. What it proves is the browser-side half — the screen renders
+/// the run's own facts and the whole disclosure form, and hydrates clean.
+async fn read_submission(h: &Harness) {
+    h.goto("/run/submit").await;
+    h.wait_xpath("//h1[contains(., 'Submit to the registry')]")
+        .await;
+    h.wait_xpath("//h3[contains(., 'What the run knows')]")
+        .await;
+    h.wait_xpath("//body[contains(., 'registry/entries/conformance/')]")
+        .await;
+    h.wait_xpath("//body[contains(., 'no provenance block')]")
+        .await;
+    // The three fields only the submitter can answer, each present as a real
+    // control rather than a sentence about one.
+    for id in [
+        "submitter-name",
+        "sut-configuration",
+        "conflict-of-interest",
+    ] {
+        h.wait_css(&format!("#{id}")).await;
+    }
+    h.wait_xpath("//button[contains(., 'Open the submission')]")
+        .await;
+    // The branch is the contract the re-derivation lane reads the run id out
+    // of, so the screen states it rather than leaving it implied.
+    let body = page_text(h).await;
+    assert!(
+        body.contains("console-run/"),
+        "the submission screen does not name the branch it will open:\n{body}"
+    );
+    h.capture("submit-light").await;
 }
 
 /// A run id this console never drove says so about the RUN, and never "no run

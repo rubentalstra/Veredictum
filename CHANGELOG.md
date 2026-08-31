@@ -19,6 +19,22 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **A finished run submits itself to the registry (#391).** The console's
+  `/run/submit` screen states what the run knows — the endpoint it drove, when
+  it started, the catalogue revision, the engine version — and collects the
+  disclosure the submission rules make mandatory, the conflict-of-interest
+  sentence included. An empty mandatory value is refused by name before
+  anything is opened. The instrument then writes the entry and the five record
+  files through its own GitHub App identity: blob, then tree, then commit, then
+  ref, so the commit GitHub signs is the one that lands, and a commit reported
+  unverified pushes no branch at all. The submission arrives on
+  `console-run/<run-id>` and carries no provenance block, because the
+  re-derivation lane writes that after it has recomputed the judgement. The App
+  identity is `VEREDICTUM_GITHUB_APP_ID`, `VEREDICTUM_GITHUB_APP_KEY`,
+  `VEREDICTUM_GITHUB_INSTALLATION_ID` and `VEREDICTUM_REGISTRY_REPO`; any of
+  them unset is a first-class state that explains what to configure and offers
+  no button. No credential the run was driven under reaches the branch, pinned
+  by a gate over a run driven with one.
 - **A recorded run can be re-judged from its own transcript: `veredictum
   replay` (#392).** The transport is now the only seam between the driver and
   the wire, so a replay answers every composed request out of the recording and

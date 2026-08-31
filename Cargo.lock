@@ -5445,6 +5445,7 @@ dependencies = [
  "icondata_lu",
  "jiff",
  "jsonschema",
+ "jsonwebtoken",
  "leptos",
  "leptos-use",
  "leptos_axum",
@@ -5461,6 +5462,7 @@ dependencies = [
  "uuid",
  "veredictum",
  "wasm-bindgen",
+ "wiremock",
  "zip",
 ]
 
