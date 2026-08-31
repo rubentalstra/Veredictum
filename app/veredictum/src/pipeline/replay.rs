@@ -38,6 +38,14 @@ pub struct ReplayRequest<'a> {
     pub statement: Option<&'a Path>,
     /// Re-judge only cases whose id contains this substring.
     pub filter: Option<&'a str>,
+    /// Re-judge only these cases, by id.
+    ///
+    /// A re-derivation answers one question — do the rows this record claims
+    /// follow from the exchanges it carries — so it drives the record's own
+    /// cases and no others. Driving the whole catalogue instead would reach a
+    /// case the run never selected, find no recording for it, and refuse a
+    /// submission for evidence it never claimed to have.
+    pub only: Option<&'a [String]>,
 }
 
 /// The re-judged run.
@@ -98,6 +106,10 @@ pub fn replay_run(
     let mut set = loaded.set;
     if let Some(needle) = request.filter {
         set.cases.retain(|(_, c)| c.id.as_str().contains(needle));
+    }
+    if let Some(ids) = request.only {
+        set.cases
+            .retain(|(_, c)| ids.iter().any(|id| id == c.id.as_str()));
     }
     let statement: Option<Statement> = match request.statement {
         None => None,

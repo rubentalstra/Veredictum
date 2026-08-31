@@ -182,7 +182,7 @@ main() {
         [ .artifacts[]
           | if .path == $verdicts_path then .sha256 = $verdicts_sha else . end
         ]
-        + [ $added[] | select(.path as $p | false | not) ]
+        + $added
       )
       | .artifacts = (.artifacts | unique_by(.path))
       | .provenance = {

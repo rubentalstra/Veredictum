@@ -632,6 +632,7 @@ fn main() -> ExitCode {
                 transcript: &transcript,
                 statement: statement.as_deref(),
                 filter: filter.as_deref(),
+                only: None,
             },
             out.as_deref(),
             against.as_deref(),
@@ -1272,6 +1273,14 @@ fn emit_documents(
 /// The exit code carries the answer: `0` when the re-judgement agrees (or
 /// when nothing was held against it), `1` when a row diverges, `2` when the
 /// replay could not run at all.
+/// Reads a committed results document.
+fn read_results(path: &Path) -> Result<veredictum::party::Results, String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    serde_json::from_str(&text)
+        .map_err(|e| format!("{} does not parse as results.json: {e}", path.display()))
+}
+
 fn replay_command(
     request: &ReplayRequest<'_>,
     out: Option<&Path>,
@@ -1285,7 +1294,33 @@ fn replay_command(
             let _flush = std::io::stdout().flush();
         }
     };
-    let outcome = match replay_run(request, &mut report_progress) {
+    // The record decides which cases are re-judged, when there is one: a
+    // re-derivation answers whether the rows a record claims follow from the
+    // exchanges it carries, and a case the run never selected has neither a
+    // row nor a recording.
+    let submitted = match against.map(read_results) {
+        None => None,
+        Some(Ok(results)) => Some(results),
+        Some(Err(reason)) => {
+            eprintln!("{reason}");
+            return ExitCode::from(2);
+        }
+    };
+    let only: Option<Vec<String>> = submitted.as_ref().map(|results| {
+        let mut ids: Vec<String> = results
+            .outcomes
+            .iter()
+            .map(|outcome| outcome.case.to_string())
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    });
+    let request = ReplayRequest {
+        only: only.as_deref(),
+        ..*request
+    };
+    let outcome = match replay_run(&request, &mut report_progress) {
         Ok(outcome) => outcome,
         Err(e) => return fail(&e),
     };
@@ -1319,24 +1354,8 @@ fn replay_command(
         outcome.counts.errored,
         outcome.counts.not_applicable
     );
-    let Some(submitted_path) = against else {
+    let (Some(submitted_path), Some(submitted)) = (against, submitted) else {
         return ExitCode::SUCCESS;
-    };
-    let submitted: veredictum::party::Results = match std::fs::read_to_string(submitted_path)
-        .map_err(|e| format!("cannot read {}: {e}", submitted_path.display()))
-        .and_then(|text| {
-            serde_json::from_str(&text).map_err(|e| {
-                format!(
-                    "{} does not parse as results.json: {e}",
-                    submitted_path.display()
-                )
-            })
-        }) {
-        Ok(results) => results,
-        Err(reason) => {
-            eprintln!("{reason}");
-            return ExitCode::from(2);
-        }
     };
     let found = divergences(&submitted, &outcome.results);
     if found.is_empty() {

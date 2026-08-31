@@ -206,6 +206,48 @@ fn prepare_submission(
     Ok((tree, record, statement, port))
 }
 
+/// A record altered after the run no longer follows from its own recording,
+/// and the gate the lane runs is what says so.
+///
+/// The comparison itself is pinned by `rederivation.rs`; what this drives is
+/// the gate a submission actually passes through, because a gate is proven by
+/// refusing a bad submission rather than by staying quiet about a good one
+/// (#408).
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn tampering_is_refused_by_the_gate(root: &Path, tree: &Path, record: &Path) -> Fallible {
+    let results = record.join("results.json");
+    let honest = std::fs::read_to_string(&results)?;
+    let altered = honest.replace("\"errored\"", "\"passed\"");
+    assert_ne!(altered, honest, "the fixture's run has a row to alter");
+    std::fs::write(&results, &altered)?;
+
+    let refused = Command::new("bash")
+        .arg(root.join("scripts/checks/registry-rederive.sh"))
+        .arg(format!(
+            "registry/entries/conformance/{SYSTEM}/{ENTRY_ID}.json"
+        ))
+        .env("REGISTRY_TREE", tree)
+        .env("VEREDICTUM_BIN", env!("CARGO_BIN_EXE_veredictum"))
+        .env("VEREDICTUM_REQUIRE_REDERIVATION", "1")
+        .output()?;
+    let said = String::from_utf8_lossy(&refused.stderr).into_owned();
+    assert!(
+        !refused.status.success(),
+        "a record claiming a pass its recording never supports must be refused:\n{}",
+        String::from_utf8_lossy(&refused.stdout)
+    );
+    assert!(
+        said.contains(FILTER),
+        "the refusal names the row that does not follow:\n{said}"
+    );
+
+    std::fs::write(&results, &honest)?;
+    Ok(())
+}
+
 /// The verdicts the instrument computes before it submits.
 ///
 /// Exit 1 is an unclean JUDGEMENT — this fixture refuses every request, so the
@@ -265,13 +307,25 @@ fn a_console_submission_is_completed_and_sealed_by_the_lane() -> Fallible {
         ))
         .env("REGISTRY_TREE", tree.path())
         .env("VEREDICTUM_BIN", env!("CARGO_BIN_EXE_veredictum"))
+        // The lane sets this, so the test drives the lane's own configuration:
+        // a run that recomputed nothing fails instead of passing quietly.
+        .env("VEREDICTUM_REQUIRE_REDERIVATION", "1")
         .output()?;
+    let said = String::from_utf8_lossy(&rederived.stdout).into_owned();
     assert!(
         rederived.status.success(),
-        "an honest submission re-derives to what it submitted:\n{}\n{}",
-        String::from_utf8_lossy(&rederived.stdout),
+        "an honest submission re-derives to what it submitted:\n{said}\n{}",
         String::from_utf8_lossy(&rederived.stderr)
     );
+    // A gate is proven by having RUN. Asserting only that it did not complain
+    // passed over a gate that skipped every submission for a whole release
+    // (#408), because a skip exits zero exactly as a clean re-derivation does.
+    assert!(
+        said.contains("re-derived 1 of 1 entry"),
+        "the gate must re-derive the submission rather than skip it:\n{said}"
+    );
+
+    tampering_is_refused_by_the_gate(&root, tree.path(), &record)?;
 
     // The completion: seal the record, write the provenance the lane observed.
     let completed = Command::new("bash")

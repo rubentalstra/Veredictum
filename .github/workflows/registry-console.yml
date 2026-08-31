@@ -181,6 +181,9 @@ jobs:
         shell: bash
         env:
           ENTRY: ${{ needs.triage.outputs.entry }}
+          # This lane asked for a re-derivation, so a run that recomputed
+          # nothing is a failure rather than a quiet pass (#408).
+          VEREDICTUM_REQUIRE_REDERIVATION: "1"
         run: bash scripts/checks/registry-rederive.sh "$ENTRY"
 
   # The signature. Its environment is protected, so the key is reachable only

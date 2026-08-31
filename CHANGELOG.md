@@ -97,6 +97,17 @@ version on.
   branch, and an entry declares the versions it was accepted under as before.
 
 ### Fixed
+- **The re-derivation gate skipped every real console submission (#408).** It
+  chose what to do by reading `.provenance.tier`, and a submission carries no
+  provenance block at all — that is the property the console tier rests on,
+  since the instrument may not state its own provenance and the lane writes the
+  block afterwards. So the gate read an empty tier, said "nothing to re-derive",
+  and exited 0, and the signing step sealed a record whose verdicts were never
+  recomputed. It now re-derives an entry that carries no provenance, reports how
+  many entries it recomputed, and fails when a caller that required a
+  re-derivation got none. Two defects it was hiding are fixed with it: the
+  replay drove the whole catalogue instead of the rows the record claims, and an
+  unclean judgement — a real result — aborted the gate.
 - **A run in flight became unfollowable (#386).** A run's id was a counter that
   restarted with the console process, and `/run/live` carried no run identity at
   all, so the page could only ask whether this process held a job right now. On

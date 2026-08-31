@@ -38,6 +38,10 @@ set -euo pipefail
 # without writing a fixture into the published registry.
 cd "${REGISTRY_TREE:-$(dirname "$0")/../..}"
 
+# How many entries this run actually recomputed, for the summary the caller
+# reads.
+rederived=0
+
 readonly ENTRIES='registry/entries'
 
 # The engine under test is built from THIS tree, never from a submission.
@@ -56,14 +60,23 @@ role_path() {
     '[.artifacts[] | select(.role == $role) | .path] | first // ""' "$1"
 }
 
+# The gate fires on a console SUBMISSION and on a completed console entry, and
+# those two look different: a submission carries no provenance block at all,
+# because the instrument is not allowed to state its own provenance and the lane
+# writes the block afterwards. Reading the tier alone therefore skipped every
+# real submission and signed it unrecomputed (#408). An entry naming any other
+# tier is skipped, with the tier said out loud.
 rederive_one() {
   local entry="$1" bin="$2"
   local tier
-  tier="$(jq -r '.provenance.tier // ""' "$entry")"
-  if [[ "$tier" != "console" ]]; then
-    echo "registry-rederive: $entry is a '$tier' entry — nothing to re-derive."
-    return 0
-  fi
+  tier="$(jq -r '.provenance.tier // "none"' "$entry")"
+  case "$tier" in
+    console|none) ;;
+    *)
+      echo "registry-rederive: $entry declares tier '$tier' — this gate re-derives console entries."
+      return 0
+      ;;
+  esac
 
   local results verdicts transcript ixit statement
   results="$(role_path "$entry" results)"
@@ -94,17 +107,32 @@ rederive_one() {
     --against "$results"
 
   echo "registry-rederive: recomputing the verdicts from the submitted outcomes"
+  # `verdicts` exits 1 when the judgement is not clean — a failed capability or
+  # a static-review finding — and that is a RESULT rather than a failure to
+  # compute: an entry about a server that fails cases is exactly what this
+  # registry publishes. Only a refusal to run at all stops the gate, and the
+  # missing-document check below is what catches a judgement that never ran.
+  local judged=0
   "$bin" verdicts \
     --statement "$statement" \
     --results "$results" \
     --root artifacts \
-    --out "$scratch/judgement" >/dev/null
+    --out "$scratch/judgement" >/dev/null || judged=$?
+  if [[ "$judged" -gt 1 ]]; then
+    echo "::error::the verdicts could not be computed from $results at all (exit $judged)" >&2
+    return 1
+  fi
+  if [[ ! -f "$scratch/judgement/verdicts.json" ]]; then
+    echo "::error::recomputing the verdicts from $results produced no verdicts.json" >&2
+    return 1
+  fi
 
   if ! diff -u "$verdicts" "$scratch/judgement/verdicts.json"; then
     echo "::error::$verdicts is not what the catalogue computes from $results" >&2
     return 1
   fi
   echo "registry-rederive: $entry re-derives to what it submitted — OK."
+  rederived=$((rederived + 1))
 }
 
 main() {
@@ -134,6 +162,15 @@ main() {
   for entry in "${entries[@]}"; do
     rederive_one "$entry" "$bin"
   done
+
+  # What the caller can check. A gate is proven by having RUN, never by having
+  # failed to complain: the lane asks for a re-derivation and must be able to
+  # tell a clean one from a skip.
+  echo "registry-rederive: re-derived ${rederived} of ${#entries[@]} entry(ies)."
+  if [[ -n "${VEREDICTUM_REQUIRE_REDERIVATION:-}" && "$rederived" -eq 0 ]]; then
+    echo "::error::nothing was re-derived, and this caller required it — a submission that reaches the signing step unrecomputed is the failure this gate exists to prevent" >&2
+    exit 1
+  fi
 }
 
 main "$@"
