@@ -23,6 +23,18 @@ console.veredictum.eu {
 		-Server
 	}
 
+	# The hydration bundle is served under unhashed names, and wasm-bindgen import
+	# symbols carry a per-build hash, so a browser holding the previous release's
+	# veredictum-console.js and fetching the new .wasm pairs two builds and fails
+	# to instantiate: "LinkError: import function ... must be callable" (#450,
+	# seen live after the v0.1.4 deploy). `no-cache` permits caching and REQUIRES
+	# revalidation (https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.4), which
+	# with the ETag Caddy already sends costs a 304 and makes that pair
+	# impossible. Content-hashed names would allow `immutable` instead; #450
+	# carries that adjudication.
+	@bundle path /pkg/*
+	header @bundle Cache-Control "no-cache"
+
 	# A conformance run streams its progress for minutes and the live screen
 	# polls once a second, so the defaults are raised for the run surfaces
 	# rather than for everything.
