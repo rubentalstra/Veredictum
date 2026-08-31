@@ -312,6 +312,50 @@ grant, and the registry is deliberately shaped to hand over: the rules
 are public, the entries carry their own evidence, and no step of the
 pipeline is proprietary.
 
+## Where the official instrument runs
+
+An instrument that grades other people's products in public states its own
+conditions in public.
+
+| | |
+|---|---|
+| Provider | Hetzner Cloud |
+| Location | Nuremberg, Germany, network zone `eu-central` |
+| Machine | CPX12: 1 vCPU, 2 GB RAM, 40 GB local disk |
+| Price | €13.90 per month, from the account's own record on 2026-08-31 |
+| Paid by | The maintainer, out of pocket. No vendor funds the instrument that grades them |
+| Concurrent runs | One |
+
+The cap comes from the machine. An engine process loads the whole catalogue, and
+it shares 2 GB with the console, the proxy and the operating system. A second
+concurrent run would be the OOM killer ending a conformance run halfway
+through, which looks exactly like a defect in the instrument. The
+number lives in one place, `VEREDICTUM_MAX_CONCURRENT_RUNS` in the box's
+environment file, beside the container's memory limit. Raising it is an
+environment edit and a redeploy, never a release, so a bigger machine changes
+what the instrument admits without changing a line of code.
+
+**The host holds no signing key, in any form, at any step.** A record produced
+there is signed only after this repository's CI has re-derived its verdicts from
+the submitted transcript, in an environment the host cannot reach. What the box
+can do is drive the catalogue, record the exchanges and open a pull request.
+[`registry/RULES.md`](https://github.com/rubentalstra/Veredictum/blob/main/registry/RULES.md)
+states what a console entry attests and what it cannot.
+
+The box is disposable. It stores nothing durable, git is where a record lives,
+and the whole posture is committed under
+[`deploy/hosted/`](https://github.com/rubentalstra/Veredictum/tree/main/deploy/hosted):
+the cloud-init that built it, the compose file, the proxy configuration. A
+rebuild from that directory produces the same machine.
+
+**One measurement caveat, stated before anyone reads a number.** The hosted
+instrument performs functional conformance runs. It does not offer the measured
+instruments: `perf`, `stress` and the comparative benchmark stay local for now.
+A latency measured from a fixed origin in Nuremberg carries the network path to
+wherever the system under test lives, and distance is not a property of the
+database being graded. Measured runs are driven by the operator, on hardware
+they describe.
+
 ## What is in the box
 
 | | |
