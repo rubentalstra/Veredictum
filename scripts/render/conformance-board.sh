@@ -290,8 +290,8 @@ render_body() {
     "        <figcaption>One run, one judgement, one entry</figcaption>\n" +
     "        <pre><code><span class=\"p\">$</span> veredictum run --root artifacts --ixit ./my-ixit.json \\\n" +
     "      --sut-name my-cdr --sut-version 1.2.3 \\\n" +
-    "      --statement party/my-cdr/statement.json --out ./run\n" +
-    "<span class=\"p\">$</span> veredictum verdicts --statement party/my-cdr/statement.json \\\n" +
+    "      --statement ./my-statement.json --out ./run\n" +
+    "<span class=\"p\">$</span> veredictum verdicts --statement ./my-statement.json \\\n" +
     "      --results ./run/results.json --root artifacts --out ./judgement</code></pre>\n" +
     "      </figure>\n" +
     "      <p class=\"after-code\">Then copy <code>results.json</code> and <code>verdicts.json</code>\n" +

@@ -47,7 +47,8 @@ const SUT_PASS: &str = "hunter3-never-submitted";
 fn identity() -> AppConfig {
     AppConfig {
         app_id: String::from("1234567"),
-        key_file: engine_gate::repo_root().join("party/smart/cnf-smart-test.key.pem"),
+        key_file: engine_gate::repo_root()
+            .join("fixtures/smart-test-issuer/cnf-smart-test.key.pem"),
         installation_id: String::from("89012345"),
         repo: String::from("rubentalstra/Veredictum"),
         api_base: String::from("https://api.github.com"),
@@ -83,7 +84,6 @@ fn state_over(out: &Path, port: u16, statement: String) -> ConsoleState {
     ConsoleState {
         root: root.clone(),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: out.to_path_buf(),
         sign_key: None,
         verify_key: None,
@@ -107,7 +107,7 @@ fn state_over(out: &Path, port: u16, statement: String) -> ConsoleState {
             ],
             probed_ok: true,
             statement_json: Some(statement),
-            statement_product: Some(String::from("EHRbase 2.34.0")),
+            statement_product: Some(String::from("Fixture CDR 0.0.0-fixture")),
             filter: Some(String::from(FILTER)),
             // The property the console tier rests on: CI re-derives the
             // judgement from the recorded exchanges, so a submission without
@@ -167,8 +167,7 @@ fn submitted() -> Result<Option<Driven>, Box<dyn std::error::Error>> {
     let out = scratch.path().join("out");
     std::fs::create_dir_all(&out)?;
     let port = engine_gate::fixture_sut()?;
-    let statement =
-        std::fs::read_to_string(engine_gate::repo_root().join("party/ehrbase/statement.json"))?;
+    let statement = std::fs::read_to_string(engine_gate::declaration_fixture())?;
     let state = state_over(&out, port, statement);
 
     let StartOutcome::Accepted(id) = veredictum_console::run_api::read::start_run_with(

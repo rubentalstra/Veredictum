@@ -23,7 +23,7 @@ and needs no key-generation step. It was produced with:
 
 ```bash
 openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
-  -out party/smart/cnf-smart-test.key.pem
+  -out fixtures/smart-test-issuer/cnf-smart-test.key.pem
 # jwks.json is the public half: kty=RSA, kid=cnf-smart-test, alg=RS256,
 # n = the modulus (base64url), e = AQAB.
 ```
@@ -34,7 +34,7 @@ openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
    SUT and points `auth.oidc` at it, with a static issuer + audience, and turns
    the SMART resource-server role on (`smart.enabled`,
    `smart.require_smart_scopes`).
-2. `party/ferroehr/ixit.json` declares the posture: the
+2. `fixtures/declaration/ixit.json` declares the posture: the
    `smart` block names this key file, the issuer, the audience and the `kid`;
    the `sut`/`admin`/`readonly` principals carry `bearer_mint` auth with
    per-instance roles + standing scope grants, and the `smart_app` instance

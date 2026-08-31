@@ -34,10 +34,10 @@ fn specs() -> PathBuf {
     repo_root().join("specs/openehr")
 }
 
-/// The committed statement of the party whose declarations the catalogue's
-/// claim-completeness gate already validates.
+/// The named ICS fixture: a filled-in declaration for a product that does not
+/// exist, which is the shape the judgement seam needs.
 fn statement_path() -> PathBuf {
-    repo_root().join("party/ehrbase/statement.json")
+    repo_root().join("fixtures/declaration/statement.json")
 }
 
 /// The committed example results document (`examples/results.example.json`).
@@ -206,7 +206,7 @@ fn judging_a_committed_campaign_renders_its_whole_submission_set() -> Fallible {
 
     assert_eq!(judgement.results.sut.name, "example-cdr");
     assert_eq!(
-        judgement.statement.product.name, "EHRbase",
+        judgement.statement.product.name, "Fixture CDR",
         "the statement travels back with the judgement"
     );
     assert!(

@@ -147,7 +147,7 @@ jobs:
           # (#55); no code lives at the root any more. The legend generator is
           # named individually (#189) because the test job runs its --check and
           # the rest of scripts/render/ has nothing to do with that job.
-          if echo "$changed" | grep -qE '^(app/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|scripts/render/bench-legend\.sh$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
+          if echo "$changed" | grep -qE '^(app/|artifacts/|schemas/|fixtures/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|scripts/render/bench-legend\.sh$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
@@ -543,19 +543,21 @@ jobs:
             echo "::error::the image does not declare eu.veredictum.image.carries-catalogue=true, which the hosted deploy requires before it will deploy anything (#420)." >&2
             exit 1
           fi
-          # `validate` takes --root and --specs and no party flag, so the run
-          # above proves nothing about /work/party. The image is exported and
-          # read instead: distroless carries no shell, so there is nothing to
-          # exec that could list a directory from inside.
+          # `validate` takes --root and --specs, so the run above proves
+          # nothing about the second citation root: a citation that resolves
+          # against an XSD, a JSON Schema or an OAS document reads a tree the
+          # run never touches. The image is exported and read instead, because
+          # distroless carries no shell and there is nothing to exec that could
+          # list a directory from inside.
           cid=$(docker create "$IMAGE")
           present=$(docker export "$cid" | tar -tf - \
-            | grep -cE '^work/(artifacts|specs/openehr|party)/$' || true)
+            | grep -cE '^work/(artifacts|specs/(openehr|its-xml-schemas|its-json-schemas|rest-oas))/$' || true)
           docker rm -f "$cid" >/dev/null
-          if [ "$present" -ne 3 ]; then
-            echo "::error::the image does not carry all three of /work/artifacts, /work/specs/openehr and /work/party (found ${present} of 3). The hosted instrument mounts nothing, so a missing tree there is an instrument with no catalogue, no oracle or no party declarations (#420)." >&2
+          if [ "$present" -ne 5 ]; then
+            echo "::error::the image does not carry all five of /work/artifacts, /work/specs/openehr, /work/specs/its-xml-schemas, /work/specs/its-json-schemas and /work/specs/rest-oas (found ${present} of 5). The hosted instrument mounts nothing, so a missing tree there is an instrument with no catalogue or no oracle to cite against (#420)." >&2
             exit 1
           fi
-          echo "the image declares it carries the catalogue, and all three trees are present"
+          echo "the image declares it carries the catalogue, and all five trees are present"
       - name: The image carries the verifying key its environment names
         env:
           IMAGE: veredictum-ci-image-build:${{ github.sha }}

@@ -15,13 +15,13 @@
 //! <root>/registers/ambiguities.yaml
 //! ```
 //!
-//! The committed PARTY statements are swept alongside, from the sibling
-//! `party/` directory of the artifact root (`<root>/../party/*/statement.json`
-//! — the repo layout is ``artifacts`/`party``). They are not
-//! schedule artifacts, but the claim-completeness gate is a relation between
-//! a claim and the catalogue, so validate cannot judge one without the other.
-//! The sweep is best-effort by design: a bare artifact tree with no sibling
-//! `party/` directory validates exactly as before.
+//! A DECLARATION is never swept from the tree. ISO/IEC 9646-7 assigns the
+//! support and supported-values columns of an ICS proforma to "the supplier
+//! of the implementation", so a declaration is submitted rather
+//! than committed here, and [`Loaded::review_declaration`] adds the one a
+//! caller supplies. With none supplied, the checks that are relations between
+//! a claim and the catalogue have no subject and report nothing; the
+//! catalogue-side gates are unaffected.
 //!
 //! Loading never fails fast: every file error becomes a finding, so one
 //! validation run reports the whole tree.
@@ -75,14 +75,14 @@ pub struct ArtifactSet {
     pub wire_surface: Option<(PathBuf, WireSurface)>,
     /// The corpus manifest's directory (source paths resolve against it).
     pub corpus_dir: Option<PathBuf>,
-    /// The committed party statements (`<root>/../party/*/statement.json`),
-    /// in path order — the ICS side of the claim-completeness gate. Empty
-    /// when no sibling `party/` directory exists.
+    /// The declarations this pass reviews, in the order they were supplied —
+    /// the ICS side of the static conformance review. Empty unless a caller
+    /// supplied one through [`Loaded::review_declaration`].
     pub parties: Vec<(PathBuf, crate::party::Statement)>,
-    /// The ixit topology committed beside each statement
-    /// (`<root>/../party/*/ixit.json`), in path order. A party that commits a
-    /// statement without one is absent here, so a check pairing the two reads
-    /// the party directory both entries share.
+    /// The ixit topology supplied beside each declaration (`ixit.json` in the
+    /// declaration's own directory). A declaration supplied without one is
+    /// absent here, so a check pairing the two reads the directory both
+    /// entries share.
     pub party_ixits: Vec<(PathBuf, crate::ixit::Ixit)>,
 }
 
@@ -93,6 +93,38 @@ pub struct Loaded {
     pub set: ArtifactSet,
     /// One error per file that did not, in discovery order.
     pub errors: Vec<LoadError>,
+}
+
+impl Loaded {
+    /// Adds one SUPPLIED declaration to the set this pass reviews: the ICS at
+    /// `statement` plus the `ixit.json` beside it, each schema-validated like
+    /// every other artifact.
+    ///
+    /// The ixit is read from the declaration's own directory because a
+    /// capability the ICS claims and the topology never declares is a relation
+    /// between the two documents, invisible from either one alone. An absent
+    /// ixit is silent: there is no second declaration to contradict.
+    ///
+    /// A file error becomes a [`Loaded::errors`] entry rather than a return,
+    /// keeping this module's never-fail-fast law.
+    ///
+    /// # Errors
+    /// Only on a schema-compilation defect in [`crate::schema`] itself.
+    pub fn review_declaration(&mut self, statement: &Path) -> Result<(), LoadError> {
+        let schemas = compiled_schemas()?;
+        let ixit_path = statement.with_file_name("ixit.json");
+        if ixit_path.is_file() {
+            match load_json_document::<crate::ixit::Ixit>(&ixit_path, schemas.ixit) {
+                Ok(ixit) => self.set.party_ixits.push((ixit_path, ixit)),
+                Err(e) => self.errors.push(e),
+            }
+        }
+        match load_json_document::<crate::party::Statement>(statement, schemas.statement) {
+            Ok(parsed) => self.set.parties.push((statement.to_owned(), parsed)),
+            Err(e) => self.errors.push(e),
+        }
+        Ok(())
+    }
 }
 
 fn yaml_files_under(dir: &Path) -> Vec<PathBuf> {
@@ -126,20 +158,6 @@ fn yaml_files_under(dir: &Path) -> Vec<PathBuf> {
             }
         }
     }
-    files.sort();
-    files
-}
-
-/// Every `<dir>/*/statement.json` under the party directory, path-sorted.
-fn statement_files_under(dir: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    let mut files: Vec<PathBuf> = entries
-        .flatten()
-        .map(|e| e.path().join("statement.json"))
-        .filter(|p| p.is_file())
-        .collect();
     files.sort();
     files
 }
@@ -293,35 +311,11 @@ pub fn load_root(root: &Path) -> Result<Loaded, LoadError> {
         register: register_schema,
         journeys: journeys_schema,
         wire_surface: wire_surface_schema,
-        statement: statement_schema,
-        ixit: ixit_schema,
+        statement: _,
+        ixit: _,
     } = schemas;
 
     let mut loaded = Loaded::default();
-
-    // The party statements live beside the artifact root, not inside it: a
-    // claim is a submission document, while `root` is the published
-    // catalogue. Swept anyway, because "a claim without cases" is a relation
-    // between the two and no gate can see it from one side alone.
-    if let Some(party_dir) = root.parent().map(|p| p.join("party")) {
-        for path in statement_files_under(&party_dir) {
-            // The ixit beside the statement is swept for the same reason: a
-            // capability the statement claims and the topology never declares
-            // is a relation between the two documents, invisible from either
-            // one alone.
-            let ixit_path = path.with_file_name("ixit.json");
-            if ixit_path.is_file() {
-                match load_json_document::<crate::ixit::Ixit>(&ixit_path, ixit_schema) {
-                    Ok(ixit) => loaded.set.party_ixits.push((ixit_path, ixit)),
-                    Err(e) => loaded.errors.push(e),
-                }
-            }
-            match load_json_document::<crate::party::Statement>(&path, statement_schema) {
-                Ok(statement) => loaded.set.parties.push((path, statement)),
-                Err(e) => loaded.errors.push(e),
-            }
-        }
-    }
 
     let performance_dir = root.join("schedule/performance");
     for path in yaml_files_under(&root.join("schedule")) {
@@ -483,10 +477,13 @@ mod tests {
         )?;
         // A singleton vocabulary file outside its schema.
         put(&root, "vocab/selectors.yaml", "body_selectors: 7\n")?;
-        // A statement that is not JSON at all.
-        put(tmp.path(), "party/acme/statement.json", "not json\n")?;
+        // A SUPPLIED declaration that is not JSON at all: the same law holds
+        // for the document a submitter hands in.
+        let declaration = tmp.path().join("submitted/statement.json");
+        put(tmp.path(), "submitted/statement.json", "not json\n")?;
 
-        let loaded = load_root(&root)?;
+        let mut loaded = load_root(&root)?;
+        loaded.review_declaration(&declaration)?;
         let failing: Vec<String> = loaded
             .errors
             .iter()
@@ -495,7 +492,7 @@ mod tests {
         for expected in [
             "schedule/performance/PERF-broken.yaml",
             "vocab/selectors.yaml",
-            "party/acme/statement.json",
+            "submitted/statement.json",
         ] {
             assert!(
                 failing.iter().any(|p| p.ends_with(expected)),
@@ -505,7 +502,31 @@ mod tests {
         assert_eq!(loaded.set.cases.len(), 1, "{:?}", loaded.errors);
         assert!(loaded.set.performance.is_empty());
         assert!(loaded.set.selectors.is_none());
-        assert!(loaded.set.parties.is_empty());
+        assert!(
+            loaded.set.parties.is_empty(),
+            "a declaration that does not load never enters the set"
+        );
+        Ok(())
+    }
+
+    /// A tree with no declaration supplied carries none: nothing is swept from
+    /// a sibling directory, so no gate can read a claim nobody submitted.
+    #[test]
+    fn no_declaration_is_swept_from_beside_the_root() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = assert_fs::TempDir::new()?;
+        let root = tmp.path().join("artifacts");
+        std::fs::create_dir_all(&root)?;
+        put(
+            tmp.path(),
+            "party/acme/statement.json",
+            "{\"product\":{\"name\":\"x\",\"version\":\"1\",\"vendor\":\"v\",\
+             \"identifier\":\"urn:x\"},\"schedule_release\":\"r\",\"claims\":{}}\n",
+        )?;
+
+        let loaded = load_root(&root)?;
+        assert!(loaded.set.parties.is_empty(), "{:?}", loaded.set.parties);
+        assert!(loaded.set.party_ixits.is_empty());
+        assert!(loaded.errors.is_empty(), "{:?}", loaded.errors);
         Ok(())
     }
 

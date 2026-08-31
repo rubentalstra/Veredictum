@@ -14,8 +14,8 @@ and published results live on the public
 request.
 
 [console.veredictum.eu](https://console.veredictum.eu) is the official
-conformance instrument. It serves the catalogue, the party statements and the
-vendored specification text, and a run driven there against a publicly
+conformance instrument. It serves the catalogue and the vendored specification
+text, and a run driven there against a publicly
 reachable CDR is an official run: the record is submitted as a pull request,
 its verdicts are recomputed here from the transcript it carries, and it is
 signed only after they match. The instance holds no key and nothing durable —

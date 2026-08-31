@@ -212,7 +212,7 @@ VEREDICTUM_VERIFY_KEY="artifacts/corpus/keys/cnf-signing.pub.asc" \
 VEREDICTUM_CAPTURE_MODE="${UI_E2E_DOCS_SHOTS:-}" \
 VEREDICTUM_CLIENT_IP_HEADER="$CLIENT_IP_HEADER" \
 VEREDICTUM_GITHUB_APP_ID="1234567" \
-VEREDICTUM_GITHUB_APP_KEY="party/smart/cnf-smart-test.key.pem" \
+VEREDICTUM_GITHUB_APP_KEY="fixtures/smart-test-issuer/cnf-smart-test.key.pem" \
 VEREDICTUM_GITHUB_INSTALLATION_ID="89012345" \
 VEREDICTUM_REGISTRY_REPO="rubentalstra/Veredictum" \
   "$CONSOLE_BIN" &

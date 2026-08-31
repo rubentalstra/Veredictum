@@ -43,7 +43,6 @@ fn state_over_fixtures(
     Ok(veredictum_console::state::ConsoleState {
         root: repo_root().join("artifacts"),
         specs: repo_root().join("specs/openehr"),
-        party: repo_root().join("party"),
         out: out.to_path_buf(),
         catalogue: std::sync::Arc::new(Err(String::from("not read by this surface"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(
@@ -345,7 +344,6 @@ fn an_uploaded_batch_lands_in_the_listing_and_is_marked_transient()
     let state = veredictum_console::state::ConsoleState {
         root: repo_root().join("artifacts"),
         specs: repo_root().join("specs/openehr"),
-        party: repo_root().join("party"),
         out: out.path().to_path_buf(),
         catalogue: std::sync::Arc::new(Err(String::from("not read by this surface"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(
@@ -391,7 +389,6 @@ fn bare_state(out: &Path) -> veredictum_console::state::ConsoleState {
     veredictum_console::state::ConsoleState {
         root: repo_root().join("artifacts"),
         specs: repo_root().join("specs/openehr"),
-        party: repo_root().join("party"),
         out: out.to_path_buf(),
         catalogue: std::sync::Arc::new(Err(String::from("not read by this surface"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(

@@ -20,10 +20,6 @@ pub const ROOT_ENV: &str = "VEREDICTUM_ROOT";
 /// `specs/openehr`; the image sets it to the documented `/work` mount).
 pub const SPECS_ENV: &str = "VEREDICTUM_SPECS";
 
-/// The environment variable naming the party-declaration tree (default
-/// `party`; the image sets it to the documented `/work` mount).
-pub const PARTY_ENV: &str = "VEREDICTUM_PARTY";
-
 /// The environment variable naming the run-output tree (default `out`; the
 /// image sets it to the documented `/work` mount). Runs write here exactly
 /// as a terminal run would.
@@ -136,8 +132,6 @@ pub struct ConsoleState {
     pub root: PathBuf,
     /// The vendored spec tree citations resolve against.
     pub specs: PathBuf,
-    /// The party-declaration tree statements are picked from.
-    pub party: PathBuf,
     /// The run-output tree job artifacts land under.
     pub out: PathBuf,
     /// The armored secret key the export seals with, when one is mounted.
@@ -207,8 +201,6 @@ impl ConsoleState {
         let specs = PathBuf::from(
             std::env::var(SPECS_ENV).unwrap_or_else(|_| String::from("specs/openehr")),
         );
-        let party =
-            PathBuf::from(std::env::var(PARTY_ENV).unwrap_or_else(|_| String::from("party")));
         let out = PathBuf::from(std::env::var(OUT_ENV).unwrap_or_else(|_| String::from("out")));
         let sign_key = std::env::var(SIGN_KEY_ENV).ok().map(PathBuf::from);
         let verify_key = std::env::var(VERIFY_KEY_ENV).ok().map(PathBuf::from);
@@ -217,7 +209,6 @@ impl ConsoleState {
         Ok(Self {
             root,
             specs,
-            party,
             out,
             sign_key,
             verify_key,

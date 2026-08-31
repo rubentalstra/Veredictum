@@ -28,8 +28,8 @@
 #                          comment.
 #   7. internal markdown   the same rule for every OTHER in-repo markdown
 #                          document, in ANY path form: a tree-rooted path
-#                          (`artifacts/`, `party/`, `scripts/`, `website/`,
-#                          `schemas/`, `fuzz/`, `app/`, `verification-pack/`)
+#                          (`artifacts/`, `fixtures/`, `registry/`, `scripts/`,
+#                          `website/`, `schemas/`, `fuzz/`, `app/`, `verification-pack/`)
 #                          ending in `.md`, the root documents by name
 #                          (README, CLAUDE, ARCHITECTURE, CONTRIBUTING,
 #                          CHANGELOG), and any RELATIVE citation whose path
@@ -68,7 +68,7 @@ RUN_MAX=8
 # The in-repo markdown documents a comment may not cite (check 7 above). The
 # vendored spec trees are deliberately absent: `specs/**` IS the oracle, and an
 # ITS-REST citation names a `.md` document there.
-INTERNAL_DOC='(artifacts|party|scripts|website|schemas|fuzz|app|verification-pack)/[^[:space:]]*[.]md'
+INTERNAL_DOC='(artifacts|fixtures|registry|scripts|website|schemas|fuzz|app|verification-pack)/[^[:space:]]*[.]md'
 INTERNAL_DOC="$INTERNAL_DOC"'|(^|[^[:alnum:]_./-])(README|CLAUDE|ARCHITECTURE|CONTRIBUTING|CHANGELOG)[.]md'
 
 cd "$(dirname "$0")/../.."

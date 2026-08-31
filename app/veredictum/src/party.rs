@@ -160,6 +160,14 @@ pub struct Attestation {
     pub statement: String,
 }
 
+/// The CNF schedule release this catalogue models, which every run stamps into
+/// its results and every claim targets.
+///
+/// ISO/IEC 9646-7 assigns the cells of an ICS proforma other than the support
+/// and supported-values columns to the proforma specifier, so the release the
+/// form belongs to is the instrument's own fact rather than a supplier's.
+pub const SCHEDULE_RELEASE: &str = "cnf-2.0-w2";
+
 /// The party statement: the ICS (claims) + the `SDoC` (self-declaration).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Statement {

@@ -51,6 +51,29 @@ No key stands behind this tier and none ever will. A stored key is one
 compromised workflow away from forging every entry on the board, and the
 release lanes here refuse long-lived credentials for the same reason.
 
+**What this tier cannot do is assert a claim.** ISO/IEC 9646-7 splits an ICS
+proforma in one place: every cell is the proforma specifier's to complete
+except the support and supported-values columns, which belong to the supplier
+of the implementation. ISO/IEC 17050-1 is titled a *supplier's* declaration of
+conformity. So this repository writes the ixit for a reproduction, because it
+composes the deployment and knows its addresses, and it never writes the claim.
+A conformance verdict is computed against a claim, so a reproduction has two
+honest routes and no third:
+
+1. **The topology cites a declaration the supplier published.** The committed
+   `statement` names that document, its source is recorded in the topology's
+   `provenance`, and the run is judged against it exactly as a submitted entry
+   is.
+2. **The run publishes a survey.** No claim is asserted, every row of the
+   capability matrix is exercised, and the record states on its face that it is
+   an observation of behaviour rather than a verdict against a declaration.
+
+Route 2 is the only one available without the vendor doing something first, and
+the instrument cannot produce one yet. Until it can, the lane refuses to bundle
+a reproduction for a topology that cites no supplier declaration rather than
+inventing a claim to judge against, and neither committed topology cites one.
+The refusal names the survey work.
+
 **Console.** console.veredictum.eu, the official hosted instrument, drove the
 catalogue against an endpoint the submitter named, recorded every exchange,
 computed the verdicts, and opened the submission from its own GitHub App
@@ -150,8 +173,8 @@ anything else. Every entry states, and an empty value is refused:
 true. FerroEHR's own entries go through this pipeline with the same field
 filled in, tier-labelled the same way as everybody else's.
 
-A conformance entry also carries the catalogue revision it ran and the party
-statement its claim was judged against. A benchmark entry carries the pack, its
+A conformance entry also carries the catalogue revision it ran and the
+supplier's declaration its claim was judged against. A benchmark entry carries the pack, its
 version, the repetition count and the posture profile the run declared.
 
 ## The artifacts
@@ -177,10 +200,21 @@ list is complete by role.
 ```bash
 veredictum run --root artifacts --ixit <your-ixit>.json \
   --sut-name <system> --sut-version <version> \
-  --statement party/<system>/statement.json --out ./run
+  --statement <your-statement>.json --out ./run
 
-veredictum verdicts --statement party/<system>/statement.json \
+veredictum verdicts --statement <your-statement>.json \
   --results ./run/results.json --root artifacts --out ./judgement
+```
+
+`<your-statement>.json` is your own declaration, and this repository commits
+none: the support columns of the ICS proforma
+(`artifacts/vocab/capability_matrix.yaml`) are yours to fill in. Hold it to the
+static conformance review before you run, which reports a claim the catalogue
+cannot test at all:
+
+```bash
+veredictum validate --root artifacts --specs specs/openehr \
+  --statement <your-statement>.json
 ```
 
 Copy `results.json` and `verdicts.json` into
@@ -233,7 +267,7 @@ not an exception to it: it READS the submitted transcript and recomputes
 verdicts over it, and it executes nothing that arrived in the pull request.
 
 A topology declares the principals its composed deployment actually has, which
-is narrower than the party's own declaration: the quickstarts stand up one
+is narrower than the supplier's own declaration: the quickstarts stand up one
 clinical principal, so every case addressing an admin or read-only principal is
 recorded not-applicable at selection time. The bundle therefore carries that
 declaration as `ixit.json`, attested beside the results, and the run record's

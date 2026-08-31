@@ -2737,7 +2737,7 @@ pub fn registry_topology_schema() -> Value {
         "$schema": DRAFT,
         "$id": urn("registry-topology"),
         "title": "Veredictum reproducible topology",
-        "description": "A deployment recipe this repository controls end to end, so a reproduction run executes nothing a submitter wrote. The reproduction lane composes `compose_file` (or the upstream document `compose_from` names), waits for `ready_url`, exports `credentials` into the environment the ixit's auth modes reference, and drives the catalogue over `ixit`.",
+        "description": "A deployment recipe this repository controls end to end, so a reproduction run executes nothing a submitter wrote. The reproduction lane composes `compose_file` (or the upstream document `compose_from` names), waits for `ready_url`, exports `credentials` into the environment the ixit's auth modes reference, and drives the catalogue over `ixit`. The ixit is this repository's to write, because it composes the deployment and therefore knows its addresses; the claim is not, so `statement` may only cite a declaration the supplier published.",
         "type": "object",
         "additionalProperties": false,
         "required": ["id", "display_name", "ixit", "base_url", "ready_url", "credentials"],
@@ -2759,7 +2759,11 @@ pub fn registry_topology_schema() -> Value {
                 "additionalProperties": { "type": "string" }
             },
             "ixit": { "type": "string", "minLength": 1 },
-            "statement": { "type": "string", "minLength": 1 },
+            "statement": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A declaration the SUPPLIER of this deployment published, committed here as a citation with its source recorded in `provenance`. ISO/IEC 9646-7 assigns an ICS proforma's support and supported-values columns to the supplier of the implementation, so this repository never authors one on a vendor's behalf. Absent, the reproduction asserts no claim and produces no conformance verdict."
+            },
             "base_url": { "type": "string", "minLength": 1 },
             "ready_url": { "type": "string", "minLength": 1 },
             "credentials": {

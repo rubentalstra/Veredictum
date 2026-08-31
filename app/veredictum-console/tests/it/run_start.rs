@@ -154,12 +154,10 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
     std::fs::create_dir_all(&out)?;
     let (port, seen) = recording_sut()?;
 
-    let claim =
-        std::fs::read_to_string(engine_gate::repo_root().join("party/ehrbase/statement.json"))?;
+    let claim = std::fs::read_to_string(engine_gate::declaration_fixture())?;
     let state = ConsoleState {
         root: engine_gate::repo_root().join("artifacts"),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: out.clone(),
         sign_key: None,
         verify_key: None,
@@ -183,7 +181,7 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
             ],
             probed_ok: true,
             statement_json: Some(claim.clone()),
-            statement_product: Some(String::from("EHRbase 2.34.0")),
+            statement_product: Some(String::from("Fixture CDR 0.0.0-fixture")),
             filter: Some(String::from(FILTER)),
             record_exchanges: false,
             postures: DeclaredPostures::default(),
@@ -315,7 +313,6 @@ async fn starting_without_a_draft_is_refused_by_name() -> Result<(), Box<dyn std
     let state = ConsoleState {
         root: engine_gate::repo_root().join("artifacts"),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: scratch.path().to_path_buf(),
         sign_key: None,
         verify_key: None,
@@ -358,7 +355,6 @@ async fn a_hosted_instance_refuses_a_private_target_at_the_start_seam()
     let state = ConsoleState {
         root: engine_gate::repo_root().join("artifacts"),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: scratch.path().to_path_buf(),
         sign_key: None,
         verify_key: None,

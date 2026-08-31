@@ -897,7 +897,7 @@ fn board_entry(system: &str, id: &str, tier: &serde_json::Value) -> serde_json::
         "result": {
             "kind": "conformance",
             "catalogue_revision": "abcdef1",
-            "statement": format!("party/{system}/statement.json")
+            "statement": format!("registry/records/{system}/{id}/statement.json")
         },
         "artifacts": [
             {"role": "results", "path": format!("registry/records/{system}/{id}/results.json"),

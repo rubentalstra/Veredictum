@@ -6,7 +6,6 @@
     "path": "docker-compose.yml"
   },
   "ixit": "registry/topologies/ferroehr/ixit.json",
-  "statement": "party/ferroehr/statement.json",
   "base_url": "http://127.0.0.1:8080/ferroehr/rest/openehr/v1",
   "ready_url": "http://127.0.0.1:8080/ferroehr/rest/openehr/v1/definition/template/adl1.4",
   "credentials": {

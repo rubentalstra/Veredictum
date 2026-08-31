@@ -6158,9 +6158,9 @@ AMB-151:
     the pipeline always composes the SMART overlay, the ixit's principals
     mint scoped Bearer tokens, and the ONE committed record drives the whole
     claimed surface including the SMART group. The `SmartAppLaunch`
-    capability row in `vocab/capability_matrix.yaml` is claimed by THE party
-    statement (`party/ferroehr/statement.json`); there is no second
-    statement and no per-lane artefact directory.
+    capability row in `vocab/capability_matrix.yaml` is claimed by the ONE
+    declaration a run is judged against, which the submitter supplies; there
+    is no second statement and no per-lane artefact directory.
     Reported upstream (#1597).
   disposition: statement_declared
   upstream_issue: 1597

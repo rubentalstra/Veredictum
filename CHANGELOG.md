@@ -18,6 +18,50 @@ version on.
 
 ## [Unreleased]
 
+### Changed
+- **The proforma stays, the answers leave (#465).** ISO/IEC 9646-7 splits an ICS
+  in one place: every cell of the proforma belongs to its specifier except the
+  support and supported-values columns, which belong to the supplier of the
+  implementation, and ISO/IEC 17050-1 is titled a *supplier's* declaration of
+  conformity. This repository was committing two filled-in declarations, one of
+  them about EHRbase, a product nobody here speaks for. Both are gone. The
+  proforma stays exactly where it was: `artifacts/vocab/capability_matrix.yaml`,
+  43 rows with a specification citation each.
+
+  What this changes for anyone driving the instrument. `validate` sweeps no
+  `party/` directory any more and gains `--statement <FILE>`, which runs the
+  static conformance review of ISO/IEC 9646-1 and -7 over one submitted
+  declaration: a claimed capability with no verdict-bearing case, a `Signing`
+  claim whose ixit declares no posture, a served-extension family the wire
+  surface does not carry. Every one of those checks survives unchanged; only its
+  input moved from a committed fixture to a supplied document. The summary line
+  now counts capability rows where it counted party statements, and the
+  console's instrument page does the same. `workload-coverage` and the
+  hollow-battery half of `claim-completeness` are re-grounded on the matrix, so
+  the catalogue side of both is enforced over all 43 rows whatever anybody
+  claims — measured by experiment before anything was removed: emptying one
+  capability's battery is still caught, by `capability-depth`, naming the row
+  and the shortfall.
+
+  The console stops offering a list of committed declarations to attach. The
+  claim is the submitter's, so the paste box and the compose-from-tiers button
+  are the only ways one enters, and the endpoint that read a statement from a
+  client-supplied path is gone with the tree it read from. The published image
+  no longer carries `/work/party` and `VEREDICTUM_PARTY` is retired.
+
+  The `reproduced` tier's question is answered in `registry/RULES.md` rather
+  than left open: without a supplier declaration there is no claim and so no
+  conformance verdict, so a reproduction either cites a declaration the supplier
+  published or publishes a survey labelled as an observation. Neither committed
+  topology cites one, so both dropped their `statement`, and the lane refuses to
+  bundle a reproduction rather than inventing a claim. The submission criteria
+  an entry is scored against are unchanged, so the rules version is unchanged.
+
+  One filled-in declaration survives as a named test fixture,
+  `fixtures/declaration/`, for a product that does not exist. The SMART lane's
+  committed test issuer moved beside it as `fixtures/smart-test-issuer/`,
+  contents and warnings untouched.
+
 ### Fixed
 - **A case needing an undeclared signing posture is excused before it writes
   anything to the server (#456).** Four `SIG-VERSION` cases asking for

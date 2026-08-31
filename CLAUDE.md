@@ -18,9 +18,13 @@ and in the code.
 ## Layout
 
 This repository holds the whole instrument: the runner, the catalogue, the
-corpora, the ambiguity register, the party declarations and the vendored spec
-oracle. A change to instrument behaviour lands here, and every release ships
-from here. The crate is on crates.io, and a `v*` tag publishes signed binaries
+corpora, the ambiguity register and the vendored spec oracle. It commits no
+conformance declaration about any product: ISO/IEC 9646-7 assigns an ICS
+proforma's support columns to the supplier of the implementation, so this
+repository authors the proforma (`artifacts/vocab/capability_matrix.yaml`) and
+a declaration travels with the submission it describes (#465).
+
+A change to instrument behaviour lands here, and every release ships from here. The crate is on crates.io, and a `v*` tag publishes signed binaries
 and the container image through the pipeline the Releasing section describes.
 
 | Path | Contents |
@@ -30,7 +34,7 @@ and the container image through the pipeline the Releasing section describes.
 | `app/veredictum/tests/**` | the integration suite: artifact gates, seeded-defect rejection, schema drift, claim completeness, the verification pack, the perf driver |
 | `app/veredictum-console/**` | the web console: the Leptos frontend the container image serves (#6, design #52); its rules are `.claude/rules/leptos-ui.md` |
 | `artifacts/**` | the catalogue: `schedule/` case cores, `bindings/` per-ITS operation bindings, `vocab/`, `corpus/`, `registers/ambiguities.yaml` |
-| `party/**` | per-party statement + IXIT declarations |
+| `fixtures/**` | test material: the named ICS fixture and the SMART lane's committed test issuer |
 | `schemas/**` | the published JSON Schemas for every artifact family (emitted, drift-guarded) |
 | `verification-pack/**` | the recorded transcript proving the verdict pipeline reproduces its adjudicated verdicts |
 | `specs/openehr/**` | the vendored released openEHR spec text: the oracle |
@@ -345,8 +349,10 @@ cargo run -- validate --root artifacts --specs specs/openehr
 
 It is every machine check over the artifact tree — id uniqueness, citation
 resolution against the vendored specs, binding completeness, coverage of the
-enumerated wire surface, claim completeness against the committed party
-statements — and **zero findings is the only passing result.** The instrument's
+enumerated wire surface, per-capability case-count floors — and **zero findings
+is the only passing result.** `--statement <file>` adds the static conformance
+review of one SUPPLIED declaration, which is the only way a claim enters:
+nothing is swept from the tree. The instrument's
 own canonical CLI table (`validate`, `run`, `verdicts`, `replay`, `verify-record`,
 `perf`, `stress`, `stress-compare`, `aql-probe`, `bench`, `bench-compare`,
 `bench-packs`, `perf-assets`, `conformance-assets`, `emit-schemas`) is the authority on how to invoke

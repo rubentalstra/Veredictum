@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn a_bearer_mint_principal_presents_one_cached_standing_grant() {
         let key = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
-            .join("party/smart/cnf-smart-test.key.pem");
+            .join("fixtures/smart-test-issuer/cnf-smart-test.key.pem");
         assert!(key.is_file(), "committed test issuer key is missing");
         let ixit: Ixit = serde_json::from_value(serde_json::json!({
             "instances": { "sut": { "base_url": "http://stub", "auth": {
@@ -589,7 +589,7 @@ mod tests {
     #[test]
     fn a_grant_inside_its_refresh_margin_is_re_minted_before_presentation() {
         let key = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
-            .join("party/smart/cnf-smart-test.key.pem");
+            .join("fixtures/smart-test-issuer/cnf-smart-test.key.pem");
         let ixit: Ixit = serde_json::from_value(serde_json::json!({
             "instances": { "sut": { "base_url": "http://stub", "auth": {
                 "mode": "bearer_mint", "subject": "cnf-user",

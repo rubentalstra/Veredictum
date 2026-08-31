@@ -24,12 +24,12 @@ use crate::components::page_header::{Crumb, PageHeader};
 use crate::components::surface::{CARD_PAD, CARD_TITLE};
 use crate::components::toast;
 use crate::run_api::fns::{
-    cancel_run, compose_claim, fetch_draft, fetch_run, fetch_scope_preview, fetch_statement_body,
-    fetch_statements, fetch_tier_counts, probe_and_save, save_scope, start_run,
+    cancel_run, compose_claim, fetch_draft, fetch_run, fetch_scope_preview, fetch_tier_counts,
+    probe_and_save, save_scope, start_run,
 };
 use crate::run_api::{
     AuthChoice, ClaimSummary, DigestEncoding, PostureForm, ProbeAnswer, RecordedRun, RunScreen,
-    ScopePreview, ScopeTier, SigningChoice, SpecProfileChoice, StartOutcome, StatementRow, TierRow,
+    ScopePreview, ScopeTier, SigningChoice, SpecProfileChoice, StartOutcome, TierRow,
 };
 use crate::run_job::{JobStatus, JobView, RunId};
 
@@ -360,23 +360,7 @@ pub fn Connect() -> impl IntoView {
 #[component]
 pub fn Scope() -> impl IntoView {
     let draft = Resource::new(|| (), |()| fetch_draft());
-    let statements = Resource::new(|| (), |()| fetch_statements());
     let statement_json = RwSignal::new(String::new());
-    let example_note = RwSignal::new(None::<Result<String, String>>);
-    // The sanctioned dispatch-continuation shape: the click is the event,
-    // the answer lands in the action's own async block.
-    let load_example = Action::new(move |path: &String| {
-        let path = path.clone();
-        async move {
-            match fetch_statement_body(path.clone()).await {
-                Ok(body) => {
-                    statement_json.set(body);
-                    example_note.set(Some(Ok(format!("Loaded {path}."))));
-                }
-                Err(e) => example_note.set(Some(Err(e.to_string()))),
-            }
-        }
-    });
     let tier_counts = Resource::new(|| (), |()| fetch_tier_counts());
     let checked_tiers = RwSignal::new(Vec::<ScopeTier>::new());
     let composed_note = RwSignal::new(None::<Result<String, String>>);
@@ -538,7 +522,7 @@ pub fn Scope() -> impl IntoView {
             <h2 class=CARD_TITLE>"Selection"</h2>
             <div class="space-y-4">
                 {tier_picker(tier_counts, checked_tiers, compose, composed_note)}
-                {statement_picker(statements, statement_json, load_example, example_note)} <div>
+                {statement_picker(statement_json)} <div>
                     <label class=LABEL for="filter">
                         "Case-id filter (optional)"
                     </label>
@@ -785,55 +769,20 @@ fn tier_picker(
     }
 }
 
-/// The statement pane: the committed examples that load into the box, the box
-/// itself, and the note the last load left.
-fn statement_picker(
-    statements: Resource<Result<Vec<StatementRow>, ServerFnError>>,
-    statement_json: RwSignal<String>,
-    load_example: Action<String, ()>,
-    example_note: RwSignal<Option<Result<String, String>>>,
-) -> impl IntoView + use<> {
+/// The statement pane: the box a submitter's own declaration is pasted into.
+///
+/// ISO/IEC 9646-7 assigns an ICS proforma's support and supported-values
+/// columns to the supplier of the implementation, so the console collects the
+/// declaration and offers none of its own.
+fn statement_picker(statement_json: RwSignal<String>) -> impl IntoView + use<> {
     view! {
         <div>
             <label class=LABEL for="statement-json">
                 "Party statement (ICS) — the claim this run grades"
             </label>
             <p class="mt-1 text-sm text-ink-muted">
-                "Paste the vendor's own statement.json, or load a committed example. Leave the box empty for an honest no-claim run: everything applicable drives, nothing is certified."
+                "Paste your own statement.json, or compose one from the tiers above and edit it. The claim is the supplier's to make, so this instrument holds none about any product. Leave the box empty for an honest no-claim run: everything applicable drives, nothing is certified."
             </p>
-            <Suspense fallback=|| {
-                view! { <p class="text-sm text-ink-muted">"Reading party/…"</p> }
-            }>
-                {move || Suspend::new(async move {
-                    match statements.await {
-                        Ok(rows) => {
-                            let buttons = rows
-                                .into_iter()
-                                .map(|row| {
-                                    let label = format!("Load {}", row.product);
-                                    let path = row.path;
-                                    view! {
-                                        <button
-                                            type="button"
-                                            class=BTN_SECONDARY
-                                            on:click=move |_| {
-                                                load_example.dispatch(path.clone());
-                                            }
-                                        >
-                                            {label}
-                                        </button>
-                                    }
-                                })
-                                .collect_view();
-                            view! {
-                                <div class="mt-2 flex flex-wrap items-center gap-2">{buttons}</div>
-                            }
-                                .into_any()
-                        }
-                        Err(e) => inline_error(&e.to_string()).into_any(),
-                    }
-                })}
-            </Suspense>
             <textarea
                 id="statement-json"
                 class=format!("{TEXTAREA} mt-2 h-48")
@@ -841,16 +790,6 @@ fn statement_picker(
                 prop:value=move || statement_json.get()
                 on:input:target=move |ev| statement_json.set(ev.target().value())
             ></textarea>
-            {move || {
-                example_note
-                    .get()
-                    .map(|note| match note {
-                        Ok(line) => {
-                            view! { <p class="mt-1 text-sm text-ink-muted">{line}</p> }.into_any()
-                        }
-                        Err(e) => inline_error(&e).into_any(),
-                    })
-            }}
         </div>
     }
 }

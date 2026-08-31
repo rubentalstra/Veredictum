@@ -16,7 +16,8 @@ render or explore.
 Validate one artifact tree through every machine gate.
 
 ```bash
-veredictum validate --root <ROOT> [--specs <SPECS>] [--write-report]
+veredictum validate --root <ROOT> [--specs <SPECS>] [--write-report] \
+    [--statement <STATEMENT>]
 ```
 
 | Flag | Meaning |
@@ -24,11 +25,18 @@ veredictum validate --root <ROOT> [--specs <SPECS>] [--write-report]
 | `--root <ROOT>` | The artifact root holding `schedule/`, `bindings/`, `vocab/`, `corpus/` and `registers/`. Required |
 | `--specs <SPECS>` | The vendored openEHR specification tree. Supplying it enables Service-Model operation resolution and citation resolution |
 | `--write-report` | Also refresh the wire-surface coverage report, at `<ROOT>/coverage-report.md`, from `--specs` |
+| `--statement <STATEMENT>` | A declaration to hold to the static conformance review, with the `ixit.json` beside it. No declaration is committed here and none is swept from the tree: ISO/IEC 9646-7 assigns an ICS proforma's support and supported-values columns to the supplier of the implementation |
 
 Every machine check over the catalogue: identifier uniqueness, citation
 resolution, binding completeness, coverage of the enumerated wire surface, and
-claim completeness against the committed party statements. It prints one line
-per finding and a summary line, and exits `1` if the finding count is not zero.
+the per-capability case-count floors. It prints one line per finding and a
+summary line, and exits `1` if the finding count is not zero.
+
+Supplying `--statement` adds the static conformance review of ISO/IEC 9646-1
+and -7 over that one declaration: a claimed capability the catalogue holds no
+verdict-bearing case for, a `Signing` claim the ixit beside it declares no
+posture for, and a served-extension family the catalogue's wire surface does
+not carry.
 
 `--write-report` is off by default on purpose. A check verb that rewrites a file
 on every run is a trap for read-only invocations, so the pipelines that publish
@@ -544,8 +552,8 @@ veredictum perf-assets --root <ROOT> --results <RESULTS> --out <OUT> \
 
 ## conformance-assets
 
-Render the capability heat grid and the per-chapter outcome bars from committed
-party artifacts.
+Render the capability heat grid and the per-chapter outcome bars from a run's
+own artifacts.
 
 ```bash
 veredictum conformance-assets --root <ROOT> --results <RESULTS> \

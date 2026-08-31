@@ -67,6 +67,13 @@ pub(crate) fn repo_root() -> &'static Path {
     Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
 }
 
+/// The named ICS fixture: a filled-in declaration for a product that does not
+/// exist, which is the shape these tests need and never a claim about any real
+/// product (ISO/IEC 9646-7 gives the support columns to the supplier).
+pub(crate) fn declaration_fixture() -> PathBuf {
+    repo_root().join("fixtures/declaration/statement.json")
+}
+
 /// The engine binary for the gate: the [`engine::ENGINE_ENV`] override when
 /// set, else the build that produced THIS test executable. Both run paths use
 /// the SAME binary, which is exactly the property under test — the console

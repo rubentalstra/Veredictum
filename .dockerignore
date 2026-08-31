@@ -5,7 +5,7 @@
 # ignore-file takes precedence), so there is only this one — the FerroEHR shape.
 #
 # What the image BAKES therefore must not be excluded here: the runtime stage
-# COPYs `artifacts/`, `specs/openehr/` and `party/` into /work (#420), because a
+# COPYs `artifacts/` and `specs/openehr/` into /work (#420), because a
 # record has to name a catalogue revision that belongs to a published release,
 # and an instance that mounts nothing has no other way to read them. An
 # exclusion of those trees fails that build, which is how it was found. The same
@@ -38,9 +38,9 @@ target/
 .gitattributes
 
 # The published schemas, the verification pack and the brand assets — read by
-# no image. The catalogue (artifacts/), the vendored oracle (specs/) and the
-# party declarations (party/) are NOT listed: the hosted overlay bakes them
-# (header above), and the operator image simply never COPYs them.
+# no image. The catalogue (artifacts/) and the vendored oracle (specs/) are NOT
+# listed: the hosted overlay bakes them (header above), and the operator image
+# simply never COPYs them.
 #
 # `assets/brand/` is the one exception, because it is a COMPILE input twice
 # over: the console's `public/` entries are symlinks into it, and its export

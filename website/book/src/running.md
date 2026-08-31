@@ -24,14 +24,20 @@ a pass over a catalogue that was never fully checked.
 ## 2. Declare your deployment
 
 The instrument needs to know where your server is and how to authenticate to
-it. That declaration is the IXIT file, and copying an example is the fastest
-way to a correct one:
+it. That declaration is the IXIT file, and it is yours to write, against
+`schemas/ixit.schema.json`. Put it in a directory of your own beside the
+clone — `mine/ixit.json` in the commands below — with your claim next to it.
+`fixtures/declaration/` carries both shapes filled in for a product that does
+not exist, which is a template to read and never a claim to copy.
 
-```bash
-cp -r party/ehrbase party/mine
-```
+This repository commits no declaration about anybody's product. ISO/IEC 9646-7
+splits an ICS proforma in one place: every cell belongs to the proforma
+specifier except the support and supported-values columns, which belong to the
+supplier of the implementation. The proforma is
+`artifacts/vocab/capability_matrix.yaml`, published here with a specification
+citation per row. The answers are yours.
 
-The directory holds two files, and the split between them matters:
+The two files, and the split between them matters:
 
 - **`ixit.json`** describes the deployment. Endpoints per instance, the
   authentication mode, and for a measured run an `environment` block naming the
@@ -49,11 +55,25 @@ speak to the server as three different callers: an ordinary clinical user, an
 administrator, and no one at all. The unauthenticated instance is what lets the
 security cases check that a route refuses an anonymous request.
 
-## 3. Drive the catalogue
+## 3. Review your claim
 
 ```bash
-veredictum run --root artifacts --ixit party/mine/ixit.json --out out/ \
-    --sut-name my-cdr --sut-version 1.2.3 --statement party/mine/statement.json
+veredictum validate --root artifacts --specs specs/openehr \
+    --statement mine/statement.json
+```
+
+`--statement` adds the static conformance review of ISO/IEC 9646-1 and -7 to
+the same command that checks the catalogue. It reports a capability you claim
+that the catalogue holds no verdict-bearing case for, a `Signing` claim your
+ixit declares no posture for, and a served-extension family the catalogue's
+wire surface does not carry. Each of those would otherwise become a row that
+can never carry evidence, discovered mid-run.
+
+## 4. Drive the catalogue
+
+```bash
+veredictum run --root artifacts --ixit mine/ixit.json --out out/ \
+    --sut-name my-cdr --sut-version 1.2.3 --statement mine/statement.json
 ```
 
 The command drives every applicable case against your endpoints and writes
@@ -87,10 +107,10 @@ on it.
 > instead, because carrying zero measurements past it would drop that evidence
 > silently.
 
-## 4. Compute the verdicts
+## 5. Compute the verdicts
 
 ```bash
-veredictum verdicts --root artifacts --statement party/mine/statement.json \
+veredictum verdicts --root artifacts --statement mine/statement.json \
     --results out/results.json --out out/
 ```
 

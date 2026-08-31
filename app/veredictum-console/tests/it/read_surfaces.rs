@@ -29,7 +29,6 @@ fn committed_state() -> ConsoleState {
     ConsoleState {
         root,
         specs,
-        party: repo_root().join("party"),
         out: repo_root().join("out"),
         catalogue: std::sync::Arc::new(catalogue),
         draft: std::sync::Arc::new(std::sync::Mutex::new(
@@ -63,7 +62,14 @@ fn the_landing_counts_are_the_validate_summary_counts() -> Result<(), Box<dyn st
     let expected = (
         u64::try_from(validation.loaded.set.cases.len())?,
         u64::try_from(validation.loaded.set.bindings.len())?,
-        u64::try_from(validation.loaded.set.parties.len())?,
+        u64::try_from(
+            validation
+                .loaded
+                .set
+                .matrix
+                .as_ref()
+                .map_or(0, |(_, matrix)| matrix.entries().len()),
+        )?,
         u64::try_from(validation.findings.len())?,
     );
 
@@ -73,7 +79,7 @@ fn the_landing_counts_are_the_validate_summary_counts() -> Result<(), Box<dyn st
                 (
                     summary.cases,
                     summary.bindings,
-                    summary.parties,
+                    summary.capabilities,
                     summary.findings
                 ),
                 expected,
@@ -102,7 +108,6 @@ fn refused_state(reason: &str) -> ConsoleState {
     ConsoleState {
         root: "/nonexistent/artifacts".into(),
         specs: "/nonexistent/specs".into(),
-        party: "/nonexistent/party".into(),
         out: "/nonexistent/out".into(),
         catalogue: std::sync::Arc::new(Err(reason.to_owned())),
         draft: std::sync::Arc::new(std::sync::Mutex::new(
@@ -402,9 +407,7 @@ fn an_unknown_case_id_is_absence_rather_than_failure() -> Result<(), Box<dyn std
 #[test]
 fn the_startup_read_falls_back_to_the_documented_mounts() {
     use veredictum_console::posture::{POSTURE_ENV, Posture};
-    use veredictum_console::state::{
-        OUT_ENV, PARTY_ENV, ROOT_ENV, SIGN_KEY_ENV, SPECS_ENV, VERIFY_KEY_ENV,
-    };
+    use veredictum_console::state::{OUT_ENV, ROOT_ENV, SIGN_KEY_ENV, SPECS_ENV, VERIFY_KEY_ENV};
 
     // The variables are process-wide and `set_var` is unsafe, which this crate
     // forbids outright, so the unset case is read rather than arranged. An
@@ -413,7 +416,6 @@ fn the_startup_read_falls_back_to_the_documented_mounts() {
     let set: Vec<&str> = [
         ROOT_ENV,
         SPECS_ENV,
-        PARTY_ENV,
         OUT_ENV,
         SIGN_KEY_ENV,
         VERIFY_KEY_ENV,
@@ -435,7 +437,6 @@ fn the_startup_read_falls_back_to_the_documented_mounts() {
     );
     assert_eq!(state.root, Path::new("artifacts"));
     assert_eq!(state.specs, Path::new("specs/openehr"));
-    assert_eq!(state.party, Path::new("party"));
     assert_eq!(state.out, Path::new("out"));
     assert_eq!(state.sign_key, None, "no signing posture without a mount");
     assert_eq!(state.verify_key, None);
