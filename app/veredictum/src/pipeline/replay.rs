@@ -19,8 +19,8 @@
 
 use std::path::Path;
 
-use crate::party::{OutcomeRecord, OutcomeStatus, Results, Statement};
-use crate::pipeline::conformance::OutcomeCounts;
+use crate::party::{OutcomeRecord, OutcomeStatus, Results, SelectionBasis, Statement};
+use crate::pipeline::conformance::{OutcomeCounts, RunWarning, Selection};
 use crate::pipeline::{Error, load_clean_root, load_ixit, read_json};
 use crate::run::RunReport;
 use crate::transcript::RunTranscript;
@@ -34,7 +34,12 @@ pub struct ReplayRequest<'a> {
     pub ixit: &'a Path,
     /// The transcript of that run.
     pub transcript: &'a Path,
-    /// The party statement the run was selected against, when it had one.
+    /// The party statement the re-judgement applies ISO/IEC 9646 test
+    /// selection with: it decides which option arm, extension route, claimed
+    /// capability and release floor the replay selects. With none the replay
+    /// re-derives a whole-catalogue sweep and stamps `selection_basis:
+    /// statement_blind`, which [`selection_agreement`] refuses to hold
+    /// against a record an ICS selected.
     pub statement: Option<&'a Path>,
     /// Re-judge only cases whose id contains this substring.
     pub filter: Option<&'a str>,
@@ -91,6 +96,11 @@ impl std::fmt::Display for Divergence {
 /// The SUT identity and the schedule release come from the transcript, so a
 /// replay needs no facts the submission did not carry.
 ///
+/// `warn` receives everything the re-judgement reports that is not a failure,
+/// in the order it happens. A replay driven with no statement raises the same
+/// blind-selection advisory a live run raises, because it stamps the same
+/// `selection_basis` on the document it emits.
+///
 /// # Errors
 /// [`Error::Catalogue`] or [`Error::Artifacts`] when the tree does not load,
 /// [`Error::Read`] or [`Error::Parse`] for the ixit, statement and transcript
@@ -99,6 +109,7 @@ impl std::fmt::Display for Divergence {
 /// invariants.
 pub fn replay_run(
     request: &ReplayRequest<'_>,
+    warn: &dyn Fn(RunWarning<'_>),
     progress: &mut dyn FnMut(crate::run::Progress<'_>),
 ) -> Result<ReplayOutcome, Error> {
     let loaded = load_clean_root(request.root)?;
@@ -118,6 +129,10 @@ pub fn replay_run(
     let transcript: RunTranscript = read_json(request.transcript, "transcript")?;
     let report = crate::run::replay(&set, &ixit, statement.as_ref(), &transcript, progress)
         .map_err(|e| Error::Instrument(format!("replay defect: {e}")))?;
+    let selection = Selection::of(statement.as_ref(), &report.unestablished);
+    if let Some(advisory) = selection.advisory() {
+        warn(advisory);
+    }
     let outcomes: Vec<OutcomeRecord> = report.records.iter().map(OutcomeRecord::from).collect();
     let counts = tally(&outcomes);
     let results = Results {
@@ -130,9 +145,7 @@ pub fn replay_run(
         schedule_release: transcript.schedule_release.clone(),
         tech_profile: crate::pipeline::conformance::tech_profile(statement.as_ref()),
         ixit_digest: crate::pipeline::conformance::ixit_digest(&ixit_text),
-        selection_basis: Some(crate::pipeline::conformance::selection_basis(
-            statement.as_ref(),
-        )),
+        selection_basis: Some(selection.basis()),
         restapi_specs_version: report.restapi_specs_version.clone(),
         outcomes,
         measurements: Vec::new(),
@@ -208,6 +221,131 @@ pub fn divergences(submitted: &Results, rederived: &Results) -> Vec<Divergence> 
     found
 }
 
+/// Whether a re-judgement applied the claim the record it is held against
+/// was selected under.
+///
+/// A `results.json` identifies that claim by two recorded facts and no
+/// others: `selection_basis` says whether an ICS selected the campaign at
+/// all, and `tech_profile.formats` is the its-rest format list the statement
+/// declared (every format, when nothing selected the campaign). Nothing in
+/// the document names the statement itself, so two different statements
+/// declaring the same formats are one value here.
+// TODO(#490): record a statement identity so a re-derivation proves it
+// re-applied the same claim rather than a compatible one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionAgreement<'a> {
+    /// The record and the re-judgement were selected under the same recorded
+    /// facts.
+    Same,
+    /// The record carries no `selection_basis`, so it identifies nothing
+    /// about what selected it. Reported and never refused: absence is
+    /// unknown, and reading it as either basis invents a fact the document
+    /// does not carry.
+    Unidentified,
+    /// One side had an ICS to select with and the other did not.
+    DifferentBasis {
+        /// What the record says selected it.
+        submitted: SelectionBasis,
+        /// What selected the re-judgement.
+        rederived: SelectionBasis,
+    },
+    /// Both record the same basis, and the its-rest wire formats they carry
+    /// differ, which two statements declaring the same profile cannot do.
+    DifferentFormats {
+        /// The formats the record carries.
+        submitted: &'a [crate::vocab::FormatName],
+        /// The formats the re-judgement derived from its statement.
+        rederived: &'a [crate::vocab::FormatName],
+    },
+}
+
+impl SelectionAgreement<'_> {
+    /// Whether this agreement refuses the comparison, because a re-judgement
+    /// selected under a different claim re-derives something other than the
+    /// record it was held against.
+    #[must_use]
+    pub fn refuses(self) -> bool {
+        matches!(
+            self,
+            SelectionAgreement::DifferentBasis { .. } | SelectionAgreement::DifferentFormats { .. }
+        )
+    }
+}
+
+impl std::fmt::Display for SelectionAgreement<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            SelectionAgreement::Same => f.write_str(
+                "the re-judgement applied the claim the record was selected under",
+            ),
+            SelectionAgreement::Unidentified => f.write_str(
+                "the record carries no selection_basis, so nothing in it identifies what selected it",
+            ),
+            SelectionAgreement::DifferentBasis {
+                submitted,
+                rederived,
+            } => write!(
+                f,
+                "the record was selected with {}, and this re-judgement with {}",
+                submitted.token(),
+                rederived.token()
+            ),
+            SelectionAgreement::DifferentFormats {
+                submitted,
+                rederived,
+            } => write!(
+                f,
+                "the record carries the its-rest formats {}, and this re-judgement derived {}",
+                format_list(submitted),
+                format_list(rederived)
+            ),
+        }
+    }
+}
+
+/// Whether the re-judgement applied the record's own claim.
+///
+/// The two recorded facts are compared in order: an absent `selection_basis`
+/// on either side identifies nothing, a differing basis is decisive on its
+/// own, and only then do the declared formats separate two statements.
+#[must_use]
+pub fn selection_agreement<'a>(
+    submitted: &'a Results,
+    rederived: &'a Results,
+) -> SelectionAgreement<'a> {
+    match (submitted.selection_basis, rederived.selection_basis) {
+        (None, _) | (_, None) => SelectionAgreement::Unidentified,
+        (Some(recorded), Some(replayed)) if recorded != replayed => {
+            SelectionAgreement::DifferentBasis {
+                submitted: recorded,
+                rederived: replayed,
+            }
+        }
+        (Some(_), Some(_)) => {
+            if submitted.tech_profile.formats == rederived.tech_profile.formats {
+                SelectionAgreement::Same
+            } else {
+                SelectionAgreement::DifferentFormats {
+                    submitted: &submitted.tech_profile.formats,
+                    rederived: &rederived.tech_profile.formats,
+                }
+            }
+        }
+    }
+}
+
+/// A declared format list, as one comma-separated run of tokens.
+fn format_list(formats: &[crate::vocab::FormatName]) -> String {
+    if formats.is_empty() {
+        return String::from("none");
+    }
+    formats
+        .iter()
+        .map(|format| format.token())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// The three compared facts of one row, as one comparable sentence.
 fn describe(outcome: &OutcomeRecord) -> String {
     format!(
@@ -230,4 +368,126 @@ fn tally(outcomes: &[OutcomeRecord]) -> OutcomeCounts {
         }
     }
     counts
+}
+#[cfg(test)]
+mod tests {
+    use crate::vocab::FormatName;
+
+    use super::*;
+
+    /// A record selected under `basis`, declaring `formats` on its-rest.
+    fn record(basis: Option<SelectionBasis>, formats: &[FormatName]) -> Results {
+        Results {
+            sut: crate::party::Sut {
+                name: String::from("selection-gate"),
+                version: String::from("0"),
+            },
+            runner: crate::party::Runner {
+                name: String::from("veredictum"),
+                version: String::from("0"),
+                verification_pack_status: crate::party::VerificationPackStatus::Passed,
+            },
+            schedule_release: String::from("cnf-2.0-w2"),
+            tech_profile: crate::party::TechProfile {
+                its: crate::vocab::ItsName::ItsRest,
+                formats: formats.to_vec(),
+            },
+            ixit_digest: String::from("0"),
+            selection_basis: basis,
+            restapi_specs_version: None,
+            outcomes: Vec::new(),
+            measurements: Vec::new(),
+            ambiguity_dispositions: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn the_same_recorded_facts_agree() {
+        let submitted = record(
+            Some(SelectionBasis::Statement),
+            &[FormatName::CanonicalJson],
+        );
+        let rederived = record(
+            Some(SelectionBasis::Statement),
+            &[FormatName::CanonicalJson],
+        );
+        let agreement = selection_agreement(&submitted, &rederived);
+        assert_eq!(agreement, SelectionAgreement::Same);
+        assert!(!agreement.refuses());
+    }
+
+    /// The case the re-derivation gate turns on: a record an ICS selected,
+    /// re-judged with no statement at all. Those rows come out of a sweep of
+    /// the whole catalogue, which is not the campaign the record describes.
+    #[test]
+    fn a_blind_replay_of_a_selected_record_is_refused() {
+        let submitted = record(
+            Some(SelectionBasis::Statement),
+            &[FormatName::CanonicalJson],
+        );
+        let rederived = record(Some(SelectionBasis::StatementBlind), FormatName::ALL);
+        let agreement = selection_agreement(&submitted, &rederived);
+        assert_eq!(
+            agreement,
+            SelectionAgreement::DifferentBasis {
+                submitted: SelectionBasis::Statement,
+                rederived: SelectionBasis::StatementBlind,
+            }
+        );
+        assert!(agreement.refuses());
+    }
+
+    /// The mirror: a blind record re-judged under somebody's claim.
+    #[test]
+    fn a_selected_replay_of_a_blind_record_is_refused() {
+        let submitted = record(Some(SelectionBasis::StatementBlind), FormatName::ALL);
+        let rederived = record(
+            Some(SelectionBasis::Statement),
+            &[FormatName::CanonicalJson],
+        );
+        assert!(selection_agreement(&submitted, &rederived).refuses());
+    }
+
+    /// Two statements that each selected their campaign, declaring different
+    /// its-rest formats, are two different claims.
+    #[test]
+    fn two_statements_declaring_different_formats_are_refused() {
+        let submitted = record(
+            Some(SelectionBasis::Statement),
+            &[FormatName::CanonicalJson],
+        );
+        let rederived = record(Some(SelectionBasis::Statement), &[FormatName::CanonicalXml]);
+        let agreement = selection_agreement(&submitted, &rederived);
+        assert!(agreement.refuses(), "{agreement}");
+        let rendered = agreement.to_string();
+        assert!(
+            rendered.contains(FormatName::CanonicalJson.token()),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(FormatName::CanonicalXml.token()),
+            "{rendered}"
+        );
+    }
+
+    /// A record written before `selection_basis` existed identifies nothing,
+    /// and absence is unknown rather than either basis: reading it as
+    /// `statement` credits a blind sweep with a scope it never had, and
+    /// reading it as blind refuses every honest re-derivation of an older
+    /// record.
+    #[test]
+    fn a_record_predating_the_recorded_basis_is_reported_not_refused() {
+        let submitted = record(None, &[FormatName::CanonicalJson]);
+        let rederived = record(
+            Some(SelectionBasis::Statement),
+            &[FormatName::CanonicalJson],
+        );
+        let agreement = selection_agreement(&submitted, &rederived);
+        assert_eq!(agreement, SelectionAgreement::Unidentified);
+        assert!(!agreement.refuses());
+        assert!(
+            agreement.to_string().contains("selection_basis"),
+            "the report names the member the record is missing: {agreement}"
+        );
+    }
 }

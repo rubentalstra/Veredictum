@@ -136,7 +136,9 @@ use veredictum::pipeline::measured::{
     MeasuredEvent, MeasuredRequest, ProbeRequest, StressRequest, SustainedWindow, run_aql_probe,
     run_measured, run_stress,
 };
-use veredictum::pipeline::replay::{ReplayRequest, divergences, replay_run};
+use veredictum::pipeline::replay::{
+    ReplayRequest, SelectionAgreement, divergences, replay_run, selection_agreement,
+};
 use veredictum::pipeline::{RenderedFile, ensure_parent_dir, to_json_document, write_file};
 use veredictum::record::{
     DigestOutcome, HONESTY_LINE, MANIFEST_FILE, RecordedFile, SIGNATURE_FILE, SignatureOutcome,
@@ -513,7 +515,12 @@ enum Command {
         /// The transcript of that run (`transcript.json`).
         #[arg(long)]
         transcript: PathBuf,
-        /// The party statement the run was selected against, when it had one.
+        /// The party statement ISO/IEC 9646 test selection re-applies: it
+        /// decides which option arm, extension route, claimed capability and
+        /// release floor the re-judgement selects. Omitting it re-derives a
+        /// whole-catalogue sweep stamped `selection_basis: statement_blind`,
+        /// which `--against` refuses to hold against a record an ICS
+        /// selected.
         #[arg(long)]
         statement: Option<PathBuf>,
         /// Re-judge only cases whose id contains this substring.
@@ -1292,12 +1299,6 @@ fn emit_documents(
     Ok(emitted)
 }
 
-/// Re-judges a recorded run and, when held against a submitted record,
-/// refuses any row the recorded exchanges do not support.
-///
-/// The exit code carries the answer: `0` when the re-judgement agrees (or
-/// when nothing was held against it), `1` when a row diverges, `2` when the
-/// replay could not run at all.
 /// Reads a committed results document.
 fn read_results(path: &Path) -> Result<veredictum::party::Results, String> {
     let text = std::fs::read_to_string(path)
@@ -1306,6 +1307,13 @@ fn read_results(path: &Path) -> Result<veredictum::party::Results, String> {
         .map_err(|e| format!("{} does not parse as results.json: {e}", path.display()))
 }
 
+/// Re-judges a recorded run and, when held against a submitted record,
+/// refuses any row the recorded exchanges do not support.
+///
+/// The exit code carries the answer: `0` when the re-judgement agrees (or
+/// when nothing was held against it), `1` when a row diverges, `2` when the
+/// replay could not run at all or was selected under a claim the record it is
+/// held against was not written under.
 fn replay_command(
     request: &ReplayRequest<'_>,
     out: Option<&Path>,
@@ -1345,7 +1353,7 @@ fn replay_command(
         only: only.as_deref(),
         ..*request
     };
-    let outcome = match replay_run(&request, &mut report_progress) {
+    let outcome = match replay_run(&request, &report_warning, &mut report_progress) {
         Ok(outcome) => outcome,
         Err(e) => return fail(&e),
     };
@@ -1382,6 +1390,20 @@ fn replay_command(
     let (Some(submitted_path), Some(submitted)) = (against, submitted) else {
         return ExitCode::SUCCESS;
     };
+    let agreement = selection_agreement(&submitted, &outcome.results);
+    if agreement.refuses() {
+        eprintln!(
+            "{} was not re-derived: {agreement}",
+            submitted_path.display()
+        );
+        eprintln!(
+            "pass the statement that record was selected against with --statement, or omit it to re-derive a blind sweep"
+        );
+        return ExitCode::from(2);
+    }
+    if matches!(agreement, SelectionAgreement::Unidentified) {
+        eprintln!("warning: {agreement}");
+    }
     let found = divergences(&submitted, &outcome.results);
     if found.is_empty() {
         println!(
@@ -1401,37 +1423,18 @@ fn replay_command(
     ExitCode::from(1)
 }
 
+/// Prints one run-level advisory, in the words the library renders it in.
+///
+/// Every command with a warn channel prints through here, so `run` and
+/// `replay` announce the same campaign with the same sentence rather than two
+/// that mean the same thing.
+fn report_warning(warning: RunWarning<'_>) {
+    for line in warning.lines() {
+        eprintln!("warning: {line}");
+    }
+}
+
 fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> ExitCode {
-    let warn = |warning: RunWarning<'_>| match warning {
-        RunWarning::CarriedMeasurements {
-            count,
-            measured_at,
-            running_at,
-        } => eprintln!(
-            "warning: carrying {count} measurement record(s) taken at SUT version {measured_at} into a run at {running_at} — re-measure or attest the surface unchanged"
-        ),
-        RunWarning::StatementBlindSelection { excused } => {
-            eprintln!(
-                "warning: no --statement was supplied, so ISO/IEC 9646 test selection ran blind and this record covers the whole catalogue rather than one party's claim"
-            );
-            for fact in veredictum::run::UnestablishedFact::ALL {
-                let count = excused.get(fact).copied().unwrap_or_default();
-                let effect = if fact.excuses_case() {
-                    format!("{count} case(s) recorded not-applicable instead of driven")
-                } else {
-                    "not applied to selection".to_owned()
-                };
-                eprintln!(
-                    "warning:   {}: unestablished ({}) — {effect}",
-                    fact.token(),
-                    fact.decides()
-                );
-            }
-            eprintln!(
-                "warning: judge this record with `veredictum verdicts --statement <file>`, which re-applies the ICS filters"
-            );
-        }
-    };
     // The progress stream is line-flushed on purpose: a driver reads this
     // through a pipe, where stdout is block-buffered and an unflushed line
     // arrives only in bursts.
@@ -1442,7 +1445,7 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> E
             let _flush = std::io::stdout().flush();
         }
     };
-    let outcome = match execute_run(request, &warn, &mut report_progress) {
+    let outcome = match execute_run(request, &report_warning, &mut report_progress) {
         Ok(outcome) => outcome,
         Err(e) => return fail(&e),
     };

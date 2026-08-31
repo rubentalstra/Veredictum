@@ -71,6 +71,103 @@ pub enum RunWarning<'a> {
     },
 }
 
+impl RunWarning<'_> {
+    /// The advisory as the lines a command prints, each without the
+    /// `warning:` prefix its caller adds.
+    ///
+    /// Every command that can raise a warning renders it here, so two
+    /// commands reporting the same campaign report it in the same words.
+    #[must_use]
+    pub fn lines(&self) -> Vec<String> {
+        match *self {
+            RunWarning::CarriedMeasurements {
+                count,
+                measured_at,
+                running_at,
+            } => vec![format!(
+                "carrying {count} measurement record(s) taken at SUT version {measured_at} into a run at {running_at} — re-measure or attest the surface unchanged"
+            )],
+            RunWarning::StatementBlindSelection { excused } => {
+                let mut lines = vec![String::from(
+                    "no --statement was supplied, so ISO/IEC 9646 test selection ran blind and this record covers the whole catalogue rather than one party's claim",
+                )];
+                lines.extend(crate::run::UnestablishedFact::ALL.iter().map(|fact| {
+                    let count = excused.get(fact).copied().unwrap_or_default();
+                    let effect = if fact.excuses_case() {
+                        format!("{count} case(s) recorded not-applicable instead of driven")
+                    } else {
+                        String::from("not applied to selection")
+                    };
+                    format!(
+                        "  {}: unestablished ({}) — {effect}",
+                        fact.token(),
+                        fact.decides()
+                    )
+                }));
+                lines.push(String::from(
+                    "judge this record with `veredictum verdicts --statement <file>`, which re-applies the ICS filters",
+                ));
+                lines
+            }
+        }
+    }
+}
+
+/// One campaign's selection posture: the basis its emitted document stamps,
+/// and the advisory its command prints.
+///
+/// Both facts answer the same question — did ISO/IEC 9646 test selection have
+/// an ICS to select with — so a campaign derives the posture once and reads
+/// both off it. Deriving them apart is what let a `replay` stamp
+/// `statement_blind` on its document and say nothing at all.
+#[derive(Debug, Clone, Copy)]
+pub struct Selection<'a> {
+    /// What selection had to select this campaign with.
+    basis: crate::party::SelectionBasis,
+    /// Cases excused per unestablished fact, which only the advisory reads.
+    excused: &'a std::collections::BTreeMap<crate::run::UnestablishedFact, usize>,
+}
+
+impl<'a> Selection<'a> {
+    /// The posture of a campaign selected with this statement, whose report
+    /// excused these cases.
+    #[must_use]
+    pub fn of(
+        statement: Option<&Statement>,
+        excused: &'a std::collections::BTreeMap<crate::run::UnestablishedFact, usize>,
+    ) -> Self {
+        Self {
+            basis: match statement {
+                Some(_) => crate::party::SelectionBasis::Statement,
+                None => crate::party::SelectionBasis::StatementBlind,
+            },
+            excused,
+        }
+    }
+
+    /// What the emitted document stamps as its `selection_basis`, so a reader
+    /// tells a party-scoped record from a whole-catalogue sweep without
+    /// access to the invocation.
+    #[must_use]
+    pub fn basis(self) -> crate::party::SelectionBasis {
+        self.basis
+    }
+
+    /// The run-level advisory, or `None` when an ICS selected the campaign
+    /// and there is nothing to announce.
+    #[must_use]
+    pub fn advisory(self) -> Option<RunWarning<'a>> {
+        match self.basis {
+            crate::party::SelectionBasis::Statement => None,
+            crate::party::SelectionBasis::StatementBlind => {
+                Some(RunWarning::StatementBlindSelection {
+                    excused: self.excused,
+                })
+            }
+        }
+    }
+}
+
 /// The recorded outcomes, tallied by status.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct OutcomeCounts {
@@ -222,10 +319,9 @@ pub fn execute_run(
     };
     let report = crate::run::execute(&set, &ixit, statement.as_ref(), request.recording, progress)
         .map_err(|e| Error::Instrument(format!("execution defect: {e}")))?;
-    if statement.is_none() {
-        warn(RunWarning::StatementBlindSelection {
-            excused: &report.unestablished,
-        });
+    let selection = Selection::of(statement.as_ref(), &report.unestablished);
+    if let Some(advisory) = selection.advisory() {
+        warn(advisory);
     }
     let outcomes: Vec<OutcomeRecord> = report.records.iter().map(OutcomeRecord::from).collect();
     let counts = tally(&outcomes);
@@ -243,7 +339,7 @@ pub fn execute_run(
         schedule_release: crate::party::SCHEDULE_RELEASE.to_owned(),
         tech_profile: tech_profile(statement.as_ref()),
         ixit_digest: ixit_digest(&ixit_text),
-        selection_basis: Some(selection_basis(statement.as_ref())),
+        selection_basis: Some(selection.basis()),
         restapi_specs_version: report.restapi_specs_version.clone(),
         outcomes,
         measurements: carried,
@@ -275,17 +371,6 @@ fn tally(outcomes: &[OutcomeRecord]) -> OutcomeCounts {
         }
     }
     counts
-}
-
-// What selection had to select the campaign with, recorded in the results so
-// a reader tells a party-scoped record from a whole-catalogue sweep without
-// access to the invocation (`run::UnestablishedFact` carries what a blind
-// sweep cannot decide).
-pub(crate) fn selection_basis(statement: Option<&Statement>) -> crate::party::SelectionBasis {
-    match statement {
-        Some(_) => crate::party::SelectionBasis::Statement,
-        None => crate::party::SelectionBasis::StatementBlind,
-    }
 }
 
 // The recorded technology profile IS the claim the verdict pipeline selects
@@ -410,6 +495,93 @@ mod tests {
     /// A warning sink that records what the run reported, in order.
     fn sink() -> RefCell<Vec<String>> {
         RefCell::new(Vec::new())
+    }
+
+    /// A statement carrying nothing but the members its shape requires: the
+    /// selection posture turns on the statement's PRESENCE, never on what it
+    /// declares.
+    fn any_statement() -> Statement {
+        serde_json::from_str(
+            r#"{
+                 "product": {
+                   "name": "selection-gate", "version": "0",
+                   "vendor": "selection-gate", "identifier": "urn:selection-gate"
+                 },
+                 "schedule_release": "cnf-2.0-w2",
+                 "claims": {}
+               }"#,
+        )
+        .expect("the minimal statement shape parses")
+    }
+
+    /// The stamp and the advisory read one derived posture, so they cannot
+    /// disagree about whether a campaign was blind. A basis that stamps
+    /// `statement_blind` while raising no advisory is the defect this pins:
+    /// the emitted document says the campaign was a whole-catalogue sweep and
+    /// nothing on the console says so.
+    #[test]
+    fn the_stamped_basis_and_the_advisory_never_disagree() {
+        let excused = std::collections::BTreeMap::new();
+        let statement = any_statement();
+        for (case, selection) in [
+            ("blind", Selection::of(None, &excused)),
+            ("selected", Selection::of(Some(&statement), &excused)),
+        ] {
+            let blind_stamp = selection.basis() == crate::party::SelectionBasis::StatementBlind;
+            let announced = selection.advisory().is_some();
+            assert_eq!(
+                blind_stamp,
+                announced,
+                "{case}: the document stamps {} and the run {} an advisory",
+                selection.basis().token(),
+                if announced { "raises" } else { "raises no" }
+            );
+        }
+    }
+
+    /// Every basis the vocabulary carries is reachable from a statement's
+    /// presence, so the agreement above is exhaustive rather than a check
+    /// over two of some larger set.
+    #[test]
+    fn both_bases_are_reachable_from_a_statements_presence() {
+        let excused = std::collections::BTreeMap::new();
+        let statement = any_statement();
+        let reached = [
+            Selection::of(None, &excused).basis(),
+            Selection::of(Some(&statement), &excused).basis(),
+        ];
+        for basis in crate::party::SelectionBasis::ALL {
+            assert!(
+                reached.contains(basis),
+                "{} is never derived, so the agreement test does not cover it",
+                basis.token()
+            );
+        }
+    }
+
+    /// The advisory a blind campaign raises is one rendering, so two commands
+    /// reporting the same campaign print the same words.
+    #[test]
+    fn the_blind_advisory_names_the_flag_and_every_unestablished_fact() {
+        let excused = std::collections::BTreeMap::new();
+        let advisory = Selection::of(None, &excused)
+            .advisory()
+            .expect("a blind campaign announces itself");
+        let lines = advisory.lines();
+        assert_eq!(
+            lines.len(),
+            crate::run::UnestablishedFact::ALL.len() + 2,
+            "{lines:?}"
+        );
+        let first = lines.first().expect("the advisory opens with its sentence");
+        assert!(first.contains("--statement"), "{first}");
+        for fact in crate::run::UnestablishedFact::ALL {
+            assert!(
+                lines.iter().any(|line| line.contains(fact.token())),
+                "{} is not named: {lines:?}",
+                fact.token()
+            );
+        }
     }
 
     #[test]

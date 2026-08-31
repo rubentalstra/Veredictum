@@ -111,7 +111,7 @@ veredictum replay --root <ROOT> --ixit <IXIT> --transcript <TRANSCRIPT> \
 | `--root <ROOT>` | The artifact root. Required |
 | `--ixit <IXIT>` | The ixit topology the recorded run was driven under. Required |
 | `--transcript <TRANSCRIPT>` | That run's `transcript.json`. Required |
-| `--statement <STATEMENT>` | The party statement the run was selected against, when it had one |
+| `--statement <STATEMENT>` | The party statement ISO/IEC 9646 test selection re-applies: it decides which option arm, extension route, claimed capability and release floor the re-judgement selects |
 | `--filter <SUBSTRING>` | Re-judge only cases whose id contains this substring |
 | `--out <RESULTS>` | Where the re-judged `results.json` is written |
 | `--against <RESULTS>` | The submitted `results.json` the re-judgement is held against |
@@ -128,6 +128,16 @@ With `--against`, every row is compared on its status and its two row counts,
 and any disagreement exits `1` naming the case. The reason text is not
 compared, because a replay reaches a recording rather than a server and
 identical judgements can carry different words.
+
+Omitting `--statement` re-derives a sweep of the whole catalogue. The replay
+says so on stderr, in the words a live run uses, and stamps
+`selection_basis: statement_blind` on the document it writes. With `--against`
+the two selection facts a `results.json` records are compared before any row
+is: a record an ICS selected, re-judged blind or under a statement declaring
+different its-rest formats, exits `2` rather than reporting agreement, because
+a re-derivation under another claim re-derives another campaign. A record
+written before `selection_basis` existed identifies nothing about what
+selected it, and the replay reports that instead of refusing.
 
 What this establishes is that the judgement follows from the evidence. It does
 not establish the evidence: a transcript is what the instrument says it sent

@@ -74,6 +74,19 @@ version on.
   floor over the whole of `/pkg`, and hashed names are served
   `max-age=31536000, immutable` on top of it, which is what a name that never
   changes content is worth: the 2.4 MB wasm stops revalidating on every load.
+- **A blind `replay` says so, and refuses to call itself a re-derivation of
+  somebody else's claim (#471).** `veredictum replay` had no warn channel at
+  all, so a run without `--statement` stamped `selection_basis:
+  statement_blind` on the document it wrote and printed nothing, in the one
+  command whose whole job is re-deriving a published record. The advisory now
+  reaches `replay` in the same words `run` uses, because both commands render
+  one `RunWarning`, and the stamped basis and the advisory are read off one
+  derived selection posture so they cannot disagree. With `--against`, a
+  record an ICS selected that is re-judged blind, or under a statement
+  declaring different its-rest wire formats, exits `2` instead of reporting
+  agreement; a record written before `selection_basis` existed identifies
+  nothing about what selected it, and that is reported rather than refused.
+  `--statement`'s help on `replay` now says what the flag decides.
 - **A case needing an undeclared signing posture is excused before it writes
   anything to the server (#456).** Four `SIG-VERSION` cases asking for
   `signature: verifiable` were driven to completion — committing real
