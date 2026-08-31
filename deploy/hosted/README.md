@@ -28,13 +28,23 @@ rotation and the answer to "is it up" are all things this directory states.
 
 ## The machine
 
-A Hetzner **CX33** — 4 vCPU x86, 8 GB RAM, 80 GB NVMe — in Falkenstein or
-Nuremberg. #412 carries the reasoning, and the short version is that the cap is
-two concurrent runs, each an engine process loading the whole catalogue, beside
-the console, a proxy and the operating system. The cheaper 4 GB box would
-probably hold it and leaves nothing for a spike, and the failure it avoids is
-the OOM killer ending a conformance run halfway through — which looks exactly
-like a defect in the instrument.
+`veredictum-console` is a Hetzner **CPX12** (2 vCPU AMD, 2 GB RAM, 40 GB NVMe)
+in **Nuremberg**, `eu-central`. It is the cheapest box that holds the posture,
+and it is deliberately the starting point rather than the answer.
+
+What it costs to run there is one concurrent run.
+`VEREDICTUM_MAX_CONCURRENT_RUNS=1` in the box's `.env` and the console's 1200 MB
+compose limit are that arithmetic: an engine process loads the whole catalogue,
+and it shares 2 GB with the console, Caddy and the operating system. A second
+concurrent run on this box is the OOM killer ending a conformance run halfway
+through, which looks exactly like a defect in the instrument.
+
+**The upgrade is a resize plus two values.** A CX33 (4 vCPU, 8 GB) holds two or
+three concurrent runs. Raising the cap means the `.env` line and the compose
+memory limit, which move together and are not a release: the code reads both
+from the environment (#414), so no version of the console is pinned to a machine
+size. Hetzner resizes in place, and the volumeless image means the box carries
+nothing a rebuild could not replace.
 
 Not Arm: the CAX line is the more expensive half since April 2026, and the image
 publishes for both architectures, so it buys nothing here.

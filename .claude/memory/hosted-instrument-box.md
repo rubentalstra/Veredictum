@@ -11,7 +11,7 @@ Nothing about it is a demonstration, and the word "demo" appears on no surface �
 `scripts/checks/hosted-instrument-language.sh` keeps it that way.
 
 **It runs on a Hetzner box this repository provisions** (#412, #403; owner ruling
-2026-08-31). `veredictum-console`, a CPX12 in Falkenstein, dual-stack. Vercel is
+2026-08-31). `veredictum-console`, a CPX12 in Nuremberg (`eu-central`), dual-stack. Vercel is
 retired and its project deleted. `deploy/hosted/` carries the whole posture as
 code — the cloud-init, the compose file, the Caddyfile, the image overlay CI
 builds — and the box holds no checkout.
