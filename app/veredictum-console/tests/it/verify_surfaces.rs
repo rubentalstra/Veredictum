@@ -608,3 +608,116 @@ fn capture_mode_pins_the_signing_time_and_the_digests() -> Result<(), Box<dyn st
     );
     Ok(())
 }
+/// The `VEREDICTUM_VERIFY_KEY` default the image sets, and the repository file
+/// the same image COPYs to that path.
+///
+/// Both are READ out of `docker/Dockerfile`: a constant restating a path here
+/// would prove nothing about what the image ships.
+fn baked_verify_key() -> Result<(String, PathBuf), Box<dyn std::error::Error>> {
+    let dockerfile = std::fs::read_to_string(engine_gate::repo_root().join("docker/Dockerfile"))?;
+    let env_path = dockerfile
+        .lines()
+        .find_map(|line| {
+            line.trim()
+                .strip_prefix("VEREDICTUM_VERIFY_KEY=")
+                .map(|value| value.trim_end_matches('\\').trim().to_owned())
+        })
+        .ok_or("docker/Dockerfile sets no VEREDICTUM_VERIFY_KEY")?;
+    let source = dockerfile
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("COPY "))
+        .find_map(|rest| {
+            let mut words = rest.split_whitespace();
+            let source = words.next()?;
+            let destination = words.next()?;
+            if destination == env_path {
+                Some(source.to_owned())
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| format!("docker/Dockerfile COPYs nothing to {env_path}"))?;
+    Ok((env_path, engine_gate::repo_root().join(source)))
+}
+
+/// The image resolves its verifying key with no operator action: the runtime
+/// stage COPYs a real armored public key to the exact path its own
+/// `VEREDICTUM_VERIFY_KEY` names, under `/app` where nothing mounts over it.
+///
+/// What this reads is the build instruction. Whether a BUILT image carries the
+/// file belongs to the lane that builds one.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn the_image_bakes_the_verifying_key_its_environment_names()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (env_path, source) = baked_verify_key()?;
+    assert!(
+        env_path.starts_with("/app/"),
+        "the baked key lives under /app, because an operator bind-mounts their own trees over the /work paths and a mount there would shadow it: {env_path}"
+    );
+    assert!(
+        source.is_file(),
+        "the build context has no {}, so that COPY would fail the build",
+        source.display()
+    );
+    let armored = std::fs::read_to_string(&source)?;
+    assert!(
+        armored.starts_with("-----BEGIN PGP PUBLIC KEY BLOCK-----"),
+        "the baked file is not an armored OpenPGP public key: {}",
+        source.display()
+    );
+    assert!(
+        !armored.contains("PRIVATE KEY BLOCK"),
+        "a secret key must never reach an image: {}",
+        source.display()
+    );
+    Ok(())
+}
+
+/// A bundle signed by a key the page does not hold is ANSWERED — every digest
+/// still matches and the origin claim alone fails — rather than refused as an
+/// error, so a wrong signer and a tampered file stay distinguishable.
+///
+/// The public half here is the one the image bakes, read from the Dockerfile,
+/// so this exercises the key a fresh instance actually verifies against.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn a_bundle_signed_by_another_key_is_not_verified_rather_than_refused()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (_, baked) = baked_verify_key()?;
+    let scratch = assert_fs::TempDir::new()?;
+    let state = state_over(scratch.path(), Some(baked));
+    let bundle = scratch.path().join("sealed");
+    seal_into(&bundle, &[("CONFORMANCE_REPORT.md", b"# report\n")])?;
+
+    let view = checked(&state, &bundle)?;
+    assert!(
+        !view.signature_accepted,
+        "another key's signature must not be accepted"
+    );
+    assert_eq!(
+        view.fingerprint, None,
+        "a rejected signature names no signer"
+    );
+    assert_eq!(view.signed_at, None);
+    assert!(!view.is_clean);
+    assert!(
+        view.files.iter().all(|file| file.outcome == "matched"),
+        "only the origin claim failed, so every digest still reproduces: {:?}",
+        view.files
+    );
+    assert!(
+        view.findings
+            .iter()
+            .any(|finding| finding.contains("does not verify against the supplied public key")),
+        "{:?}",
+        view.findings
+    );
+    Ok(())
+}

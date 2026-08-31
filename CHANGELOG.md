@@ -186,6 +186,18 @@ version on.
   version a submitter may declare instead. `RULES.md` states how a version
   leaves the readable set, because that is the one event that can invalidate a
   published entry.
+- **The official instrument could not check a signature (#430).** `/verify` is
+  where somebody who performed no run checks a published record, and on the
+  hosted console it rendered its own unconfigured hint instead: the image
+  carried no public key, so `VEREDICTUM_VERIFY_KEY` had nothing to point at.
+  The image now bakes the registry signing public half at
+  `/app/keys/registry-signing.pub.asc` and sets that variable to it, so a fresh
+  instance and a local `docker compose up` both verify a published record with
+  no operator action. The key is release data like the catalogue: the release
+  that publishes a record ships the key that record is checked with. It lives
+  under `/app` because an operator bind-mounts their own trees over the `/work`
+  paths, and a mount there would shadow it. Naming another key still overrides
+  the default.
 - **The re-derivation gate skipped every real console submission (#408).** It
   chose what to do by reading `.provenance.tier`, and a submission carries no
   provenance block at all — that is the property the console tier rests on,
