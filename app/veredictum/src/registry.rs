@@ -31,17 +31,33 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// The registry entry format's own version, as every entry declares it.
+/// The registry entry format version a NEWLY WRITTEN entry declares.
 ///
-/// A submitted entry naming a different version is refused rather than read
-/// under this release's field meanings.
+/// The newest version, and the only one anything here writes. What a submitted
+/// entry may declare is the wider [`READABLE_REGISTRY_SCHEMA_VERSIONS`].
 pub const REGISTRY_SCHEMA_VERSION: &str = "1.1.0";
 
-/// The version of the published submission rules an entry is accepted under.
+/// Every entry format version this release can read an entry under.
 ///
-/// Rules change prospectively: a merged entry is never re-scored, so the
-/// version it was accepted under travels with it.
+/// Membership means each field an entry at that version carries still means
+/// here what it meant when the entry was accepted, so the entry scores without
+/// being edited. A version leaves the set only when this release genuinely
+/// cannot read an entry naming it.
+pub const READABLE_REGISTRY_SCHEMA_VERSIONS: &[&str] = &["1.0.0", "1.1.0"];
+
+/// The submission rules version a NEWLY ACCEPTED entry declares.
+///
+/// The newest published rules. Which rules versions an already-merged entry
+/// may declare is the wider [`READABLE_RULES_VERSIONS`], because rules change
+/// prospectively and the version an entry was accepted under travels with it.
 pub const RULES_VERSION: &str = "1.1.0";
+
+/// Every submission rules version this release accepts an entry under.
+///
+/// Membership means an entry accepted under that version stays publishable
+/// here unedited. A version leaves the set only when this release genuinely
+/// cannot read an entry naming it.
+pub const READABLE_RULES_VERSIONS: &[&str] = &["1.0.0", "1.1.0"];
 
 /// A failure of the registry machinery.
 ///
@@ -901,12 +917,12 @@ impl RegistryEntry {
 /// decide what to print, and a submitter reads the same sentence CI did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EntryDefect {
-    /// The document declares a registry format this release does not read.
+    /// The document declares a registry format outside the readable set.
     SchemaVersion {
         /// What the entry declared.
         declared: String,
     },
-    /// The document declares rules this release does not publish.
+    /// The document declares a rules version outside the accepted set.
     RulesVersion {
         /// What the entry declared.
         declared: String,
@@ -1000,18 +1016,23 @@ pub enum EntryDefect {
     UnexplainedSupersede,
 }
 
+/// One readable-version set, as a diagnostic names it to a submitter.
+fn version_set(versions: &[&str]) -> String {
+    versions.join(", ")
+}
+
 impl fmt::Display for EntryDefect {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             EntryDefect::SchemaVersion { declared } => write!(
                 f,
-                "the entry declares registry format {declared:?}, and this release reads \
-                 {REGISTRY_SCHEMA_VERSION}"
+                "the entry declares registry format {declared:?}, and this release reads {}",
+                version_set(READABLE_REGISTRY_SCHEMA_VERSIONS)
             ),
             EntryDefect::RulesVersion { declared } => write!(
                 f,
-                "the entry declares rules version {declared:?}, and this release publishes \
-                 {RULES_VERSION}"
+                "the entry declares rules version {declared:?}, and this release accepts {}",
+                version_set(READABLE_RULES_VERSIONS)
             ),
             EntryDefect::EmptyField { field } => {
                 write!(f, "{field} is empty, and the disclosure is mandatory")
@@ -1104,12 +1125,12 @@ const BENCH_SUBMISSIONS: &str = "benchmarks/submissions/";
 #[must_use]
 pub fn entry_defects(entry: &RegistryEntry) -> Vec<EntryDefect> {
     let mut defects = Vec::new();
-    if entry.registry_schema_version != REGISTRY_SCHEMA_VERSION {
+    if !READABLE_REGISTRY_SCHEMA_VERSIONS.contains(&entry.registry_schema_version.as_str()) {
         defects.push(EntryDefect::SchemaVersion {
             declared: entry.registry_schema_version.clone(),
         });
     }
-    if entry.rules_version != RULES_VERSION {
+    if !READABLE_RULES_VERSIONS.contains(&entry.rules_version.as_str()) {
         defects.push(EntryDefect::RulesVersion {
             declared: entry.rules_version.clone(),
         });
@@ -1507,6 +1528,91 @@ mod tests {
     #[test]
     fn the_publishable_fixture_carries_no_defect() {
         assert_eq!(entry_defects(&bench_entry()), Vec::new());
+    }
+
+    /// What this release writes is what it reads: the version a new entry
+    /// declares is a member of the readable set, so an entry written today is
+    /// still readable after the next rules change.
+    #[test]
+    fn the_version_a_new_entry_declares_is_itself_readable() {
+        assert!(
+            READABLE_REGISTRY_SCHEMA_VERSIONS.contains(&REGISTRY_SCHEMA_VERSION),
+            "{READABLE_REGISTRY_SCHEMA_VERSIONS:?} must carry {REGISTRY_SCHEMA_VERSION}"
+        );
+        assert!(
+            READABLE_RULES_VERSIONS.contains(&RULES_VERSION),
+            "{READABLE_RULES_VERSIONS:?} must carry {RULES_VERSION}"
+        );
+        let entry = bench_entry();
+        assert_eq!(entry.registry_schema_version, REGISTRY_SCHEMA_VERSION);
+        assert_eq!(entry.rules_version, RULES_VERSION);
+        assert_eq!(entry_defects(&entry), Vec::new());
+    }
+
+    /// A merged entry is never re-scored against a later version: an entry
+    /// accepted at 1.0.0 scores clean here, so it stays publishable without
+    /// anybody editing a published claim.
+    #[test]
+    fn an_entry_at_an_earlier_readable_version_carries_no_version_defect() {
+        let mut entry = bench_entry();
+        entry.registry_schema_version = String::from("1.0.0");
+        entry.rules_version = String::from("1.0.0");
+        assert_eq!(entry_defects(&entry), Vec::new());
+    }
+
+    /// A format version outside the readable set is refused, because reading
+    /// the entry would mean guessing what its fields meant, and the diagnostic
+    /// names every version a submitter may declare instead.
+    #[test]
+    fn an_entry_at_an_unreadable_format_version_is_refused() {
+        let mut entry = bench_entry();
+        entry.registry_schema_version = String::from("0.9.0");
+        let defects = entry_defects(&entry);
+        assert_eq!(
+            defects,
+            vec![EntryDefect::SchemaVersion {
+                declared: String::from("0.9.0")
+            }],
+            "an unreadable format version is the one defect, and rules_version is unaffected"
+        );
+        let rendered = defects
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        for readable in READABLE_REGISTRY_SCHEMA_VERSIONS {
+            assert!(
+                rendered.contains(readable),
+                "{rendered:?} must name the accepted version {readable}"
+            );
+        }
+    }
+
+    /// The two versions are separate fields, so an unaccepted rules version is
+    /// refused on its own, with its own accepted set in the diagnostic.
+    #[test]
+    fn an_entry_at_an_unaccepted_rules_version_is_refused() {
+        let mut entry = bench_entry();
+        entry.rules_version = String::from("0.9.0");
+        let defects = entry_defects(&entry);
+        assert_eq!(
+            defects,
+            vec![EntryDefect::RulesVersion {
+                declared: String::from("0.9.0")
+            }],
+            "an unaccepted rules version is the one defect, and the format version is unaffected"
+        );
+        let rendered = defects
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join("; ");
+        for readable in READABLE_RULES_VERSIONS {
+            assert!(
+                rendered.contains(readable),
+                "{rendered:?} must name the accepted version {readable}"
+            );
+        }
     }
 
     /// A console entry that does not carry what a re-derivation reads cannot

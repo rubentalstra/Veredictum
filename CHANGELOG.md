@@ -173,6 +173,19 @@ version on.
   branch, and an entry declares the versions it was accepted under as before.
 
 ### Fixed
+- **A published registry entry is no longer re-scored against a later rules
+  version (#397).** `registry/RULES.md` promises that rules change
+  prospectively, and the gate contradicted it: an entry was refused unless both
+  its entry format version and its rules version equalled the newest constant,
+  so the next rules change would have turned every merged entry red. A release
+  now declares the set of versions it can read (`1.0.0` and `1.1.0`, since the
+  1.1.0 move only added the console provenance kind and changed no field's
+  meaning), and an entry declaring any member of that set is accepted unedited.
+  An entry naming a version outside the set is still refused, by the gate and
+  by the published `registry-entry` schema, and the diagnostic names every
+  version a submitter may declare instead. `RULES.md` states how a version
+  leaves the readable set, because that is the one event that can invalidate a
+  published entry.
 - **The re-derivation gate skipped every real console submission (#408).** It
   chose what to do by reading `.provenance.tier`, and a submission carries no
   provenance block at all — that is the property the console tier rests on,
