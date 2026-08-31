@@ -302,6 +302,7 @@ pub fn validate(ctx: &Context<'_>) -> Vec<Finding> {
     check_claim_completeness(ctx.set, &mut findings);
     check_signing_posture_declared(ctx.set, &mut findings);
     check_guard_scope(ctx.set, &mut findings);
+    check_guard_phrasing(ctx.set, &mut findings);
     check_served_extension_declarations(ctx.set, &mut findings);
     check_capability_depth(ctx.set, &mut findings);
     check_workload_coverage(ctx.set, &mut findings);
@@ -589,9 +590,8 @@ fn check_signing_posture_declared(set: &ArtifactSet, findings: &mut Vec<Finding>
 /// what the runner does undetectably, or it names a capability the case does
 /// not gate, and then the rule it states is implemented nowhere.
 ///
-/// A guard phrased as a condition is the second failure and the worse one:
-/// selection reads `guards` nowhere, so the phrasing promises a hold that
-/// happens nowhere ([`ConditionPhrasing`]).
+/// The phrasing half of the boundary is [`check_guard_phrasing`], which needs
+/// no matrix.
 ///
 /// Prose guards stay legal for provenance, for what a row does not claim, and
 /// for the assumptions a case rests on; the boundary is stated on the `guards`
@@ -605,6 +605,18 @@ fn check_guard_scope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
         for guard in &case.guards {
             guard_restates_declaration_rule(case, guard, &who, findings);
             guard_restates_capability_scope(case, guard, matrix, &who, findings);
+        }
+    }
+}
+
+/// No `guards:` entry is phrased as an applicability condition.
+///
+/// This gate reads the guard text alone, so it holds with or without a
+/// capability matrix — a phrasing defect is a defect whatever else loaded.
+fn check_guard_phrasing(set: &ArtifactSet, findings: &mut Vec<Finding>) {
+    for (path, case) in &set.cases {
+        let who = path.display().to_string();
+        for guard in &case.guards {
             guard_states_applicability_condition(guard, &who, findings);
         }
     }
