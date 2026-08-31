@@ -88,3 +88,4 @@ CLAUDE.local.md
 # rebuilds it from `website/` on every run, so nothing under it is committed.
 /_site/
 /website/book/book/
+.claude/triage-*/
