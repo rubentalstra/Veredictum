@@ -20,11 +20,16 @@ use std::collections::BTreeMap;
 
 use reqwest::StatusCode;
 
+use crate::exec::documents::{self, DocumentDivergence, DocumentForm};
 use crate::exec::resultset;
 use crate::exec::state::{Captured, VarStore};
-use crate::model::assertion::{Assertion, ColumnSpec, IgnoreSpec, RowsSpec};
+use crate::ids::{CorpusKey, ViewName};
+use crate::model::assertion::{
+    Assertion, ColumnSpec, EquivalentTarget, IgnoreList, IgnoreSpec, RowsSpec,
+};
+use crate::model::value::TemplatedValue;
 use crate::refgrammar::{Segment, Template, ValueRef};
-use crate::vocab::{CellComparison, IgnoreSetName, ResultSetMatch};
+use crate::vocab::{CellComparison, CorpusFormat, IgnoreSetName, ResultSetMatch};
 
 /// One assertion failure (stable, human-readable — lands in the outcome
 /// record and the report).
@@ -452,6 +457,308 @@ pub fn resolve_ignore_sets(
         }
     }
     paths
+}
+
+/// The document form both sides of an `equivalent` assertion are in, for a
+/// response body no JSON parse accepted.
+///
+/// One side is the served `Content-Type`, the other the corpus entry's
+/// DECLARED `format`, and the comparison happens only when the two agree.
+/// A form is never inferred from the bytes: a guess is how a comparison
+/// between two unrelated documents manufactures a row out of nothing.
+///
+/// `declared` answers the format the corpus manifest gives a key, and [`None`]
+/// when the manifest carries no such entry.
+///
+/// # Errors
+/// The refusal sentence for the inconclusive channel: when either side names
+/// no form this runner reads, when the two name different forms, or when the
+/// assertion carries `ignoring:` paths, which address JSON members and so
+/// address no part of these documents.
+pub fn agreed_document_form(
+    to: &EquivalentTarget,
+    ignoring: &IgnoreList,
+    media_type: Option<&str>,
+    declared: impl FnOnce(&CorpusKey) -> Option<CorpusFormat>,
+) -> Result<DocumentForm, String> {
+    let served = media_type
+        .and_then(DocumentForm::of_media_type)
+        .ok_or_else(|| unparsed_body_reason("equivalent", media_type))?;
+    if !ignoring.0.is_empty() {
+        return Err(format!(
+            "equivalent: `ignoring:` names RM paths, which address no part of a {} document, so \
+             the served body is UNJUDGEABLE against the fixture rather than unequal",
+            served.token()
+        ));
+    }
+    let EquivalentTarget::Ref(reference) = to else {
+        return Err(format!(
+            "equivalent: the committed payload carries no declared document form, so a {} body is \
+             UNJUDGEABLE against it",
+            served.token()
+        ));
+    };
+    let ValueRef::DataSet { key, view: None } = reference else {
+        return Err(format!(
+            "equivalent: the target {reference} declares no document form, so a {} body is \
+             UNJUDGEABLE against it — only a corpus entry's `format` declares one",
+            served.token()
+        ));
+    };
+    let format = declared(key).ok_or_else(|| {
+        format!(
+            "equivalent: the corpus manifest declares no entry {key}, so the served body is \
+             UNJUDGEABLE against it"
+        )
+    })?;
+    let fixture = DocumentForm::of_corpus_format(format).ok_or_else(|| {
+        format!(
+            "equivalent: the SUT served a {} document while the corpus fixture {key} declares \
+             format {}, so the two sides are not in one document form — UNJUDGEABLE on this \
+             exchange rather than unequal",
+            served.token(),
+            format.token()
+        )
+    })?;
+    if fixture == served {
+        Ok(served)
+    } else {
+        Err(format!(
+            "equivalent: the SUT served a {} document while the corpus fixture {key} is {} \
+             (format {}), so the two sides are not in one document form — UNJUDGEABLE on this \
+             exchange rather than unequal",
+            served.token(),
+            fixture.token(),
+            format.token()
+        ))
+    }
+}
+
+/// The one refusal sentence for a body no JSON parse accepted, shared by every
+/// seam that owes one so all of them name the served media type the same way.
+#[must_use]
+pub fn unparsed_body_reason(family: &str, media_type: Option<&str>) -> String {
+    let served = media_type.map_or_else(
+        || "a body carrying no declared media type".to_owned(),
+        |declared| format!("a {declared} body"),
+    );
+    format!(
+        "{family}: the SUT served {served}, which this runner does not parse into RM attributes — \
+         the canonical JSON serialization spells every RM attribute as a member name, and the \
+         canonical XML serialization is the other bound document form (ITS-REST \
+         specifications/docs/overview/Resources.md §Data representation), so the asserted fact is \
+         UNJUDGEABLE on this exchange rather than absent from it"
+    )
+}
+
+/// Compare a served document against its corpus fixture in the form both are
+/// declared to be in ([`crate::exec::documents`]).
+///
+/// The two failing sides take different channels: a divergence and a served
+/// document that is not well formed are findings against the SUT, while an
+/// ill-formed FIXTURE is a defect of this instrument's own catalogue and says
+/// nothing about the server.
+///
+/// # Errors
+/// [`AssertionOutcome::Mismatch`] for a divergent or ill-formed served
+/// document, [`AssertionOutcome::Unjudgeable`] for an ill-formed fixture or a
+/// side that is not document text at all.
+pub fn equivalent_documents(
+    form: DocumentForm,
+    body: &Value,
+    expected: &Value,
+) -> Result<(), AssertionOutcome> {
+    let (Value::String(served), Value::String(fixture)) = (body, expected) else {
+        return Err(AssertionOutcome::Unjudgeable(format!(
+            "equivalent: a {} comparison reads both sides as document text, and one of them is \
+             not — UNJUDGEABLE on this exchange",
+            form.token()
+        )));
+    };
+    documents::compare(form, served, fixture).map_err(|divergence| match divergence {
+        DocumentDivergence::Divergent(_) | DocumentDivergence::ServedIllFormed(_) => {
+            AssertionOutcome::Mismatch(format!("equivalent: {divergence}"))
+        }
+        DocumentDivergence::FixtureIllFormed(_) => {
+            AssertionOutcome::Unjudgeable(format!("equivalent: {divergence}"))
+        }
+    })
+}
+
+/// The equivalence-failure diagnostic: the first differing paths.
+///
+/// Each phrase names the path, what was served and what was wanted, so a red
+/// row carries triage-usable evidence — two 80-char head previews forced the
+/// 2026-07-28 composition-XML triage to reconstruct the diff offline from the
+/// codec instead of reading it from `results.json`.
+#[must_use]
+pub fn equivalence_mismatch(body: &Value, expected: &Value) -> AssertionFailure {
+    let mut diffs: Vec<String> = Vec::new();
+    diff_paths(body, expected, "$", &mut diffs);
+    let shown = 6;
+    let suffix = if diffs.len() > shown {
+        format!(" … and {} more differing path(s)", diffs.len() - shown)
+    } else {
+        String::new()
+    };
+    AssertionFailure(format!(
+        "equivalent: retrieved content differs from committed (modulo the normative ignore-set); {}{}",
+        diffs
+            .iter()
+            .take(shown)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("; "),
+        suffix
+    ))
+}
+
+/// Every path at which two RM values differ, deepest-first, as
+/// `path: got … want …` phrases.
+fn diff_paths(got: &Value, want: &Value, path: &str, out: &mut Vec<String>) {
+    let brief = |v: &Value| {
+        let s = v.to_string();
+        if s.chars().count() > 60 {
+            let head: String = s.chars().take(60).collect();
+            format!("{head}…")
+        } else {
+            s
+        }
+    };
+    match (got, want) {
+        (Value::Object(x), Value::Object(y)) => {
+            // `_type` presence on one side only is tolerated by the
+            // comparator (rm_cells_equal) — keep the diagnostic aligned so a
+            // red row never lists only tolerated diffs.
+            for (k, vw) in y {
+                match x.get(k) {
+                    Some(vg) => diff_paths(vg, vw, &format!("{path}/{k}"), out),
+                    None if k == "_type" => {}
+                    None => out.push(format!(
+                        "{path}/{k}: absent in retrieved (want {})",
+                        brief(vw)
+                    )),
+                }
+            }
+            for (k, vg) in x {
+                if !y.contains_key(k) && k != "_type" {
+                    out.push(format!("{path}/{k}: surplus in retrieved ({})", brief(vg)));
+                }
+            }
+        }
+        (Value::Array(x), Value::Array(y)) => {
+            if x.len() != y.len() {
+                out.push(format!("{path}: array length {} vs {}", x.len(), y.len()));
+            }
+            for (i, (vg, vw)) in x.iter().zip(y).enumerate() {
+                diff_paths(vg, vw, &format!("{path}[{i}]"), out);
+            }
+        }
+        _ => {
+            if !resultset::cells_equal(got, want) {
+                out.push(format!("{path}: got {} want {}", brief(got), brief(want)));
+            }
+        }
+    }
+}
+
+/// Evaluate the `signature` facts one assertion declares, against the
+/// `ORIGINAL_VERSION` envelope the caller holds.
+///
+/// `present`/`equals`/`distinct_from` are mode-agnostic and read the served
+/// envelope alone; `verifiable` reconstructs the agreed canonical form and
+/// verifies it under `signing`, the posture of the addressed instance (RM
+/// common `master06-change_control_package.adoc` §Digital Signature). Both
+/// comparands arrive RESOLVED, because where a comparand comes from is the
+/// caller's business and what it means is not.
+///
+/// # Errors
+/// [`AssertionOutcome::Mismatch`] for every fact judged against a value the
+/// SUT served, and [`AssertionOutcome::Unjudgeable`] for a `verifiable` fact
+/// no declared posture covers.
+pub fn eval_signature(
+    body: &Value,
+    present: Option<bool>,
+    verifiable: Option<bool>,
+    equals: Option<&str>,
+    distinct_from: Option<&str>,
+    signing: Option<&crate::exec::signature::SigningMode>,
+) -> Result<(), AssertionOutcome> {
+    let signature = body.get("signature").and_then(Value::as_str);
+    if present == Some(true) && signature.is_none_or(str::is_empty) {
+        return Err(AssertionFailure(
+            "signature: expected present, the ORIGINAL_VERSION envelope carries no signature"
+                .into(),
+        )
+        .into());
+    }
+    if let Some(want) = distinct_from {
+        // The canonical form the signature covers includes `uid`, so two
+        // distinct versions carry distinct signatures (RM common master06
+        // §Digital Signature; version.adoc `canonical_form`: all attributes
+        // except signature). Both sides must be non-empty.
+        let Some(sig) = signature.filter(|s| !s.is_empty()) else {
+            return Err(AssertionFailure(
+                "signature: distinct_from requested but the envelope carries no signature".into(),
+            )
+            .into());
+        };
+        if want.is_empty() {
+            return Err(AssertionFailure(
+                "signature: distinct_from comparand is empty (the earlier signature capture failed)"
+                    .into(),
+            )
+            .into());
+        }
+        if sig == want {
+            return Err(AssertionFailure(
+                "signature: identical to the compared version's signature — the signature must be a function of the version's canonical content (RM common master06 §Digital Signature)"
+                    .into(),
+            )
+            .into());
+        }
+    }
+    if let Some(want) = equals
+        && signature != Some(want)
+    {
+        return Err(AssertionFailure(format!(
+            "signature: stored {signature:?} is not the client-supplied {want:?} (must be stored verbatim)"
+        ))
+        .into());
+    }
+    if verifiable == Some(true) {
+        let Some(sig) = signature else {
+            return Err(AssertionFailure(
+                "signature: verifiable requested but the envelope carries no signature".into(),
+            )
+            .into());
+        };
+        // The mode is a DEPLOYMENT fact the party declares in its ixit (RM
+        // common master06 §Digital Signature: a deployment runs digest or
+        // openPGP, one at a time). Undeclared, the run holds no agreed
+        // canonical form and no key material, so it never asked.
+        let Some(mode) = signing else {
+            return Err(AssertionOutcome::Unjudgeable(
+                "signature: verifiable requested but the ixit declares no `signing` posture for \
+                 the addressed instance — the mode is a deployment fact (RM common \
+                 master06-change_control_package.adoc §Digital Signature), so this run cannot \
+                 judge the fact"
+                    .into(),
+            ));
+        };
+        match crate::exec::signature::verify(body, sig, mode) {
+            Ok(true) => {}
+            Ok(false) => {
+                return Err(AssertionFailure(
+                    "signature: does not verify over the agreed canonical form (RFC 8785 JCS of the version minus signature)"
+                        .into(),
+                )
+                .into());
+            }
+            Err(e) => return Err(AssertionFailure(format!("signature verify: {e}")).into()),
+        }
+    }
+    Ok(())
 }
 
 /// Evaluate a `field` assertion over a response body.
@@ -1003,17 +1310,61 @@ pub fn judgement_of(assertion: &Assertion) -> Judgement {
 }
 
 /// The facts a RECORDED exchange carries: the status the server answered
-/// with, and the body it served.
+/// with, the body it served, and the media type it declared for that body.
 ///
-/// This is the whole ground a transcript replay judges from — a recorded
-/// exchange carries no committed request payload, no corpus, no versioned
-/// read and no instance posture.
+/// This is the exchange half of the ground a transcript replay judges from —
+/// a recorded exchange carries no committed request payload, no versioned
+/// read and no instance posture. The catalogue half is [`CorpusGround`].
 #[derive(Debug, Clone, Copy)]
 pub struct ExchangeFacts<'a> {
     /// The status code the recorded server answered with.
     pub status: StatusCode,
     /// The recorded response body, or [`Value::Null`] where it served none.
     pub body: &'a Value,
+    /// The `Content-Type` the recorded response declared, when it declared
+    /// one. A whole-document comparison reads the served form off it, exactly
+    /// as the live driver does.
+    pub media_type: Option<&'a str>,
+}
+
+/// The catalogue half of a replay's ground: the corpus the replay was given.
+///
+/// Two assertion families compare a served value against a CORPUS FIXTURE
+/// rather than against anything the wire carried — `equivalent` names the
+/// document its target declares, and `signature` may name the client-supplied
+/// value a `${ds:…}` reference spells. A replay is driven over the same
+/// artifact root the live run drove, so those comparands are read rather than
+/// reconstructed, and the trait is narrow on purpose: the corpus and nothing
+/// else. A reference that reaches row state, provisioning or the party's ixit
+/// stays [`ReplayJudgement::Unrecorded`].
+pub trait CorpusGround {
+    /// The payload a `${ds:<key>}` or `${ds:<key>#<view>}` reference names.
+    ///
+    /// # Errors
+    /// The verbatim reason the reference did not resolve.
+    fn data_set(&mut self, key: &CorpusKey, view: Option<&ViewName>) -> Result<Value, String>;
+
+    /// The format the corpus manifest declares for `key`, and [`None`] when it
+    /// carries no such entry.
+    fn corpus_format(&self, key: &CorpusKey) -> Option<CorpusFormat>;
+}
+
+/// The ground a replay with no corpus at all reads: nothing.
+///
+/// Every `${ds:…}` reference is unresolvable here, so a family whose comparand
+/// is a corpus fixture takes the inconclusive channel instead of a pass. It is
+/// the honest stand-in for a caller that holds no artifact root.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoCorpus;
+
+impl CorpusGround for NoCorpus {
+    fn data_set(&mut self, key: &CorpusKey, _view: Option<&ViewName>) -> Result<Value, String> {
+        Err(format!("no corpus is loaded, so {key} resolves to nothing"))
+    }
+
+    fn corpus_format(&self, _key: &CorpusKey) -> Option<CorpusFormat> {
+        None
+    }
 }
 
 /// Whether an assertion's facts are all in a recorded exchange.
@@ -1061,16 +1412,192 @@ pub fn replay_judgement(assertion: &Assertion) -> ReplayJudgement {
             Some(RowsSpec::From(_)) => ReplayJudgement::Unrecorded,
             Some(RowsSpec::Inline(_)) | None => ReplayJudgement::FromExchange,
         },
-        Assertion::Equivalent { .. } | Assertion::Signature { .. } | Assertion::Version { .. } => {
-            ReplayJudgement::Unrecorded
+        // The served document is recorded verbatim and the fixture comes from
+        // the catalogue the replay is given, so a `${ds:…}` target is judged
+        // here. `to: committed` names the payload the row sent EARLIER, which
+        // is a request-side value no response recording carries, and
+        // `ignoring:` needs the addressed binding's `server_assigned` set.
+        Assertion::Equivalent { to, ignoring } => match to {
+            EquivalentTarget::Ref(ValueRef::DataSet { .. }) if ignoring.0.is_empty() => {
+                ReplayJudgement::FromExchange
+            }
+            EquivalentTarget::Committed | EquivalentTarget::Ref(_) => ReplayJudgement::Unrecorded,
+        },
+        // `present`, `equals` and `distinct_from` read the served envelope's
+        // own `signature` member against a comparand the catalogue spells.
+        // `verifiable` needs the signing posture of the addressed instance,
+        // which is a deployment fact the party declares and no exchange
+        // carries.
+        Assertion::Signature {
+            verifiable,
+            equals,
+            distinct_from,
+            ..
+        } => {
+            if *verifiable == Some(true) {
+                ReplayJudgement::Unrecorded
+            } else if equals.iter().chain(distinct_from).all(replayable_comparand) {
+                ReplayJudgement::FromExchange
+            } else {
+                ReplayJudgement::Unrecorded
+            }
         }
+        // Every fact this family judges is read off the VERSION envelope the
+        // assertion itself fetches — the ORIGINAL_VERSION envelope for
+        // `change_type`/`lifecycle_state`, the REVISION_HISTORY for `count` —
+        // and it names its target through a `${…}` reference over row state.
+        // Neither is the step's own recorded exchange.
+        Assertion::Version { .. } => ReplayJudgement::Unrecorded,
         Assertion::Unique { .. } | Assertion::MessageExemplar { .. } | Assertion::State { .. } => {
             ReplayJudgement::NotPerStep
         }
     }
 }
 
-/// Evaluate one assertion from a recorded exchange alone.
+/// Whether a comparand resolves against the recording plus the catalogue's own
+/// corpus: a literal, or a `${ds:…}` corpus reference.
+fn replayable_comparand(value: &TemplatedValue) -> bool {
+    if value.literal().is_some() {
+        return true;
+    }
+    matches!(
+        value,
+        TemplatedValue::Text(template)
+            if matches!(template.as_single_ref(), Some(ValueRef::DataSet { .. }))
+    )
+}
+
+/// Why the ground one assertion needs is outside a recording.
+///
+/// The sentence is per FAMILY rather than one line for all of them, because
+/// the absences are different: `equivalent` may name the payload the row
+/// committed earlier, `signature` may need the signing posture the party
+/// declares, and `version` is read off the versioned object. A reason that
+/// names the wrong absence is a reason that goes stale the moment one of them
+/// is closed, which is exactly how the single line this replaced went stale.
+fn unrecorded_reason(assertion: &Assertion) -> AssertionOutcome {
+    let why = match assertion {
+        Assertion::Field { .. } | Assertion::ResultSet { .. } => {
+            "the comparand rides a `${…}` reference over row state, provisioning or the party's \
+             ixit, none of which a response recording carries"
+        }
+        Assertion::Equivalent { .. } => {
+            "the comparand is the payload the row committed earlier, or an `ignoring:` set the \
+             addressed binding declares — neither is on the response side a recording keeps"
+        }
+        Assertion::Signature { .. } => {
+            "`verifiable` needs the `signing` posture of the addressed instance, which is a \
+             deployment fact the party declares in its ixit (RM common \
+             master06-change_control_package.adoc §Digital Signature) and no exchange carries"
+        }
+        Assertion::Version { .. } => {
+            "the family judges the VERSION envelope it fetches itself — the ORIGINAL_VERSION \
+             envelope for change_type/lifecycle_state, the REVISION_HISTORY for count — and names \
+             its target through a `${…}` reference over row state, so the step's own recorded \
+             exchange decides neither"
+        }
+        Assertion::Returns { .. }
+        | Assertion::XmlRoot { .. }
+        | Assertion::InstanceOf { .. }
+        | Assertion::Unique { .. }
+        | Assertion::MessageExemplar { .. }
+        | Assertion::State { .. } => "the recorded exchange carries no ground for this family",
+    };
+    AssertionOutcome::Unjudgeable(format!("{}: {why}", assertion.family()))
+}
+
+/// The comparand a `${ds:…}` reference or a literal spells, as scalar text.
+///
+/// # Errors
+/// [`AssertionOutcome::Unjudgeable`] when the reference does not resolve
+/// against the corpus, or names something outside the corpus altogether.
+fn resolved_comparand(
+    family: &str,
+    value: Option<&TemplatedValue>,
+    ground: &mut dyn CorpusGround,
+) -> Result<Option<String>, AssertionOutcome> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let resolved = if let Some(literal) = value.literal() {
+        literal
+    } else {
+        let reference = match value {
+            TemplatedValue::Text(template) => template.as_single_ref(),
+            TemplatedValue::Null
+            | TemplatedValue::Bool(_)
+            | TemplatedValue::Number(_)
+            | TemplatedValue::Seq(_)
+            | TemplatedValue::Map(_) => None,
+        };
+        let Some(ValueRef::DataSet { key, view }) = reference else {
+            return Err(AssertionOutcome::Unjudgeable(format!(
+                "{family}: the comparand names something outside the corpus, so a replay cannot \
+                 resolve it"
+            )));
+        };
+        ground.data_set(key, view.as_ref()).map_err(|e| {
+            AssertionOutcome::Unjudgeable(format!("{family}: {key} is unresolvable ({e})"))
+        })?
+    };
+    Ok(Some(
+        resolved
+            .as_str()
+            .map_or_else(|| resolved.to_string(), ToOwned::to_owned),
+    ))
+}
+
+/// Judge one `equivalent` assertion whose target is a corpus fixture, from the
+/// recorded exchange and that fixture.
+///
+/// Both halves are the live driver's own: the form agreement
+/// ([`agreed_document_form`]) and whichever comparator it selects, the
+/// whole-document one for the two non-JSON forms and the RM-structural one for
+/// canonical JSON.
+///
+/// # Errors
+/// [`AssertionOutcome::Mismatch`] for a served document or value that diverges
+/// from the fixture, [`AssertionOutcome::Unjudgeable`] for a fixture the corpus
+/// does not carry and for two sides that are not in one form.
+fn eval_equivalent_from_corpus(
+    to: &EquivalentTarget,
+    ignoring: &IgnoreList,
+    facts: ExchangeFacts<'_>,
+    ground: &mut dyn CorpusGround,
+) -> Result<(), AssertionOutcome> {
+    let EquivalentTarget::Ref(ValueRef::DataSet { key, view }) = to else {
+        return Err(AssertionOutcome::Unjudgeable(String::from(
+            "equivalent: the target is not a corpus fixture, so a replay has nothing to compare \
+             the served body against",
+        )));
+    };
+    let expected = ground.data_set(key, view.as_ref()).map_err(|e| {
+        AssertionOutcome::from(AssertionFailure(format!(
+            "equivalent: target reference unresolvable ({e})"
+        )))
+    })?;
+    // NOTE: the driver records the parse OUTCOME because "an unparsed body and
+    // a JSON string body are both `Value::String`"; a transcript keeps neither,
+    // so a replay reads the form off the media type and the body's own shape.
+    let served_document = matches!(facts.body, Value::String(_))
+        && facts
+            .media_type
+            .and_then(DocumentForm::of_media_type)
+            .is_some();
+    if served_document {
+        let form =
+            agreed_document_form(to, ignoring, facts.media_type, |k| ground.corpus_format(k))
+                .map_err(AssertionOutcome::Unjudgeable)?;
+        return equivalent_documents(form, facts.body, &expected);
+    }
+    if equivalent(facts.body, &expected, &[]) {
+        Ok(())
+    } else {
+        Err(equivalence_mismatch(facts.body, &expected).into())
+    }
+}
+
+/// Evaluate one assertion from a recorded exchange and the catalogue's corpus.
 ///
 /// Returns the non-gating divergences a passing assertion tolerated. An
 /// assertion [`replay_judgement`] classifies [`ReplayJudgement::Unrecorded`]
@@ -1079,21 +1606,16 @@ pub fn replay_judgement(assertion: &Assertion) -> ReplayJudgement {
 ///
 /// # Errors
 /// [`AssertionOutcome::Mismatch`] for a served value that contradicts the
-/// assertion, [`AssertionOutcome::Unjudgeable`] for a fact the exchange does
-/// not carry.
+/// assertion, [`AssertionOutcome::Unjudgeable`] for a fact neither the exchange
+/// nor the corpus carries.
 pub fn eval_from_exchange(
     assertion: &Assertion,
     facts: ExchangeFacts<'_>,
+    ground: &mut dyn CorpusGround,
 ) -> Result<Vec<String>, AssertionOutcome> {
-    let unrecorded = || {
-        AssertionOutcome::Unjudgeable(format!(
-            "{}: the recorded exchange carries no ground for this family",
-            assertion.family()
-        ))
-    };
     match replay_judgement(assertion) {
         ReplayJudgement::NotPerStep => return Ok(Vec::new()),
-        ReplayJudgement::Unrecorded => return Err(unrecorded()),
+        ReplayJudgement::Unrecorded => return Err(unrecorded_reason(assertion)),
         ReplayJudgement::FromExchange => {}
     }
     let body = facts.body;
@@ -1109,13 +1631,10 @@ pub fn eval_from_exchange(
         } => eval_field(
             body,
             path,
-            equals
-                .as_ref()
-                .and_then(crate::model::value::TemplatedValue::literal)
-                .as_ref(),
+            equals.as_ref().and_then(TemplatedValue::literal).as_ref(),
             not_equals
                 .as_ref()
-                .and_then(crate::model::value::TemplatedValue::literal)
+                .and_then(TemplatedValue::literal)
                 .as_ref(),
             *exists,
             *absent,
@@ -1164,14 +1683,36 @@ pub fn eval_from_exchange(
             )
             .map_err(AssertionOutcome::from);
         }
+        Assertion::Equivalent { to, ignoring } => {
+            return eval_equivalent_from_corpus(to, ignoring, facts, ground).map(|()| Vec::new());
+        }
+        // `verifiable` never reaches here (Unrecorded, answered above), so the
+        // posture is None and the mode-agnostic facts are what remain.
+        Assertion::Signature {
+            present,
+            verifiable,
+            equals,
+            distinct_from,
+            ..
+        } => {
+            let equals = resolved_comparand("signature", equals.as_ref(), ground)?;
+            let distinct_from = resolved_comparand("signature", distinct_from.as_ref(), ground)?;
+            return eval_signature(
+                body,
+                *present,
+                *verifiable,
+                equals.as_deref(),
+                distinct_from.as_deref(),
+                None,
+            )
+            .map(|()| Vec::new());
+        }
         // Every remaining family is Unrecorded or NotPerStep, both answered
         // above; the arm keeps the dispatch total without a panic.
-        Assertion::Equivalent { .. }
-        | Assertion::Signature { .. }
-        | Assertion::Version { .. }
+        Assertion::Version { .. }
         | Assertion::Unique { .. }
         | Assertion::MessageExemplar { .. }
-        | Assertion::State { .. } => return Err(unrecorded()),
+        | Assertion::State { .. } => return Err(unrecorded_reason(assertion)),
     };
     judged.map(|()| Vec::new()).map_err(AssertionOutcome::from)
 }
@@ -1180,6 +1721,60 @@ pub fn eval_from_exchange(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// The equivalence diagnostic names the differing PATHS — a missing key,
+    /// a surplus key, an array-length difference and an unequal leaf — and
+    /// caps the list, so a red row carries triage-usable evidence instead of
+    /// two truncated previews.
+    #[test]
+    fn the_equivalence_diagnostic_names_the_paths_that_differ() {
+        let got = serde_json::json!({
+            "_type": "COMPOSITION",
+            "name": { "value": "served" },
+            "surplus": 1,
+            "items": [{ "a": 1 }]
+        });
+        let want = serde_json::json!({
+            "name": { "value": "committed" },
+            "missing": "gone",
+            "items": [{ "a": 1 }, { "a": 2 }]
+        });
+        let message = equivalence_mismatch(&got, &want).0;
+        assert!(
+            message.contains("$/name/value: got \"served\" want \"committed\""),
+            "{message}"
+        );
+        assert!(
+            message.contains("$/missing: absent in retrieved"),
+            "{message}"
+        );
+        assert!(
+            message.contains("$/surplus: surplus in retrieved (1)"),
+            "{message}"
+        );
+        assert!(
+            message.contains("$/items: array length 1 vs 2"),
+            "{message}"
+        );
+        // `_type` on one side only is what the comparator tolerates, so the
+        // diagnostic never lists it.
+        assert!(!message.contains("_type"), "{message}");
+
+        // Past the shown budget the count is stated rather than the list run
+        // on: a leaf preview is truncated to keep one line readable.
+        let wide_got = serde_json::json!({ "k": "x" });
+        let wide_want: Value = Value::Object(
+            (0..9)
+                .map(|k| (format!("k{k}"), Value::String("y".repeat(80))))
+                .collect(),
+        );
+        let wide = equivalence_mismatch(&wide_got, &wide_want).0;
+        assert!(wide.contains("and 4 more differing path(s)"), "{wide}");
+        assert!(
+            wide.contains('…'),
+            "a long leaf is previewed, not dumped: {wide}"
+        );
+    }
 
     /// Every assertion variant's judgement, pinned by name.
     ///
@@ -1270,6 +1865,19 @@ mod tests {
                 ReplayJudgement::Unrecorded,
             ),
             (
+                json!({ "assert": "equivalent", "to": "${ds:cnf.opt.minimal_all_entries}" }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "equivalent", "to": "${ds:cnf.composition.minimal_event.v1}",
+                        "ignoring": ["server_assigned"] }),
+                ReplayJudgement::Unrecorded,
+            ),
+            (
+                json!({ "assert": "equivalent", "to": "${retrieved_body}" }),
+                ReplayJudgement::Unrecorded,
+            ),
+            (
                 json!({ "assert": "returns", "equals": true }),
                 ReplayJudgement::FromExchange,
             ),
@@ -1296,6 +1904,19 @@ mod tests {
             ),
             (
                 json!({ "assert": "signature", "of": "${v1}", "present": true }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "signature", "of": "${v1}",
+                        "equals": "${ds:cnf.security.signed_version#signature}" }),
+                ReplayJudgement::FromExchange,
+            ),
+            (
+                json!({ "assert": "signature", "of": "${v1}", "distinct_from": "${sig_a}" }),
+                ReplayJudgement::Unrecorded,
+            ),
+            (
+                json!({ "assert": "signature", "of": "${v1}", "verifiable": true }),
                 ReplayJudgement::Unrecorded,
             ),
             (
@@ -1335,21 +1956,25 @@ mod tests {
         let facts = ExchangeFacts {
             status: StatusCode::OK,
             body: &body,
+            media_type: Some("application/json"),
         };
         let parse = |document: Value| -> Assertion {
             serde_json::from_value(document).expect("the assertion parses")
         };
+        let ground = &mut NoCorpus;
 
         assert_eq!(
             eval_from_exchange(
                 &parse(json!({ "assert": "instance_of", "rm_type": "EHR" })),
-                facts
+                facts,
+                ground
             ),
             Ok(Vec::new())
         );
         let mismatch = eval_from_exchange(
             &parse(json!({ "assert": "instance_of", "rm_type": "FOLDER" })),
             facts,
+            ground,
         )
         .expect_err("a body of another type contradicts the assertion");
         assert!(
@@ -1362,6 +1987,7 @@ mod tests {
         let unjudgeable = eval_from_exchange(
             &parse(json!({ "assert": "equivalent", "to": "committed" })),
             facts,
+            ground,
         )
         .expect_err("no committed payload is recorded");
         assert!(
@@ -1373,7 +1999,8 @@ mod tests {
         assert_eq!(
             eval_from_exchange(
                 &parse(json!({ "assert": "state", "text": "the EHR exists" })),
-                facts
+                facts,
+                ground
             ),
             Ok(Vec::new())
         );

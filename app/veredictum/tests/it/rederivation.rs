@@ -238,3 +238,111 @@ fn a_record_whose_exchanges_were_removed_cannot_pass() -> Fallible {
     assert_eq!(found.len(), 1, "{found:?}");
     Ok(())
 }
+
+/// The `equivalent` family, re-derived over a recorded XML document (#469).
+///
+/// #468 gave the live driver a whole-document comparator, so a served OPT is
+/// judged against its corpus fixture. The transcript records that document
+/// verbatim and the fixture comes from the catalogue the replay is given, so
+/// the re-derivation reaches the same status — and the gate says so over a
+/// real recording rather than by reasoning about the classification.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_equivalent_case_re_judges_to_the_status_the_live_run_reached() -> Fallible {
+    let corpus = assert_fs::TempDir::new()?;
+    std::fs::write(corpus.path().join("opt.xml"), OPT_XML)?;
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/definition/template/adl1.4/gate.en.v1"))
+            .respond_with(ResponseTemplate::new(200).set_body_raw(OPT_XML, "application/xml")),
+    );
+    let live = execute(
+        &equivalent_set(corpus.path()),
+        &ixit(&sut.base_url()),
+        None,
+        Recording::On,
+        &mut |_| {},
+    )?;
+    let transcript = transcript_of(&live);
+    assert_eq!(transcript.exchange_count(), 1, "one exchange was recorded");
+
+    let base_url = sut.base_url();
+    drop(sut);
+    let again = replay(
+        &equivalent_set(corpus.path()),
+        &ixit(&base_url),
+        None,
+        &transcript,
+        &mut |_| {},
+    )?;
+    let submitted = results_of(&live);
+    let rederived = results_of(&again);
+    assert_eq!(
+        submitted.outcomes.first().map(|o| o.status),
+        Some(OutcomeStatus::Passed),
+        "the SUT serves the fixture document back, so the live row passes: {:?}",
+        live.records
+    );
+    assert_eq!(
+        divergences(&submitted, &rederived),
+        Vec::new(),
+        "an `equivalent` row must re-derive to the status the live run reached"
+    );
+    Ok(())
+}
+
+/// The document both sides of the `equivalent` comparison are in.
+const OPT_XML: &str = concat!(
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n",
+    "<template xmlns=\"http://schemas.openehr.org/v1\">",
+    "<template_id><value>gate.en.v1</value></template_id>",
+    "</template>\n"
+);
+
+/// The catalogue the `equivalent` re-derivation is driven over: one binding,
+/// one corpus fixture on disk, one case comparing the served document.
+fn equivalent_set(corpus_dir: &std::path::Path) -> veredictum::artifacts::ArtifactSet {
+    let mut set = crate::fake_sut::artifact_set_over_corpus(
+        &[json!({
+            "sm_operation": "I_DEFINITION_ADL14.get_opt",
+            "its": "its-rest",
+            "request": {
+                "method": "GET",
+                "path": "/definition/template/adl1.4/{template_id}",
+                "headers": { "Accept": "application/xml" }
+            },
+            "outcomes": { "ok": { "status": 200 } }
+        })],
+        json!({
+            "gate.opt": {
+                "source": "opt.xml",
+                "format": "opt-xml",
+                "rm_versions": [">=1.0.2"],
+                "validity": { "verdict": "valid" },
+                "template_id": "gate.en.v1",
+                "provenance": "authored for the re-derivation gate (#469)"
+            }
+        }),
+        corpus_dir,
+    );
+    set.cases.push((
+        std::path::PathBuf::from("equivalent.yaml"),
+        case(json!({
+            "id": "REDERIVE-get_opt", "kind": "functional", "component": "DEFINITION_ADL14",
+            "sm_operation": "I_DEFINITION_ADL14.get_opt",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "data_sets": ["gate.opt"],
+            "flow": [{
+                "step": 1, "call": "get_opt",
+                "with": { "template_id": "gate.en.v1" },
+                "expect": "ok",
+                "assert": [{ "assert": "equivalent", "to": "${ds:gate.opt}" }]
+            }]
+        })),
+    ));
+    set
+}

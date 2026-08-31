@@ -64,10 +64,9 @@ fn the_pack_rejects_a_broken_runner() {
 }
 
 /// A replay never claims a verdict over an assertion it did not evaluate
-/// (#239). The player answers from recorded exchanges alone: it issues no
-/// versioned read, resolves no corpus reference and knows no instance
-/// posture, so a judged postcondition is unevaluable there and the entry is
-/// REFUSED by name. An empty answer would have reproduced the adjudicated
+/// (#239). The postcondition seam refuses every judged family by role: the
+/// player runs the postconditions after the flow, with no exchange of their
+/// own to read, so an empty answer would have reproduced the adjudicated
 /// verdict while silently skipping the assertion.
 #[test]
 fn a_pack_entry_carrying_a_judged_postcondition_is_refused() {
@@ -225,6 +224,81 @@ fn a_pack_case_reading_a_provisioned_handle_is_refused() {
     assert!(
         refusal.contains("ehr_id") && refusal.contains(entry.case.as_str()),
         "the refusal names neither the handle nor the case: {refusal}"
+    );
+}
+
+/// The pack's `equivalent` entry JUDGES the document it records (#469): an
+/// ADL2 source served with one changed term stops reproducing `passed`.
+///
+/// Before this the family was classified as carrying no recorded ground at
+/// all, so the pack could hold no entry over it and proved nothing about the
+/// comparator the live driver uses. The committed pack is untouched: the
+/// doctoring happens on the parsed copy.
+#[test]
+fn a_recorded_document_diverging_from_its_fixture_stops_passing() {
+    let (set, mut transcript) = load();
+    let entry = transcript
+        .entries
+        .iter_mut()
+        .find(|e| e.case.as_str() == "I_DEFINITION_ADL2.get_artefact-retrieve")
+        .expect("the pack carries the ADL2 retrieval entry");
+    let served = entry
+        .steps
+        .first_mut()
+        .expect("the entry records its one step");
+    let document = match served.response.body.take() {
+        Some(serde_json::Value::String(text)) => text,
+        other => panic!("the recorded ADL2 body is document text, got {other:?}"),
+    };
+    served.response.body = Some(serde_json::Value::String(
+        document.replace("CNF minimal encounter", "something else entirely"),
+    ));
+
+    let (expected, produced) = replay_entry(&set, entry).expect("replay");
+    assert!(
+        matches!(produced, RowOutcome::Failed { step: 1, .. }),
+        "a served document that differs from the fixture must fail the row at its own step, produced {produced:?}"
+    );
+    assert!(
+        !verdict_matches(expected, &produced),
+        "a diverging document must not reproduce `passed`"
+    );
+}
+
+/// A `signature` assertion whose only fact is `present` is judged from the
+/// recorded envelope (#469): the member is in the recording, so the replay
+/// reads it rather than refusing the entry.
+#[test]
+fn a_present_only_signature_is_judged_from_the_recorded_envelope() {
+    let (mut set, transcript) = load();
+    let entry = transcript
+        .entries
+        .iter()
+        .find(|e| matches!(e.expected_verdict, ExpectedVerdict::Passed))
+        .expect("a passing adjudication exists");
+    let case = set
+        .cases
+        .iter_mut()
+        .map(|(_, c)| c)
+        .find(|c| c.id == entry.case)
+        .expect("the entry's case is in the catalogue");
+    let present: veredictum::model::assertion::Assertion = serde_json::from_value(
+        serde_json::json!({ "assert": "signature", "of": "${v1}", "present": true }),
+    )
+    .expect("a signature assertion parses");
+    case.flow
+        .iter_mut()
+        .find(|s| s.step == 3)
+        .expect("the case carries a step 3")
+        .assertions
+        .push(present);
+
+    // The step-3 read-back carries no `signature`, so the fact is JUDGED and
+    // found absent — the row fails, which is the proof it was evaluated.
+    let (_, produced) = replay_entry(&set, entry).expect("the replay must judge, never refuse");
+    assert!(
+        matches!(produced, RowOutcome::Failed { step: 3, .. }),
+        "a present-only signature must be judged off the recorded envelope, produced {produced:?}"
     );
 }
 

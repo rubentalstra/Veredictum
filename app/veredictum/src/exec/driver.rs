@@ -24,7 +24,6 @@ use serde_json::Value;
 
 use crate::artifacts::ArtifactSet;
 use crate::exec::assertions::{self, AssertionFailure, AssertionOutcome};
-use crate::exec::documents::{self, DocumentDivergence, DocumentForm};
 use crate::exec::outcome::{self, Observation};
 use crate::exec::resolve::Resolver;
 use crate::exec::state::{Captured, VarStore};
@@ -33,7 +32,7 @@ use crate::exec::{PostconditionOutcomes, Provisioned, StepDriver, StepObservatio
 use crate::ids::{CaptureName, SmOperationRef};
 use crate::ixit::{AuthMode, Instance, Ixit};
 use crate::model::assertion::{
-    Assertion, EquivalentTarget, IgnoreList, PostconditionRole, RowsSpec, SingleRef,
+    Assertion, EquivalentTarget, PostconditionRole, RowsSpec, SingleRef,
 };
 use crate::model::binding::{
     OperationBinding, RequestBody, RequestSpec, StripRule, WireCapture, WireFrom,
@@ -649,14 +648,17 @@ impl<'a> HttpDriver<'a> {
     }
 
     /// Evaluate a `signature` assertion against a read-back `ORIGINAL_VERSION`
-    /// envelope (the version-envelope read step's body). `present`/`equals` are
-    /// mode-agnostic; `verifiable` reconstructs the agreed canonical form and
-    /// verifies per `signing` — the posture of the INSTANCE the step ran on
-    /// (RM common master06 §Digital Signature; [`crate::exec::signature`]).
+    /// envelope (the version-envelope read step's body).
     ///
-    /// Every fact judged against a value the SUT SERVED is a conformance
-    /// mismatch; a `verifiable` fact the party's own declarations leave without
-    /// a posture is unjudgeable, and takes the inconclusive channel.
+    /// Resolving the two comparands is all this seam adds: the facts themselves
+    /// are judged by [`assertions::eval_signature`], so the live driver and a
+    /// transcript replay read one implementation of them.
+    ///
+    /// # Errors
+    /// [`AssertionOutcome::Mismatch`] for a comparand that does not resolve and
+    /// for every fact judged against a value the SUT served;
+    /// [`AssertionOutcome::Unjudgeable`] for a `verifiable` fact the party's own
+    /// declarations leave without a posture.
     #[expect(
         clippy::too_many_arguments,
         reason = "one parameter per declared signature fact — mirrors the assertion shape"
@@ -671,173 +673,32 @@ impl<'a> HttpDriver<'a> {
         signing: Option<&crate::exec::signature::SigningMode>,
         vars: &VarStore,
     ) -> Result<(), AssertionOutcome> {
-        let signature = body.get("signature").and_then(Value::as_str);
-        if present == Some(true) && signature.is_none_or(str::is_empty) {
-            return Err(AssertionFailure(
-                "signature: expected present, the ORIGINAL_VERSION envelope carries no signature"
-                    .into(),
-            )
-            .into());
-        }
-        if let Some(other) = distinct_from {
-            // The canonical form the signature covers includes `uid`, so two
-            // distinct versions carry distinct signatures (RM common master06
-            // §Digital Signature; version.adoc `canonical_form`: all attributes
-            // except signature). Both sides must be non-empty.
-            let want = self
-                .resolver
-                .resolve_value(other, vars)
-                .map_err(|e| AssertionFailure(e.to_string()))?;
-            let want = want
-                .as_str()
-                .map_or_else(|| want.to_string(), ToOwned::to_owned);
-            let Some(sig) = signature.filter(|s| !s.is_empty()) else {
-                return Err(AssertionFailure(
-                    "signature: distinct_from requested but the envelope carries no signature"
-                        .into(),
-                )
-                .into());
-            };
-            if want.is_empty() {
-                return Err(AssertionFailure(
-                    "signature: distinct_from comparand is empty (the earlier signature capture failed)"
-                        .into(),
-                )
-                .into());
-            }
-            if sig == want {
-                return Err(AssertionFailure(
-                    "signature: identical to the compared version's signature — the signature must be a function of the version's canonical content (RM common master06 §Digital Signature)"
-                        .into(),
-                )
-                .into());
-            }
-        }
-        if let Some(expected) = equals {
-            let want = self
-                .resolver
-                .resolve_value(expected, vars)
-                .map_err(|e| AssertionFailure(e.to_string()))?;
-            let want = want
-                .as_str()
-                .map_or_else(|| want.to_string(), ToOwned::to_owned);
-            if signature != Some(want.as_str()) {
-                return Err(AssertionFailure(format!(
-                    "signature: stored {signature:?} is not the client-supplied {want:?} (must be stored verbatim)"
+        let mut comparand = |value: Option<&crate::model::value::TemplatedValue>| -> Result<Option<String>, AssertionFailure> {
+            match value {
+            None => Ok(None),
+            Some(value) => {
+                let resolved = self
+                    .resolver
+                    .resolve_value(value, vars)
+                    .map_err(|e| AssertionFailure(e.to_string()))?;
+                Ok(Some(
+                    resolved
+                        .as_str()
+                        .map_or_else(|| resolved.to_string(), ToOwned::to_owned),
                 ))
-                .into());
             }
-        }
-        if verifiable == Some(true) {
-            let Some(sig) = signature else {
-                return Err(AssertionFailure(
-                    "signature: verifiable requested but the envelope carries no signature".into(),
-                )
-                .into());
-            };
-            // The mode is a DEPLOYMENT fact the party declares in its ixit (RM
-            // common master06 §Digital Signature: a deployment runs digest or
-            // openPGP, one at a time). Undeclared, the run holds no agreed
-            // canonical form and no key material, so it never asked.
-            let Some(mode) = signing else {
-                return Err(AssertionOutcome::Unjudgeable(
-                    "signature: verifiable requested but the ixit declares no `signing` posture \
-                     for the addressed instance — the mode is a deployment fact (RM common \
-                     master06-change_control_package.adoc §Digital Signature), so this run \
-                     cannot judge the fact"
-                        .into(),
-                ));
-            };
-            match crate::exec::signature::verify(body, sig, mode) {
-                Ok(true) => {}
-                Ok(false) => {
-                    return Err(AssertionFailure(
-                        "signature: does not verify over the agreed canonical form (RFC 8785 JCS of the version minus signature)"
-                            .into(),
-                    )
-                    .into());
-                }
-                Err(e) => return Err(AssertionFailure(format!("signature verify: {e}")).into()),
             }
-        }
-        Ok(())
-    }
-
-    /// The document form both sides of an `equivalent` assertion are in, for
-    /// a response body the driver could not parse as JSON.
-    ///
-    /// One side is the served `Content-Type`, the other the corpus entry's
-    /// DECLARED `format`, and the comparison happens only when the two agree.
-    /// A form is never inferred from the bytes: a guess is how a comparison
-    /// between two unrelated documents manufactures a row out of nothing.
-    ///
-    /// # Errors
-    /// The refusal sentence for the inconclusive channel: when either side
-    /// names no form this runner reads, when the two name different forms, or
-    /// when the assertion carries `ignoring:` paths, which address JSON
-    /// members and so address no part of these documents.
-    fn agreed_document_form(
-        &self,
-        to: &EquivalentTarget,
-        ignoring: &IgnoreList,
-        media_type: Option<&str>,
-    ) -> Result<DocumentForm, String> {
-        let served = media_type
-            .and_then(DocumentForm::of_media_type)
-            .ok_or_else(|| unparsed_body_reason("equivalent", media_type))?;
-        if !ignoring.0.is_empty() {
-            return Err(format!(
-                "equivalent: `ignoring:` names RM paths, which address no part of a {} document, \
-                 so the served body is UNJUDGEABLE against the fixture rather than unequal",
-                served.token()
-            ));
-        }
-        let EquivalentTarget::Ref(reference) = to else {
-            return Err(format!(
-                "equivalent: the committed payload carries no declared document form, so a {} \
-                 body is UNJUDGEABLE against it",
-                served.token()
-            ));
         };
-        let ValueRef::DataSet { key, view: None } = reference else {
-            return Err(format!(
-                "equivalent: the target {reference} declares no document form, so a {} body is \
-                 UNJUDGEABLE against it — only a corpus entry's `format` declares one",
-                served.token()
-            ));
-        };
-        let entry = self
-            .set
-            .corpus
-            .as_ref()
-            .and_then(|(_, manifest)| manifest.get(key))
-            .ok_or_else(|| {
-                format!(
-                    "equivalent: the corpus manifest declares no entry {key}, so the served \
-                     body is UNJUDGEABLE against it"
-                )
-            })?;
-        let fixture = DocumentForm::of_corpus_format(entry.format).ok_or_else(|| {
-            format!(
-                "equivalent: the SUT served a {} document while the corpus fixture {key} declares \
-                 format {}, so the two sides are not in one document form — UNJUDGEABLE on this \
-                 exchange rather than unequal",
-                served.token(),
-                entry.format.token()
-            )
-        })?;
-        if fixture == served {
-            Ok(served)
-        } else {
-            Err(format!(
-                "equivalent: the SUT served a {} document while the corpus fixture {key} is {} \
-                 (format {}), so the two sides are not in one document form — UNJUDGEABLE on this \
-                 exchange rather than unequal",
-                served.token(),
-                fixture.token(),
-                entry.format.token()
-            ))
-        }
+        let distinct_from = comparand(distinct_from)?;
+        let equals = comparand(equals)?;
+        assertions::eval_signature(
+            body,
+            present,
+            verifiable,
+            equals.as_deref(),
+            distinct_from.as_deref(),
+            signing,
+        )
     }
 
     /// Evaluate the pure-side assertions against one exchange.
@@ -877,7 +738,13 @@ impl<'a> HttpDriver<'a> {
             // judgeable exactly when both sides are in the same form.
             let document_form = match (assertion, &exchange.body_form) {
                 (Assertion::Equivalent { to, ignoring }, BodyForm::Unparsed { media_type }) => {
-                    match self.agreed_document_form(to, ignoring, media_type.as_deref()) {
+                    let resolver = &self.resolver;
+                    match assertions::agreed_document_form(
+                        to,
+                        ignoring,
+                        media_type.as_deref(),
+                        |key| resolver.corpus_format(key),
+                    ) {
                         Ok(form) => Some(form),
                         Err(refusal) => {
                             failures.push(AssertionOutcome::Unjudgeable(refusal));
@@ -939,7 +806,7 @@ impl<'a> HttpDriver<'a> {
                         ))),
                         Ok(Some(expected)) => {
                             if let Some(form) = document_form {
-                                equivalent_documents(form, body, &expected)
+                                assertions::equivalent_documents(form, body, &expected)
                             } else {
                                 let ignored = assertions::resolve_ignore_sets(
                                     &ignoring.0,
@@ -949,7 +816,7 @@ impl<'a> HttpDriver<'a> {
                                 if assertions::equivalent(body, &expected, &ignored) {
                                     Ok(())
                                 } else {
-                                    Err(AssertionOutcome::from(equivalence_mismatch(
+                                    Err(AssertionOutcome::from(assertions::equivalence_mismatch(
                                         body, &expected,
                                     )))
                                 }
@@ -1496,7 +1363,7 @@ fn template_ref_name(template: &Template) -> Option<&str> {
 ///
 /// The `equivalent` family addresses no member and reaches this only when the
 /// served body and its corpus fixture are not in one document form, which
-/// [`HttpDriver::agreed_document_form`] decides first.
+/// [`assertions::agreed_document_form`] decides first.
 fn unjudgeable_on_unparsed_body(
     assertion: &Assertion,
     form: &BodyForm,
@@ -1522,129 +1389,9 @@ fn unjudgeable_on_unparsed_body(
         | Assertion::MessageExemplar { .. }
         | Assertion::State { .. } => return None,
     }
-    Some(AssertionOutcome::Unjudgeable(unparsed_body_reason(
-        assertion.family(),
-        media_type.as_deref(),
-    )))
-}
-
-/// The one refusal sentence, shared by the assertion dispatch and the
-/// versioned read so both name the served media type the same way.
-fn unparsed_body_reason(family: &str, media_type: Option<&str>) -> String {
-    let served = media_type.map_or_else(
-        || "a body carrying no declared media type".to_owned(),
-        |declared| format!("a {declared} body"),
-    );
-    format!(
-        "{family}: the SUT served {served}, which this runner does not parse into RM attributes — \
-         the canonical JSON serialization spells every RM attribute as a member name, and the \
-         canonical XML serialization is the other bound document form (ITS-REST \
-         specifications/docs/overview/Resources.md §Data representation), so the asserted fact is \
-         UNJUDGEABLE on this exchange rather than absent from it"
-    )
-}
-
-/// Compare a served document against its corpus fixture in the form both are
-/// declared to be in ([`crate::exec::documents`]).
-///
-/// The two failing sides take different channels: a divergence and a served
-/// document that is not well formed are findings against the SUT, while an
-/// ill-formed FIXTURE is a defect of this instrument's own catalogue and says
-/// nothing about the server.
-fn equivalent_documents(
-    form: DocumentForm,
-    body: &Value,
-    expected: &Value,
-) -> Result<(), AssertionOutcome> {
-    let (Value::String(served), Value::String(fixture)) = (body, expected) else {
-        return Err(AssertionOutcome::Unjudgeable(format!(
-            "equivalent: a {} comparison reads both sides as document text, and one of them is \
-             not — UNJUDGEABLE on this exchange",
-            form.token()
-        )));
-    };
-    documents::compare(form, served, fixture).map_err(|divergence| match divergence {
-        DocumentDivergence::Divergent(_) | DocumentDivergence::ServedIllFormed(_) => {
-            AssertionOutcome::Mismatch(format!("equivalent: {divergence}"))
-        }
-        DocumentDivergence::FixtureIllFormed(_) => {
-            AssertionOutcome::Unjudgeable(format!("equivalent: {divergence}"))
-        }
-    })
-}
-
-/// The equivalence-failure diagnostic: the first differing paths (path, got,
-/// want), so a red row carries triage-usable evidence — two 80-char head
-/// previews forced the 2026-07-28 composition-XML triage to reconstruct the
-/// diff offline from the codec instead of reading it from results.json.
-fn equivalence_mismatch(body: &Value, expected: &Value) -> AssertionFailure {
-    let mut diffs: Vec<String> = Vec::new();
-    diff_paths(body, expected, "$", &mut diffs);
-    let shown = 6;
-    let suffix = if diffs.len() > shown {
-        format!(" … and {} more differing path(s)", diffs.len() - shown)
-    } else {
-        String::new()
-    };
-    AssertionFailure(format!(
-        "equivalent: retrieved content differs from committed (modulo the normative ignore-set); {}{}",
-        diffs
-            .iter()
-            .take(shown)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join("; "),
-        suffix
+    Some(AssertionOutcome::Unjudgeable(
+        assertions::unparsed_body_reason(assertion.family(), media_type.as_deref()),
     ))
-}
-
-/// Collect the paths where two JSON trees differ (leaf previews truncated,
-/// structure-first): missing keys, length mismatches, and unequal leaves.
-fn diff_paths(got: &Value, want: &Value, path: &str, out: &mut Vec<String>) {
-    let brief = |v: &Value| {
-        let s = v.to_string();
-        if s.chars().count() > 60 {
-            let head: String = s.chars().take(60).collect();
-            format!("{head}…")
-        } else {
-            s
-        }
-    };
-    match (got, want) {
-        (Value::Object(x), Value::Object(y)) => {
-            // `_type` presence on one side only is tolerated by the
-            // comparator (assertions::rm_cells_equal) — keep the diagnostic
-            // aligned so a red row never lists only tolerated diffs.
-            for (k, vw) in y {
-                match x.get(k) {
-                    Some(vg) => diff_paths(vg, vw, &format!("{path}/{k}"), out),
-                    None if k == "_type" => {}
-                    None => out.push(format!(
-                        "{path}/{k}: absent in retrieved (want {})",
-                        brief(vw)
-                    )),
-                }
-            }
-            for (k, vg) in x {
-                if !y.contains_key(k) && k != "_type" {
-                    out.push(format!("{path}/{k}: surplus in retrieved ({})", brief(vg)));
-                }
-            }
-        }
-        (Value::Array(x), Value::Array(y)) => {
-            if x.len() != y.len() {
-                out.push(format!("{path}: array length {} vs {}", x.len(), y.len()));
-            }
-            for (i, (vg, vw)) in x.iter().zip(y).enumerate() {
-                diff_paths(vg, vw, &format!("{path}[{i}]"), out);
-            }
-        }
-        _ => {
-            if !crate::exec::resultset::cells_equal(got, want) {
-                out.push(format!("{path}: got {} want {}", brief(got), brief(want)));
-            }
-        }
-    }
 }
 
 /// Parse an IMF-fixdate `Date` header ("Sun, 06 Nov 1994 08:49:37 GMT") to
@@ -4146,10 +3893,9 @@ impl HttpDriver<'_> {
             )));
         }
         if let BodyForm::Unparsed { media_type } = &exchange.body_form {
-            return Err(AssertionOutcome::Unjudgeable(unparsed_body_reason(
-                "version",
-                media_type.as_deref(),
-            )));
+            return Err(AssertionOutcome::Unjudgeable(
+                assertions::unparsed_body_reason("version", media_type.as_deref()),
+            ));
         }
         let body = exchange
             .body
@@ -4557,7 +4303,7 @@ mod tests {
             ..quoted
         };
         assert_eq!(unparsed.json_body(), None);
-        let reason = unparsed_body_reason("field", None);
+        let reason = assertions::unparsed_body_reason("field", None);
         assert!(reason.contains("no declared media type"), "{reason}");
     }
 
@@ -5656,60 +5402,6 @@ mod tests {
         );
         let error = rendered(serde_json::json!([{ "id": "a" }])).unwrap_err();
         assert_eq!(error, "a query parameter value is a scalar, not a object");
-    }
-
-    /// The equivalence diagnostic names the differing PATHS — a missing key,
-    /// a surplus key, an array-length difference and an unequal leaf — and
-    /// caps the list, so a red row carries triage-usable evidence instead of
-    /// two truncated previews.
-    #[test]
-    fn the_equivalence_diagnostic_names_the_paths_that_differ() {
-        let got = serde_json::json!({
-            "_type": "COMPOSITION",
-            "name": { "value": "served" },
-            "surplus": 1,
-            "items": [{ "a": 1 }]
-        });
-        let want = serde_json::json!({
-            "name": { "value": "committed" },
-            "missing": "gone",
-            "items": [{ "a": 1 }, { "a": 2 }]
-        });
-        let message = equivalence_mismatch(&got, &want).0;
-        assert!(
-            message.contains("$/name/value: got \"served\" want \"committed\""),
-            "{message}"
-        );
-        assert!(
-            message.contains("$/missing: absent in retrieved"),
-            "{message}"
-        );
-        assert!(
-            message.contains("$/surplus: surplus in retrieved (1)"),
-            "{message}"
-        );
-        assert!(
-            message.contains("$/items: array length 1 vs 2"),
-            "{message}"
-        );
-        // `_type` on one side only is what the comparator tolerates, so the
-        // diagnostic never lists it.
-        assert!(!message.contains("_type"), "{message}");
-
-        // Past the shown budget the count is stated rather than the list run
-        // on: a leaf preview is truncated to keep one line readable.
-        let wide_got = serde_json::json!({ "k": "x" });
-        let wide_want: Value = Value::Object(
-            (0..9)
-                .map(|k| (format!("k{k}"), Value::String("y".repeat(80))))
-                .collect(),
-        );
-        let wide = equivalence_mismatch(&wide_got, &wide_want).0;
-        assert!(wide.contains("and 4 more differing path(s)"), "{wide}");
-        assert!(
-            wide.contains('…'),
-            "a long leaf is previewed, not dumped: {wide}"
-        );
     }
 
     /// The IMF-fixdate reader (RFC 9110 §5.6.7) parses the released example
