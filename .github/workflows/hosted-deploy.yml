@@ -12,10 +12,12 @@
 # `deploy/hosted/` is the whole posture — the cloud-init, the compose file, the
 # proxy — and this file is the only thing that applies it.
 #
-# TWO STAGES, because nothing on the box builds anything. The hosted image is
-# the published release plus the data a volumeless instance needs, built and
-# pushed HERE; the box only ever pulls. So a deploy is a pull and a recreate,
-# and the box holds no checkout of this repository at all.
+# ONE IMAGE, and this lane builds nothing (#420). The release image carries the
+# engine, the console and the data — the catalogue, the vendored oracle, the
+# party declarations — so the box only ever pulls, and what it judges against is
+# the data of a published release rather than of whatever branch last built an
+# overlay. A deploy is a pull and a recreate, and the box holds no checkout of
+# this repository at all.
 #
 # The deploy itself is `rubentalstra/hetzner-deploy-action`, written for this and
 # public because the gap was real: everything on the Marketplace either creates
@@ -30,9 +32,12 @@
 #     `FROM ghcr.io/rubentalstra/veredictum:latest`, which that leg moves on a
 #     real release tag, so nothing is hand-bumped at a cut. A pre-release moves
 #     no `:latest`, so there is nothing to deploy.
-#   - push to main touching the hosted posture (deploy/hosted/**): the same
-#     release image is rebuilt with the new posture and the current main's data.
 #   - workflow_dispatch: a manual redeploy.
+#
+# There is deliberately NO push trigger. Nothing here can change the posture
+# FILES on the box: the deploy key runs one script, and that script pulls and
+# recreates. A push-triggered run would go green having applied nothing, which
+# is worse than no automation at all (#423 carries posture delivery).
 #
 # Provisioning is #403, once: the box, the DNS, and a deploy key restricted to
 # one command, stored in the `hosted` ENVIRONMENT rather than as repository
@@ -57,12 +62,6 @@ on:
         required: false
         type: string
         default: ""
-  push:
-    branches: [main]
-    paths:
-      - deploy/hosted/**
-      - .dockerignore # it decides what the build below can even see
-      - .github/workflows/hosted-deploy.yml
   workflow_dispatch:
 
 permissions: {}
@@ -73,7 +72,6 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/rubentalstra/veredictum
-  HOSTED_IMAGE: ghcr.io/rubentalstra/veredictum-console-hosted
   HOSTED_BASE: https://console.veredictum.eu
 
 jobs:
@@ -88,15 +86,15 @@ jobs:
     # and the environment's own protection rules are what stands in front of
     # them. A caller does not hold them and cannot pass the wrong ones.
     environment: hosted
-    permissions:
-      contents: read
-      # The overlay is pushed to this repository's own registry namespace.
-      packages: write
+    # Nothing here reads this repository or writes a registry: the checks are
+    # anonymous registry reads, and the deploy is one restricted command over
+    # SSH. The secrets it needs are the environment's, not the token's.
+    permissions: {}
     steps:
       # The needs-edge's guarantee, re-asserted at the point of use (the
       # FerroEHR#2846 ruling): a release call means `:latest` must ALREADY be
-      # the tag's image, because the hosted build is `FROM …:latest`. A stale
-      # tag fails here, before any deploy — never as a 20-minute blind poll.
+      # the tag's image, because `:latest` is what the box pulls. A stale tag
+      # fails here, before any deploy — never as a 20-minute blind poll.
       # Anonymous registry reads: the image is public.
       - name: The :latest tag is the release image
         if: inputs.expected-version != ''
@@ -120,32 +118,32 @@ jobs:
           fi
           echo "${IMAGE}:latest == ${EXPECTED} (${latest})"
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      # The box builds nothing, so the overlay is built here: the published
-      # release image plus the catalogue, the specification oracle and the party
-      # declarations a volumeless instance cannot mount.
-      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-      - name: Build and push the hosted image
-        id: image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          context: .
-          file: deploy/hosted/Dockerfile
-          push: true
-          # `:latest` is what the box's compose file pulls; the version tag is
-          # what a reader traces a running instance back to.
-          tags: |
-            ${{ env.HOSTED_IMAGE }}:latest
-            ${{ env.HOSTED_IMAGE }}:${{ inputs.expected-version || github.sha }}
-          provenance: false
+      # The box mounts nothing, so an image without the data at /work would come
+      # up serving a console with no catalogue at all. The release image carries
+      # it and says so with a label, and this refuses to deploy an image that
+      # does not — which is what makes the #420 cutover safe: an older release,
+      # or a rollback to one, fails here instead of on the box.
+      - name: The image carries the catalogue
+        env:
+          REF: ${{ inputs.expected-version || 'latest' }}
+        run: |
+          set -euo pipefail
+          tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+          idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${REF}")
+          child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
+          cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+            -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
+          carries=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
+            | jq -r '.config.Labels["eu.veredictum.image.carries-catalogue"] // empty')
+          if [ "$carries" != "true" ]; then
+            echo "::error::${IMAGE}:${REF} does not declare eu.veredictum.image.carries-catalogue=true, so it carries no catalogue at /work. The box mounts nothing, so deploying it would serve an instrument with no catalogue. Deploy a release built after #420." >&2
+            exit 1
+          fi
+          echo "${IMAGE}:${REF} carries the catalogue"
 
       # What the console must serve for this deploy to count. A release call is
       # told the version its tag names; a posture push or a manual redeploy

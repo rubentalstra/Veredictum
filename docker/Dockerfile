@@ -50,6 +50,14 @@ ARG RUST_VERSION=1.97.1
 ARG CARGO_LEPTOS_VERSION=v0.3.7
 ARG TAILWIND_VERSION=v4.3.3
 
+# ── mkdirs: the one stage with a shell, for a directory nobody can COPY ───────
+# The runtime writes a run's artifacts under /work/out and runs as uid 65532,
+# while everything COPYed below arrives root-owned. distroless carries no shell,
+# so no RUN can create that directory there: it arrives from here instead,
+# already owned by the uid that has to write to it.
+FROM busybox@sha256:9db7b59979c38555a39def84a31fb98b5296952f9e3afd4f6f11f05b07adfab0 AS mkdirs
+RUN mkdir -p /empty/out
+
 # ── builder: toolchain + prebuilt tools, then cargo-leptos under the cache ────
 # Digest-pinned rust:1.97.1-slim-trixie (Debian 13, glibc 2.41). The builder
 # and the cc-debian13 runtime below share the Debian 13 generation, so the
@@ -143,7 +151,29 @@ ENV LEPTOS_OUTPUT_NAME=veredictum-console \
     LEPTOS_SITE_ADDR=0.0.0.0:3000 \
     VEREDICTUM_ENGINE=/usr/local/bin/veredictum \
     VEREDICTUM_ROOT=/work/artifacts \
-    VEREDICTUM_SPECS=/work/specs/openehr
+    VEREDICTUM_SPECS=/work/specs/openehr \
+    VEREDICTUM_PARTY=/work/party \
+    VEREDICTUM_OUT=/work/out
+
+# ── The data the instrument judges against, in the image ──────────────────────
+# The catalogue, the vendored specification oracle and the party declarations
+# ship WITH the release rather than being mounted (#420). Two reasons, and the
+# second is the one that matters: an instance with no volume cannot mount them
+# at all, and a record has to name a catalogue revision that belongs to a
+# published version. An image whose data came from whatever branch built it
+# would pair a released engine with an unreleased catalogue, which is exactly
+# the unpinned pairing this instrument refuses to accept from anyone else.
+#
+# An operator who wants their own trees bind-mounts over these paths, which
+# takes precedence over image content
+# (https://docs.docker.com/engine/storage/bind-mounts — a bind mount obscures
+# what the image has at the target). `docker/docker-compose.yml` does exactly
+# that, so the local development loop reads the working tree as before.
+COPY artifacts/ /work/artifacts/
+COPY specs/openehr/ /work/specs/openehr/
+COPY party/ /work/party/
+COPY --from=mkdirs --chown=65532:65532 /empty/ /work/
+
 EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/veredictum-console"]
 # The binary is its own probe (`healthcheck` mode GETs /healthz and exits by
@@ -180,6 +210,11 @@ LABEL org.opencontainers.image.title="Veredictum console" \
       org.opencontainers.image.base.digest="sha256:a77defd6fedbb3392b175ba8ea3d1c22be963c1597c248c3ba987ddd80bfb512" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"
+# Not an OCI predefined key, because none of them means this: the image carries
+# the catalogue, the oracle and the party declarations at /work. The hosted
+# deploy REQUIRES it, so an image built before #420 cannot be deployed to an
+# instance that mounts nothing and would find /work empty.
+LABEL eu.veredictum.image.carries-catalogue="true"
 
 # ── runtime-from-source: the local path (COPY the in-image build) ─────────────
 FROM runtime-base AS runtime-from-source
