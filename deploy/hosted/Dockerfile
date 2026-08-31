@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: Veredictum contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# The hosted instrument's image: the published release, plus the data a
-# deployment with no volume needs baked in (#394).
+# The hosted instrument's image: the published release, plus the data an
+# instance with nothing mounted needs baked in (#394, #412).
 #
 # console.veredictum.eu is the official conformance instrument, so what it
 # runs has to be the release bytes and nothing else: this file is FROM the
@@ -33,8 +33,8 @@ FROM ghcr.io/rubentalstra/veredictum:latest
 # explicitly so the posture is a property of THIS file too (trivy DS-0002).
 USER 65532:65532
 
-# The compose stack mounts the repository at /work; the hosted instance has
-# no volume, so the same paths are baked from the checkout the deploy builds.
+# A local compose stack mounts the repository at /work; the box holds no
+# checkout, so the same paths are baked from the tree the deploy builds from.
 COPY artifacts/ /work/artifacts/
 COPY specs/openehr/ /work/specs/openehr/
 COPY party/ /work/party/
@@ -56,7 +56,7 @@ ENV VEREDICTUM_PARTY=/work/party \
 ENV VEREDICTUM_POSTURE=hosted
 
 # The console reads its bind address from LEPTOS_SITE_ADDR at startup and
-# defaults to loopback, which no host outside the container can reach. The
-# port is the base image's own EXPOSE, and `deploy/hosted/fly.toml` names the
-# same number as the service's internal port.
+# defaults to loopback, which no host outside the container can reach. The port
+# is the base image's own EXPOSE, and the compose file's proxy reaches the
+# container on that same number.
 ENV LEPTOS_SITE_ADDR=0.0.0.0:3000
