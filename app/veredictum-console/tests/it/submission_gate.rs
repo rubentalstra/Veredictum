@@ -116,6 +116,10 @@ fn state_over(out: &Path, port: u16, statement: String) -> ConsoleState {
         }))),
         jobs: JobSlot::default(),
         client_ip_header: None,
+        // The submission gate drives a fixture on loopback, which is what the
+        // local posture is for; #390's guard is exercised by its own tests.
+        posture: veredictum_console::posture::Posture::Local,
+        rates: veredictum_console::rate_limit::RateLimiter::default(),
         capture: false,
     }
 }
