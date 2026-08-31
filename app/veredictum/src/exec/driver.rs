@@ -24,6 +24,7 @@ use serde_json::Value;
 
 use crate::artifacts::ArtifactSet;
 use crate::exec::assertions::{self, AssertionFailure, AssertionOutcome};
+use crate::exec::documents::{self, DocumentDivergence, DocumentForm};
 use crate::exec::outcome::{self, Observation};
 use crate::exec::resolve::Resolver;
 use crate::exec::state::{Captured, VarStore};
@@ -32,7 +33,7 @@ use crate::exec::{PostconditionOutcomes, Provisioned, StepDriver, StepObservatio
 use crate::ids::{CaptureName, SmOperationRef};
 use crate::ixit::{AuthMode, Instance, Ixit};
 use crate::model::assertion::{
-    Assertion, EquivalentTarget, PostconditionRole, RowsSpec, SingleRef,
+    Assertion, EquivalentTarget, IgnoreList, PostconditionRole, RowsSpec, SingleRef,
 };
 use crate::model::binding::{
     OperationBinding, RequestBody, RequestSpec, StripRule, WireCapture, WireFrom,
@@ -762,6 +763,83 @@ impl<'a> HttpDriver<'a> {
         Ok(())
     }
 
+    /// The document form both sides of an `equivalent` assertion are in, for
+    /// a response body the driver could not parse as JSON.
+    ///
+    /// One side is the served `Content-Type`, the other the corpus entry's
+    /// DECLARED `format`, and the comparison happens only when the two agree.
+    /// A form is never inferred from the bytes: a guess is how a comparison
+    /// between two unrelated documents manufactures a row out of nothing.
+    ///
+    /// # Errors
+    /// The refusal sentence for the inconclusive channel: when either side
+    /// names no form this runner reads, when the two name different forms, or
+    /// when the assertion carries `ignoring:` paths, which address JSON
+    /// members and so address no part of these documents.
+    fn agreed_document_form(
+        &self,
+        to: &EquivalentTarget,
+        ignoring: &IgnoreList,
+        media_type: Option<&str>,
+    ) -> Result<DocumentForm, String> {
+        let served = media_type
+            .and_then(DocumentForm::of_media_type)
+            .ok_or_else(|| unparsed_body_reason("equivalent", media_type))?;
+        if !ignoring.0.is_empty() {
+            return Err(format!(
+                "equivalent: `ignoring:` names RM paths, which address no part of a {} document, \
+                 so the served body is UNJUDGEABLE against the fixture rather than unequal",
+                served.token()
+            ));
+        }
+        let EquivalentTarget::Ref(reference) = to else {
+            return Err(format!(
+                "equivalent: the committed payload carries no declared document form, so a {} \
+                 body is UNJUDGEABLE against it",
+                served.token()
+            ));
+        };
+        let ValueRef::DataSet { key, view: None } = reference else {
+            return Err(format!(
+                "equivalent: the target {reference} declares no document form, so a {} body is \
+                 UNJUDGEABLE against it — only a corpus entry's `format` declares one",
+                served.token()
+            ));
+        };
+        let entry = self
+            .set
+            .corpus
+            .as_ref()
+            .and_then(|(_, manifest)| manifest.get(key))
+            .ok_or_else(|| {
+                format!(
+                    "equivalent: the corpus manifest declares no entry {key}, so the served \
+                     body is UNJUDGEABLE against it"
+                )
+            })?;
+        let fixture = DocumentForm::of_corpus_format(entry.format).ok_or_else(|| {
+            format!(
+                "equivalent: the SUT served a {} document while the corpus fixture {key} declares \
+                 format {}, so the two sides are not in one document form — UNJUDGEABLE on this \
+                 exchange rather than unequal",
+                served.token(),
+                entry.format.token()
+            )
+        })?;
+        if fixture == served {
+            Ok(served)
+        } else {
+            Err(format!(
+                "equivalent: the SUT served a {} document while the corpus fixture {key} is {} \
+                 (format {}), so the two sides are not in one document form — UNJUDGEABLE on this \
+                 exchange rather than unequal",
+                served.token(),
+                fixture.token(),
+                entry.format.token()
+            ))
+        }
+    }
+
     /// Evaluate the pure-side assertions against one exchange.
     ///
     /// The single dispatch both assertion seams run: a step's own `assert:`
@@ -794,7 +872,27 @@ impl<'a> HttpDriver<'a> {
         let mut failures = Vec::new();
         let mut advisories = Vec::new();
         for assertion in assertions_list {
-            if let Some(refusal) = unjudgeable_on_unparsed_body(assertion, &exchange.body_form) {
+            // The `equivalent` family addresses no member: it compares a
+            // served DOCUMENT against a corpus fixture, so an unparsed body is
+            // judgeable exactly when both sides are in the same form.
+            let document_form = match (assertion, &exchange.body_form) {
+                (Assertion::Equivalent { to, ignoring }, BodyForm::Unparsed { media_type }) => {
+                    match self.agreed_document_form(to, ignoring, media_type.as_deref()) {
+                        Ok(form) => Some(form),
+                        Err(refusal) => {
+                            failures.push(AssertionOutcome::Unjudgeable(refusal));
+                            continue;
+                        }
+                    }
+                }
+                _ => None,
+            };
+            let standing_refusal = if document_form.is_some() {
+                None
+            } else {
+                unjudgeable_on_unparsed_body(assertion, &exchange.body_form)
+            };
+            if let Some(refusal) = standing_refusal {
                 failures.push(refusal);
                 continue;
             }
@@ -835,24 +933,29 @@ impl<'a> HttpDriver<'a> {
                         }
                     };
                     match expected {
-                        Err(failure) => Err(failure),
-                        Ok(None) => {
-                            Err(AssertionFailure("equivalent: no committed payload".into()))
-                        }
+                        Err(failure) => Err(AssertionOutcome::from(failure)),
+                        Ok(None) => Err(AssertionOutcome::from(AssertionFailure(
+                            "equivalent: no committed payload".into(),
+                        ))),
                         Ok(Some(expected)) => {
-                            let ignored = assertions::resolve_ignore_sets(
-                                &ignoring.0,
-                                &binding.server_assigned,
-                                &ctx_defaults,
-                            );
-                            if assertions::equivalent(body, &expected, &ignored) {
-                                Ok(())
+                            if let Some(form) = document_form {
+                                equivalent_documents(form, body, &expected)
                             } else {
-                                Err(equivalence_mismatch(body, &expected))
+                                let ignored = assertions::resolve_ignore_sets(
+                                    &ignoring.0,
+                                    &binding.server_assigned,
+                                    &ctx_defaults,
+                                );
+                                if assertions::equivalent(body, &expected, &ignored) {
+                                    Ok(())
+                                } else {
+                                    Err(AssertionOutcome::from(equivalence_mismatch(
+                                        body, &expected,
+                                    )))
+                                }
                             }
                         }
                     }
-                    .map_err(AssertionOutcome::from)
                 }
                 Assertion::Returns {
                     equals,
@@ -1390,6 +1493,10 @@ fn template_ref_name(template: &Template) -> Option<&str> {
 /// `specifications/docs/overview/Resources.md` §Data representation). Judging
 /// the fact absent there would charge the SUT for the instrument's own limit,
 /// so the outcome is the inconclusive channel and it names the media type.
+///
+/// The `equivalent` family addresses no member and reaches this only when the
+/// served body and its corpus fixture are not in one document form, which
+/// [`HttpDriver::agreed_document_form`] decides first.
 fn unjudgeable_on_unparsed_body(
     assertion: &Assertion,
     form: &BodyForm,
@@ -1435,6 +1542,35 @@ fn unparsed_body_reason(family: &str, media_type: Option<&str>) -> String {
          specifications/docs/overview/Resources.md §Data representation), so the asserted fact is \
          UNJUDGEABLE on this exchange rather than absent from it"
     )
+}
+
+/// Compare a served document against its corpus fixture in the form both are
+/// declared to be in ([`crate::exec::documents`]).
+///
+/// The two failing sides take different channels: a divergence and a served
+/// document that is not well formed are findings against the SUT, while an
+/// ill-formed FIXTURE is a defect of this instrument's own catalogue and says
+/// nothing about the server.
+fn equivalent_documents(
+    form: DocumentForm,
+    body: &Value,
+    expected: &Value,
+) -> Result<(), AssertionOutcome> {
+    let (Value::String(served), Value::String(fixture)) = (body, expected) else {
+        return Err(AssertionOutcome::Unjudgeable(format!(
+            "equivalent: a {} comparison reads both sides as document text, and one of them is \
+             not — UNJUDGEABLE on this exchange",
+            form.token()
+        )));
+    };
+    documents::compare(form, served, fixture).map_err(|divergence| match divergence {
+        DocumentDivergence::Divergent(_) | DocumentDivergence::ServedIllFormed(_) => {
+            AssertionOutcome::Mismatch(format!("equivalent: {divergence}"))
+        }
+        DocumentDivergence::FixtureIllFormed(_) => {
+            AssertionOutcome::Unjudgeable(format!("equivalent: {divergence}"))
+        }
+    })
 }
 
 /// The equivalence-failure diagnostic: the first differing paths (path, got,

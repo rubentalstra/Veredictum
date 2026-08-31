@@ -1056,6 +1056,23 @@ impl CorpusFormat {
         CorpusFormat::Adl14Text,
         CorpusFormat::RawJson,
     ];
+
+    /// The token the manifest declares this format by — one spelling, so a
+    /// diagnostic names exactly what the catalogue author wrote.
+    #[must_use]
+    pub const fn token(self) -> &'static str {
+        match self {
+            CorpusFormat::CanonicalJson => "canonical-json",
+            CorpusFormat::CanonicalXml => "canonical-xml",
+            CorpusFormat::WtFlat => "wt-flat",
+            CorpusFormat::WtStructured => "wt-structured",
+            CorpusFormat::OptXml => "opt-xml",
+            CorpusFormat::AqlText => "aql-text",
+            CorpusFormat::Adl2Text => "adl2-text",
+            CorpusFormat::Adl14Text => "adl14-text",
+            CorpusFormat::RawJson => "raw-json",
+        }
+    }
 }
 
 impl HttpMethod {
