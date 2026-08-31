@@ -242,6 +242,20 @@ branches:
     reason: coverage_gap
     source: "ITS-REST specifications/operations/admin_ehr_delete_all.yaml, verbatim: \"The server may execute this operation asynchronously (e.g. in batches), in which case returns status `202 Accepted`. If the deletion is processed synchronously and completes successfully, the server returns status `204 No Content`.\" + responses/202.yaml, against docs/overview/Requests_and_responses.md §\"HTTP status codes\" (no 202 row; \"Additional status codes MAY be used\") — register AMB-139"
     note: "The bulk-route half of the same unforceable service-side choice; see the section comment above."
+  # The 405-WHEN-DISABLED arm of the bulk route, declared since #458. The
+  # element `admin-bulk-delete-disabled-405` in Axis 1 carries the full
+  # adjudication; this row is the Axis 2 half, because the binding now declares
+  # the kind. A live run against a deployment with the admin surface switched
+  # off answered 405 on this resource, which retired the earlier premise that no
+  # case could reach the branch. What survives is the TOPOLOGY reason: a case
+  # cannot ask the SUT to be reconfigured mid-run, and the ixit models no
+  # disabled-admin deployment, so the branch is nameable and still unforceable.
+  - binding: I_ADMIN_SERVICE.physical_ehr_delete
+    variant: delete_all
+    outcome: method_not_allowed
+    reason: coverage_gap
+    source: "ITS-REST specifications/operations/admin_ehr_delete_all.yaml, verbatim: \"> NOTE: This functionality is intended primarily for **development** or **testing** purposes and may be disabled in **production** environments, in which case server may respond with `405 Method Not Allowed`.\" and that operation's own `responses` map, which declares a '405' resolving to responses/405.yaml (\"`405 Method Not Allowed` is returned when the service knows the request method, but the target resource doesn't support this method\") + docs/overview/Requests_and_responses.md §\"HTTP Methods\" (\"If a method is recognized but not allowed for the target resource, the response SHOULD be `405 Method Not Allowed` status code\")"
+    note: "Declared because the operation declares it, and observed on a live run against a deployment with the admin surface disabled (#458). Unexercised because the trigger is a deployment setting rather than a request shape: the ixit models no disabled-admin instance, so no case can select the branch without failing against every deployment that does serve it. A statement that claims AdminApi over such a deployment fails these cases, which is the correct answer; one that does not claim it has them excused at selection. Closes when the ixit models an admin-disabled deployment fact a case can key on."
   - binding: I_ADMIN_SERVICE.physical_ehr_delete
     variant: delete_all
     outcome: not_found

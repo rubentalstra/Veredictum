@@ -126,7 +126,7 @@ pub struct CaseDetail {
     pub exercises: Vec<String>,
     /// The spec-version windows, component and range, verbatim.
     pub applies: Vec<String>,
-    /// The prose run conditions, each spec-cited.
+    /// The cited prose about the case, which participates in no selection.
     pub guards: Vec<String>,
     /// The case-level format axis.
     pub formats: Vec<String>,

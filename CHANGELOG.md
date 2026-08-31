@@ -45,6 +45,44 @@ version on.
   is what the row carries. A declaration the run could not use, such as an
   openPGP mode with no key, is refused by name at the save rather than
   silently dropped.
+- **The verification pack judges its bindings' header matchers (#473).** The
+  pack player classified the status, bound captures and evaluated assertions,
+  and never ran a single header matcher, so an entry could reproduce `passed`
+  over a recording whose served headers violated its own binding. Turning them
+  on failed six of the pack's ten tests, and every failure was real: three
+  recorded `201` responses omitted the `Last-Modified` the `create_ehr`
+  expectation declares, and no recording carried the request-side ask at all,
+  which left every `negotiated` matcher unjudgeable while the evaluator answered
+  "no failure" for an absent ask. A recorded request now carries the negotiated
+  `accept`, and an entry declaring a `negotiated` matcher without one is refused
+  by name rather than passed.
+- **`guards:` stops promising a selection it never performed (#460).** 377 case
+  cores carry a `guards:` line, 618 entries between them, and nothing in the run
+  path has ever read the field. All 56 Admin API cases said "guarded until the
+  Admin API stabilises", so a reader of the catalogue concluded those cases were
+  held back while they drove as gating cases, and 34 of them went red on the
+  first live run. Reading all 618 entries settled which way to fix it: they are
+  provenance and scope prose, and every one of the 85 that named a
+  machine-decidable condition named one the runner already decides from a typed
+  field (`capabilities`, `option`, `requires`, `applies`, or a `${ixit:…}`
+  read). The field is now what it already was in the other 533 entries: cited
+  prose about the case, selecting nothing. Those 85 entries are rewritten to
+  state their fact, a new `guard-condition` validate gate refuses "applies
+  only", "not-applicable", "guarded until", "skip where" and their siblings, and
+  the published `case-core` schema, `ARCHITECTURE.md`, the book's catalogue
+  chapter and the console's case page all say so. No case changed selection. A
+  catalogue that means to hold a case back does it with `status: draft`, which a
+  run reports as its own exception and no verdict rests on.
+- **The bulk-delete binding declares the 405 its own released source declares
+  (#458).** `admin_ehr_delete_all.yaml` anticipates the branch in as many words,
+  "may be disabled in production environments, in which case server may respond
+  with `405 Method Not Allowed`", and its `responses` map carries a `'405'`. The
+  binding omitted it on the premise that no case could reach the branch, which a
+  live run against a deployment with the admin surface switched off refuted. The
+  kind is declared, the wire-surface exception records why it stays unforceable
+  (the trigger is a deployment setting the ixit does not model, not a request
+  shape), and a statement claiming `AdminApi` over such a deployment now fails
+  those cases while one that does not has them excused at selection.
 - **A run with no party statement no longer publishes the losing arm of every
   mutually exclusive option pair as a failure (#455).** `--statement` is
   optional, and five arms of the drive-time selection law were gated on a

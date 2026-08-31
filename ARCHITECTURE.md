@@ -574,9 +574,10 @@ below):
    rules, **named RM invariants** (`limits_consistent (invariant)`), ISO 8601
    rules, and constraint clauses (`C_DV_QUANTITY.list: …`) (master17.3) →
    the literal grammar + violation categories (§8.8).
-9. **Applicability guards exist per case** (DV_SCALE only at RM ≥ 1.1.0;
-   list constraints tool-dependent — master17.3 NOTEs) → `applies` +
-   `guards` (§8.3).
+9. **Applicability is per case** (DV_SCALE only at RM ≥ 1.1.0) → `applies`
+   and the typed `requires`/`capabilities`/`option` declarations (§8.3); the
+   master17.3 NOTE assumptions a case rests on (list constraints
+   tool-dependent) are recorded as `guards` prose, which selects nothing.
 10. **The same logical case runs across multiple representations**
     (XML/JSON/FLAT/STRUCTURED/TDD "content check" language in master07) →
     format axes (§8.7).
@@ -656,7 +657,7 @@ One file per case. Normative fields (∎ = required):
 | `description` ∎ | string | The schedule's Description row. |
 | `spec_refs` ∎ | string[] | Citations (component + document + section). CI link-checks them. |
 | `applies` | map | Spec-version applicability ranges (`rm: ">=1.0.2"`, `aql: ">=1.1"` …) — range grammar = Cargo/semver requirement syntax. |
-| `guards` | string[] | Non-version run conditions, each spec-cited (e.g. "modeling tool supports C_DV_QUANTITY list constraints — master17.3 NOTE"). A failed guard ⇒ `not-applicable`, citation mandatory. |
+| `guards` | string[] | Spec-cited **prose** about the case — where the expectation was authored from, what the row does not claim, the adjudication it rests on, the assumptions it makes (e.g. "modeling tool supports C_DV_QUANTITY list constraints — master17.3 NOTE"). Citation mandatory. It participates in **no selection**: applicability is decided by the typed fields alone (`status`, `applies`, `capabilities`, `option`, `requires`, the flow's own `on:` addressing and its `${ixit:…}` reads). Two validate gates hold the boundary: `guard-scope` refuses a guard restating one of those typed rules, `guard-condition` refuses a guard phrased as an applicability condition ("applies only", "not-applicable", "guarded until", "skip where", "out of scope"), whose promised hold happens nowhere. |
 | `capabilities` ∎ (assertion-machinery cases) | string[] | The **verdict-bearing** capability names (§8.2 family 3 matrix) — keep MINIMAL: a case failure marks every listed capability `Failed` (§8.11 step 4). Performance cases carry `class` instead (their selection key, §8.11 step 2c) and omit this field. |
 | `exercises` | string[] | Informative coverage tags: capabilities the case touches without bearing their verdict. |
 | `profiles` | string[] | The profile **tier(s)** (CORE/STANDARD/OPTIONS) the capabilities belong to — derivable from the Profiles matrix, carried for readability; CI checks tier-vs-capability consistency. |
@@ -1746,7 +1747,8 @@ catalogue, **capability matrix**):
    entry the claims touch, an environment block present when a performance
    class is claimed.
 2. **Selection**: cases whose `capabilities` ∩ claimed capabilities ≠ ∅,
-   filtered by `applies` × declared spec versions and by `guards`.
+   filtered by `applies` × declared spec versions. `guards` is prose and
+   filters nothing.
    **2b — option deselection**: a case carrying an `option:` tag is selected
    only when the ICS `options` declaration matches it; the sibling
    realizing the undeclared behaviour is recorded `not-applicable` with the

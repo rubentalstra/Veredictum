@@ -54,7 +54,7 @@ formats: [canonical-xml]               # tech-profile axis: XML-less parties are
 guards:
   - "DEMOGRAPHIC API is DEVELOPMENT-stage in ITS-REST 1.1.0 — CNF profiles (Demographic Persistence, OPTIONS); ITS-REST demographic (DEVELOPMENT lifecycle)"
   - "authored from SM I_DEMOGRAPHIC_SERVICE / I_PARTY operation semantics (declared meaning + Errors) + released ITS-REST demographic docs; master10 (DEMOGRAPHIC) is a stalled schedule stub (all cases TBD aaaa/bbbb) — a coverage guide only, not the authority"
-  - "Canonical-XML support for this resource family is statement-declared, not spec-mandated — the published XSDs declare no document element for PERSON and ITS-REST overview Resources.md §Data representation leaves the format to the service, so this row judges only a party that declares it cannot process such a payload (register AMB-167)"
+  - "Canonical-XML support for this resource family is statement-declared, not spec-mandated — the published XSDs declare no document element for PERSON and ITS-REST overview Resources.md §Data representation leaves the format to the service, so offering and refusing are both conformant (register AMB-167)"
 test_purpose: >-
   On a service that declares it cannot process canonical-XML request payloads
   for the PARTY family, update_party refuses an `application/xml` PERSON

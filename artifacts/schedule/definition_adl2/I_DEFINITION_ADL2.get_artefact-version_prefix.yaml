@@ -33,7 +33,7 @@ sm_operation: I_DEFINITION_ADL2.get_artefact
 capabilities: [Adl2OptProvisioning]
 profiles: [OPTIONS]
 guards:
-  - "ADL2 Get-template-at-version is deprecated in ITS-REST 1.1.0 (deprecated: true) — ITS-REST definition_template_adl2_version_get; SPECITS-87 (skip where the deprecated surface is withdrawn)"
+  - "ADL2 Get-template-at-version is deprecated in ITS-REST 1.1.0 (deprecated: true) — ITS-REST definition_template_adl2_version_get, SPECITS-87; the release marks the operation deprecated and withdraws nothing"
 test_purpose: >-
   A {major} version prefix on the ADL2 version GET resolves to the highest
   matching release of that artefact, not to a lower member of the family.

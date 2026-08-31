@@ -42,7 +42,7 @@ spec_refs:
   - "SM openehr_platform §I_EHR_SERVICE.create_ehr_with_id"
 applies: { rm: ">=1.0.2" }
 guards:
-  - "the identity claim is only checkable against a party declaration — no released ITS-REST operation discloses a server's configured system identifier, so a party whose ixit omits system_id records this case not-applicable (RM ehr master04 §EHR Identifier Allocation states the rule but the wire exposes no source for the expected value)"
+  - "the identity claim is only checkable against a party declaration — no released ITS-REST operation discloses a server's configured system identifier, so the expected value is the party's own `${ixit:system_id}` declaration (RM ehr master04 §EHR Identifier Allocation states the rule but the wire exposes no source for the expected value)"
 requires: { server: any }
 parameters:
   iteration: reset_per_row

@@ -110,6 +110,13 @@ pub enum CheckId {
     /// restatement either duplicates it undetectably or names a capability the
     /// case does not gate and states a rule nothing implements.
     GuardScope,
+    /// Guard phrasing: a `guards:` entry is PROSE and participates in no
+    /// selection, so it may not be phrased as an applicability condition on
+    /// the case or on one of its rows. Nothing reads `guards` at drive time,
+    /// so a guard promising a hold promises what happens nowhere; a reader who
+    /// believes it concludes the case is held back while it drives and gates.
+    /// Applicability is decided by the typed fields alone.
+    GuardCondition,
     /// A party statement's declared `served_extensions` families each resolve
     /// in the catalogue's outward wire-surface axis and are declared once. A
     /// statement publishes the route families its own party declares, never the
@@ -180,6 +187,7 @@ impl CheckId {
             Self::JourneyEnvelope => "journey-envelope",
             Self::ClaimCompleteness => "claim-completeness",
             Self::GuardScope => "guard-scope",
+            Self::GuardCondition => "guard-condition",
             Self::ServedExtensionDeclaration => "served-extension-declaration",
             Self::CapabilityDepth => "capability-depth",
             Self::WorkloadCoverage => "workload-coverage",
@@ -294,6 +302,7 @@ pub fn validate(ctx: &Context<'_>) -> Vec<Finding> {
     check_claim_completeness(ctx.set, &mut findings);
     check_signing_posture_declared(ctx.set, &mut findings);
     check_guard_scope(ctx.set, &mut findings);
+    check_guard_phrasing(ctx.set, &mut findings);
     check_served_extension_declarations(ctx.set, &mut findings);
     check_capability_depth(ctx.set, &mut findings);
     check_workload_coverage(ctx.set, &mut findings);
@@ -571,17 +580,22 @@ fn check_signing_posture_declared(set: &ArtifactSet, findings: &mut Vec<Finding>
     }
 }
 
-/// A `guards:` entry may not state a CAPABILITY-scoped selection rule.
+/// A `guards:` entry states no selection rule at all: not a CAPABILITY-scoped
+/// one, not a declaration-absence one, and not an applicability condition of
+/// its own.
 ///
-/// Capability scoping is a global law the runner implements once, in
-/// [`crate::run`] selection over the case's own `capabilities:` list. A
+/// Capability and declaration scoping are global laws the runner implements
+/// once, in [`crate::run`] selection over the case's own typed fields. A
 /// per-case prose restatement is either redundant, and then free to drift from
 /// what the runner does undetectably, or it names a capability the case does
 /// not gate, and then the rule it states is implemented nowhere.
 ///
-/// Prose guards stay legal for every rule outside the typed shapes; the
-/// boundary is stated on the `guards` property of the published case-core
-/// schema.
+/// The phrasing half of the boundary is [`check_guard_phrasing`], which needs
+/// no matrix.
+///
+/// Prose guards stay legal for provenance, for what a row does not claim, and
+/// for the assumptions a case rests on; the boundary is stated on the `guards`
+/// property of the published case-core schema.
 fn check_guard_scope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     let Some((_, matrix)) = &set.matrix else {
         return;
@@ -592,6 +606,137 @@ fn check_guard_scope(set: &ArtifactSet, findings: &mut Vec<Finding>) {
             guard_restates_declaration_rule(case, guard, &who, findings);
             guard_restates_capability_scope(case, guard, matrix, &who, findings);
         }
+    }
+}
+
+/// No `guards:` entry is phrased as an applicability condition.
+///
+/// This gate reads the guard text alone, so it holds with or without a
+/// capability matrix — a phrasing defect is a defect whatever else loaded.
+fn check_guard_phrasing(set: &ArtifactSet, findings: &mut Vec<Finding>) {
+    for (path, case) in &set.cases {
+        let who = path.display().to_string();
+        for guard in &case.guards {
+            guard_states_applicability_condition(guard, &who, findings);
+        }
+    }
+}
+
+/// The closed vocabulary of phrasings that state an APPLICABILITY VERDICT on a
+/// case or on one of its rows, which a `guards:` entry may not carry.
+///
+/// A guard is prose, and the runner reads it nowhere: applicability is decided
+/// by the typed fields alone — `status`, `applies`, `capabilities`, `option`,
+/// the `requires` block, the flow's own `on:` addressing and its `${ixit:…}`
+/// reads. So a guard phrased as a condition promises a hold that happens
+/// nowhere, and a reader who believes it concludes the case is held back while
+/// it drives and gates a verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ConditionPhrasing {
+    /// The case is held back until some future event.
+    Held,
+    /// The case applies only under a stated condition.
+    AppliesOnly,
+    /// The case resolves not-applicable.
+    NotApplicable,
+    /// The case is skipped.
+    Skipped,
+    /// The case is outside the run's scope.
+    OutOfScope,
+    /// The case judges only some parties.
+    JudgesOnly,
+    /// Some rows of the case do not run.
+    RowsWithheld,
+    /// The case requires an ixit declaration to run.
+    RequiresIxit,
+}
+
+impl ConditionPhrasing {
+    /// Every phrasing, in the order findings are reported.
+    const ALL: [Self; 8] = [
+        Self::Held,
+        Self::AppliesOnly,
+        Self::NotApplicable,
+        Self::Skipped,
+        Self::OutOfScope,
+        Self::JudgesOnly,
+        Self::RowsWithheld,
+        Self::RequiresIxit,
+    ];
+
+    /// The lowercase substrings that spell this phrasing.
+    fn phrases(self) -> &'static [&'static str] {
+        match self {
+            Self::Held => &[
+                "guarded until",
+                "guarded unless",
+                "guarded while",
+                "guarded pending",
+            ],
+            Self::AppliesOnly => &[
+                "applies only",
+                "only applies",
+                "apply only",
+                "applicable only",
+                "only applicable",
+            ],
+            Self::NotApplicable => &["not-applicable", "not applicable"],
+            Self::Skipped => &["skip where", "skip when", "skipped where", "skipped when"],
+            Self::OutOfScope => &["not in scope", "out of scope"],
+            Self::JudgesOnly => &["judges only", "judged only"],
+            Self::RowsWithheld => &["runs neither", "rows do not run", "row does not run"],
+            Self::RequiresIxit => &["requires ixit", "requires an ixit"],
+        }
+    }
+
+    /// Where the condition this phrasing states actually belongs.
+    fn typed_home(self) -> &'static str {
+        match self {
+            Self::Held => {
+                "a case this catalogue holds back carries `status: draft`, which selection \
+                 reports as its own exception and no verdict rests on; a maturity fact worth \
+                 keeping is stated as a fact"
+            }
+            Self::AppliesOnly | Self::NotApplicable | Self::OutOfScope | Self::JudgesOnly => {
+                "the case's own `capabilities`, `option`, `applies` and `requires` declarations \
+                 are what selection reads — state the fact and let them carry the scope"
+            }
+            Self::Skipped | Self::RowsWithheld => {
+                "no row-level selection exists: a behaviour that must be selectable on its own \
+                 is its own case, with its own typed declarations"
+            }
+            Self::RequiresIxit => {
+                "the ixit declaration law is global — selection excuses a case whose \
+                 `${ixit:…}` read or `requires` block the party does not declare, and a \
+                 capability claimed without the posture it needs is a `claim-completeness` \
+                 finding"
+            }
+        }
+    }
+}
+
+/// Reports a `guard` phrased as an applicability condition.
+///
+/// One finding per phrasing family, so a guard carrying two of them names
+/// both; the families are walked in [`ConditionPhrasing::ALL`] order, which
+/// keeps the finding order a function of the guard text alone.
+fn guard_states_applicability_condition(guard: &str, who: &str, findings: &mut Vec<Finding>) {
+    let lowered = guard.to_lowercase();
+    for phrasing in ConditionPhrasing::ALL {
+        let Some(phrase) = phrasing.phrases().iter().find(|p| lowered.contains(**p)) else {
+            continue;
+        };
+        push(
+            findings,
+            CheckId::GuardCondition,
+            who,
+            format!(
+                "guard {guard:?} is phrased as an applicability condition ({phrase:?}), and \
+                 nothing reads `guards` at drive time — the hold it promises happens nowhere; \
+                 {}",
+                phrasing.typed_home()
+            ),
+        );
     }
 }
 

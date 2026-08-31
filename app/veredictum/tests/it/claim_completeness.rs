@@ -728,6 +728,52 @@ fn a_guard_restating_a_terminology_requirement_fails_validate() {
     );
 }
 
+/// A guard PHRASED as an applicability condition fails validate (#460): the
+/// runner reads `guards` nowhere at drive time, so "guarded until …" promises a
+/// hold that happens nowhere while the case drives and gates its capability.
+#[test]
+fn a_guard_phrased_as_a_selection_condition_fails_validate() {
+    let world = World::new();
+    world.edit(SIGNING_CASE, |text| {
+        text.replace(
+            "applies: { rm: \">=1.0.2\" }",
+            "applies: { rm: \">=1.0.2\" }\nguards:\n  - \"the surface is DEVELOPMENT-stage \
+             — ITS-REST docs/admin/Description.md §Status; guarded until it stabilises\"",
+        )
+    });
+    assert_gate(
+        &world.findings(),
+        "guard-condition",
+        "is phrased as an applicability condition (\"guarded until\")",
+    );
+}
+
+/// …and the same gate leaves PROVENANCE prose alone, which is what the field
+/// is for: where the expectation was authored from and what it does not claim.
+#[test]
+fn a_provenance_guard_draws_no_condition_finding() {
+    let world = World::new();
+    world.edit(SIGNING_CASE, |text| {
+        text.replace(
+            "applies: { rm: \">=1.0.2\" }",
+            "applies: { rm: \">=1.0.2\" }\nguards:\n  - \"the verifying key is a \
+             statement/ixit input, not a wire value — RM common §change_control Digital \
+             Signature\"",
+        )
+    });
+    let conditions: Vec<String> = world
+        .findings()
+        .iter()
+        .filter(|f| f.check.token() == "guard-condition")
+        .map(ToString::to_string)
+        .collect();
+    assert!(
+        conditions.is_empty(),
+        "provenance prose is legal, got:\n{}",
+        conditions.join("\n")
+    );
+}
+
 /// …and a guard scoped to a capability the case does NOT gate states a rule
 /// nothing implements — the shape FerroEHR#2378 was opened on.
 #[test]

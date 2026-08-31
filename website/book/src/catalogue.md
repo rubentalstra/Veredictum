@@ -62,9 +62,14 @@ One file, one behaviour. The fields that shape every case:
 
 Two more fields carry the honesty:
 
-- **`applies`** and **`guards`** state when a case is applicable at all, by
-  specification version range or by a cited run condition. A failed guard
-  produces not-applicable with its citation, never a silent skip.
+- **`applies`** states the specification version range a case is applicable in.
+  Applicability is decided by the typed fields only: `applies`, `status`,
+  `capabilities`, `option`, and the `requires` block. A case selection puts out
+  of scope is recorded not-applicable with its citation, never a silent skip.
+- **`guards`** is cited prose about the case: where the expectation was
+  authored from, what the row does not claim, the adjudication it rests on, the
+  assumptions it makes. It selects nothing, and `validate` refuses a guard
+  phrased as if it did.
 - **`ambiguities`** lists the register entries the case is subject to.
 
 What a case core deliberately does *not* contain: any status code, header name,

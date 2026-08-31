@@ -57,10 +57,14 @@
 #                       half. ehr-subject-query-argument-required stays a
 #                       gap on its own second blocker (the binding request
 #                       model cannot express an omitted mandatory argument).
-#   method_not_allowed  still uncased: both its elements are blocked by
-#                       something other than vocabulary (the ixit models no
-#                       disabled-admin deployment; the runner has no
-#                       deliberate-wrong-method request form).
+#   method_not_allowed  still uncased, and the blockers are not vocabulary. The
+#                       bulk-delete binding DECLARES the kind since #458, and a
+#                       live run against a deployment with the admin surface
+#                       switched off answered 405 on that resource -- so the
+#                       branch is observable, and unforceable because the
+#                       trigger is a deployment setting the ixit does not model.
+#                       The wrong-method element stays blocked on the runner
+#                       having no deliberate-wrong-method request form.
 created: { class: success, meaning: "New resource exists (\"positive response associated to the successful creation\")" }
 ok: { class: success, meaning: "Read/query succeeded with content" }
 ok_empty: { class: success, meaning: "Fulfilled with no content (e.g. composition logically deleted at requested time)" }
