@@ -42,6 +42,20 @@ pub const SIGN_KEY_ENV: &str = "VEREDICTUM_SIGN_KEY";
 /// Unset is a first-class state: the page explains what to configure.
 pub const VERIFY_KEY_ENV: &str = "VEREDICTUM_VERIFY_KEY";
 
+/// The environment variable stating how many runs this host can drive at once.
+///
+/// Unset is [`crate::run_job::MAX_CONCURRENT_RUNS`], which #388 reasoned about
+/// and called a starting value to re-derive by measuring on the chosen host.
+/// This is how a host states what it actually has: a 2 GB box drives one run,
+/// not two, and the queue covers the difference with a position rather than a
+/// refusal.
+///
+/// A value that is not a positive integer refuses to start. A cap is a safety
+/// property, and falling back to a larger default on a typo would let a box
+/// admit work it cannot hold — which the OOM killer then resolves, halfway
+/// through somebody's conformance run.
+pub const MAX_CONCURRENT_RUNS_ENV: &str = "VEREDICTUM_MAX_CONCURRENT_RUNS";
+
 /// The environment variable naming the request header that carries the real
 /// client address, for a deployment behind a proxy.
 ///
@@ -91,6 +105,29 @@ pub const REGISTRY_REPO_ENV: &str = "VEREDICTUM_REGISTRY_REPO";
 /// deployment can name its own root, and so the client's request sequence is
 /// assertable against a stub server with no network at all.
 pub const REGISTRY_API_ENV: &str = "VEREDICTUM_GITHUB_API";
+
+/// Why the console refused to start.
+///
+/// Two values, and only two, that this console will not guess at. Everything
+/// else missing is a first-class state a screen explains; these two are safety
+/// properties, and a wrong guess about either lets the instrument do something
+/// it should not.
+#[derive(Debug, thiserror::Error)]
+pub enum StartupError {
+    /// The posture is a value that names no posture.
+    #[error(transparent)]
+    Posture(#[from] crate::posture::UnknownPosture),
+    /// The concurrency cap is not a positive integer.
+    #[error(
+        "{env}={value:?} is not a positive integer, and a concurrency cap is not a value to guess at: a box that admits more runs than it can hold has the OOM killer resolve the difference, halfway through somebody's conformance run"
+    )]
+    Concurrency {
+        /// The variable that carried it.
+        env: &'static str,
+        /// The value, verbatim.
+        value: String,
+    },
+}
 
 /// The loaded catalogue, or the explanation of why there is none.
 #[derive(Debug, Clone)]
@@ -143,14 +180,28 @@ impl ConsoleState {
     /// through the published lib — the same call `validate` runs.
     ///
     /// # Errors
-    /// [`crate::posture::UnknownPosture`] when
-    /// [`crate::posture::POSTURE_ENV`] names no posture. That is the ONE
-    /// startup value this console refuses to guess at: a missing mount is a
-    /// first-class state the screens explain, but a public instance falling
-    /// back to `local` on a typo would drive whatever address a visitor
-    /// named, so the process does not start at all.
-    pub fn load() -> Result<Self, crate::posture::UnknownPosture> {
+    /// [`StartupError`]: a posture that names no posture, or a concurrency cap
+    /// that is not a positive integer. Those are the two startup values this
+    /// console refuses to guess at — a missing mount is a first-class state the
+    /// screens explain, while a wrong guess about either of these lets the
+    /// instrument drive an address it should not or admit work it cannot hold.
+    pub fn load() -> Result<Self, StartupError> {
         let posture = crate::posture::from_env()?;
+        // What this host can actually drive at once. #388 reasoned two, and
+        // called it a starting value to re-derive by measuring on the chosen
+        // host; this is where the host says what it measured.
+        let max_concurrent = match std::env::var(MAX_CONCURRENT_RUNS_ENV) {
+            Err(_) => crate::run_job::MAX_CONCURRENT_RUNS,
+            Ok(value) => match value.trim().parse::<usize>() {
+                Ok(n) if n > 0 => n,
+                _ => {
+                    return Err(StartupError::Concurrency {
+                        env: MAX_CONCURRENT_RUNS_ENV,
+                        value,
+                    });
+                }
+            },
+        };
         let root =
             PathBuf::from(std::env::var(ROOT_ENV).unwrap_or_else(|_| String::from("artifacts")));
         let specs = PathBuf::from(
@@ -172,7 +223,10 @@ impl ConsoleState {
             verify_key,
             catalogue: Arc::new(catalogue),
             draft: Arc::new(std::sync::Mutex::new(crate::run_api::Drafts::new())),
-            jobs: crate::run_job::JobSlot::default(),
+            jobs: crate::run_job::JobSlot::with_limits(crate::run_job::Limits {
+                max_concurrent,
+                ..crate::run_job::Limits::default()
+            }),
             client_ip_header: std::env::var(CLIENT_IP_HEADER_ENV)
                 .ok()
                 .filter(|name| !name.trim().is_empty()),
@@ -180,5 +234,52 @@ impl ConsoleState {
             rates: crate::rate_limit::RateLimiter::default(),
             capture: crate::capture::enabled(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_CONCURRENT_RUNS_ENV, StartupError};
+
+    /// The cap a host may state, and the values it may not.
+    ///
+    /// Driven over the parse itself rather than through `load()`: that reads
+    /// process-wide environment, and a test that sets a variable races every
+    /// other test in the binary.
+    fn cap_of(value: Option<&str>) -> Result<usize, StartupError> {
+        match value {
+            None => Ok(crate::run_job::MAX_CONCURRENT_RUNS),
+            Some(value) => match value.trim().parse::<usize>() {
+                Ok(n) if n > 0 => Ok(n),
+                _ => Err(StartupError::Concurrency {
+                    env: MAX_CONCURRENT_RUNS_ENV,
+                    value: value.to_owned(),
+                }),
+            },
+        }
+    }
+
+    #[test]
+    fn an_unset_cap_is_the_reasoned_default() {
+        assert_eq!(cap_of(None).ok(), Some(crate::run_job::MAX_CONCURRENT_RUNS));
+    }
+
+    #[test]
+    fn a_host_states_what_it_can_drive() {
+        assert_eq!(cap_of(Some("1")).ok(), Some(1));
+        assert_eq!(cap_of(Some(" 4 ")).ok(), Some(4));
+    }
+
+    /// Every one of these would otherwise fall back to a LARGER cap than the
+    /// host stated, which is the direction that ends a run halfway through.
+    #[test]
+    fn a_cap_that_is_not_a_positive_integer_refuses_to_start() {
+        for value in ["", "0", "two", "-1", "1.5", "1 2"] {
+            let refused = cap_of(Some(value));
+            assert!(
+                matches!(refused, Err(StartupError::Concurrency { .. })),
+                "{value:?} must refuse rather than fall back"
+            );
+        }
     }
 }

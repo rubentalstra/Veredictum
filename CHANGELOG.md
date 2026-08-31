@@ -128,6 +128,15 @@ version on.
   this repository can reach them, and no Hetzner API token exists at all — the
   deploy talks to the host and nothing else, so a leaked deploy key cannot
   destroy the server.
+- **A host states how many runs it can drive (#412).**
+  `VEREDICTUM_MAX_CONCURRENT_RUNS` overrides the reasoned default, because #388
+  called that number a starting value to re-derive by measuring on the chosen
+  host — and the chosen host turned out to be a 2 GB box that drives one run
+  rather than two. A value that is not a positive integer refuses to start: a
+  cap is a safety property, and falling back to a larger default on a typo lets
+  a box admit work it cannot hold, which the OOM killer then resolves halfway
+  through somebody's run. Resizing the box is now an environment edit rather
+  than a release.
 - **The console sweeps its own run artifacts (#412).** A disposable filesystem
   discarded them every few hours; a box that does not restart would let them grow
   until the disk is gone. Directories older than `ARTIFACTS_KEPT` go hourly,
