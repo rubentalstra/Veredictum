@@ -426,6 +426,12 @@ jobs:
       - name: Every CI job gates the merge
         run: bash scripts/checks/ci-conclusion-complete.sh
 
+      # The other direction of the same property: a command this workflow runs
+      # that the local battery does not is a command whose first failure is a
+      # red pull request. On 2026-08-31 that gap was 15 commands wide.
+      - name: The local battery covers this workflow
+        run: bash scripts/checks/gates-cover-ci.sh
+
       # The image's OCI metadata is declared in two places and must agree. It
       # lives in THIS job rather than the image tier because it reads
       # `release.yml` and `build-image.yml` as well as the Dockerfile — the
