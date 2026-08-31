@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# TEMPORARY, and #425 removes it once it has answered its one question: does the
+# `registry-signing` environment actually admit the job that has to reach it,
+# and does the reviewer gate actually hold?
+#
+# The documentation settles the design — a deployment branch policy is matched
+# against GITHUB_REF, and a `pull_request_target` run carries the default
+# branch's ref
+# (https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
+# — but it cannot establish that THIS repository is configured the way it is
+# believed to be. The signing lane has never run, and "the first submitter finds
+# out" is not verification of the step every published record depends on.
+#
+# It never writes the key, never checks it out, and never prints it: the only
+# thing it says about the secret is whether it is long enough to be a key at
+# all. Dispatch it on `main` and it must wait for approval and then pass;
+# dispatch it on any other ref and the deployment must be REFUSED, which is the
+# half that proves the policy is doing work rather than being decorative.
+name: Environment gate probe
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  probe:
+    name: reach the registry-signing environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: registry-signing
+    steps:
+      - name: What ref the policy was matched against, and whether a key is there
+        env:
+          KEY: ${{ secrets.REGISTRY_SIGN_KEY }}
+        run: |
+          set -euo pipefail
+          echo "GITHUB_REF=${GITHUB_REF}"
+          echo "the environment admitted this ref and the reviewer released it"
+          # Presence only. A length is not the key, and an empty secret would
+          # otherwise be found by the first real submission instead of here.
+          if [ "${#KEY}" -gt 1000 ]; then
+            echo "REGISTRY_SIGN_KEY is present and of key-like length"
+          else
+            echo "::error::REGISTRY_SIGN_KEY is absent or too short to be an armored secret key. A console record is signed from this environment and nowhere else." >&2
+            exit 1
+          fi

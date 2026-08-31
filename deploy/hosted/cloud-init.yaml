@@ -9,7 +9,7 @@
 #
 # What it deliberately does NOT do: fetch anything from this repository. The box
 # holds no checkout. Everything the instrument needs is baked into the image
-# (deploy/hosted/Dockerfile), so the deploy is a pull.
+# (docker/Dockerfile, #420), so the deploy is a pull.
 
 users:
   - name: deploy

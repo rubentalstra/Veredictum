@@ -19,6 +19,18 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **One image, carrying the data it judges against (#420).** The published
+  image now holds the catalogue, the vendored specification oracle and the party
+  declarations at `/work`, so `docker compose up` grades a server in an empty
+  directory and the hosted instrument mounts nothing. It replaces a second image
+  whose only content was those three directories copied over the release, and
+  whose data came from whichever branch last built it — so the official
+  instrument was pairing a released engine with an unreleased catalogue. An
+  operator who wants their own trees bind-mounts over the baked paths, which
+  still takes precedence. The image declares
+  `eu.veredictum.image.carries-catalogue`, and the hosted deploy refuses an
+  image that does not, so an older release cannot reach an instance that would
+  find `/work` empty.
 - **The registry signing key exists, and its public half is committed
   (#403).** `registry/keys/registry-signing.pub.asc` is what a reader checks a
   published console record against, with the instrument through

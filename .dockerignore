@@ -1,17 +1,14 @@
-# The ONE build-context ignore file for every image built from this repository
-# root — docker/Dockerfile and deploy/hosted/Dockerfile both. A Dockerfile-adjacent
+# The build-context ignore file for the ONE image this repository builds
+# (docker/Dockerfile). A Dockerfile-adjacent
 # `*.dockerignore` would SHADOW this file entirely
 # (https://docs.docker.com/build/concepts/context — a Dockerfile-specific
 # ignore-file takes precedence), so there is only this one — the FerroEHR shape.
 #
-# What the hosted console BAKES therefore must not be excluded here:
-# deploy/hosted/Dockerfile COPYs `artifacts/`, `specs/openehr/` and `party/` into
-# /work, because the box runs the image against no checkout of this repository
-# and mounts nothing. An exclusion of those trees fails that build, which is how
-# it was found. They stay in the context; the price is that the
-# from-source operator build's `COPY . .` now carries them into its builder
-# stage, which only that local path pays — the CI target COPYs bin/ and site/
-# alone, and BuildKit transfers lazily.
+# What the image BAKES therefore must not be excluded here: the runtime stage
+# COPYs `artifacts/`, `specs/openehr/` and `party/` into /work (#420), because a
+# record has to name a catalogue revision that belongs to a published release,
+# and an instance that mounts nothing has no other way to read them. An
+# exclusion of those trees fails that build, which is how it was found.
 #
 # Everything else stays out, with ONE re-included directory: a smaller context
 # keeps COPY layers stable across edits to what images never read, and
