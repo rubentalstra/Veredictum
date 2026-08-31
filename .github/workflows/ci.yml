@@ -218,6 +218,16 @@ jobs:
       - name: TODOs name their issue — seeded-violation proof
         run: bash scripts/checks/todo-issue-refs.sh --self-test
 
+      # console.veredictum.eu is the official conformance instrument (#388), so
+      # no reader-facing surface may call it a demo or a sandbox. The words are
+      # refused as whole words, which leaves `demonstration` and the CSP
+      # directive name alone.
+      - name: No surface calls the instrument a demo
+        run: bash scripts/checks/hosted-instrument-language.sh
+
+      - name: No surface calls the instrument a demo — seeded-violation proof
+        run: bash scripts/checks/hosted-instrument-language.sh --self-test
+
       # The console's engine pin is ONE value, the workspace engine version
       # (#179). The root manifest's `[patch.crates-io]` only redirects the
       # console's exact crates.io pin to `app/veredictum` while the two agree,

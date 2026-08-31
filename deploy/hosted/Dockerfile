@@ -9,7 +9,7 @@
 # published image and adds layers of committed data. `:latest` is the release
 # pointer `scan-and-tag` moves on a real release tag and never on a
 # pre-release, and the only thing that deploys is
-# `.github/workflows/sandbox-deploy.yml`, which a release pings after that leg
+# `.github/workflows/hosted-deploy.yml`, which a release pings after that leg
 # succeeds — so the reference always resolves and no cut-time bump exists.
 #
 # The instance holds nothing durable. A run's artifacts live under /work/out

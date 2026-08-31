@@ -83,13 +83,21 @@ It ships as two products over one engine:
   the verdicts. The image is the console, never the CLI — a static binary
   needs no container.
 
-A hosted instance of the console runs at
-[console.veredictum.eu](https://console.veredictum.eu), no install needed:
-browse the catalogue, the party statements and the vendored specification
-text, or connect a publicly reachable CDR and drive a real run from the
-browser. Runs there write the instance's ephemeral filesystem, so a record
-you want to keep belongs on your own machine, one section down. The delivery
-pipeline behind the hosted instance is documented in
+[console.veredictum.eu](https://console.veredictum.eu) is the official
+conformance instrument, and a run performed there is an official run. It
+drives the catalogue against the endpoint you name, records every exchange,
+computes the verdicts, and submits the whole record as a pull request. CI
+recomputes those verdicts from the transcript the submission carries, refuses
+any mismatch, and signs the record with a key the instance never holds. The
+merge publishes it.
+
+What that establishes is threefold: the run was performed by an instrument
+nobody in the exchange controls, its judgement is arithmetic anyone can
+repeat, and the bytes have not moved since we repeated it. What it cannot
+establish is the environment — you chose the endpoint, and the record says
+so. Running the instrument yourself publishes your own claim instead, which
+is a different question rather than a weaker answer, and the section below is
+how. The delivery pipeline behind the hosted instrument is documented in
 [deploy/hosted/README.md](deploy/hosted/README.md).
 
 Both are pre-1.0. The 0.1.x line publishes working releases and makes no
@@ -130,11 +138,12 @@ answer the same questions without this tool.
 ## Quick start
 
 The fastest path installs nothing:
-[console.veredictum.eu](https://console.veredictum.eu) is the hosted console
-described above. For everything you want to keep, run it yourself — fastest
-first: the console with `docker compose up`, the CLI from cargo, the signed
-bare-metal binaries. Grading a server end to end needs the catalogue, which
-lives in this repository — that path closes the section.
+[console.veredictum.eu](https://console.veredictum.eu) is the official
+instrument described above, and a run there produces an official record. To
+publish your own claim, or to work offline, run the instrument yourself —
+fastest first: the console with `docker compose up`, the CLI from cargo, the
+signed bare-metal binaries. Grading a server end to end needs the catalogue,
+which lives in this repository — that path closes the section.
 
 ### docker compose up — the console
 

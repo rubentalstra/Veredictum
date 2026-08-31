@@ -282,6 +282,31 @@ table is comparable across them.
 
 ![Two records aligned side by side](console/img/benchmark-compare-light.png)
 
+## Running it in public
+
+The hosted instrument at
+[console.veredictum.eu](https://console.veredictum.eu) is this console served
+publicly, and a public console has two problems a local one does not.
+
+**It drives whatever endpoint a visitor names.** `VEREDICTUM_POSTURE=hosted`
+turns on the target guard: loopback, private, link-local, unique-local,
+unspecified, multicast, carrier-shared and broadcast addresses are refused in
+both families before any socket opens, and the name is resolved first, because
+a name under a visitor's control resolving to a private address is the whole
+problem. The variable's default is `local`, which refuses nothing — driving a
+CDR at `localhost` is the normal local case. A value that is neither refuses
+to start, rather than falling back to the permissive one on a typo.
+
+**It has to tell its visitors apart.** With no login, that is the peer address.
+Behind a proxy the peer is the proxy, so `VEREDICTUM_CLIENT_IP_HEADER` names
+the header carrying the real client address — and only a header the operator
+names is read, because an unconditionally trusted `X-Forwarded-For` would let
+any visitor claim any identity and defeat the per-visitor caps. Unset, the
+socket peer is the whole answer.
+
+Both are documented with the rest of the hosted posture in the repository's
+`deploy/hosted/` directory.
+
 ## An address the console does not serve
 
 A path outside the route tree answers `404` and renders it: the same chrome,

@@ -99,6 +99,16 @@ version on.
   endpoint — and the conformance board labels and orders the new rows.
 
 ### Changed
+- **Every reader-facing page describes the hosted instrument as what it is
+  (#395).** console.veredictum.eu is the official conformance instrument: a run
+  performed there is an official run, and the record it produces is re-derived
+  and signed here. The README, the landing page and the book say that, along
+  with the one thing such a record cannot attest — the submitter chose the
+  endpoint. Running the instrument yourself publishes your own claim, which the
+  same pages now describe as a different question rather than a lesser one.
+  `scripts/checks/hosted-instrument-language.sh` refuses the words "demo" and
+  "sandbox" on every surface a reader meets, as whole words, so `demonstration`
+  and the CSP directive name are untouched.
 - **The hosted instrument runs as one process that never stops (#394).** A
   conformance run outlives the request that started it, and an autoscaling
   request platform breaks that three ways: several instances answer one

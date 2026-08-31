@@ -287,6 +287,7 @@ The guard tier, ungated because its inputs exist on every change:
 bash scripts/checks/comment-style.sh --all        # comment form and budgets
 bash scripts/checks/todo-issue-refs.sh            # TODO(#N) outside .rs (YAML/shell/TOML)
 bash scripts/checks/changelog-structure.sh        # Keep a Changelog structure
+bash scripts/checks/hosted-instrument-language.sh # no surface calls it a demo
 bash scripts/checks/ci-conclusion-complete.sh     # no CI job runs ungated
 zizmor --min-severity=low .github/workflows/      # workflow security posture
 actionlint                                        # workflow correctness + shellcheck

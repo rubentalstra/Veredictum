@@ -13,12 +13,14 @@ and published results live on the public
 [benchmark](https://veredictum.eu/benchmarks.html) boards, submitted by pull
 request.
 
-A hosted instance of the web console runs at
-[console.veredictum.eu](https://console.veredictum.eu). It serves the
-catalogue, the party statements and the vendored specification text, and it
-can drive a run against a publicly reachable CDR — nothing to install. Its
-filesystem is ephemeral, so a record you want to keep is produced on your
-own machine ([Installation](installation.md)).
+[console.veredictum.eu](https://console.veredictum.eu) is the official
+conformance instrument. It serves the catalogue, the party statements and the
+vendored specification text, and a run driven there against a publicly
+reachable CDR is an official run: the record is submitted as a pull request,
+its verdicts are recomputed here from the transcript it carries, and it is
+signed only after they match. The instance holds no key and nothing durable —
+git is where a record lives. Running the instrument yourself publishes your
+own claim instead ([Installation](installation.md)).
 
 The released openEHR specifications are the only authority the instrument
 accepts. Every expectation in the catalogue names the section it comes from, so
