@@ -38,4 +38,7 @@ apply" part so a future session can act on it without re-deriving it.
 - [Drafting in Ruben's voice](drafting-in-rubens-voice.md) — personal drafts
   (emails, forum posts) lead with the point, short paragraphs, no structure
   announcements, no AI tells; Discourse is markdown, Outlook is .txt
+- [The console tier's trust model](console-tier-trust-model.md) — the transport
+  seam that makes a re-judgement meaningful, and the two ways a gate can pass
+  while doing nothing
 - [The hosted instrument](hosted-instrument-always-on.md) — console.veredictum.eu is the OFFICIAL instrument (#388), one always-on machine, Vercel retired by #394, no signing key on the host
