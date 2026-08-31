@@ -349,7 +349,8 @@ enumerated wire surface, per-capability case-count floors — and **zero finding
 is the only passing result.** `--statement <file>` adds the static conformance
 review of one SUPPLIED declaration, which is the only way a claim enters:
 nothing is swept from the tree. The instrument's
-own canonical CLI table (`validate`, `run`, `verdicts`, `replay`, `verify-record`,
+own canonical CLI table (`validate`, `run`, `verdicts`, `replay`, `evidence`,
+`verify-record`,
 `perf`, `stress`, `stress-compare`, `aql-probe`, `bench`, `bench-compare`,
 `bench-packs`, `perf-assets`, `conformance-assets`, `emit-schemas`) is the authority on how to invoke
 everything else; never improvise a flag. `scripts/checks/cli-surface.sh` holds

@@ -18,6 +18,49 @@ version on.
 
 ## [Unreleased]
 
+### Added
+- **A red run exports the evidence behind its own rows (#463).** New subcommand
+  `veredictum evidence`, which carves a named set of a finished run's recorded
+  exchanges out of its `transcript.json` and writes them as one bundle. It reads
+  no statement: sealing a record needs a claim, and reading the exchanges a run
+  recorded does not, which is exactly the case when a run has gone red. One
+  command turns the red rows into a triage input:
+
+  ```bash
+  veredictum evidence --transcript run/transcript.json \
+      --results run/results.json --failing --out run/evidence.json
+  ```
+
+  `--failing` selects every `failed` and `errored` case the results record
+  names; `--only <CASE>` (repeatable) and `--filter <SUBSTRING>` name a set
+  directly, and the three union. Each exported case carries the outcome row the
+  run recorded beside its requests and responses, so a reader holds one
+  document rather than two.
+
+  **An export that would carry nothing is refused**, exit `2`, with no file
+  written. A selection matching no recorded case names what was asked for and
+  what the transcript actually carries; a selection whose every case recorded
+  nothing names those cases. A selection that half-matched still exports, and
+  the bundle's `without_exchanges` names every case it could not carry, so a
+  partial answer never reads as a complete one. This is what the first live
+  triage's hand-written extraction got wrong: it produced 130,761 empty objects
+  and zero scalar values, valid JSON of the right shape and size with nothing
+  in it, and nothing said so.
+
+  The `authorization` request header's value is withheld by the export itself,
+  whatever the transcript held, pinned by a test over a run driven with a
+  credential. Response bodies are the wire's own bytes and can carry real
+  patient data, so the bundle is operator-controlled output like the transcript
+  it comes from.
+
+  The console offers the same document on a red run: the results screen's
+  **Evidence for a triage** section downloads it from `/export/evidence.json`,
+  and says which of the two reasons applies when it cannot — no row went red, or
+  the run was driven without recording its wire.
+
+  `schemas/evidence-bundle.schema.json` is the published shape, drift-guarded
+  like every other emitted schema.
+
 ### Changed
 - **The proforma stays, the answers leave (#465).** ISO/IEC 9646-7 splits an ICS
   in one place: every cell of the proforma belongs to its specifier except the

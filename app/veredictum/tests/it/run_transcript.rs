@@ -1,15 +1,18 @@
 // SPDX-FileCopyrightText: Veredictum contributors
 // SPDX-License-Identifier: Apache-2.0
 
-//! The opt-in run wire transcript (#96): what `run --record-exchanges`
-//! persists beside `results.json`, and what a run without the flag does not.
+//! The opt-in run wire transcript (#96) and the evidence bundle carved out of
+//! it (#463): what `run --record-exchanges` persists beside `results.json`,
+//! what a run without the flag does not, and what `veredictum evidence` will
+//! and will not hand a triage.
 //!
 //! Every run here drives a hermetic in-process fixture SUT that answers every
 //! request `500` with a fixed body, so the exchanges are deterministic and no
-//! real deployment is involved. The properties under test are the artifact's:
-//! it validates against its published schema, it is ordered so a re-run emits
-//! the same bytes, the sealed manifest covers it, and the credential the run
-//! authenticated with never reaches the file.
+//! real deployment is involved. The properties under test are the artifacts':
+//! they validate against their published schemas, the transcript is ordered so
+//! a re-run emits the same bytes, the sealed manifest covers it, an export
+//! that would carry nothing is refused, and the credential the run
+//! authenticated with reaches neither file.
 
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
@@ -327,6 +330,163 @@ fn an_unrecorded_sealed_run_names_no_transcript() -> Fallible {
             .iter()
             .any(|file| file.name == TRANSCRIPT_FILE),
         "an unrecorded run's manifest names no transcript"
+    );
+    Ok(())
+}
+
+/// The committed published schema for the evidence bundle.
+fn evidence_bundle_schema() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let path = repo_root().join("schemas/evidence-bundle.schema.json");
+    let body = std::fs::read_to_string(&path)?;
+    Ok(serde_json::from_str(&body)?)
+}
+
+/// Runs `veredictum evidence` with the given arguments, returning its output.
+fn run_evidence(args: &[&str]) -> Result<std::process::Output, std::io::Error> {
+    std::process::Command::new(env!("CARGO_BIN_EXE_veredictum"))
+        .arg("evidence")
+        .args(args)
+        .output()
+}
+
+/// Drives one recorded, credentialed run and hands back its directory.
+fn recorded_run() -> Result<assert_fs::TempDir, Box<dyn std::error::Error>> {
+    let scratch = assert_fs::TempDir::new()?;
+    let port = fixture_sut()?;
+    let ixit = write_ixit(scratch.path(), port, true)?;
+    // The fixture answers 500, so every row is red: a non-zero exit is the
+    // campaign's own verdict and says nothing about the export under test.
+    let _clean = run_binary(scratch.path(), &ixit, &["--record-exchanges"])?;
+    Ok(scratch)
+}
+
+/// A finished run's red rows export as an evidence bundle with no statement
+/// anywhere in the picture, and the credential the run authenticated with
+/// reaches neither the bundle nor the console.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn the_red_rows_of_a_credentialed_run_export_without_a_statement() -> Fallible {
+    let scratch = recorded_run()?;
+    assert!(
+        !scratch.path().join("statement.json").exists(),
+        "the run was driven with no claim at all, which is the point"
+    );
+
+    let bundle_path = scratch.path().join(veredictum::evidence::EVIDENCE_FILE);
+    let output = run_evidence(&[
+        "--transcript",
+        &scratch.path().join(TRANSCRIPT_FILE).display().to_string(),
+        "--results",
+        &scratch.path().join("results.json").display().to_string(),
+        "--failing",
+        "--out",
+        &bundle_path.display().to_string(),
+    ])?;
+    assert!(
+        output.status.success(),
+        "the export was refused: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let body = std::fs::read_to_string(&bundle_path)?;
+    assert!(body.ends_with('\n'), "documents end with a newline");
+    assert!(
+        !body.contains(PASSWORD),
+        "the run's credential must never reach the bundle"
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains(PASSWORD)
+            && !String::from_utf8_lossy(&output.stderr).contains(PASSWORD),
+        "the run's credential must never reach the console either"
+    );
+
+    let value: serde_json::Value = serde_json::from_str(&body)?;
+    let validator = jsonschema::validator_for(&evidence_bundle_schema()?)?;
+    if let Some(finding) = validator.iter_errors(&value).next() {
+        panic!(
+            "the emitted bundle fails its published schema at {}: {finding}",
+            finding.instance_path()
+        );
+    }
+
+    let bundle: veredictum::evidence::EvidenceBundle = serde_json::from_str(&body)?;
+    assert_eq!(bundle.sut.name, "transcript-gate");
+    assert!(
+        bundle.exchange_count() > 0,
+        "an empty bundle is exactly what must be unproducible"
+    );
+    let authorizations: Vec<&String> = bundle
+        .cases
+        .iter()
+        .flat_map(|case| case.exchanges.iter())
+        .filter_map(|exchange| exchange.request.headers.get("authorization"))
+        .collect();
+    assert!(
+        !authorizations.is_empty(),
+        "the authenticated run sent the header, so the bundle records the name"
+    );
+    for value in authorizations {
+        assert_eq!(value, REDACTED, "the header's value is withheld");
+    }
+    for case in &bundle.cases {
+        let status = case
+            .outcome
+            .as_ref()
+            .map(|outcome| outcome.status)
+            .ok_or("--results was supplied, so every case carries its row")?;
+        assert!(
+            matches!(
+                status,
+                veredictum::party::OutcomeStatus::Failed
+                    | veredictum::party::OutcomeStatus::Errored
+            ),
+            "--failing selects red rows only, and {} is {}",
+            case.case,
+            status.token()
+        );
+    }
+    Ok(())
+}
+
+/// An export naming a case set the run never recorded is refused, names both
+/// sides of the mismatch, and writes no file: a bundle of the right shape
+/// with nothing in it must be unproducible.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn an_export_matching_nothing_is_refused_and_writes_no_file() -> Fallible {
+    let scratch = recorded_run()?;
+    let bundle_path = scratch.path().join("nothing.json");
+    let output = run_evidence(&[
+        "--transcript",
+        &scratch.path().join(TRANSCRIPT_FILE).display().to_string(),
+        "--only",
+        "I_EHR_SERVICE.no_such_case-main",
+        "--out",
+        &bundle_path.display().to_string(),
+    ])?;
+
+    assert!(
+        !output.status.success(),
+        "an export that would carry nothing must fail loudly"
+    );
+    assert!(
+        !bundle_path.exists(),
+        "the refusal writes no document at all"
+    );
+    let diagnostic = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        diagnostic.contains("no_such_case"),
+        "the refusal names what was asked for: {diagnostic}"
+    );
+    assert!(
+        diagnostic.contains(FILTER),
+        "the refusal names what the transcript actually carries: {diagnostic}"
     );
     Ok(())
 }

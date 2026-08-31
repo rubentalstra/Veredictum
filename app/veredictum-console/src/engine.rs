@@ -109,6 +109,21 @@ pub struct VerdictsSpec {
     pub sign_key: Option<PathBuf>,
 }
 
+/// What to export, mirroring the `veredictum evidence` CLI surface one to one
+/// and adding nothing to it.
+///
+/// No statement is named because the subcommand reads none: a run's recorded
+/// exchanges are readable whether or not a party claimed anything over them.
+#[derive(Debug)]
+pub struct EvidenceSpec {
+    /// The finished run's `transcript.json`.
+    pub transcript: PathBuf,
+    /// The finished run's `results.json`, which names the red rows.
+    pub results: PathBuf,
+    /// Where the bundle is written.
+    pub out: PathBuf,
+}
+
 /// One line of the running engine's own output, as it happens.
 #[derive(Debug)]
 pub enum Line {
@@ -166,6 +181,13 @@ pub enum Error {
     /// own diagnostic, verbatim.
     #[error("the engine refused the judgement: {diagnostic}")]
     Judgement {
+        /// What the engine printed, trimmed.
+        diagnostic: String,
+    },
+    /// The evidence subcommand exited non-zero, which is how it says the
+    /// bundle would have carried nothing.
+    #[error("the engine refused the evidence export: {diagnostic}")]
+    Evidence {
         /// What the engine printed, trimmed.
         diagnostic: String,
     },
@@ -271,6 +293,36 @@ impl Engine {
             stderr
         };
         Err(Error::Judgement { diagnostic })
+    }
+
+    /// Exports the finished run's red rows as an evidence bundle by running
+    /// the pinned binary's `evidence` subcommand to completion.
+    ///
+    /// The refusal is the engine's own: a run whose red rows recorded no
+    /// exchanges exits non-zero and writes nothing, so the console can never
+    /// hand a reader a bundle of the right shape with no content in it.
+    ///
+    /// # Errors
+    /// [`Error::Execute`] when the process cannot run, and
+    /// [`Error::Evidence`] carrying the engine's own diagnostic when it
+    /// refuses the export.
+    pub fn evidence(&self, spec: &EvidenceSpec) -> Result<(), Error> {
+        let output = std::process::Command::new(&self.binary)
+            .args(evidence_args(spec))
+            .stdin(std::process::Stdio::null())
+            .output()
+            .map_err(Error::Execute)?;
+        if output.status.success() {
+            return Ok(());
+        }
+        // stderr first, because the engine's refusals print there.
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        let diagnostic = if stderr.is_empty() {
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        } else {
+            stderr
+        };
+        Err(Error::Evidence { diagnostic })
     }
 
     /// Spawns one run and hands back the handle that streams it — the split
@@ -543,6 +595,24 @@ pub fn verdicts_args(spec: &VerdictsSpec) -> Vec<std::ffi::OsString> {
         args.push(key.clone().into());
     }
     args
+}
+
+/// Assembles the exact `veredictum evidence` argument vector for a spec.
+///
+/// `--failing` is fixed rather than exposed: the console offers one thing,
+/// which is the red rows of the run being read.
+#[must_use]
+pub fn evidence_args(spec: &EvidenceSpec) -> Vec<std::ffi::OsString> {
+    vec![
+        "evidence".into(),
+        "--transcript".into(),
+        spec.transcript.clone().into(),
+        "--results".into(),
+        spec.results.clone().into(),
+        "--failing".into(),
+        "--out".into(),
+        spec.out.clone().into(),
+    ]
 }
 
 /// Returns a value's published token: the lib's own serialization, without

@@ -8,8 +8,9 @@ authority if the two ever disagree.
 
 Three commands make the conformance record (`validate`, `run`, `verdicts`),
 three measure (`perf`, `stress`, `bench`), `replay` re-judges a recorded run
-out of its own transcript, `verify-record` checks a sealed bundle, and the rest
-render or explore.
+out of its own transcript, `evidence` carves the exchanges behind a red run's
+rows out of that transcript, `verify-record` checks a sealed bundle, and the
+rest render or explore.
 
 ## validate
 
@@ -142,6 +143,52 @@ selected it, and the replay reports that instead of refusing.
 What this establishes is that the judgement follows from the evidence. It does
 not establish the evidence: a transcript is what the instrument says it sent
 and received.
+
+## evidence
+
+Export a finished run's recorded exchanges for a named set of cases: the
+triage input, carved out of the run's own `transcript.json`.
+
+```bash
+veredictum evidence --transcript <TRANSCRIPT> --out <BUNDLE> \
+    [--results <RESULTS>] [--failing] [--only <CASE>]... [--filter <SUBSTRING>]
+```
+
+| Flag | Meaning |
+|---|---|
+| `--transcript <TRANSCRIPT>` | The run's `transcript.json`, written by `run --record-exchanges`. Required |
+| `--out <BUNDLE>` | Where the bundle is written. Required |
+| `--results <RESULTS>` | The run's `results.json`. Required by `--failing`, and otherwise optional: supplying it puts each exported case's outcome row beside its exchanges |
+| `--failing` | Export the red rows the results record names — every `failed` and every `errored` case |
+| `--only <CASE>` | Export this case, by id. Repeat the flag once per case |
+| `--filter <SUBSTRING>` | Export cases whose id contains this substring |
+
+At least one of `--failing`, `--only` and `--filter` is required, and the three
+union: a case is exported when any of them names it. The unfiltered document is
+the transcript itself.
+
+The red rows of a run become a triage input in one command:
+
+```bash
+veredictum evidence --transcript run/transcript.json \
+    --results run/results.json --failing --out run/evidence.json
+```
+
+**No statement is read.** Sealing a record needs a claim; reading the exchanges
+a run recorded does not, and a run that went red is exactly when they are
+needed.
+
+**An export that would carry nothing is refused**, exit `2`, with no file
+written. A selection matching no recorded case names what was asked for and
+what the transcript actually carries; a selection whose every case recorded no
+exchange names those cases and says that recording is opt-in. A selection that
+half-matched still exports, and the bundle's `without_exchanges` names every
+case it could not carry, so a partial answer never reads as a complete one.
+
+The `authorization` request header's value is withheld by the export itself,
+whatever the transcript held. Response bodies are the wire's own bytes and can
+carry real patient data, so the bundle is operator-controlled output like the
+transcript it comes from.
 
 ## verify-record
 
