@@ -19,6 +19,17 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+- **The console's bundle is served under content-hashed names, and the hosted
+  instance caches them for a year (#450).** `veredictum-console.<hash>.js` and
+  its `.wasm` now carry the content hash cargo-leptos computed, so a browser
+  holding one release's JavaScript cannot pair it with the next release's wasm:
+  the old name is unreachable rather than mismatched, and the `LinkError` that
+  left the page rendered and dead after the v0.1.4 deploy has no way to happen.
+  The served markup reads those names from the build's own hash file, so it can
+  only ever name files the build emitted. `Cache-Control: no-cache` stays the
+  floor over the whole of `/pkg`, and hashed names are served
+  `max-age=31536000, immutable` on top of it, which is what a name that never
+  changes content is worth: the 2.4 MB wasm stops revalidating on every load.
 - **A case needing an undeclared signing posture is excused before it writes
   anything to the server (#456).** Four `SIG-VERSION` cases asking for
   `signature: verifiable` were driven to completion — committing real

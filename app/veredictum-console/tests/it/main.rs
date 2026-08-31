@@ -11,6 +11,8 @@
 #[cfg(feature = "ssr")]
 mod bench_surfaces;
 #[cfg(feature = "ssr")]
+mod bundle_names;
+#[cfg(feature = "ssr")]
 mod captures;
 
 mod e2e_console;

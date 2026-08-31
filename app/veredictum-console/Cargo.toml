@@ -174,6 +174,11 @@ workspace = true
 output-name = "veredictum-console"
 site-root = "target/site"
 site-pkg-dir = "pkg"
+# Content-hashed output names, so `veredictum-console.<hash>.js` and its `.wasm`
+# are a pair no cache can separate: a stale JS beside a fresh wasm is an
+# unreachable name rather than a broken instantiation (#450). The emitted
+# `hash.txt` beside the bundle is the ONE reader of those names.
+hash-files = true
 tailwind-input-file = "style/tailwind.css"
 # Static assets copied into the site root; seal.svg is a SYMLINK to the one
 # brand original under assets/brand/, so the mark cannot fork.

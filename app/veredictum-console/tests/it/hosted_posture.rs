@@ -109,6 +109,47 @@ fn the_image_bakes_the_posture_the_hosted_deploy_extracts() -> Result<(), Box<dy
     Ok(())
 }
 
+/// The hosted Caddyfile keeps `no-cache` over the whole bundle as the floor,
+/// and the `immutable` override for content-hashed names is written AFTER it.
+///
+/// Order is the correctness property (#450): directives carrying named
+/// matchers keep their Caddyfile order
+/// (<https://caddyserver.com/docs/caddyfile/directives#sorting-algorithm>), so
+/// the override written first would be overwritten by the floor, and every
+/// hashed asset would revalidate on every load.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn the_bundle_floor_is_no_cache_and_the_hashed_override_follows_it()
+-> Result<(), Box<dyn std::error::Error>> {
+    let caddyfile = std::fs::read_to_string(repo_root().join("deploy/hosted/Caddyfile"))?;
+
+    let floor = caddyfile
+        .find("header @bundle Cache-Control \"no-cache\"")
+        .ok_or(
+            "the /pkg floor must stay: a hashed build that regresses degrades to revalidation",
+        )?;
+    let override_at = caddyfile
+        .find("header @hashed Cache-Control \"public, max-age=31536000, immutable\"")
+        .ok_or("a content-hashed name never names other bytes, so it is served immutable")?;
+    assert!(
+        floor < override_at,
+        "the immutable override must be written after the no-cache floor, or the floor overwrites it"
+    );
+
+    assert!(
+        caddyfile.contains("@bundle path /pkg/*"),
+        "the floor must cover everything under /pkg, hashed or not"
+    );
+    assert!(
+        caddyfile.contains("@hashed path_regexp"),
+        "the override must select on the emitted <name>.<hash>.<ext> shape, never on all of /pkg"
+    );
+    Ok(())
+}
+
 /// `.dockerignore` excludes none of the posture: an excluded path is a COPY
 /// that fails the build, and the exclusion is invisible in the Dockerfile.
 #[expect(
