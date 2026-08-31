@@ -145,6 +145,8 @@ WORKDIR /app
 # VEREDICTUM_ENGINE names the in-image engine by absolute path rather than
 # leaning on PATH resolution, so an overlay can repoint or disable it with one
 # variable and the console never resolves a different binary by accident.
+# VEREDICTUM_VERIFY_KEY names the verifying key COPYed below, so /verify
+# checks a published record with no operator action at all.
 ENV LEPTOS_OUTPUT_NAME=veredictum-console \
     LEPTOS_SITE_ROOT=/app/site \
     LEPTOS_SITE_PKG_DIR=pkg \
@@ -153,7 +155,8 @@ ENV LEPTOS_OUTPUT_NAME=veredictum-console \
     VEREDICTUM_ROOT=/work/artifacts \
     VEREDICTUM_SPECS=/work/specs/openehr \
     VEREDICTUM_PARTY=/work/party \
-    VEREDICTUM_OUT=/work/out
+    VEREDICTUM_OUT=/work/out \
+    VEREDICTUM_VERIFY_KEY=/app/keys/registry-signing.pub.asc
 
 # ── The data the instrument judges against, in the image ──────────────────────
 # The catalogue, the vendored specification oracle and the party declarations
@@ -173,6 +176,19 @@ COPY artifacts/ /work/artifacts/
 COPY specs/openehr/ /work/specs/openehr/
 COPY party/ /work/party/
 COPY --from=mkdirs --chown=65532:65532 /empty/ /work/
+
+# ── The verifying key, in the image ───────────────────────────────────────────
+# The PUBLIC half of the registry signing key: what a reader checks a published
+# record against on /verify. It is release data exactly like the catalogue
+# above, because the release that publishes a record is the release that has to
+# be able to check one — so a fresh instance verifies with no clone, no key
+# hunting and no operator step (#430). Shipping a public key in an image
+# weakens nothing; the secret half lives in one GitHub environment and reaches
+# no host.
+#
+# /app, not /work: an operator bind-mounts their own trees over the /work paths
+# above, and a mount there would shadow the key. Nothing mounts over /app.
+COPY registry/keys/registry-signing.pub.asc /app/keys/registry-signing.pub.asc
 
 EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/veredictum-console"]

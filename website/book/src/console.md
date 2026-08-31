@@ -227,6 +227,13 @@ The manifest's signature is an ordinary detached OpenPGP signature, so
 `gpg --verify` accepts a bundle too. Nobody has to trust this console to check
 this console.
 
+The key the page checks against is baked into the image at
+`/app/keys/registry-signing.pub.asc`, and `VEREDICTUM_VERIFY_KEY` names it by
+default, so a fresh instance verifies a published record with no configuration.
+It is the public half of the key that signs a registry record, which is what a
+reader needs and all a reader needs. Point that variable at another file to
+check records signed by another key.
+
 ## Benchmarks: speed records, read as speed records
 
 `/benchmarks` reads the JSON document a `veredictum bench` run writes. It lists
