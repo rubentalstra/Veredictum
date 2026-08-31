@@ -19,6 +19,17 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+- **The verification pack judges its bindings' header matchers (#473).** The
+  pack player classified the status, bound captures and evaluated assertions,
+  and never ran a single header matcher, so an entry could reproduce `passed`
+  over a recording whose served headers violated its own binding. Turning them
+  on failed six of the pack's ten tests, and every failure was real: three
+  recorded `201` responses omitted the `Last-Modified` the `create_ehr`
+  expectation declares, and no recording carried the request-side ask at all,
+  which left every `negotiated` matcher unjudgeable while the evaluator answered
+  "no failure" for an absent ask. A recorded request now carries the negotiated
+  `accept`, and an entry declaring a `negotiated` matcher without one is refused
+  by name rather than passed.
 - **The bulk-delete binding declares the 405 its own released source declares
   (#458).** `admin_ehr_delete_all.yaml` anticipates the branch in as many words,
   "may be disabled in production environments, in which case server may respond
