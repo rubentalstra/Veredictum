@@ -19,6 +19,23 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+- **`guards:` stops promising a selection it never performed (#460).** 377 case
+  cores carry a `guards:` line, 618 entries between them, and nothing in the run
+  path has ever read the field. All 56 Admin API cases said "guarded until the
+  Admin API stabilises", so a reader of the catalogue concluded those cases were
+  held back while they drove as gating cases, and 34 of them went red on the
+  first live run. Reading all 618 entries settled which way to fix it: they are
+  provenance and scope prose, and every one of the 85 that named a
+  machine-decidable condition named one the runner already decides from a typed
+  field (`capabilities`, `option`, `requires`, `applies`, or a `${ixit:…}`
+  read). The field is now what it already was in the other 533 entries: cited
+  prose about the case, selecting nothing. Those 85 entries are rewritten to
+  state their fact, a new `guard-condition` validate gate refuses "applies
+  only", "not-applicable", "guarded until", "skip where" and their siblings, and
+  the published `case-core` schema, `ARCHITECTURE.md`, the book's catalogue
+  chapter and the console's case page all say so. No case changed selection. A
+  catalogue that means to hold a case back does it with `status: draft`, which a
+  run reports as its own exception and no verdict rests on.
 - **The bulk-delete binding declares the 405 its own released source declares
   (#458).** `admin_ehr_delete_all.yaml` anticipates the branch in as many words,
   "may be disabled in production environments, in which case server may respond

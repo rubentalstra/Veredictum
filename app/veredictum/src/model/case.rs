@@ -690,13 +690,18 @@ pub struct CaseCore {
     /// Spec-version windows outside which the case does not apply.
     #[serde(default)]
     pub applies: Applies,
-    /// Non-version run conditions, each spec-cited; a failed guard ⇒
-    /// `not-applicable` with citation.
+    /// Spec-cited PROSE about the case: where the expectation was authored
+    /// from, what the row does not claim, the adjudication it rests on, the
+    /// assumptions it makes.
     ///
-    /// Prose, for the conditions no runner rule expresses. A condition the
-    /// runner already decides structurally is never restated here — capability
-    /// scoping is [`CaseCore::capabilities`] alone, and the `guard-scope`
-    /// validate gate refuses a guard that states it.
+    /// It participates in NO selection — nothing reads this field at drive
+    /// time. Applicability is decided by the typed fields alone
+    /// ([`CaseCore::status`], [`CaseCore::applies`],
+    /// [`CaseCore::capabilities`], [`CaseCore::option`],
+    /// [`CaseCore::requires`], and the flow's own `on:` addressing). The
+    /// `guard-scope` validate gate refuses a guard restating one of those
+    /// rules, and `guard-condition` refuses a guard PHRASED as an
+    /// applicability condition, whose promised hold happens nowhere.
     #[serde(default)]
     pub guards: Vec<String>,
     /// The verdict-bearing capability names — kept MINIMAL (a case failure

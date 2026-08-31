@@ -41,8 +41,8 @@ spec_refs:
   - "CNF profiles master03-profiles §Non-Functional (the Security & Privacy product attribute; the SEC-BASIC tier is our own extension — no released openEHR spec defines it)"
 applies: { rm: ">=1.0.2" }
 guards:
-  - "applies only when the SUT declares the SEC-BASIC security tier — CNF profiles master03-profiles §Non-Functional (the Security & Privacy product attribute; the SEC-BASIC tier is our own extension — no released openEHR spec defines it)"
-  - "the challenge is mandated only when the service requires authentication — ITS-REST overview Requests_and_responses §Authentication and authorization ('If authentication and authorization are required'); a service declaring no authentication framework is not in scope"
+  - "the SEC-BASIC security tier is our own extension — no released openEHR spec defines it; it stands in for the Security & Privacy product attribute of CNF profiles master03-profiles §Non-Functional, and this row's scope is its own profiles and capabilities declaration"
+  - "the challenge is mandated only when the service requires authentication — ITS-REST overview Requests_and_responses §Authentication and authorization ('If authentication and authorization are required'); the AuthenticatedAccess capability this row gates is the party's own declaration that it does"
 requires:
   server: any
 flow:
