@@ -59,6 +59,25 @@ version on.
   the two sides, stays in the inconclusive channel with a refusal naming both
   sides; the other four assertion families keep the standing refusal, since each
   needs its own derivation.
+- **A transcript replay judges `equivalent` and `signature` instead of refusing
+  them (#469).** Three assertion families shared one classification saying a
+  recorded exchange carries no ground for them, and for two of them that had
+  stopped being true. A served document is recorded verbatim and its corpus
+  fixture comes from the catalogue the replay is given, so an `equivalent`
+  assertion naming a `${ds:…}` fixture now runs through the same form agreement
+  and the same comparator the live driver uses. A `signature` assertion whose
+  facts are `present`, `equals` or `distinct_from` over a literal or a `${ds:…}`
+  comparand runs through the same evaluator, which the live driver now calls too
+  rather than carrying its own copy. `version` stays refused, and the refusal
+  says why per family instead of one sentence for all three: every fact it
+  judges is read off a VERSION envelope the assertion fetches itself — the
+  `ORIGINAL_VERSION` envelope for `change_type` and `lifecycle_state`, the
+  `REVISION_HISTORY` for `count` — and it names its target through a `${…}`
+  reference over row state, so the step's own recorded exchange decides neither.
+  A `signature` asking `verifiable` stays refused for the same kind of reason:
+  the signing posture is a deployment fact the party declares and no exchange
+  carries it. The verification pack gains its first `equivalent` entry, so the
+  family is now proven reproducible rather than merely classified.
 
 ## [0.1.4] - 2026-08-31
 

@@ -130,6 +130,29 @@
       ],
       "expected_verdict": "errored",
       "adjudication_ref": "ITS-REST overview Requests_and_responses (500 maps to no outcome of the operation's binding) \u2014 interpreter law c: inconclusive, never a conformance finding"
+    },
+    {
+      "case": "I_DEFINITION_ADL2.get_artefact-retrieve",
+      "row": 0,
+      "steps": [
+        {
+          "step": 1,
+          "request": {
+            "method": "GET",
+            "path": "/definition/template/adl2/openEHR-EHR-COMPOSITION.cnf_minimal.v1.0.0"
+          },
+          "response": {
+            "status": 200,
+            "headers": {
+              "content-type": "text/plain",
+              "etag": "W/\"openEHR-EHR-COMPOSITION.cnf_minimal.v1.0.0\""
+            },
+            "body": "operational_template (adl_version=2.0.6; rm_release=1.0.2; generated)\n    openEHR-EHR-COMPOSITION.cnf_minimal.v1.0.0\n\n\nlanguage\n    original_language = <[ISO_639-1::en]>\n\ndescription\n    lifecycle_state = <\"unmanaged\">\n    original_author = <\n        [\"name\"] = <\"openEHR CNF\">\n    >\n\ndefinition\n    COMPOSITION[id1] matches {    -- CNF minimal encounter\n        content cardinality matches {0..*; unordered} matches {\n            OBSERVATION[id2] occurrences matches {0..*} matches {*}\n        }\n    }\n\nterminology\n    term_definitions = <\n        [\"en\"] = <\n            [\"id1\"] = <text = <\"CNF minimal\">; description = <\"CNF minimal encounter\">>\n            [\"id2\"] = <text = <\"Observation\">; description = <\"An observation\">>\n        >\n    >\n"
+          }
+        }
+      ],
+      "expected_verdict": "passed",
+      "adjudication_ref": "ITS-REST specifications/operations/definition_template_adl2_get.yaml \u00a7responses ('200') serves the OperationalTemplateV2 as text/plain ADL2 source, and the retrieval is verbatim (register AMB-111, disposition fixed_handling) \u2014 the served source equals the corpus fixture, so the `equivalent` assertion holds and the row passes"
     }
   ]
 }

@@ -10,10 +10,10 @@
 //! with the Nth recorded response (matching = method + path suffix), so a
 //! fixture file fully determines what any conformant runner must conclude.
 //!
-//! A replay judges every assertion a recorded exchange decides
-//! ([`crate::exec::assertions::eval_from_exchange`]) and REFUSES the entry
-//! for any family it cannot, on both assertion seams: no verdict is ever
-//! reproduced over an assertion nobody evaluated.
+//! A replay judges every assertion a recorded exchange plus the catalogue's
+//! own corpus decides ([`crate::exec::assertions::eval_from_exchange`]) and
+//! REFUSES the entry for any family it cannot, on both assertion seams: no
+//! verdict is ever reproduced over an assertion nobody evaluated.
 
 #![expect(
     clippy::disallowed_types,
@@ -27,11 +27,12 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::exec::assertions::{ExchangeFacts, ReplayJudgement, replay_judgement};
+use crate::exec::assertions::{CorpusGround, ExchangeFacts, ReplayJudgement, replay_judgement};
 use crate::exec::outcome::StepJudgement;
+use crate::exec::resolve::Resolver;
 use crate::exec::state::{Captured, VarStore};
 use crate::exec::{StepDriver, StepObservation, outcome};
-use crate::ids::{CaptureName, CaseId, SmOperationRef};
+use crate::ids::{CaptureName, CaseId, CorpusKey, SmOperationRef, ViewName};
 use crate::model::assertion::{Assertion, PostconditionRole};
 use crate::model::binding::WireFrom;
 use crate::model::case::{CaseCore, FlowStep};
@@ -120,6 +121,30 @@ pub struct Transcript {
     pub entries: Vec<TranscriptEntry>,
 }
 
+/// The catalogue's own corpus, as the replay's [`CorpusGround`].
+///
+/// A replay is driven over the same artifact root the live run drove, so a
+/// `${ds:…}` comparand is read off disk through the run's own resolver. The
+/// wrapper exists because [`CorpusGround`] is the narrow contract the pure
+/// evaluators see: the corpus, and no row state, no provisioning, no ixit.
+struct PlayerCorpus<'a> {
+    resolver: Resolver<'a>,
+    manifest: &'a crate::model::corpus::CorpusManifest,
+}
+
+impl CorpusGround for PlayerCorpus<'_> {
+    fn data_set(&mut self, key: &CorpusKey, view: Option<&ViewName>) -> Result<Value, String> {
+        match view {
+            None => self.resolver.data_set(key).map_err(|e| e.to_string()),
+            Some(view) => self.resolver.view(key, view).map_err(|e| e.to_string()),
+        }
+    }
+
+    fn corpus_format(&self, key: &CorpusKey) -> Option<crate::vocab::CorpusFormat> {
+        self.manifest.get(key).map(|entry| entry.format)
+    }
+}
+
 /// The player: a [`StepDriver`] answering from recorded exchanges.
 #[derive(Debug)]
 pub struct TranscriptPlayer<'a> {
@@ -137,6 +162,17 @@ impl<'a> TranscriptPlayer<'a> {
             entry,
             cursor: 0,
         }
+    }
+
+    /// The corpus ground for this replay, or [`None`] when the artifact set
+    /// carries no corpus at all.
+    fn corpus(&self) -> Option<PlayerCorpus<'a>> {
+        let (_, manifest) = self.set.corpus.as_ref()?;
+        let corpus_dir = self.set.corpus_dir.as_deref()?;
+        Some(PlayerCorpus {
+            resolver: Resolver::new(manifest, corpus_dir, None),
+            manifest,
+        })
     }
 
     /// Selects the operation binding under the same variant discipline as the
@@ -168,10 +204,11 @@ impl<'a> TranscriptPlayer<'a> {
     /// Refuses the entry when `step` asserts a family the replay cannot judge.
     ///
     /// A transcript records the response side of the flow's own exchanges and
-    /// nothing else: no payload committed earlier in the row, no corpus, no
-    /// versioned read, no instance posture. A [`ReplayJudgement::Unrecorded`]
-    /// assertion is unevaluable here, so the entry is refused by name rather
-    /// than claiming a verdict over an assertion nobody ran.
+    /// nothing else: no payload committed earlier in the row, no versioned
+    /// read, no instance posture. A [`ReplayJudgement::Unrecorded`] assertion
+    /// is unevaluable from that plus the catalogue's corpus, so the entry is
+    /// refused by name rather than claiming a verdict over an assertion nobody
+    /// ran.
     fn refuse_unrecorded(case: &CaseCore, step: &FlowStep) -> Result<(), String> {
         let unjudgeable: Vec<&str> = step
             .assertions
@@ -327,11 +364,26 @@ impl StepDriver for TranscriptPlayer<'_> {
             )));
         };
         let body = recorded.response.body.as_ref().unwrap_or(&Value::Null);
-        let facts = ExchangeFacts { status, body };
+        let facts = ExchangeFacts {
+            status,
+            body,
+            media_type: recorded
+                .response
+                .headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+                .map(|(_, value)| value.as_str()),
+        };
+        let mut no_corpus = crate::exec::assertions::NoCorpus;
+        let mut corpus = self.corpus();
+        let ground: &mut dyn CorpusGround = match corpus.as_mut() {
+            Some(loaded) => loaded,
+            None => &mut no_corpus,
+        };
         let mut assertion_failures = Vec::new();
         let mut advisories = Vec::new();
         for assertion in &step.assertions {
-            match crate::exec::assertions::eval_from_exchange(assertion, facts) {
+            match crate::exec::assertions::eval_from_exchange(assertion, facts, ground) {
                 Ok(recorded_advisories) => advisories.extend(recorded_advisories),
                 Err(outcome) => assertion_failures.push(outcome),
             }
@@ -375,11 +427,11 @@ impl StepDriver for TranscriptPlayer<'_> {
     /// Refuses any judged postcondition instead of reproducing a verdict it
     /// never checked.
     ///
-    /// The player issues no versioned read, resolves no corpus reference and
-    /// knows no instance posture, so every [`PostconditionRole::Judged`] family
-    /// is unevaluable here and the entry is refused by name. The aggregate
-    /// family is law e ([`TranscriptPlayer::aggregates`]) and the informative
-    /// families are never pass/fail, so neither blocks a replay.
+    /// A postcondition runs after the flow, with no exchange of its own to
+    /// read, so every [`PostconditionRole::Judged`] family is unevaluable here
+    /// and the entry is refused by name. The aggregate family is law e
+    /// ([`TranscriptPlayer::aggregates`]) and the informative families are
+    /// never pass/fail, so neither blocks a replay.
     fn postconditions(
         &mut self,
         case: &CaseCore,
