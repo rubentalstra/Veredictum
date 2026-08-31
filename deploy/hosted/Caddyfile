@@ -1,0 +1,38 @@
+# TLS for console.veredictum.eu, which Caddy obtains and renews on its own.
+#
+# Nothing in CI touches a certificate, and nothing expires quietly at 3am. This
+# is the one piece that is strictly worse when hand-rolled.
+
+console.veredictum.eu {
+	reverse_proxy console:3000
+
+	encode zstd gzip
+
+	# The console reads the client address from X-Forwarded-For, and ONLY because
+	# `VEREDICTUM_CLIENT_IP_HEADER` names it. Caddy sets it; nothing else can,
+	# because Caddy is the only thing on the public port.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# A conformance run streams its progress for minutes and the live screen
+	# polls once a second, so the defaults are raised for the run surfaces
+	# rather than for everything.
+	@run path /run/* /api/*
+	handle @run {
+		reverse_proxy console:3000 {
+			transport http {
+				read_timeout 10m
+				write_timeout 10m
+			}
+		}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

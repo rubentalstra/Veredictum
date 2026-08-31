@@ -107,6 +107,43 @@ async fn main() -> anyhow::Result<()> {
         .fallback(leptos_axum::file_and_error_handler(shell))
         .with_state(leptos_options);
 
+    // The artifact sweeper (#412). The instrument now runs on a host that does
+    // not restart, so the run directories a disposable filesystem used to
+    // discard every few hours would otherwise grow until the disk is gone. It
+    // lives here rather than in the job map so that constructing a state — which
+    // every test does — spawns no thread.
+    {
+        let out = state.out.clone();
+        let jobs = state.jobs.clone();
+        tokio::spawn(async move {
+            loop {
+                let live = jobs.live_ids().unwrap_or_default();
+                let out = out.clone();
+                // Reading a directory tree is blocking I/O, and a runtime thread
+                // is not where it belongs.
+                let swept = tokio::task::spawn_blocking(move || {
+                    veredictum_console::run_job::sweep_artifacts(
+                        &out,
+                        veredictum_console::run_job::ARTIFACTS_KEPT,
+                        &live,
+                    )
+                })
+                .await;
+                if let Ok(swept) = swept
+                    && (swept.removed > 0 || swept.refused > 0)
+                {
+                    // A count, never a path: an operator sees the shape without
+                    // a run's identity reaching a shared log stream.
+                    eprintln!(
+                        "veredictum-console: swept {} expired run directory(ies), {} refused, {} kept live",
+                        swept.removed, swept.refused, swept.live
+                    );
+                }
+                tokio::time::sleep(veredictum_console::run_job::SWEEP_INTERVAL).await;
+            }
+        });
+    }
+
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     // The peer address is the only identity a console with no login has
     // (#389), and axum surfaces it as a `ConnectInfo` extension only when the

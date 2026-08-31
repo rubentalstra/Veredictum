@@ -1,0 +1,69 @@
+# What runs on the box: the instrument, and a proxy that gets its own
+# certificate (#412).
+#
+# The file lives at /opt/veredictum-console/docker-compose.yml on the host. CI
+# never edits it — the deploy is a pull and a recreate — so a change here is a
+# change someone makes deliberately.
+
+services:
+  console:
+    # The release pointer scan-and-tag moves on a real release tag, plus the
+    # data layers deploy/hosted/Dockerfile bakes over it. `.env` names the
+    # exact reference so a rollback can move it.
+    image: ${CONSOLE_IMAGE:-ghcr.io/rubentalstra/veredictum-console-hosted:latest}
+    container_name: veredictum-console
+    # A conformance run is a process that outlives its request. A crash must
+    # come back, because nothing else is watching from inside the box.
+    restart: unless-stopped
+    # The image is its own health probe (`veredictum-console healthcheck`),
+    # because the distroless base carries no shell and no curl. The deploy waits
+    # on this before it verifies anything from outside.
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/veredictum-console", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Two concurrent runs, each an engine process that loads the whole
+    # catalogue, plus the console itself. The limit exists so a runaway run
+    # cannot take the proxy and the host with it: on an 8 GB box this leaves
+    # room for Caddy and the operating system.
+    deploy:
+      resources:
+        limits:
+          memory: 6g
+    environment:
+      # The public posture: a visitor names the endpoint, so private,
+      # link-local and loopback targets are refused before a socket opens.
+      VEREDICTUM_POSTURE: hosted
+      # Behind Caddy the peer address is Caddy, so the per-submitter caps read
+      # the address Caddy forwards — and only because this names the header.
+      VEREDICTUM_CLIENT_IP_HEADER: X-Forwarded-For
+    env_file:
+      # Holds CONSOLE_IMAGE and, once #391's submission path is live, the
+      # GitHub App credentials. Readable by the service user alone.
+      - .env
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: veredictum-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificate and the account key survive a redeploy. Losing them
+      # means asking for a new certificate on every deploy, which is how a
+      # deploy loop meets a rate limit.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - console
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,87 @@
+#cloud-config
+# console.veredictum.eu, from a fresh Hetzner box to serving state on first boot
+# (#412).
+#
+# Committed rather than remembered. A host built by hand is a host nobody can
+# rebuild, and the first time it needs rebuilding is the worst time to discover
+# that. Pass this as the server's user data at creation; #403 is the owner
+# action that does.
+#
+# What it deliberately does NOT do: fetch anything from this repository. The box
+# holds no checkout. Everything the instrument needs is baked into the image
+# (deploy/hosted/Dockerfile), so the deploy is a pull.
+
+users:
+  - name: deploy
+    lock_passwd: true
+    shell: /bin/bash
+    groups: [docker]
+    ssh_authorized_keys:
+      # REPLACE both. The first is a person's key; the second is CI's, restricted
+      # to one command so a leaked key runs one script rather than a shell.
+      - ssh-ed25519 AAAA... owner@laptop
+      - command="/opt/veredictum-console/deploy.sh",no-agent-forwarding,no-port-forwarding,no-user-rc,no-pty ssh-ed25519 AAAA... deploy@ci
+
+ssh_pwauth: false
+disable_root: true
+
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - ufw
+  - unattended-upgrades
+
+write_files:
+  # A box nobody logs into still takes security updates.
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+  # Container logs are the likeliest thing to fill a small disk, and a full disk
+  # fails in a way that looks like nothing at all.
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": { "max-size": "10m", "max-file": "3" },
+        "live-restore": true
+      }
+
+  # The ONE command the CI key may run. The deploy is a pull and a recreate:
+  # nothing is built here, and nothing is fetched from this repository.
+  - path: /opt/veredictum-console/deploy.sh
+    permissions: "0755"
+    owner: deploy:deploy
+    content: |
+      #!/usr/bin/env bash
+      # SSH runs this whatever the client asked for, which is the point of the
+      # command= restriction on the key.
+      set -euo pipefail
+      cd /opt/veredictum-console
+      docker compose pull -q
+      docker compose up -d --remove-orphans
+      # Images the instrument no longer runs. A running container's image is
+      # never pruned, so this cannot take the release out from under itself.
+      docker image prune -f --filter "until=168h"
+
+runcmd:
+  # Two firewalls that agree. The Hetzner Cloud Firewall keeps traffic off the
+  # NIC; this is what the box itself says, and a disagreement between them is a
+  # question worth answering.
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+  - [ufw, allow, "22/tcp"]
+  - [ufw, allow, "80/tcp"]
+  - [ufw, allow, "443/tcp"]
+  - [ufw, --force, enable]
+  - [sh, -c, "curl -fsSL https://get.docker.com | sh"]
+  - [systemctl, enable, --now, docker]
+  - [install, -d, -o, deploy, -g, deploy, /opt/veredictum-console]
+  - [systemctl, enable, --now, unattended-upgrades]
+
+final_message: >-
+  the box is up after $UPTIME seconds. Put docker-compose.yml, Caddyfile and
+  .env in /opt/veredictum-console, then run the deploy lane.

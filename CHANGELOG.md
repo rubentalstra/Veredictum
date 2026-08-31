@@ -109,15 +109,32 @@ version on.
   `scripts/checks/hosted-instrument-language.sh` refuses the words "demo" and
   "sandbox" on every surface a reader meets, as whole words, so `demonstration`
   and the CSP directive name are untouched.
-- **The hosted instrument runs as one process that never stops (#394).** A
-  conformance run outlives the request that started it, and an autoscaling
-  request platform breaks that three ways: several instances answer one
-  service, an idle one is terminated with the engine child inside it, and each
-  has its own filesystem. `deploy/hosted/` now carries the posture and the
-  image overlay, the deploy lane is `hosted-deploy.yml` and applies it, and
-  `Dockerfile.vercel` and `vercel.json` are gone. The verification is unchanged and host-independent:
-  what proves a deploy landed is the console serving the expected engine
-  version, never a platform API agreeing that it deployed something.
+- **The hosted instrument runs on a box this repository provisions, deploys to
+  and watches (#394, #412).** A conformance run outlives the request that started
+  it, and #387 measured what an autoscaling request platform does to that:
+  several instances answer one service, an idle one is stopped with the engine
+  child inside it, and each has its own filesystem. So `deploy/hosted/` carries
+  the whole posture as code — a `cloud-init` that brings a fresh box to serving
+  state, the compose file with its healthcheck and memory limit, a Caddyfile for
+  automatic TLS, and the image overlay CI builds and the box only pulls, because
+  the box holds no checkout. `Dockerfile.vercel` and `vercel.json` are gone. The
+  deploy goes through `rubentalstra/hetzner-deploy-action`, written for this,
+  which waits for the container's own healthcheck and then requires the public
+  URL to serve the expected engine version — a bare 200 is not proof, since the
+  deployment being replaced answers 200 too. A scheduled watch asks every fifteen
+  minutes whether the instrument is up and serving the right release, opening one
+  issue and reusing it until it recovers. The deploy key and the host key are
+  ENVIRONMENT secrets in an environment the deploy job names, so nothing else in
+  this repository can reach them, and no Hetzner API token exists at all — the
+  deploy talks to the host and nothing else, so a leaked deploy key cannot
+  destroy the server.
+- **The console sweeps its own run artifacts (#412).** A disposable filesystem
+  discarded them every few hours; a box that does not restart would let them grow
+  until the disk is gone. Directories older than `ARTIFACTS_KEPT` go hourly,
+  never one a run in the map still names, and never anything outside the
+  `console-job-<uuid>` shape — an operator's own files under the output mount are
+  left alone. A swept run answers through the honest "this console knows nothing
+  about that run" rather than a failure.
 - **The registry entry format and the submission rules are both at 1.1.0
   (#393).** `schemas/registry-entry.schema.json` carries the third provenance
   branch, and an entry declares the versions it was accepted under as before.

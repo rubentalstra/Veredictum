@@ -402,6 +402,96 @@ pub fn job_dir(out: &std::path::Path, id: RunId) -> PathBuf {
     out.join(format!("console-job-{id}"))
 }
 
+/// How long a finished run's artifacts stay on disk.
+///
+/// A separate lifetime from [`FINISHED_RUNS_KEPT`], which bounds MEMORY. The
+/// disk needs its own because the instrument now runs on a host that does not
+/// restart: what a disposable filesystem discarded every few hours would
+/// otherwise grow until the disk is gone, and a full disk fails in a way that
+/// looks like nothing at all. A day means a submitter who walks away and comes
+/// back the same day still finds their record; beyond that the run answers
+/// through #386's honest "this console knows nothing about that run".
+#[cfg(feature = "ssr")]
+pub const ARTIFACTS_KEPT: Duration = Duration::from_hours(24);
+
+/// How often the artifact sweeper wakes.
+///
+/// Time-driven rather than event-driven on purpose: a deploy may be followed by
+/// no run at all, and the directories left by the deploy before it still have
+/// to go.
+#[cfg(feature = "ssr")]
+pub const SWEEP_INTERVAL: Duration = Duration::from_hours(1);
+
+/// What one sweep did.
+#[cfg(feature = "ssr")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Swept {
+    /// Directories removed.
+    pub removed: usize,
+    /// Directories kept because a run in the map still names them.
+    pub live: usize,
+    /// Directories kept because they are younger than [`ARTIFACTS_KEPT`].
+    pub young: usize,
+    /// Directories that could not be read or removed, which is a fact about
+    /// the host rather than about a run.
+    pub refused: usize,
+}
+
+/// Removes the artifact directories of runs this process no longer holds and
+/// that are older than `keep`.
+///
+/// `live` is every id still in the map, and one of those is never swept
+/// whatever its age: the live screen reads that directory. Nothing outside the
+/// `console-job-<uuid>` shape is touched, so an operator's own files under the
+/// output mount are left alone.
+///
+/// An unreadable directory is counted and stepped over rather than returned as
+/// a failure: a sweep that stops at the first surprise leaves the disk filling.
+#[cfg(feature = "ssr")]
+#[must_use]
+pub fn sweep_artifacts(
+    out: &std::path::Path,
+    keep: Duration,
+    live: &std::collections::BTreeSet<RunId>,
+) -> Swept {
+    let mut swept = Swept::default();
+    let Ok(entries) = std::fs::read_dir(out) else {
+        return swept;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(id) = name
+            .strip_prefix("console-job-")
+            .and_then(|rest| rest.parse::<RunId>().ok())
+        else {
+            continue;
+        };
+        if live.contains(&id) {
+            swept.live += 1;
+            continue;
+        }
+        let age = entry
+            .metadata()
+            .and_then(|meta| meta.modified())
+            .map(|at| at.elapsed().unwrap_or_default());
+        match age {
+            Ok(age) if age >= keep => {
+                if std::fs::remove_dir_all(entry.path()).is_ok() {
+                    swept.removed += 1;
+                } else {
+                    swept.refused += 1;
+                }
+            }
+            Ok(_) => swept.young += 1,
+            Err(_) => swept.refused += 1,
+        }
+    }
+    swept
+}
+
 /// The run map: every campaign this process is driving, queued or remembered.
 #[cfg(feature = "ssr")]
 #[derive(Debug, Clone)]
@@ -933,6 +1023,18 @@ impl JobSlot {
         let jobs = self.lock()?;
         Ok(running_count(&jobs))
     }
+
+    /// Every run id the map still holds, live or remembered.
+    ///
+    /// The sweeper's exclusion set: a directory named here is read by the live
+    /// screen and is never removed, whatever its age.
+    ///
+    /// # Errors
+    /// [`JobError::Poisoned`] only.
+    pub fn live_ids(&self) -> Result<std::collections::BTreeSet<RunId>, JobError> {
+        let jobs = self.lock()?;
+        Ok(jobs.keys().copied().collect())
+    }
 }
 
 /// The engine's own tally over the typed record: passed / failed / errored /
@@ -1227,6 +1329,58 @@ mod map_tests {
 
     /// Eviction keeps the most recent terminal runs and drops the oldest,
     /// and it never touches a run that is still queued or driving.
+    /// The sweeper's four answers, over a real output tree: a live run is kept
+    /// whatever its age, an old one goes, a young one stays, and something that
+    /// is not a job directory at all is never touched.
+    #[cfg(feature = "ssr")]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+    )]
+    #[test]
+    fn the_sweeper_keeps_what_is_live_and_what_is_young() -> Result<(), std::io::Error> {
+        use std::collections::BTreeSet;
+        use std::time::Duration;
+
+        let out = std::env::temp_dir().join(format!("veredictum-sweep-{}", std::process::id()));
+        std::fs::create_dir_all(&out)?;
+
+        let live_id = RunId::mint();
+        let old_id = RunId::mint();
+        let young_id = RunId::mint();
+        for id in [live_id, old_id, young_id] {
+            std::fs::create_dir_all(super::job_dir(&out, id))?;
+        }
+        // An operator's own file under the output mount, which the sweeper must
+        // leave alone because it is not a job directory.
+        let theirs = out.join("notes.txt");
+        std::fs::write(&theirs, b"mine")?;
+
+        let live: BTreeSet<RunId> = [live_id].into_iter().collect();
+
+        // A zero keep-window makes every directory "old", so the live set is
+        // the only thing that can save one — which is the property under test.
+        let swept = super::sweep_artifacts(&out, Duration::ZERO, &live);
+        assert_eq!(swept.live, 1, "the live run's directory is kept: {swept:?}");
+        assert_eq!(swept.removed, 2, "the other two go: {swept:?}");
+        assert!(super::job_dir(&out, live_id).is_dir());
+        assert!(!super::job_dir(&out, old_id).exists());
+        assert!(
+            theirs.is_file(),
+            "a file that is not a job directory is untouched"
+        );
+
+        // And with a window nothing has outlived, a directory the map has
+        // forgotten still stays.
+        std::fs::create_dir_all(super::job_dir(&out, young_id))?;
+        let swept = super::sweep_artifacts(&out, Duration::from_hours(1), &BTreeSet::new());
+        assert_eq!(swept.removed, 0, "{swept:?}");
+        assert_eq!(swept.young, 2, "{swept:?}");
+
+        std::fs::remove_dir_all(&out)?;
+        Ok(())
+    }
+
     #[test]
     fn eviction_drops_the_oldest_finished_runs_first() {
         let limits = Limits {

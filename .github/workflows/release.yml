@@ -699,7 +699,7 @@ jobs:
       tags: ${{ needs.image.outputs.tags }}
 
   # ── hosted console ──────────────────────────────────────────────────────────
-  # The hosted build is `FROM ghcr.io/rubentalstra/veredictum:latest`, so the
+  # The hosted overlay is `FROM ghcr.io/rubentalstra/veredictum:latest`, so the
   # deploy rides the leg that MOVES `:latest` — scan-and-tag — and only for a
   # real release, because a pre-release moves no `:latest` and so changes
   # nothing to deploy. A failure here reddens `announce` with the recovery
@@ -712,8 +712,6 @@ jobs:
     uses: ./.github/workflows/hosted-deploy.yml
     with:
       expected-version: ${{ needs.plan.outputs.version }}
-    secrets:
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
   # ── crates.io ───────────────────────────────────────────────────────────────
   # LAST on purpose, and after the release is otherwise complete. A crates.io
@@ -877,7 +875,7 @@ jobs:
                 '- **crates.io published and a later step failed**: that version is public and' \
                 '  immutable. Do NOT try to replace it — yank it and cut the next version.' \
                 '- **hosted console failed**: nothing published is affected. Read the step'"'"'s' \
-                '  own diagnosis (stale `:latest`, empty deploy token, or the deploy itself),' \
+                '  own diagnosis (stale `:latest`, an empty deploy key, or the box itself),' \
                 '  fix that half, then redeploy with `gh workflow run "Sandbox deploy"`.' \
                 ''
             fi
