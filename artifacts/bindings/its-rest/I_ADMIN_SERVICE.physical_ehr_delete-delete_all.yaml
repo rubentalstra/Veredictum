@@ -78,11 +78,15 @@
 # all (the whole set), one sends `?ehr_id=a`, both send `?ehr_id=a&ehr_id=b`,
 # and a member bound to a LIST capture expands element-wise beyond two.
 #
-# THE 405-WHEN-DISABLED BRANCH IS NOT DECLARED HERE: it exists only under a
-# deployment setting the ixit does not model, so no case can reach it and it is
-# carried as the wire_surface element `admin-bulk-delete-disabled-405`. (The
-# `method_not_allowed` kind added by the 2026-07-28 schedule release, #544,
-# removes the vocabulary half of that boundary; the topology half stands.)
+# THE 405-WHEN-DISABLED BRANCH IS DECLARED: the operation's own description
+# anticipates it -- "This functionality is intended primarily for development or
+# testing purposes and may be disabled in production environments, in which case
+# server may respond with 405 Method Not Allowed" -- and its `responses` map
+# carries a '405'. A deployment with the bulk delete disabled answered it on a
+# live run, so the earlier premise that no case could reach the branch was
+# wrong (#458). A case still EXPECTS a deletion, so a 405 fails the row for a
+# statement that claims AdminApi, and `unclaimed_capabilities` excuses the case
+# for one that does not.
 sm_operation: I_ADMIN_SERVICE.physical_ehr_delete
 its: its-rest
 variant: delete_all
@@ -104,3 +108,5 @@ outcomes:
     body: error_loose                     # §HTTP status codes — 4xx detail is a MAY under Prefer: return=representation
   not_found:
     status: 404                           # responses/404.yaml — the GENERIC 404 (not 404_unknown_ehr_id)
+  method_not_allowed:
+    status: 405                           # the operation's own '405' response and its disabled-in-production NOTE; responses/405.yaml

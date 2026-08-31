@@ -19,6 +19,16 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+- **The bulk-delete binding declares the 405 its own released source declares
+  (#458).** `admin_ehr_delete_all.yaml` anticipates the branch in as many words,
+  "may be disabled in production environments, in which case server may respond
+  with `405 Method Not Allowed`", and its `responses` map carries a `'405'`. The
+  binding omitted it on the premise that no case could reach the branch, which a
+  live run against a deployment with the admin surface switched off refuted. The
+  kind is declared, the wire-surface exception records why it stays unforceable
+  (the trigger is a deployment setting the ixit does not model, not a request
+  shape), and a statement claiming `AdminApi` over such a deployment now fails
+  those cases while one that does not has them excused at selection.
 - **A run with no party statement no longer publishes the losing arm of every
   mutually exclusive option pair as a failure (#455).** `--statement` is
   optional, and five arms of the drive-time selection law were gated on a
