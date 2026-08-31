@@ -24,6 +24,3 @@ trustedRegistries:
   # Every FROM is digest-pinned; these are the registries those digests live in.
   - docker.io
   - gcr.io
-  # This project's own registry: the hosted instrument's overlay is FROM the
-  # release image published here, which is the whole point of that file.
-  - ghcr.io
