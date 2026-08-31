@@ -41,4 +41,4 @@ apply" part so a future session can act on it without re-deriving it.
 - [The console tier's trust model](console-tier-trust-model.md) — the transport
   seam that makes a re-judgement meaningful, and the two ways a gate can pass
   while doing nothing
-- [The hosted instrument](hosted-instrument-always-on.md) — console.veredictum.eu is the OFFICIAL instrument (#388), one always-on machine, Vercel retired by #394, no signing key on the host
+- [The hosted instrument](hosted-instrument-box.md) — console.veredictum.eu is the OFFICIAL instrument (#388) on a Hetzner box (owner ruling); hosting is the owner's call and I proposed migrations twice before being told; no signing key on the host

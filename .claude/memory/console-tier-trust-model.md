@@ -29,4 +29,4 @@ about a good one.
 
 **How to apply:** when you add or change a gate, assert that it RAN — a count,
 a named row, a refusal — and drive the bad input through it in the same test.
-See [[hosted-instrument-always-on]] for where the instrument runs.
+See [[hosted-instrument-box]] for where the instrument runs.
