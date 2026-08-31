@@ -41,6 +41,24 @@ version on.
   document written before the member existed reads as unknown, never as either
   basis. A blind `veredictum run` also prints one run-level advisory naming
   every selection fact it could not establish and how many cases each excused.
+- **`equivalent` judges the XML and the plain-text form its own binding asked
+  for (#457).** Three retrieval rows reported that the instrument could not
+  judge a body it had itself negotiated: `I_DEFINITION_ADL14.get_opt` sends
+  `Accept: application/xml` and `I_DEFINITION_ADL2.get_artefact` sends
+  `Accept: text/plain`, so `get_opt-retrieve_single`,
+  `get_opt-retrieve_specific_version` and `get_artefact-retrieve` could not pass
+  on any server. The comparator now reads both forms whenever the corpus entry's
+  declared `format` and the served media type agree on one, so those rows judge
+  retrieval fidelity as the register's AMB-111 ruling pins it. XML equivalence is
+  information-set equality: attribute order, the namespace prefix, whitespace
+  inside a tag, `<a/>` against `<a></a>`, a CDATA section against the characters
+  it stands for, and the XML declaration are not differences, while element
+  order, expanded names, attribute values and character data are. Text
+  equivalence tolerates the line-break spelling HTTP grants a text body and
+  nothing else. A form the comparator cannot read, and any disagreement between
+  the two sides, stays in the inconclusive channel with a refusal naming both
+  sides; the other four assertion families keep the standing refusal, since each
+  needs its own derivation.
 
 ## [0.1.4] - 2026-08-31
 
