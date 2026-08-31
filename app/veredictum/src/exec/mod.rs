@@ -29,6 +29,7 @@
 pub mod assertions;
 pub mod bodies;
 pub mod content_synth;
+pub mod documents;
 pub mod driver;
 pub mod headers;
 pub mod opt_synth;

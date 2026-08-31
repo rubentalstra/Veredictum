@@ -30,6 +30,7 @@ mod corpus_packs;
 mod defect_rejection;
 mod driver_wire;
 mod env_coupled;
+mod equivalent_documents;
 mod fake_sut;
 mod folder_provisioning;
 mod gpg_interop;
