@@ -15,18 +15,25 @@
 # 3000). It binds loopback ON PURPOSE: the console has no login, so exposing
 # it wider is the operator's decision, behind their own gate.
 #
-# The image carries the console and the pinned engine, never the catalogue or
-# the specification oracle — those are paths the instrument reads, and a party
-# may legitimately point at their own. Started beside an empty directory the
-# console comes up and says what it is missing; to grade a server, run it
-# beside a checkout of https://github.com/rubentalstra/Veredictum so the
-# `/work` mount carries `artifacts/`, `specs/openehr/` and `party/`.
+# The image carries the console, the pinned engine AND the release's own
+# catalogue, specification oracle and party declarations (#420), so this works
+# in an empty directory: what it grades against is the data of the release the
+# image names, which is also what a record produced here can honestly cite.
+#
+# To use your own instead, bind-mount over the baked path — a bind mount
+# obscures what the image has at the target
+# (https://docs.docker.com/engine/storage/bind-mounts):
+#
+#   volumes:
+#     - ./my-artifacts:/work/artifacts
+#
+# A run's artifacts stay inside the container, at `/work/out`, and a recreate
+# forgets them: the console hands a finished run's record over HTTP, which is
+# the path that does not depend on filesystem ownership. Mounting a host
+# directory there works only if uid 65532 can write to it, since that is the
+# uid the image runs as.
 services:
   console:
     image: ghcr.io/rubentalstra/veredictum:0.1.3
     ports:
       - "127.0.0.1:3210:3000"
-    volumes:
-      # The working directory: catalogue root, spec tree, party declarations
-      # and run output, exactly as the image's VEREDICTUM_* defaults expect.
-      - ./:/work

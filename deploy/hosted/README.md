@@ -52,6 +52,24 @@ redeploy, not a release.
 Not Arm: the CAX line is the more expensive half since April 2026, and the image
 publishes for both architectures, so it buys nothing here.
 
+## The image
+
+**One image, and this directory builds none of it.** `ghcr.io/rubentalstra/veredictum`
+carries the engine, the console and the release's own catalogue, vendored
+specification oracle and party declarations (#420), which is why this instance
+mounts nothing at all. `docker/Dockerfile` is where that is built, at a release.
+
+Two consequences worth stating. A record produced here names a catalogue
+revision that belongs to a published version, because the data in the image is
+the data of the release that built it. And an image built before #420 cannot be
+deployed here at all: it declares no
+`eu.veredictum.image.carries-catalogue` label, and the deploy lane refuses it
+rather than serving an instrument whose `/work` is empty.
+
+`CONSOLE_IMAGE` in `.env` names the exact reference. `:latest` is the release
+pointer, and naming a version instead is how a rollback pins an older one — an
+older one that still carries the label.
+
 ## What is in this directory
 
 | File | What it is |
@@ -59,7 +77,6 @@ publishes for both architectures, so it buys nothing here.
 | `cloud-init.yaml` | A fresh box to serving state on first boot: the `deploy` user, key-only SSH, both firewalls, unattended upgrades, Docker, capped logs, and the one command the CI key may run |
 | `docker-compose.yml` | What runs on the box — the console with its healthcheck and memory limit, behind Caddy |
 | `Caddyfile` | Automatic TLS, and the raised timeouts a run's streaming needs |
-| `Dockerfile` | The hosted image: the published release plus the data a volumeless instance cannot mount |
 | `env.example` | The environment file the box holds, including the one credential that lives there |
 
 The box holds **no checkout of this repository**. Everything the instrument
