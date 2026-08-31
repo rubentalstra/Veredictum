@@ -175,6 +175,15 @@ ENV LEPTOS_OUTPUT_NAME=veredictum-console \
 COPY artifacts/ /work/artifacts/
 COPY specs/openehr/ /work/specs/openehr/
 COPY party/ /work/party/
+# The SECOND root a citation resolves against. `validate` derives it from the
+# specs root's PARENT (`bundle_root`: `/work/specs/openehr` to `/work/specs`),
+# so these three have to sit beside the docs tree rather than inside it. Without
+# them every citation that can only resolve against a released machine-readable
+# bundle becomes a finding, and the catalogue in the image fails its own gate.
+# 0.8 MB compressed for all three, measured.
+COPY specs/its-xml-schemas/ /work/specs/its-xml-schemas/
+COPY specs/its-json-schemas/ /work/specs/its-json-schemas/
+COPY specs/rest-oas/ /work/specs/rest-oas/
 COPY --from=mkdirs --chown=65532:65532 /empty/ /work/
 
 # ── The verifying key, in the image ───────────────────────────────────────────
