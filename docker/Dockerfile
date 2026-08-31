@@ -190,6 +190,21 @@ COPY --from=mkdirs --chown=65532:65532 /empty/ /work/
 # above, and a mount there would shadow the key. Nothing mounts over /app.
 COPY registry/keys/registry-signing.pub.asc /app/keys/registry-signing.pub.asc
 
+# ── The hosted posture, in the image ──────────────────────────────────────────
+# What the hosted instance RUNS — its compose file and its Caddyfile — travels
+# in the image too (#423). The deploy key on that host may run exactly one
+# command, and that command extracts these two files out of the image it just
+# pulled, which is the box's only way to receive them: it holds no checkout and
+# fetches nothing from this repository. So a posture change arrives the way a
+# catalogue change does, at a release, with the provenance of the artifact it
+# travelled in.
+#
+# /app, not /work, for the reason the key above is there: an operator
+# bind-mounts their own trees over the /work paths, and a mount there would
+# shadow these. An operator image simply never reads them.
+COPY deploy/hosted/docker-compose.yml /app/posture/docker-compose.yml
+COPY deploy/hosted/Caddyfile /app/posture/Caddyfile
+
 EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/veredictum-console"]
 # The binary is its own probe (`healthcheck` mode GETs /healthz and exits by

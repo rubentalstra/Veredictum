@@ -121,6 +121,20 @@ version on.
   provenance. `registry/RULES.md` states what the kind attests and what it
   cannot — it cannot attest the environment, because the submitter chose the
   endpoint — and the conformance board labels and orders the new rows.
+- **The hosted posture travels inside the image (#423).** The published image
+  now carries `deploy/hosted/docker-compose.yml` and `deploy/hosted/Caddyfile`
+  at `/app/posture/`, and the one command the hosted box's deploy key may run
+  extracts them from the image it just pulled and installs them. Before this,
+  a committed change to either file reached the box only when somebody copied it
+  there by hand. A posture change now arrives the way a catalogue change does,
+  at a release, with the provenance of the artifact it travelled in, and the
+  deploy key gains nothing: it still runs one script and writes no arbitrary
+  file. An extraction that comes out empty stops the deploy, a candidate compose
+  file `docker compose config` refuses to parse is never installed, each
+  replaced file is kept as `.prev`, and a changed Caddyfile restarts the caddy
+  service — a bind-mounted file's contents changing does not recreate the
+  container that mounts it, so without that restart a proxy change served
+  nothing.
 
 ### Changed
 - **Every reader-facing page describes the hosted instrument as what it is

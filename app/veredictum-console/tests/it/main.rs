@@ -20,6 +20,8 @@ mod engine_gate;
 mod export_gate;
 #[cfg(feature = "ssr")]
 mod github_client;
+
+mod hosted_posture;
 #[cfg(feature = "ssr")]
 mod read_surfaces;
 #[cfg(feature = "ssr")]

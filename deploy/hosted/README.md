@@ -72,15 +72,54 @@ older one that still carries the label.
 
 ## What is in this directory
 
-| File | What it is |
-|---|---|
-| `cloud-init.yaml` | A fresh box to serving state on first boot: the `deploy` user, key-only SSH, both firewalls, unattended upgrades, Docker, capped logs, and the one command the CI key may run |
-| `docker-compose.yml` | What runs on the box — the console with its healthcheck and memory limit, behind Caddy |
-| `Caddyfile` | Automatic TLS, and the raised timeouts a run's streaming needs |
-| `env.example` | The environment file the box holds, including the one credential that lives there |
+| File | What it is | How the box gets it |
+|---|---|---|
+| `cloud-init.yaml` | A fresh box to serving state on first boot: the `deploy` user, key-only SSH, both firewalls, unattended upgrades, Docker, capped logs, and the one command the CI key may run | the server's user data at creation, once |
+| `docker-compose.yml` | What runs on the box: the console with its healthcheck and memory limit, behind Caddy | baked into the image at `/app/posture/`, and `deploy.sh` installs it from the image it pulled |
+| `Caddyfile` | Automatic TLS, and the raised timeouts a run's streaming needs | the same way, and a change to it restarts Caddy |
+| `env.example` | A copy-to-`.env` template: the machine-sized caps, the image reference, and the one credential's path | never. `.env` is the operator's file, written by hand on the box |
 
-The box holds **no checkout of this repository**. Everything the instrument
-needs is baked into the image, which CI builds and pushes; the box only pulls.
+The box holds **no checkout of this repository**, and it fetches nothing from
+here over the network. Everything the instrument needs is baked into the image,
+which CI builds and pushes; the box only pulls.
+
+## The posture travels in the image
+
+The compose file and the Caddyfile the box runs are release data, exactly like
+the catalogue (#423). `docker/Dockerfile` COPYs both to `/app/posture/`, and
+`deploy.sh` extracts them out of the image it just pulled:
+
+1. It reads `CONSOLE_IMAGE` from `.env`, which is what names the artifact to
+   interrogate, and pulls it.
+2. The base is distroless, so it carries no shell. The files come out through
+   `docker create` plus `docker cp` rather than a `cat` that could never run.
+3. An extracted file that is empty **stops the deploy**. So does a candidate
+   compose file that `docker compose config` refuses to parse, because
+   installing one would leave the box unable to run its next deploy at all.
+4. Each replaced file is kept as `docker-compose.yml.prev` or `Caddyfile.prev`,
+   so a bad posture is recovered by copying the previous file back and running
+   `docker compose up -d` — never by editing YAML over SSH.
+5. A changed Caddyfile restarts the caddy service explicitly. It is a bind
+   mount, and `docker compose up -d` does not recreate a container because a
+   mounted file's contents changed, so the restart is what applies the change.
+
+A posture change therefore arrives at a release, carrying the provenance of the
+image it travelled in: the same trade #420 accepted for the catalogue. Slower on
+purpose, and nothing about it widens what the deploy key can do — that key still
+runs one script and writes no arbitrary file.
+
+**`deploy.sh` does not update itself.** A script that overwrites itself mid-run
+is a footgun, so a change to it in `cloud-init.yaml` reaches the box by hand:
+copy the new content to `/opt/veredictum-console/deploy.sh` over SSH, or rebuild
+the box from the cloud-init document. `scripts/checks/hosted-deploy-script.sh`
+extracts that script in CI and holds it to shellcheck, because the YAML it lives
+in is a place no other gate reads as shell.
+
+What only a real deploy proves: that the extraction and the restart behave on
+the box. CI lints the script and checks that the image bakes the two paths the
+script reads; the deploy lane's own verification, which fetches the public URL
+from the runner and requires the served engine version, is what catches a Caddy
+that will not start on a posture nobody has run before.
 
 ## What the instance keeps, and what it never holds
 
@@ -105,17 +144,20 @@ git.
 
 ## How a deploy happens
 
-`.github/workflows/hosted-deploy.yml` is the only thing that deploys, in two
-stages, on exactly three occasions:
+`.github/workflows/hosted-deploy.yml` is the only thing that deploys, on exactly
+two occasions:
 
 1. **A real release.** `release.yml` calls it after the scan-and-tag leg applies
    the image tags. A pre-release moves no `:latest`, so it deploys nothing.
-2. **A posture push.** A push to `main` touching `deploy/hosted/**` rebuilds the
-   same release image with the new posture and the current main's data.
-3. **A manual `workflow_dispatch`.**
+2. **A manual `workflow_dispatch`.**
 
-The lane asserts by digest that `:latest` is the tagged image before it builds
-anything, builds the hosted overlay and pushes it, and then deploys through
+There is deliberately no push trigger. A push to `deploy/hosted/**` publishes no
+image, and the posture on the box comes out of an image, so a push-triggered run
+would report success having applied nothing (#420 removed it, #423 is what makes
+the files actually travel).
+
+The lane builds nothing: it asserts by digest that `:latest` is the tagged image
+and deploys through
 [`rubentalstra/hetzner-deploy-action`](https://github.com/rubentalstra/hetzner-deploy-action),
 which was written for this. It waits for the container's own healthcheck and
 then fetches the public URL **from the runner**, requiring the served engine

@@ -20,11 +20,13 @@ error.
 | `comment-style.sh` | `.claude/rules/comments.md` — block comments, `TODO(#NNNN):` form, marker vocabulary, NOTE and comment-run budgets | `.claude/hooks/rust_fmt_clippy.sh` per edit; the `guards` job in `.github/workflows/ci.yml` |
 | `changelog-structure.sh` | Keep a Changelog 1.1.0 — no duplicated `### <Type>` inside one release section, no header outside the canonical type set | the `guards` job in `.github/workflows/ci.yml` |
 | `ci-conclusion-complete.sh` | branch protection routes through one `conclusion` check, so no CI job may run without appearing in its `needs` | the `workflow-audit` job in `.github/workflows/ci.yml` |
+| `hosted-deploy-script.sh` | the hosted box's `deploy.sh` is shellcheck-clean, extracted from the `write_files` block it lives in | the `guards` job in `.github/workflows/ci.yml`, with `--self-test` beside it |
 
-Two of these take a single file or no argument rather than the three modes
-above: `changelog-structure.sh` reads one changelog and
-`ci-conclusion-complete.sh` reads one workflow. The mode contract applies to
-guards that scan a file set.
+Three of these take a single file or no argument rather than the three modes
+above: `changelog-structure.sh` reads one changelog,
+`ci-conclusion-complete.sh` reads one workflow, and
+`hosted-deploy-script.sh` reads one cloud-init document. The mode contract
+applies to guards that scan a file set.
 
 Guards still to port with the code: the spec-citation resolver, the
 default-value style check, the typed-status check, and the SPDX header check.
