@@ -118,7 +118,7 @@ pub enum TargetRefusal {
     },
     /// The host resolves to an address only this instance can reach.
     #[error(
-        "this public instance refuses {host:?}: it resolves to {address}, {family}, reachable only from inside the network this instance runs in. Name a target this instance can reach from the public internet, or run the console yourself against a private one."
+        "this public instance refuses {host:?}: it resolves to {address}, {family}, reachable only from inside the network this instance runs in. Name a target reachable from the public internet, or run the console yourself against a private one. A locally driven run cannot earn a console entry: for a deployment the internet cannot reach, the registry tiers are reproduced and self-reported."
     )]
     Refused {
         /// The host, as the URL carried it.
@@ -311,6 +311,26 @@ mod tests {
         Posture, RefusedFamily, TargetRefusal, check_blocking, check_host_blocking, refused_family,
     };
     use std::net::IpAddr;
+
+    /// A refused target has to tell the visitor what to do instead, and the
+    /// thing they most need to know is the one they cannot infer: a run they
+    /// drive themselves earns no console entry, so the routes are the other
+    /// two tiers (#441).
+    #[test]
+    fn a_refusal_names_the_tiers_a_private_deployment_can_still_reach() {
+        let refusal = TargetRefusal::Refused {
+            host: "cdr.internal".to_owned(),
+            address: "10.0.0.5".parse::<IpAddr>().expect("a literal address"),
+            family: RefusedFamily::Private,
+        };
+        let shown = refusal.to_string();
+        for expected in ["reproduced", "self-reported", "public internet"] {
+            assert!(
+                shown.contains(expected),
+                "the refusal must name {expected:?}: {shown}"
+            );
+        }
+    }
 
     /// One address per refused family, driven as an ADDRESS: a string-prefix
     /// test would pass on `10.0.0.1` and miss `::ffff:10.0.0.1`.
