@@ -130,6 +130,9 @@ pub fn replay_run(
         schedule_release: transcript.schedule_release.clone(),
         tech_profile: crate::pipeline::conformance::tech_profile(statement.as_ref()),
         ixit_digest: crate::pipeline::conformance::ixit_digest(&ixit_text),
+        selection_basis: Some(crate::pipeline::conformance::selection_basis(
+            statement.as_ref(),
+        )),
         restapi_specs_version: report.restapi_specs_version.clone(),
         outcomes,
         measurements: Vec::new(),

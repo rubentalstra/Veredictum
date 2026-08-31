@@ -34,7 +34,11 @@ pub struct RunRequest<'a> {
     pub filter: Option<&'a str>,
     /// The party statement, which turns on ISO/IEC 9646 test selection: an
     /// option-gated case whose option the statement does not declare is
-    /// recorded not-applicable at drive time instead of driven.
+    /// recorded not-applicable at drive time instead of driven. With no
+    /// statement NO arm of a mutually exclusive branch is selected, so those
+    /// cases and every extension route are recorded not-applicable too
+    /// ([`crate::run::UnestablishedFact`]), and the recorded
+    /// `selection_basis` says the campaign ran blind.
     pub statement: Option<&'a Path>,
     /// Whether the run keeps its wire exchanges for the transcript artifact
     /// ([`crate::transcript::TRANSCRIPT_FILE`], written beside the results).
@@ -44,6 +48,16 @@ pub struct RunRequest<'a> {
 /// Something a run reports as it goes that is not a failure.
 #[derive(Debug, Clone, Copy)]
 pub enum RunWarning<'a> {
+    /// The campaign carried no party statement, so ISO/IEC 9646 test
+    /// selection had no ICS to select with: reported once per run, naming
+    /// every fact it could not establish and the cases each excused.
+    StatementBlindSelection {
+        /// Cases excused per unestablished fact, in vocabulary order. A fact
+        /// absent here excused nothing, either because no case turned on it
+        /// or because it only narrows a sweep the catalogue can honestly
+        /// drive ([`crate::run::UnestablishedFact::excuses_case`]).
+        excused: &'a std::collections::BTreeMap<crate::run::UnestablishedFact, usize>,
+    },
     /// Measurement records taken at one SUT version are being carried into
     /// a run against another, which the version-binding rule wants either
     /// re-measured or attested as an unchanged surface.
@@ -208,6 +222,11 @@ pub fn execute_run(
     };
     let report = crate::run::execute(&set, &ixit, statement.as_ref(), request.recording, progress)
         .map_err(|e| Error::Instrument(format!("execution defect: {e}")))?;
+    if statement.is_none() {
+        warn(RunWarning::StatementBlindSelection {
+            excused: &report.unestablished,
+        });
+    }
     let outcomes: Vec<OutcomeRecord> = report.records.iter().map(OutcomeRecord::from).collect();
     let counts = tally(&outcomes);
     let carried = carried_measurements(request, warn)?;
@@ -224,6 +243,7 @@ pub fn execute_run(
         schedule_release: "cnf-2.0-w2".to_owned(),
         tech_profile: tech_profile(statement.as_ref()),
         ixit_digest: ixit_digest(&ixit_text),
+        selection_basis: Some(selection_basis(statement.as_ref())),
         restapi_specs_version: report.restapi_specs_version.clone(),
         outcomes,
         measurements: carried,
@@ -255,6 +275,17 @@ fn tally(outcomes: &[OutcomeRecord]) -> OutcomeCounts {
         }
     }
     counts
+}
+
+// What selection had to select the campaign with, recorded in the results so
+// a reader tells a party-scoped record from a whole-catalogue sweep without
+// access to the invocation (`run::UnestablishedFact` carries what a blind
+// sweep cannot decide).
+pub(crate) fn selection_basis(statement: Option<&Statement>) -> crate::party::SelectionBasis {
+    match statement {
+        Some(_) => crate::party::SelectionBasis::Statement,
+        None => crate::party::SelectionBasis::StatementBlind,
+    }
 }
 
 // The recorded technology profile IS the claim the verdict pipeline selects
@@ -574,6 +605,9 @@ mod tests {
                 } => seen
                     .borrow_mut()
                     .push(format!("{count} {measured_at} {running_at}")),
+                RunWarning::StatementBlindSelection { .. } => {
+                    panic!("carry-forward reports no selection warning")
+                }
             },
         )
         .expect("carry-forward across versions is a warning, not a refusal");

@@ -181,9 +181,12 @@ enum Command {
         /// Only run cases whose id contains this substring.
         #[arg(long)]
         filter: Option<String>,
-        /// The party statement (ICS) — when supplied, option-gated cases
-        /// whose option the ICS does not declare are recorded N/A at drive
-        /// time (ISO/IEC 9646 test selection) instead of driven.
+        /// The party statement (ICS) — the list ISO/IEC 9646 test selection
+        /// selects from. Supplied, an option-gated case whose arm the ICS does
+        /// not declare is recorded N/A at drive time; absent, NO arm of a
+        /// mutually exclusive branch is selected, so every such case and every
+        /// extension route is recorded N/A with its citation and the run says
+        /// so once.
         #[arg(long)]
         statement: Option<PathBuf>,
         /// An armored OpenPGP secret key — when supplied, the emitted
@@ -1385,6 +1388,27 @@ fn run_command(request: &RunRequest<'_>, signing: &Signing, progress: bool) -> E
         } => eprintln!(
             "warning: carrying {count} measurement record(s) taken at SUT version {measured_at} into a run at {running_at} — re-measure or attest the surface unchanged"
         ),
+        RunWarning::StatementBlindSelection { excused } => {
+            eprintln!(
+                "warning: no --statement was supplied, so ISO/IEC 9646 test selection ran blind and this record covers the whole catalogue rather than one party's claim"
+            );
+            for fact in veredictum::run::UnestablishedFact::ALL {
+                let count = excused.get(fact).copied().unwrap_or_default();
+                let effect = if fact.excuses_case() {
+                    format!("{count} case(s) recorded not-applicable instead of driven")
+                } else {
+                    "not applied to selection".to_owned()
+                };
+                eprintln!(
+                    "warning:   {}: unestablished ({}) — {effect}",
+                    fact.token(),
+                    fact.decides()
+                );
+            }
+            eprintln!(
+                "warning: judge this record with `veredictum verdicts --statement <file>`, which re-applies the ICS filters"
+            );
+        }
     };
     // The progress stream is line-flushed on purpose: a driver reads this
     // through a pipe, where stdout is block-buffered and an unflushed line

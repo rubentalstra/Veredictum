@@ -55,7 +55,7 @@ veredictum run --root <ROOT> --ixit <IXIT> --out <OUT> \
 | `--sut-name <NAME>` | Display name for the system under test. Default `ferroehr` |
 | `--sut-version <VERSION>` | Version label for the system under test. Default `dev` |
 | `--filter <SUBSTRING>` | Only run cases whose identifier contains this substring |
-| `--statement <STATEMENT>` | The party statement. When supplied, an option-gated case whose option the statement does not declare is recorded not-applicable at drive time instead of driven |
+| `--statement <STATEMENT>` | The party statement (ICS), the list ISO/IEC 9646 test selection selects from. Supplied, an option-gated case whose arm the statement does not declare is recorded not-applicable at drive time instead of driven. Absent, no arm of a mutually exclusive branch is selected at all, so every option-gated case and every extension route is recorded not-applicable with its citation, `results.json` records `selection_basis: statement_blind`, and the run prints one advisory naming what it could not select |
 | `--sign-key <KEY>` | An armored OpenPGP secret key. Seals the emitted documents with `record-manifest.json` and its detached signature |
 | `--sign-passphrase <PASSPHRASE>` | The passphrase unlocking `--sign-key`, read from `VEREDICTUM_SIGN_PASSPHRASE` |
 | `--record-exchanges` | Persist the wire exchanges beside `results.json` as `transcript.json`. Off by default. The artifact records a SUT's response bodies verbatim, so it can carry real patient data: it is operator-controlled output, never a log, and belongs wherever the record itself is stored. The `authorization` request header's value is withheld. With `--sign-key` the sealed manifest covers the transcript too |
