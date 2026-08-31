@@ -15,7 +15,10 @@ users:
   - name: deploy
     lock_passwd: true
     shell: /bin/bash
-    groups: [docker]
+    # NOT `groups: [docker]`: users are created before Docker is installed, so
+    # the group does not exist yet and cloud-init would warn and move on,
+    # leaving this user unable to talk to the socket. runcmd adds it below,
+    # after the install.
     ssh_authorized_keys:
       # REPLACE both. The first is a person's key; the second is CI's, restricted
       # to one command so a leaked key runs one script rather than a shell.
@@ -55,6 +58,10 @@ write_files:
   - path: /opt/veredictum-console/deploy.sh
     permissions: "0755"
     owner: deploy:deploy
+    # Deferred to the final stage: `write-files` runs BEFORE `users-groups` in
+    # the default module order, so an owner naming this user cannot be applied
+    # any earlier.
+    defer: true
     content: |
       #!/usr/bin/env bash
       # SSH runs this whatever the client asked for, which is the point of the
@@ -80,6 +87,9 @@ runcmd:
   - [sh, -c, "curl -fsSL https://get.docker.com | sh"]
   - [systemctl, enable, --now, docker]
   - [install, -d, -o, deploy, -g, deploy, /opt/veredictum-console]
+  # The group exists now, so the deploy user can join it. A group change takes
+  # effect at the next login, and every deploy is its own SSH session.
+  - [usermod, -aG, docker, deploy]
   - [systemctl, enable, --now, unattended-upgrades]
 
 final_message: >-
