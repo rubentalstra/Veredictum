@@ -348,6 +348,23 @@ and the whole posture is committed under
 the cloud-init that built it, the compose file, the proxy configuration. A
 rebuild from that directory produces the same machine.
 
+**Who can change the thing that judges.** A record is trusted because this
+repository's CI re-derived its verdicts from the submitted transcript and then
+signed them, and the lane that does both lives on `main`. So who can move `main`
+is part of the trust claim, and the answer is published rather than implied.
+
+Every change to `main` requires a pull request, with its diff, its CI run and its
+audit-log entry. The maintainer holds a pull-request-only bypass, which means
+they may merge their own pull request without a second reviewer, and may merge
+one whose checks have not passed. They cannot push to `main` at all. Signed
+commits, no force-pushes and no branch deletion are enforced with no exception
+for anyone. The registry signing key sits behind a second gate: an environment
+that admits only `main` and holds the job until a person releases it.
+
+For a project with one maintainer, a second reviewer is a promise nobody could
+keep. A visible object for every change is one that can be kept, and it is the
+one that matters when somebody wants to audit how a verdict was produced.
+
 **One measurement caveat, stated before anyone reads a number.** The hosted
 instrument performs functional conformance runs. It does not offer the measured
 instruments: `perf`, `stress` and the comparative benchmark stay local for now.
