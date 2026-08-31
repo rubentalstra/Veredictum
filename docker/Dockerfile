@@ -121,7 +121,8 @@ RUN --mount=type=cache,target=/app/target,sharing=locked \
     && install -m 0755 target/release/veredictum /usr/local/bin/veredictum \
     && strip /usr/local/bin/veredictum-console /usr/local/bin/veredictum \
     && mkdir -p /srv \
-    && cp -r target/site /srv/site
+    && cp -r target/site /srv/site \
+    && cp target/release/hash.txt /srv/site/hash.txt
 
 # ── runtime-base: the SHARED final base (digest-pinned distroless, non-root) ──
 # gcr.io/distroless/cc-debian13:nonroot — glibc, libgcc_s and CA certificates,
@@ -147,9 +148,18 @@ WORKDIR /app
 # variable and the console never resolves a different binary by accident.
 # VEREDICTUM_VERIFY_KEY names the verifying key COPYed below, so /verify
 # checks a published record with no operator action at all.
+#
+# The bundle is emitted under content-hashed names (#450), which the server
+# reads back at render time, so LEPTOS_HASH_FILES must be set here as well as
+# at build time. LEPTOS_HASH_FILE_NAME is ABSOLUTE because leptos resolves it
+# against the server binary's directory and an absolute path replaces that base
+# (https://doc.rust-lang.org/std/path/struct.Path.html#method.join): the hash
+# file then travels inside the site bundle it names, as one artifact.
 ENV LEPTOS_OUTPUT_NAME=veredictum-console \
     LEPTOS_SITE_ROOT=/app/site \
     LEPTOS_SITE_PKG_DIR=pkg \
+    LEPTOS_HASH_FILES=true \
+    LEPTOS_HASH_FILE_NAME=/app/site/hash.txt \
     LEPTOS_SITE_ADDR=0.0.0.0:3000 \
     VEREDICTUM_ENGINE=/usr/local/bin/veredictum \
     VEREDICTUM_ROOT=/work/artifacts \

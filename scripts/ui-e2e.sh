@@ -135,8 +135,8 @@ wait_http() { # url, tries, what
 # compile rebuilds the bin target and overwrites target/debug/veredictum-console
 # mid-run. The two builds are not interchangeable: a plain cargo build has no
 # LEPTOS_OUTPUT_NAME in its environment, so leptos emits a bootstrap naming
-# `<name>_bg.wasm` while cargo-leptos ships `<name>.wasm`, and the only symptom
-# is a page that loads and never hydrates. That is also why UI_E2E_NO_BUILD
+# `<name>_bg.wasm` while cargo-leptos ships `<name>.<hash>.wasm`, and the only
+# symptom is a page that loads and never hydrates. That is also why UI_E2E_NO_BUILD
 # reuses these copies rather than target/debug: any cargo command between two
 # harness runs replaces target/debug/veredictum-console with such a build.
 CONSOLE_BIN="$ROOT/target/ui-e2e/veredictum-console"
@@ -149,12 +149,13 @@ if [[ -z "${UI_E2E_NO_BUILD:-}" ]]; then
   # and the shipped bundle cannot style differently.
   TAILWIND_VERSION="$(grep -E '^ARG TAILWIND_VERSION=' docker/Dockerfile | head -1 | cut -d= -f2)"
   (cd app/veredictum-console && LEPTOS_TAILWIND_VERSION="$TAILWIND_VERSION" cargo leptos build)
-  for artifact in "$ROOT/target/debug/veredictum-console" "$ROOT/target/site/pkg"; do
+  for artifact in "$ROOT/target/debug/veredictum-console" "$ROOT/target/site/pkg" \
+                  "$ROOT/target/debug/hash.txt"; do
     [[ -e "$artifact" ]] || { echo "FATAL: $artifact is missing after the build" >&2; exit 1; }
   done
   cp "$ROOT/target/debug/veredictum-console" "$CONSOLE_BIN"
 else
-  for artifact in "$CONSOLE_BIN" "$ROOT/target/site/pkg"; do
+  for artifact in "$CONSOLE_BIN" "$ROOT/target/site/pkg" "$ROOT/target/debug/hash.txt"; do
     [[ -e "$artifact" ]] \
       || { echo "FATAL: $artifact is missing — run once without UI_E2E_NO_BUILD" >&2; exit 1; }
   done
@@ -197,12 +198,18 @@ rm -rf "$ROOT/target/ui-e2e/out"
 mkdir -p "$ROOT/target/ui-e2e/out"
 
 echo "── serving the console on $CONSOLE_ADDR over the repository mounts"
+# The bundle carries content-hashed names (#450) and the server reads them back
+# from the hash file cargo-leptos wrote beside the binary it built. The copy
+# served here runs from target/ui-e2e, so the file is named by absolute path
+# rather than found next to the running executable.
 # The mounts are RELATIVE and the process runs from the repository root: the
 # landing renders them verbatim, and an absolute path would put whoever ran the
 # capture pass into a committed documentation screenshot.
 LEPTOS_SITE_ROOT="$ROOT/target/site" \
 LEPTOS_SITE_ADDR="$CONSOLE_ADDR" \
 LEPTOS_OUTPUT_NAME="veredictum-console" \
+LEPTOS_HASH_FILES="true" \
+LEPTOS_HASH_FILE_NAME="$ROOT/target/debug/hash.txt" \
 VEREDICTUM_ROOT="artifacts" \
 VEREDICTUM_SPECS="specs/openehr" \
 VEREDICTUM_OUT="target/ui-e2e/out" \
@@ -230,15 +237,17 @@ if [[ -z "$WASM_PATH" ]] || ! curl -sf -o /dev/null "$PROBE_URL$WASM_PATH"; then
   exit 1
 fi
 
-# Warm the served asset chain once: the first journey after a cold start
-# otherwise pays the whole debug-profile WASM read against its hydration
-# budget.
+# Every asset the page names must answer 200, and warming them here also keeps
+# the first journey after a cold start from paying the whole debug-profile WASM
+# read against its hydration budget. The names are content-hashed (#450), so a
+# 404 here means the served markup and the built bundle disagree.
 curl -sf "$PROBE_URL/" \
   | grep -oE '(href|src)="/pkg/[^"]+"' \
   | sed -E 's/^(href|src)="//; s/"$//' \
   | sort -u \
   | while IFS= read -r asset; do
-      curl -sf -o /dev/null "$PROBE_URL$asset" || true
+      curl -sf -o /dev/null "$PROBE_URL$asset" \
+        || { echo "FATAL: the page references $asset, which the site tree does not carry." >&2; exit 1; }
     done
 
 # ── 2. The browser endpoint ─────────────────────────────────────────────────

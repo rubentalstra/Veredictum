@@ -23,17 +23,30 @@ console.veredictum.eu {
 		-Server
 	}
 
-	# The hydration bundle is served under unhashed names, and wasm-bindgen import
-	# symbols carry a per-build hash, so a browser holding the previous release's
-	# veredictum-console.js and fetching the new .wasm pairs two builds and fails
-	# to instantiate: "LinkError: import function ... must be callable" (#450,
-	# seen live after the v0.1.4 deploy). `no-cache` permits caching and REQUIRES
-	# revalidation (https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.4), which
-	# with the ETag Caddy already sends costs a 304 and makes that pair
-	# impossible. Content-hashed names would allow `immutable` instead; #450
-	# carries that adjudication.
+	# The floor for everything the hydration bundle serves. wasm-bindgen import
+	# symbols carry a per-build hash, so a browser holding one build's
+	# veredictum-console.js and fetching another's .wasm pairs two builds and
+	# fails to instantiate: "LinkError: import function ... must be callable"
+	# (#450, seen live after the v0.1.4 deploy). `no-cache` permits caching and
+	# REQUIRES revalidation
+	# (https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.4), which with the
+	# ETag Caddy already sends costs a 304 and makes that pair impossible.
 	@bundle path /pkg/*
 	header @bundle Cache-Control "no-cache"
+
+	# On top of the floor: a name carrying the content hash cargo-leptos emitted
+	# never names other bytes, so its response needs no revalidation at all
+	# (`immutable`, https://www.rfc-editor.org/rfc/rfc8246) within the freshness
+	# lifetime `max-age` gives it
+	# (https://www.rfc-editor.org/rfc/rfc9111#section-5.2.2.1). Written AFTER the
+	# floor because directives carrying named matchers keep their Caddyfile order
+	# (https://caddyserver.com/docs/caddyfile/directives#sorting-algorithm), so
+	# this one overrides it — and only for names shaped `<name>.<hash>.<ext>`,
+	# which an unhashed build never emits: that build keeps the floor. The
+	# pattern carries no `{n,}` quantifier because a Caddyfile reads braces as
+	# placeholders (https://caddyserver.com/docs/caddyfile/concepts#placeholders).
+	@hashed path_regexp ^/pkg/[^/]+\.[A-Za-z0-9_-]+\.(js|wasm|css)$
+	header @hashed Cache-Control "public, max-age=31536000, immutable"
 
 	# A conformance run streams its progress for minutes and the live screen
 	# polls once a second, so the defaults are raised for the run surfaces

@@ -555,8 +555,15 @@ jobs:
           sudo install -m 0755 tailwindcss /usr/local/bin/tailwindcss
           rm -rf cargo-leptos* tailwindcss
 
+      # The hash file names the emitted `<name>.<hash>.<ext>` files (#450) and
+      # cargo-leptos writes it beside the server binary, which this lane does
+      # not build. It moves into the bundle it describes, so the two travel as
+      # one artifact and the image reads it at /app/site/hash.txt.
       - name: Build the site bundle
-        run: cargo leptos build --release
+        run: |
+          set -euo pipefail
+          cargo leptos build --release
+          mv target/release/hash.txt target/site/hash.txt
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -646,8 +653,12 @@ jobs:
           # and a wasm bundle compiled with different keys register one set
           # and request another: the 0.1.2 image shipped exactly that, and
           # every client call answered the app's own 404 page (#381).
+          # The wasm is named by its content hash (#450), so the served page is
+          # what names it — the same one reader the browser follows.
+          wasm="$(printf '%s' "$body" | grep -oE '(href|src)="/pkg/[^"]+\.wasm"' | head -1 | sed -E 's/^[a-z]+="//; s/"$//')"
+          [ -n "$wasm" ] || { echo "::error::the landing page references no /pkg/*.wasm at all — the hydration bootstrap is missing"; exit 1; }
           docker cp "${cid}:/usr/local/bin/veredictum-console" ./smoke-console
-          docker cp "${cid}:/app/site/pkg/veredictum-console.wasm" ./smoke-client.wasm
+          docker cp "${cid}:/app/site${wasm}" ./smoke-client.wasm
           strings -a ./smoke-console | grep -oE '/api/[a-z_]+[0-9]+' | sort -u > ./paths-server.txt
           strings -a ./smoke-client.wasm | grep -oE '/api/[a-z_]+[0-9]+' | sort -u > ./paths-client.txt
           if [ ! -s ./paths-client.txt ] || [ ! -s ./paths-server.txt ]; then

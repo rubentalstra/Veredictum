@@ -54,6 +54,7 @@ pub mod record_api;
 pub mod redirect;
 pub mod run_api;
 pub mod run_job;
+pub mod site_bundle;
 #[cfg(feature = "ssr")]
 pub mod state;
 pub mod submit_api;

@@ -66,7 +66,8 @@ on:
         description: >-
           If set, download this run artifact into site/ — the
           architecture-independent site bundle (WASM, CSS, the generated
-          bootstrap) a prebuilt web-app target COPYs beside the binary.
+          bootstrap and the hash file naming them) a prebuilt web-app target
+          COPYs beside the binary.
         required: false
         type: string
         default: ""

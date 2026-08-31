@@ -11,7 +11,7 @@ use leptos::prelude::{
     AutoReload, ClassAttribute, Effect, ElementChild, GlobalAttributes, HydrationScripts, IntoView,
     LeptosOptions, component, document, view,
 };
-use leptos_meta::{Link, Meta, MetaTags, Stylesheet, Title, provide_meta_context};
+use leptos_meta::{Link, Meta, MetaTags, Title, provide_meta_context};
 use leptos_router::{
     ParamSegment, StaticSegment,
     components::{ParentRoute, Route, Router, Routes},
@@ -41,11 +41,7 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
         <!DOCTYPE html>
         <html lang="en" class=crate::capture::root_class(crate::capture::enabled())>
             <head>
-                <meta charset="utf-8" />
-                <meta name="viewport" content="width=device-width, initial-scale=1" />
-                <AutoReload options=options.clone() />
-                <HydrationScripts options />
-                <MetaTags />
+                <DocumentHead options />
             </head>
             <body>
                 <App />
@@ -54,8 +50,35 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
     }
 }
 
-/// The root component: meta context, the stylesheet, and the route tree —
-/// every surface nested under the one [`Shell`].
+/// The head of the served document: the hydration bootstrap, the stylesheet,
+/// and the slot `leptos_meta` injects the per-page tags into.
+///
+/// Every `/pkg/` name the browser is told to fetch is written here, from the
+/// one [`crate::site_bundle`] reader over the build's own hash file, so the
+/// bootstrap pair and the stylesheet can only name files that build emitted.
+/// Hydration starts at the body's children, so nothing here is hydrated.
+#[expect(
+    clippy::must_use_candidate,
+    reason = "a Leptos component is mounted by the framework, never consumed as a value"
+)]
+#[component]
+pub fn DocumentHead(
+    /// The Leptos configuration the server was started with.
+    options: LeptosOptions,
+) -> impl IntoView {
+    let stylesheet = crate::site_bundle::stylesheet_href(&options);
+    view! {
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <AutoReload options=options.clone() />
+        <HydrationScripts options />
+        <link id="leptos" rel="stylesheet" href=stylesheet />
+        <MetaTags />
+    }
+}
+
+/// The root component: meta context, the document metadata, and the route
+/// tree — every surface nested under the one [`Shell`].
 #[expect(
     clippy::must_use_candidate,
     reason = "a Leptos component is mounted by the framework, never consumed as a value"
@@ -77,7 +100,6 @@ pub fn App() -> impl IntoView {
     });
 
     view! {
-        <Stylesheet id="leptos" href="/pkg/veredictum-console.css" />
         // `favicon.ico` is declared because a browser probes that path on every
         // load anyway, and the 404 it logs is a page error the journeys' console
         // gate fails on (#84).
