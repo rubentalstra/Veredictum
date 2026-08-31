@@ -67,7 +67,7 @@ spec_refs:
 applies: { rm: ">=1.0.2" }
 formats: [canonical-json]
 guards:
-  - "requires ixit-declared signing key material — the verifying key is a statement/ixit input, not a wire value (RM common §change_control Digital Signature)"
+  - "the verifying key is a statement/ixit input, not a wire value — RM common §change_control Digital Signature"
 requires:
   server: any
   templates: [cnf.opt.minimal_event]
