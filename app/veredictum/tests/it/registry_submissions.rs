@@ -33,7 +33,8 @@ use sha2::{Digest as _, Sha256};
 
 use veredictum::ixit::{AuthMode, Ixit};
 use veredictum::registry::{
-    ArtifactRole, DeploymentKind, EntryId, EntryKind, Provenance, REGISTRY_SCHEMA_VERSION,
+    ArtifactRole, DeploymentKind, EntryId, EntryKind, Provenance,
+    READABLE_REGISTRY_SCHEMA_VERSIONS, READABLE_RULES_VERSIONS, REGISTRY_SCHEMA_VERSION,
     RULES_VERSION, RegistryEntry, entry_defects,
 };
 
@@ -170,13 +171,71 @@ fn every_entry_is_publishable_by_the_rules_it_declares() {
                 .collect::<Vec<_>>()
                 .join("; ")
         );
-        assert_eq!(
-            entry.registry_schema_version, REGISTRY_SCHEMA_VERSION,
-            "{relative} declares a registry format this release does not read"
+        assert!(
+            READABLE_REGISTRY_SCHEMA_VERSIONS.contains(&entry.registry_schema_version.as_str()),
+            "{relative} declares a registry format this release cannot read: {:?} is outside \
+             {READABLE_REGISTRY_SCHEMA_VERSIONS:?}",
+            entry.registry_schema_version
         );
-        assert_eq!(
-            entry.rules_version, RULES_VERSION,
-            "{relative} declares rules this release does not publish"
+        assert!(
+            READABLE_RULES_VERSIONS.contains(&entry.rules_version.as_str()),
+            "{relative} declares rules this release does not accept: {:?} is outside \
+             {READABLE_RULES_VERSIONS:?}",
+            entry.rules_version
+        );
+    }
+}
+
+/// A merged entry stays publishable at the version it was accepted under. The
+/// fixture declares the earliest readable version and is otherwise untouched,
+/// so both halves of the gate are pinned: the published schema admits it, and
+/// the reader scores it with no version defect.
+#[test]
+fn an_entry_at_the_earliest_readable_version_stays_publishable() {
+    let earliest_format = READABLE_REGISTRY_SCHEMA_VERSIONS
+        .first()
+        .copied()
+        .unwrap_or(REGISTRY_SCHEMA_VERSION);
+    let earliest_rules = READABLE_RULES_VERSIONS
+        .first()
+        .copied()
+        .unwrap_or(RULES_VERSION);
+    let (_reproduced, _console, self_reported) = board_provenances();
+    let mut document = board_entry("beta", "2026-01-03-beta", &self_reported);
+    document["registry_schema_version"] = json!(earliest_format);
+    document["rules_version"] = json!(earliest_rules);
+    pin_the_signature(&mut document, "beta", "2026-01-03-beta");
+
+    let found = violations(&validator_for("registry-entry.schema.json"), &document);
+    assert!(
+        found.is_empty(),
+        "the published schema refuses an entry at {earliest_format}: {}",
+        found.join("; ")
+    );
+    let entry: RegistryEntry = serde_json::from_value(document)
+        .unwrap_or_else(|e| panic!("an entry at {earliest_format} does not parse: {e}"));
+    assert_eq!(
+        entry_defects(&entry),
+        Vec::new(),
+        "an entry accepted under {earliest_rules} must stay publishable unedited"
+    );
+}
+
+/// An entry naming a version this release does not carry is refused by the
+/// published schema itself, so a submitter is told before any field of theirs
+/// is read under the wrong meaning.
+#[test]
+fn the_published_schema_refuses_a_version_outside_the_readable_set() {
+    let (_reproduced, _console, self_reported) = board_provenances();
+    let mut document = board_entry("beta", "2026-01-03-beta", &self_reported);
+    document["registry_schema_version"] = json!("0.9.0");
+    document["rules_version"] = json!("0.9.0");
+    let found = violations(&validator_for("registry-entry.schema.json"), &document);
+    for field in ["/registry_schema_version", "/rules_version"] {
+        assert!(
+            found.iter().any(|violation| violation.starts_with(field)),
+            "{field} outside the readable set must violate the published schema: {}",
+            found.join("; ")
         );
     }
 }
@@ -480,6 +539,22 @@ fn board_entry(system: &str, id: &str, tier: &serde_json::Value) -> serde_json::
         ],
         "provenance": tier
     })
+}
+
+/// Declares the signature a self-reported [`board_entry`] carries as an
+/// artifact, so the gate can read the bytes the signature covers.
+///
+/// The renderer never looks at artifact roles, so the board fixture pins none;
+/// the gate does, and refuses a signature nothing pins.
+fn pin_the_signature(document: &mut serde_json::Value, system: &str, id: &str) {
+    let artifacts = document["artifacts"]
+        .as_array_mut()
+        .expect("a fixture entry carries an artifact list");
+    artifacts.push(json!({
+        "role": "signature",
+        "path": format!("registry/records/{system}/{id}/verdicts.json.asc"),
+        "sha256": "2".repeat(64)
+    }));
 }
 
 /// A verdicts document as the renderer reads it: the coverage bound and the

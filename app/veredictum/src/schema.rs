@@ -26,8 +26,8 @@ use crate::model::vocab_files::{BODY_SELECTOR_TOKENS, HEADER_MATCHER_FORMS};
 use crate::model::wire_surface::SurfaceReason;
 use crate::party::{OutcomeStatus, VerificationPackStatus};
 use crate::registry::{
-    ArtifactRole, DeploymentKind, EntryKind, REGISTRY_SCHEMA_VERSION, Relationship,
-    SignatureScheme, Tier as RegistryTier,
+    ArtifactRole, DeploymentKind, EntryKind, READABLE_REGISTRY_SCHEMA_VERSIONS,
+    READABLE_RULES_VERSIONS, Relationship, SignatureScheme, Tier as RegistryTier,
 };
 use crate::vocab::{
     CaseKind, CaseStatus, Component, CorpusFormat, Disposition, FormatName, HttpMethod, Iteration,
@@ -2660,9 +2660,9 @@ pub fn registry_entry_schema() -> Value {
         "additionalProperties": false,
         "required": ["registry_schema_version", "entry_id", "rules_version", "submitter", "subject", "disclosure", "result", "artifacts", "provenance"],
         "properties": {
-            "registry_schema_version": { "const": REGISTRY_SCHEMA_VERSION },
+            "registry_schema_version": { "enum": READABLE_REGISTRY_SCHEMA_VERSIONS },
             "entry_id": { "type": "string", "pattern": REGISTRY_ENTRY_ID_PATTERN },
-            "rules_version": { "type": "string", "minLength": 1 },
+            "rules_version": { "enum": READABLE_RULES_VERSIONS },
             "submitter": {
                 "type": "object",
                 "additionalProperties": false,

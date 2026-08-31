@@ -306,6 +306,21 @@ means, what the gate should refuse — belong in a pull request against this
 document. Rule changes apply from the version that carries them. Published
 entries are never re-scored.
 
+## How a version leaves the readable set
+
+Each release declares the set of rules versions and entry format versions it
+can read, and that set is wider than the newest version of each. An entry
+declaring any member of it is accepted as it stands, which is what keeps a
+merged entry publishable while this document moves on.
+
+A version leaves the set only when a field an entry at that version carries no
+longer means here what it meant when the entry was accepted. That is the one
+event that can invalidate an already-published entry, so dropping a version is
+its own pull request: it names the field whose meaning moved, and for every
+affected entry it either supersedes that entry with a re-derived one or states
+why the entry can no longer be read. A version is never dropped to tidy the
+set.
+
 ## What this registry does not do
 
 It does not rank a conformance entry against a benchmark entry, and it never
