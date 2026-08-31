@@ -152,9 +152,9 @@ jobs:
           else
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
-          # The image tier: both Dockerfiles — the image itself and the hosted
-          # instrument's overlay over it — the build-context ignore file that
-          # decides what either can see, the lint configuration, and this file.
+          # The image tier: the one Dockerfile, the build-context ignore file
+          # that decides what it can see, the hosted posture that runs it, the
+          # lint configuration, and this file.
           if echo "$changed" | grep -qE '^(docker/|deploy/hosted/|\.dockerignore$|\.hadolint\.yaml$|\.github/workflows/ci\.yml$)'; then
             echo "docker=true" >> "$GITHUB_OUTPUT"
           else
@@ -459,13 +459,6 @@ jobs:
       - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
         with:
           dockerfile: docker/Dockerfile
-          config: .hadolint.yaml
-          failure-threshold: warning
-      # The hosted instrument's overlay is a Dockerfile that ships to the
-      # public instance, and until #394 it was linted by nothing at all.
-      - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
-        with:
-          dockerfile: deploy/hosted/Dockerfile
           config: .hadolint.yaml
           failure-threshold: warning
 
