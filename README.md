@@ -296,13 +296,24 @@ own workflow: it composed the deployment from a recipe committed under
 `registry/topologies/`, drove the catalogue against it, and attested the
 bundle. A **console** entry was produced at
 [console.veredictum.eu](https://console.veredictum.eu), the official hosted
-instrument, against an endpoint the submitter named; its verdicts were
-re-derived here from the transcript it submitted, and the record was signed
-only after they matched. A **self-reported** entry was run and signed by its
+instrument, against an endpoint the submitter named that is **reachable from the
+public internet**; its verdicts were re-derived here from the transcript it
+submitted, and the record was signed only after they matched. A **self-reported** entry was run and signed by its
 submitter; the signature proves who submitted the file and that the bytes
 have not moved, and it never proves the run happened as described. The tier
 is the discriminant of the entry's provenance block, so it cannot be claimed
 without the evidence its variant requires.
+
+**A deployment the internet cannot reach cannot earn a console entry.** The
+hosted instrument refuses a target only it could reach (loopback, RFC 1918,
+link-local, unique-local) before a socket opens, because otherwise a visitor
+could point it at its own host network. That leaves a server behind a firewall,
+on a laptop, or in a private subnet with two honest routes: the **reproduced**
+tier, if the deployment can be composed from a recipe committed under
+`registry/topologies/`, which is the stronger of the two because this repository
+performs the run; or **self-reported**, which says what the submitter says it
+says. The guard is not a limitation to be worked around. It is the reason the
+instrument cannot be turned against the network it runs in.
 
 **A test report is not a certificate.** An entry says what happened when a
 named version of a named system was driven by a named version of this

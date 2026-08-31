@@ -56,6 +56,14 @@ catalogue against an endpoint the submitter named, recorded every exchange,
 computed the verdicts, and opened the submission from its own GitHub App
 identity. That identity is the only one permitted to open a `console` entry.
 
+The endpoint has to be reachable from the public internet. The instrument
+refuses a target only it could reach, before a socket opens, because a visitor
+who could name a loopback or private address could point it at its own host
+network. A deployment the internet cannot reach is therefore not eligible for
+this tier, and its honest routes are `reproduced`, if the deployment can be
+composed from a recipe committed under `registry/topologies/`, or
+`self-reported`.
+
 The instrument is not asked to be trusted. A verdict is a pure function over
 the recorded exchanges, so CI recomputes the verdicts here from the transcript
 the submission carries and refuses the submission unless they match. Only then
