@@ -298,15 +298,33 @@ The Rust tier. Run these before every commit; CI gates them on whether the
 change touched anything they read:
 
 ```bash
-cargo build --all-targets
-cargo nextest run                       # never cargo test
-cargo clippy --all-targets -- -D warnings
+cargo build --workspace --all-targets
+cargo nextest run --workspace            # never cargo test
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
 cargo deny check
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --document-private-items
-cargo hack check --rust-version --all-targets    # the declared MSRV, verified
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
+cargo hack check --rust-version --all-targets --workspace   # the declared MSRV
 cargo machete                                    # no dependency nothing imports
 ```
+
+**`--workspace` is not decoration on any of those lines.** Without it a
+root-run command reads `default-members`, which is `app/veredictum` alone, so a
+green board says nothing whatever about the console (#405). CI passes it
+explicitly everywhere, and these lines match CI on purpose.
+
+**And `--workspace` is still not the console's gate.** It compiles the console
+with no features, which is not how it ships. The console has two real targets and
+they are their own tier:
+
+```bash
+cargo clippy -p veredictum-console --all-targets --features ssr -- -D warnings
+cargo clippy -p veredictum-console --lib --target wasm32-unknown-unknown \
+  --no-default-features --features hydrate -- -D warnings
+cargo nextest run -p veredictum-console --features ssr
+```
+
+`/ui-gates` runs those plus `leptosfmt` and the browser journeys.
 
 The libFuzzer harnesses in `fuzz/` are their own nightly workspace, never a
 root member. CI compiles them on every pull request touching `app/` or `fuzz/`

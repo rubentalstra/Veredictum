@@ -39,7 +39,7 @@ Non-negotiables (violations are rejected at review):
 - **Every closed vocabulary is an enum or a newtype**, and an unknown token is
   a loud error, never a silent fallback to a default. A silent fallback in a
   conformance instrument manufactures a passing row out of a typo.
-- Done = `cargo build` + `cargo clippy --all-targets` + `cargo nextest run`
+- Done = `cargo build --workspace` + `cargo clippy --workspace --all-targets` + `cargo nextest run --workspace` (without `--workspace` the root gates read `default-members` and skip the console, #405)
   green for everything you touched, `cargo fmt` clean. Report actual command
   results; never claim green you did not see.
 - Deferred work is ALWAYS `// TODO(#NNNN): <what is missing>` with its tracker

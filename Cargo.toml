@@ -10,11 +10,21 @@
 resolver = "3"
 members = ["app/veredictum", "app/veredictum-console"]
 # The instrument alone, so every documented `cargo run -- <subcommand>`
-# invocation keeps working from the repository root — a virtual workspace
-# with two default members cannot resolve a bare `cargo run`. The console is
-# NOT skipped by the gates for it: every CI cargo command passes --workspace
-# explicitly (ci.yml), which is the honest arrangement — the guarantee lives
-# in the gate, not in a local default.
+# invocation resolves from the repository root with no extra manifest key.
+#
+# The reason is NOT that two default members make `cargo run` impossible.
+# Verified 2026-08-31 on a throwaway two-member workspace: a bare `cargo run`
+# does fail with "could not determine which binary to run", and a `default-run`
+# key on one member fixes it. So the constraint is avoidable, and this is a
+# choice rather than a limit.
+#
+# The choice stands on coverage instead. Adding the console here would compile
+# it FEATURELESS in every root command, which is not how it ships — its gates
+# are `--features ssr` natively and `--features hydrate` on wasm32 — so the
+# root board would grow build time while looking like console coverage it does
+# not have. Naming the console explicitly is the honest arrangement, and the
+# documented battery does exactly that (#405): every gate line carries
+# `--workspace`, and the console's own two targets are their own tier.
 default-members = ["app/veredictum"]
 
 # ─────────────────────────────────────────────────────────────────────────────

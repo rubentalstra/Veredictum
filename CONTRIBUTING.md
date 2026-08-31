@@ -49,9 +49,9 @@ anything it reads.
 
 ```bash
 cargo build --all-targets
-cargo clippy --all-targets -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all --check
-cargo nextest run
+cargo nextest run --workspace
 cargo deny check
 cargo run -- validate --root artifacts --specs specs/openehr   # zero findings
 ```
