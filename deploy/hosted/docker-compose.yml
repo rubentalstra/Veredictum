@@ -24,14 +24,19 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
-    # Two concurrent runs, each an engine process that loads the whole
-    # catalogue, plus the console itself. The limit exists so a runaway run
-    # cannot take the proxy and the host with it: on an 8 GB box this leaves
-    # room for Caddy and the operating system.
+    # Sized for the box, not for an aspiration. The instrument runs on a CPX12
+    # today — 1 vCPU, 2 GB — so this leaves roughly 700 MB for Caddy and the
+    # operating system. The limit exists so a runaway run cannot take the proxy
+    # and the host with it.
+    #
+    # ON A RESIZE, both of these move together and neither is a code change:
+    # this number, and VEREDICTUM_MAX_CONCURRENT_RUNS in `.env`. A limit above
+    # what the host has is not a limit — the host runs out first, and what it
+    # kills is whichever process asks next.
     deploy:
       resources:
         limits:
-          memory: 6g
+          memory: 1200m
     environment:
       # The public posture: a visitor names the endpoint, so private,
       # link-local and loopback targets are refused before a socket opens.
@@ -39,6 +44,11 @@ services:
       # Behind Caddy the peer address is Caddy, so the per-submitter caps read
       # the address Caddy forwards — and only because this names the header.
       VEREDICTUM_CLIENT_IP_HEADER: X-Forwarded-For
+      # What this host can actually drive at once. #388 reasoned two on an 8 GB
+      # machine and called it a value to re-derive by measuring; a 2 GB box
+      # drives one, and the queue covers the difference with a position rather
+      # than a refusal. Raise it with the memory limit above when the box grows.
+      VEREDICTUM_MAX_CONCURRENT_RUNS: "${VEREDICTUM_MAX_CONCURRENT_RUNS:-1}"
     env_file:
       # Holds CONSOLE_IMAGE and, once #391's submission path is live, the
       # GitHub App credentials. Readable by the service user alone.
