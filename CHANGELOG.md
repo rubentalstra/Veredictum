@@ -18,6 +18,20 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-31
+
+This release builds the hosted instrument and everything that judges what it
+produces: console.veredictum.eu on a box this repository provisions, several
+people driving the catalogue at once, a submission opened by the instrument's own
+App identity, CI that re-derives a submitted record's verdicts before anything is
+signed, and a signing key that exists only in a protected environment.
+
+**No record has travelled that path yet.** Nothing has been driven at
+console.veredictum.eu, submitted, re-derived, signed and verified offline as one
+sequence. Every part of it is tested on its own and the parts have not been run
+in series, so read this as the pipeline arriving rather than as a result. The
+first record is what v0.1.5 exists to produce.
+
 ### Added
 - **One image, carrying the data it judges against (#420).** The published
   image now holds the catalogue, the vendored specification oracle and the party
@@ -1876,7 +1890,8 @@ tag stands; 0.1.0-alpha.6 ships the same tree plus the pipeline fix.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.3...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/rubentalstra/Veredictum/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/rubentalstra/Veredictum/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/rubentalstra/Veredictum/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/rubentalstra/Veredictum/compare/v0.1.0...v0.1.1
