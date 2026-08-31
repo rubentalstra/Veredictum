@@ -2,14 +2,13 @@
 # root — docker/Dockerfile and deploy/hosted/Dockerfile both. A Dockerfile-adjacent
 # `*.dockerignore` would SHADOW this file entirely
 # (https://docs.docker.com/build/concepts/context — a Dockerfile-specific
-# ignore-file takes precedence), and Vercel's buildah supports only this
-# root-level form anyway (https://github.com/containers/buildah/issues/4236),
-# so there is only this one — the FerroEHR shape.
+# ignore-file takes precedence), so there is only this one — the FerroEHR shape.
 #
 # What the hosted console BAKES therefore must not be excluded here:
 # deploy/hosted/Dockerfile COPYs `artifacts/`, `specs/openehr/` and `party/` into
-# /work (Vercel has no volume), and the first sandbox build failed on exactly
-# an exclusion of those trees. They stay in the context; the price is that the
+# /work, because the box runs the image against no checkout of this repository
+# and mounts nothing. An exclusion of those trees fails that build, which is how
+# it was found. They stay in the context; the price is that the
 # from-source operator build's `COPY . .` now carries them into its builder
 # stage, which only that local path pays — the CI target COPYs bin/ and site/
 # alone, and BuildKit transfers lazily.

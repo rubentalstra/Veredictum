@@ -94,8 +94,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "verdict=${verdict} served=${served:-none} expected=${expected:-unknown}"
 
-      # One issue, reused. A box down for a day produces one record with a
-      # comment per check, not ninety-six issues nobody reads.
+      # One issue, reused, and a comment only when the DIAGNOSIS CHANGES. A box
+      # down for a day is one record whose comments are the distinct things that
+      # were wrong, because ninety-six identical lines bury the one that differs.
       - name: Say so, once
         if: steps.ask.outputs.verdict != 'ok'
         env:
@@ -108,16 +109,28 @@ jobs:
           set -euo pipefail
           existing="$(gh issue list --repo "$REPO" --state open --search "$ISSUE_TITLE in:title" \
             --json number --jq '.[0].number // empty')"
-          note="**${VERDICT}** — ${DETAIL}
+          headline="**${VERDICT}** — ${DETAIL}"
+          note="${headline}
 
           Checked at $(date -u +%Y-%m-%dT%H:%M:%SZ) by [this run](${RUN_URL})."
           if [ -n "$existing" ]; then
+            # The last diagnosis this watch recorded. An unchanged one is
+            # already on the issue, and the run history carries every check.
+            # shellcheck disable=SC2016  # $opened is a jq variable, not a shell one
+            said="$(gh issue view "$existing" --repo "$REPO" --json comments,body --jq '
+              ([.body | split("\n")[] | select(startswith("**"))] | last // "") as $opened
+              | [.comments[] | select(.body | startswith("**")) | .body | split("\n")[0]]
+              | last // $opened')"
+            if [ "$said" = "$headline" ]; then
+              echo "unchanged since the last comment on #${existing}: ${headline}"
+              exit 0
+            fi
             gh issue comment "$existing" --repo "$REPO" --body "$note"
             echo "commented on #${existing}"
           else
             gh issue create --repo "$REPO" --title "$ISSUE_TITLE" \
               --label bug --label P0 \
-              --body "The scheduled watch found the hosted instrument not serving what it should. This issue is reused for as long as that holds, one comment per check, and closed when a check finds it healthy again.
+              --body "The scheduled watch found the hosted instrument not serving what it should. This issue is reused for as long as that holds, gains a comment whenever the diagnosis changes, and closes when a check finds it healthy again. Every individual check is in the workflow run history.
 
           ${note}
 
