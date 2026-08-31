@@ -9,7 +9,8 @@
 #
 # What it deliberately does NOT do: fetch anything from this repository. The box
 # holds no checkout. Everything the instrument needs is baked into the image
-# (docker/Dockerfile, #420), so the deploy is a pull.
+# (docker/Dockerfile, #420), including the posture the box itself runs (#423),
+# so the deploy is a pull and an extraction.
 
 users:
   - name: deploy
@@ -60,8 +61,9 @@ write_files:
         "live-restore": true
       }
 
-  # The ONE command the CI key may run. The deploy is a pull and a recreate:
-  # nothing is built here, and nothing is fetched from this repository.
+  # The ONE command the CI key may run. The deploy is a pull, an extraction of
+  # the posture out of the pulled image, and a recreate: nothing is built here,
+  # and nothing is fetched from this repository over the network.
   - path: /opt/veredictum-console/deploy.sh
     permissions: "0755"
     owner: deploy:deploy
@@ -73,10 +75,100 @@ write_files:
       #!/usr/bin/env bash
       # SSH runs this whatever the client asked for, which is the point of the
       # command= restriction on the key.
+      #
+      # The posture this box runs — docker-compose.yml and Caddyfile — travels
+      # INSIDE the published image at /app/posture (docker/Dockerfile, #423), so
+      # a committed posture change arrives with the release that carries it and
+      # inherits that artifact's provenance. This script extracts it from the
+      # image it just pulled and installs it only after the compose file parses.
+      #
+      # It does NOT rewrite itself: a script that overwrites itself mid-run is
+      # a footgun, so installing a new version of THIS file stays a manual step
+      # on the box.
       set -euo pipefail
       cd /opt/veredictum-console
+
+      # `.env` is the operator's file and no automation writes it, so it is what
+      # names the image to interrogate. No fallback: an unnamed image is a stop,
+      # never a guess at which artifact the posture should come from.
+      image="$(sed -n 's/^[[:space:]]*CONSOLE_IMAGE=//p' .env | tail -n 1)"
+      image="${image%\"}"
+      image="${image#\"}"
+      if [[ -z "$image" ]]; then
+        echo "deploy: .env names no CONSOLE_IMAGE, so no image can be read" >&2
+        exit 1
+      fi
+
+      docker pull -q "$image"
+
+      # The created container and the candidate files go away on every exit
+      # path, including a refusal below.
+      cleanup() {
+        if [[ -n "$cid" ]]; then
+          docker rm -f "$cid" >/dev/null 2>&1 || true
+        fi
+        rm -f docker-compose.yml.candidate Caddyfile.candidate
+      }
+      cid=""
+      trap cleanup EXIT
+
+      # The base is distroless and carries no shell, so `docker run … cat` can
+      # never work: a container is CREATED and never started, and the files are
+      # copied out of it
+      # (https://docs.docker.com/reference/cli/docker/container/cp/).
+      cid="$(docker create "$image")"
+      docker cp "$cid:/app/posture/docker-compose.yml" docker-compose.yml.candidate
+      docker cp "$cid:/app/posture/Caddyfile" Caddyfile.candidate
+
+      # `set -e` fails a failed copy; an EMPTY file it cannot see. A truncated
+      # posture stops the deploy here rather than recreating with the old files
+      # and reporting success.
+      for candidate in docker-compose.yml.candidate Caddyfile.candidate; do
+        if [[ ! -s "$candidate" ]]; then
+          echo "deploy: $candidate came out of $image empty" >&2
+          exit 1
+        fi
+      done
+
+      # A compose file that does not parse must never be installed: the next
+      # deploy could not run at all, and the box would be reachable only by hand.
+      docker compose -f docker-compose.yml.candidate config --quiet
+
+      compose_changed=0
+      caddy_changed=0
+      cmp -s docker-compose.yml.candidate docker-compose.yml || compose_changed=1
+      cmp -s Caddyfile.candidate Caddyfile || caddy_changed=1
+
+      # The replaced copy stays on the box, so a bad posture is recoverable
+      # without anyone editing YAML over SSH.
+      if [[ "$compose_changed" -eq 1 ]]; then
+        if [[ -f docker-compose.yml ]]; then
+          cp -p docker-compose.yml docker-compose.yml.prev
+        fi
+        mv docker-compose.yml.candidate docker-compose.yml
+        echo "deploy: docker-compose.yml installed from $image (previous: docker-compose.yml.prev)"
+      fi
+      if [[ "$caddy_changed" -eq 1 ]]; then
+        if [[ -f Caddyfile ]]; then
+          cp -p Caddyfile Caddyfile.prev
+        fi
+        mv Caddyfile.candidate Caddyfile
+        echo "deploy: Caddyfile installed from $image (previous: Caddyfile.prev)"
+      fi
+
       docker compose pull -q
       docker compose up -d --remove-orphans
+
+      # A bind-mounted file's CONTENTS changing is not a configuration change,
+      # so compose does not recreate the container that mounts it
+      # (https://docs.docker.com/reference/cli/docker/compose/up/) and Caddy
+      # keeps serving the old configuration until it is restarted. An
+      # unapplied proxy change is the failure this whole extraction exists to
+      # remove, so the restart is explicit.
+      if [[ "$caddy_changed" -eq 1 ]]; then
+        docker compose restart caddy
+      fi
+
       # Images the instrument no longer runs. A running container's image is
       # never pruned, so this cannot take the release out from under itself.
       docker image prune -f --filter "until=168h"
@@ -100,5 +192,6 @@ runcmd:
   - [systemctl, enable, --now, unattended-upgrades]
 
 final_message: >-
-  the box is up after $UPTIME seconds. Put docker-compose.yml, Caddyfile and
-  .env in /opt/veredictum-console, then run the deploy lane.
+  the box is up after $UPTIME seconds. Put .env and github-app.pem in
+  /opt/veredictum-console, then run the deploy lane: it installs
+  docker-compose.yml and the Caddyfile out of the image it pulls.

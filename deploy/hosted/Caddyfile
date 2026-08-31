@@ -2,6 +2,11 @@
 #
 # Nothing in CI touches a certificate, and nothing expires quietly at 3am. This
 # is the one piece that is strictly worse when hand-rolled.
+#
+# The file reaches the box from inside the image (#423): it is COPYed to
+# /app/posture/ and installed by the deploy script, which then restarts the caddy
+# service — a bind-mounted file's contents changing does not recreate the
+# container that mounts it, so without that restart an edit here serves nothing.
 
 console.veredictum.eu {
 	reverse_proxy console:3000

@@ -228,6 +228,18 @@ jobs:
       - name: No surface calls the instrument a demo — seeded-violation proof
         run: bash scripts/checks/hosted-instrument-language.sh --self-test
 
+      # The hosted box's deploy script lives inside `cloud-init.yaml`, where no
+      # other gate reads it as shell — and it is the ONE command the deploy key
+      # may run, so a defect in it is a box that stops taking deploys (#423).
+      # Guard-tier by the same rule as the rest of this job: a text input that
+      # exists on every pull request, and seconds to check. shellcheck ships on
+      # the GitHub Ubuntu runner images.
+      - name: The hosted deploy script is shellcheck-clean
+        run: bash scripts/checks/hosted-deploy-script.sh
+
+      - name: The hosted deploy script — seeded-violation proof
+        run: bash scripts/checks/hosted-deploy-script.sh --self-test
+
       # The console's engine pin is ONE value, the workspace engine version
       # (#179). The root manifest's `[patch.crates-io]` only redirects the
       # console's exact crates.io pin to `app/veredictum` while the two agree,
@@ -569,6 +581,35 @@ jobs:
           diff -u registry/keys/registry-signing.pub.asc ./image-verify-key.asc
           rm -f ./image-verify-key.asc
           echo "the image carries the committed verifying key at ${baked}"
+      - name: The image carries the hosted posture, and it comes out by docker cp
+        env:
+          IMAGE: veredictum-ci-image-build:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # The hosted box receives its compose file and its Caddyfile by
+          # extracting them from the image it pulled (#423), so the claim that
+          # matters is that a built image carries them and that the extraction
+          # mechanism returns the committed bytes. This runs the SAME mechanism
+          # deploy.sh runs: create a container, never start it, copy out.
+          cid=$(docker create "$IMAGE")
+          docker cp "$cid:/app/posture/docker-compose.yml" ./image-compose.yml
+          docker cp "$cid:/app/posture/Caddyfile" ./image-Caddyfile
+          docker rm -f "$cid" >/dev/null
+          diff -u deploy/hosted/docker-compose.yml ./image-compose.yml
+          diff -u deploy/hosted/Caddyfile ./image-Caddyfile
+          # And the extracted compose file must parse, because deploy.sh refuses
+          # to install one that does not: the box would otherwise be left unable
+          # to run its next deploy at all. `.env` and the secret file are the
+          # operator's, so they are staged here to make the validation the same
+          # one the box performs.
+          mkdir -p ./posture-check
+          mv ./image-compose.yml ./posture-check/docker-compose.yml
+          mv ./image-Caddyfile ./posture-check/Caddyfile
+          cp deploy/hosted/env.example ./posture-check/.env
+          : > ./posture-check/github-app.pem
+          docker compose -f ./posture-check/docker-compose.yml config --quiet
+          rm -rf ./posture-check
+          echo "the image carries the committed hosted posture at /app/posture, and it parses"
 
   # ── The Rust tier ───────────────────────────────────────────────────────────
   # rustfmt compiles nothing, so a restored target or registry cache here is

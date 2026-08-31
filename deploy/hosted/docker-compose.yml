@@ -1,9 +1,10 @@
 # What runs on the box: the instrument, and a proxy that gets its own
 # certificate (#412).
 #
-# The file lives at /opt/veredictum-console/docker-compose.yml on the host. CI
-# never edits it — the deploy is a pull and a recreate — so a change here is a
-# change someone makes deliberately.
+# The file lives at /opt/veredictum-console/docker-compose.yml on the host, and
+# it gets there from inside the image: it is COPYed to /app/posture/ and the
+# deploy script installs it out of the image it just pulled (#423). So an edit
+# here reaches the box with the release that carries it, and never before one.
 
 services:
   console:

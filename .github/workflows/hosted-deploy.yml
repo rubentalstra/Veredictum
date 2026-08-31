@@ -34,10 +34,12 @@
 #     no `:latest`, so there is nothing to deploy.
 #   - workflow_dispatch: a manual redeploy.
 #
-# There is deliberately NO push trigger. Nothing here can change the posture
-# FILES on the box: the deploy key runs one script, and that script pulls and
-# recreates. A push-triggered run would go green having applied nothing, which
-# is worse than no automation at all (#423 carries posture delivery).
+# There is deliberately NO push trigger. The posture files travel INSIDE the
+# published image at /app/posture, and the one script the deploy key may run
+# installs them out of the image it pulled (#423) — so a posture change reaches
+# the box with the release that carries it. A push to `deploy/hosted/**`
+# publishes no image, so a push-triggered run would go green having applied
+# nothing, which is worse than no automation at all.
 #
 # Provisioning is #403, once: the box, the DNS, and a deploy key restricted to
 # one command, stored in the `hosted` ENVIRONMENT rather than as repository
@@ -57,8 +59,8 @@ on:
         description: >-
           The version string the hosted console must serve before the deploy
           counts as done (`X.Y.Z`, no `v`). Empty means "derive it from the
-          `:latest` image's own version label" — which is what a posture push
-          or a manual redeploy wants, since neither changes the image.
+          `:latest` image's own version label" — which is what a manual
+          redeploy wants, since it changes no image.
         required: false
         type: string
         default: ""
