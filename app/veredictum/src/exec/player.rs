@@ -69,8 +69,9 @@ pub struct RecordedRequest {
     /// the request asked for, and a recording that omits the ask cannot judge
     /// it. Optional so an entry whose expectation declares no such matcher
     /// carries nothing it does not need; an entry that DOES declare one and
-    /// omits this is refused rather than passed
-    /// ([`TranscriptPlayer::refuse_ungrounded_headers`]).
+    /// omits this is refused rather than passed, by the player's own
+    /// ungrounded-header guard. Named in prose rather than linked: the guard is
+    /// private and a public item may not link to it.
     #[serde(default)]
     pub accept: Option<String>,
 }
