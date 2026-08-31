@@ -1,7 +1,7 @@
 {
   "product": {
     "name": "FerroEHR",
-    "version": "4.0.5",
+    "version": "4.0.13",
     "vendor": "Ruben Talstra",
     "identifier": "urn:rubentalstra:ferroehr"
   },
@@ -125,7 +125,7 @@
   "attestation": {
     "signatory": "Ruben Talstra",
     "role": "Owner",
-    "date": "2026-07-22",
+    "date": "2026-08-31",
     "statement": "We declare conformance of FerroEHR to the openEHR CNF 2.0 platform test schedule under the declared capabilities, options and technology profile; every claim derives from the committed machine-verified results."
   }
 }
