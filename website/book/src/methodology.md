@@ -135,7 +135,7 @@ The dispositions are a closed set:
 |---|---|
 | `loose_assert` | Assert only what the specification actually pins, and nothing more |
 | `fixed_handling` | The handling is encoded directly in the case or the binding |
-| `option_select` | Sibling cases realize the choices, and the party's statement selects one |
+| `option_select` | The entry names one family per independent choice; sibling cases realize a family’s arms, and the declaration answers every family its claim reaches with exactly one arm |
 | `report_only` | The result is reported and never gates a certificate. Reserved for genuinely open upstream questions |
 | `statement_declared` | The party declares the behaviour in its statement |
 | `editorial` | The specification text is itself defective; the catalogue encodes the reading derivable from the released text, with a citation |

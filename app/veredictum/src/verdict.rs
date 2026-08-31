@@ -518,25 +518,14 @@ fn static_review(
         }
     }
 
-    // Every option_select register entry whose sibling cases intersect the
-    // claim must have a declared option.
-    for (id, entry) in register.entries() {
-        if entry.disposition != Disposition::OptionSelect {
-            continue;
-        }
-        let sibling_intersects = cases.iter().any(|c| {
-            c.status == CaseStatus::Active
-                && c.option.as_ref().is_some_and(|t| entry.options.contains(t))
-                && intersects(&c.capabilities, claimed)
+    // Every option FAMILY whose sibling cases intersect the claim is answered
+    // with exactly one arm. Per family, never per entry: one entry may branch
+    // into several independent families, and an entry-wide test is satisfied
+    // by the first family answered while the rest deselect in silence.
+    for gap in option_family_gaps(statement, cases, register) {
+        findings.push(ReviewFinding {
+            message: gap.message(),
         });
-        if sibling_intersects && !entry.options.iter().any(|o| statement.options.contains(o)) {
-            findings.push(ReviewFinding {
-                message: format!(
-                    "option_select {id} governs claimed cases but the ICS declares none of its options {:?}",
-                    entry.options.iter().map(OptionTag::as_str).collect::<Vec<_>>()
-                ),
-            });
-        }
     }
 
     // A performance claim requires an environment reference.
@@ -570,6 +559,106 @@ fn require_tier_caps(
             });
         }
     }
+}
+
+/// One option FAMILY a declaration reaches but does not answer with exactly
+/// one arm.
+///
+/// The arms of a family are mutually exclusive by the register entry that
+/// declares them, so a conformant deployment realizes exactly one. A family
+/// with no arm declared deselects EVERY one of its rows, which is a narrower
+/// claim published as a complete one; a family with several declared selects
+/// rows whose expectations contradict each other.
+#[derive(Debug, Clone)]
+pub struct OptionFamilyGap {
+    /// The register entry the family belongs to.
+    pub entry: crate::ids::AmbiguityId,
+    /// The family the declaration has to answer.
+    pub family: crate::ids::OptionFamilyName,
+    /// The family's mutually exclusive arms.
+    pub arms: Vec<OptionTag>,
+    /// The arms the declaration did declare: none, or more than one.
+    pub declared: Vec<OptionTag>,
+}
+
+impl OptionFamilyGap {
+    /// The one-line finding, shared by the static review, the `validate` gate
+    /// and the drive-time citation so all three say the same thing.
+    #[must_use]
+    pub fn message(&self) -> String {
+        let arms = join_tags(&self.arms);
+        if self.declared.is_empty() {
+            return format!(
+                "option_select {} governs claimed cases and the ICS declares no arm of its \
+                 `{}` option family (one of: {arms}) — every row of that family deselects, so \
+                 the claim is narrower than the record reports it",
+                self.entry, self.family
+            );
+        }
+        format!(
+            "option_select {} governs claimed cases and the ICS declares {} for its `{}` \
+             option family (one of: {arms}) — the arms are mutually exclusive, so a deployment \
+             realizes exactly one",
+            self.entry,
+            join_tags(&self.declared),
+            self.family
+        )
+    }
+}
+
+fn join_tags(tags: &[OptionTag]) -> String {
+    tags.iter()
+        .map(OptionTag::as_str)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Every option family the claim reaches that the declaration does not answer
+/// with exactly one arm.
+///
+/// A family is REACHED when an active case carrying one of its arms gates a
+/// capability the declaration claims, which is the predicate selection itself
+/// uses: a family nothing in scope turns on asks no question and needs no
+/// answer.
+#[must_use]
+pub fn option_family_gaps<'c>(
+    statement: &Statement,
+    cases: impl IntoIterator<Item = &'c CaseCore>,
+    register: &AmbiguityRegister,
+) -> Vec<OptionFamilyGap> {
+    let cases: Vec<&CaseCore> = cases.into_iter().collect();
+    let claimed = &statement.claims.capabilities;
+    let mut gaps = Vec::new();
+    for (id, entry) in register.entries() {
+        if entry.disposition != Disposition::OptionSelect {
+            continue;
+        }
+        for (family, arms) in entry.options.families() {
+            let reached = cases.iter().any(|c| {
+                c.status == CaseStatus::Active
+                    && c.option.as_ref().is_some_and(|t| arms.contains(t))
+                    && intersects(&c.capabilities, claimed)
+            });
+            if !reached {
+                continue;
+            }
+            let declared: Vec<OptionTag> = arms
+                .iter()
+                .filter(|arm| statement.options.contains(arm))
+                .cloned()
+                .collect();
+            if declared.len() == 1 {
+                continue;
+            }
+            gaps.push(OptionFamilyGap {
+                entry: id.clone(),
+                family: family.clone(),
+                arms: arms.clone(),
+                declared,
+            });
+        }
+    }
+    gaps
 }
 
 // ── step 2: selection ────────────────────────────────────────────────────────
@@ -881,7 +970,12 @@ mod tests {
                         "disposition": "report_only" },
             "AMB-39": { "ambiguity": "a", "source": "s", "handling": "h",
                          "disposition": "option_select",
-                         "options": ["sf-deprecated-types-supported", "sf-deprecated-types-unsupported"] }
+                         "options": {
+                             "sf-deprecated-types":
+                                 ["sf-deprecated-types-supported", "sf-deprecated-types-unsupported"],
+                             "sf-deprecated-media":
+                                 ["sf-deprecated-media-supported", "sf-deprecated-media-unsupported"]
+                         } }
         }))
         .unwrap()
     }
@@ -1374,6 +1468,85 @@ mod tests {
             messages(&report)
                 .iter()
                 .all(|m| !m.starts_with("option_select")),
+            "{:?}",
+            report.review
+        );
+    }
+
+    /// One register entry may branch into several INDEPENDENT families, and
+    /// answering one of them says nothing about the rest (#462).
+    ///
+    /// The entry-wide test this replaced was satisfied by any single declared
+    /// option, so the second family's rows deselected in silence while the
+    /// claim read as complete.
+    #[test]
+    fn answering_one_family_of_an_entry_does_not_answer_its_others() {
+        let mut answered = functional_case(
+            "SF-deprecated_types-supported",
+            &["SimplifiedFormats"],
+            &["OPTIONS"],
+        );
+        answered.option = Some(OptionTag::parse("sf-deprecated-types-supported").unwrap());
+        let mut unanswered = functional_case(
+            "SF-deprecated_media-supported",
+            &["SimplifiedFormats"],
+            &["OPTIONS"],
+        );
+        unanswered.option = Some(OptionTag::parse("sf-deprecated-media-supported").unwrap());
+        let st = statement(
+            &["SimplifiedFormats"],
+            &["OPTIONS"],
+            &["sf-deprecated-types-supported"],
+        );
+        let report = compute(
+            &st,
+            &results(serde_json::json!([])),
+            &[answered, unanswered],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        let option_findings: Vec<&str> = messages(&report)
+            .into_iter()
+            .filter(|m| m.starts_with("option_select"))
+            .collect();
+        let [only] = option_findings.as_slice() else {
+            panic!("expected exactly one unanswered family, got {option_findings:?}");
+        };
+        assert!(only.contains("sf-deprecated-media"), "{only}");
+        assert!(only.contains("declares no arm"), "{only}");
+    }
+
+    /// The arms of one family are mutually exclusive, so a declaration naming
+    /// several of them describes a deployment that cannot exist.
+    #[test]
+    fn declaring_several_arms_of_one_family_is_a_review_finding() {
+        let mut governed = functional_case(
+            "SF-deprecated_types-supported",
+            &["SimplifiedFormats"],
+            &["OPTIONS"],
+        );
+        governed.option = Some(OptionTag::parse("sf-deprecated-types-supported").unwrap());
+        let st = statement(
+            &["SimplifiedFormats"],
+            &["OPTIONS"],
+            &[
+                "sf-deprecated-types-supported",
+                "sf-deprecated-types-unsupported",
+            ],
+        );
+        let report = compute(
+            &st,
+            &results(serde_json::json!([])),
+            &[governed],
+            &[],
+            &matrix(),
+            &register(),
+        );
+        assert!(
+            messages(&report)
+                .iter()
+                .any(|m| m.starts_with("option_select AMB-39") && m.contains("mutually exclusive")),
             "{:?}",
             report.review
         );

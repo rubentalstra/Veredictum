@@ -33,12 +33,17 @@ use crate::vocab::CaseStatus;
 /// the CNF profiles are exactly that list ("A profile may be defined logically
 /// as a particular list of platform components and capabilities" — CNF
 /// profiles `master02-overview.adoc` §Overview). With no statement there is no
-/// such list, and every fact below is undecided.
+/// such list, and every fact below is undecided. A SUPPLIED statement that
+/// answers one option family with no arm leaves [`Self::OptionBranch`]
+/// undecided for that family alone, on the same ground: the answer is
+/// missing, so the fact is not established.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UnestablishedFact {
-    /// Which arm of an `option_select` register branch this deployment serves
-    /// (`statement.options`).
+    /// Which arm of an `option_select` register FAMILY this deployment serves
+    /// (`statement.options`) — unestablished with no statement at all, and
+    /// unestablished per family for a statement declaring none of that
+    /// family's arms.
     OptionBranch,
     /// Whether the party serves an extension route no released openEHR
     /// specification governs (`statement.claims.capabilities`).
@@ -102,7 +107,7 @@ impl UnestablishedFact {
     pub fn decides(self) -> &'static str {
         match self {
             UnestablishedFact::OptionBranch => {
-                "which arm of a mutually exclusive option_select register branch this deployment \
+                "which arm of a mutually exclusive option_select register family this deployment \
                  serves"
             }
             UnestablishedFact::ExtensionRealization => {
@@ -155,9 +160,11 @@ pub struct RunReport {
     /// Cases the interpreter could not drive, each with its reason.
     pub exceptions: Vec<(CaseId, Exception)>,
     /// Cases excused because a selection fact only the ICS establishes was
-    /// unestablished, counted per fact — the run-level account a
-    /// statement-blind campaign reports once instead of per row. Empty for a
-    /// campaign that carried a statement.
+    /// unestablished, counted per fact — the run-level account a campaign
+    /// reports once instead of per row. A statement-blind campaign leaves
+    /// every fact unestablished; a campaign WITH a statement can still leave
+    /// [`UnestablishedFact::OptionBranch`] unestablished for an option family
+    /// that statement answers with no arm.
     pub unestablished: std::collections::BTreeMap<UnestablishedFact, usize>,
     /// Cases the interpreter drove end-to-end.
     pub interpreter_run: usize,
@@ -963,54 +970,105 @@ fn unclaimed_capabilities(
     ))
 }
 
-/// The register entry that declares `tag` as one arm of its `option_select`
-/// branch, for the citation on an arm nothing selected.
-fn option_branch_entry(set: &ArtifactSet, tag: &crate::ids::OptionTag) -> Option<String> {
-    set.register.as_ref().and_then(|(_, register)| {
-        register
-            .entries()
-            .iter()
-            .find(|(_, entry)| entry.options.contains(tag))
-            .map(|(id, _)| id.to_string())
-    })
+/// The register family `tag` is one arm of: the entry id, the family name,
+/// and the family's mutually exclusive arms.
+///
+/// # Errors
+/// A tag no `option_select` entry declares. The tag is a closed vocabulary the
+/// register defines, so an unresolvable one is a catalogue defect
+/// (`validate`'s `option-tag` gate names it) and the run refuses rather than
+/// guessing which rows it deselects.
+fn option_family(
+    set: &ArtifactSet,
+    tag: &crate::ids::OptionTag,
+) -> Result<
+    (
+        crate::ids::AmbiguityId,
+        crate::ids::OptionFamilyName,
+        Vec<crate::ids::OptionTag>,
+    ),
+    String,
+> {
+    let found = set
+        .register
+        .as_ref()
+        .and_then(|(_, register)| register.option_family_of(tag));
+    match found {
+        Some((id, family, arms)) => Ok((id.clone(), family.clone(), arms.to_vec())),
+        None => Err(format!(
+            "option {tag}: no option_select register entry declares this tag as an arm of any \
+             option family, so which rows it selects between cannot be resolved — an option \
+             tag is a closed vocabulary the register defines"
+        )),
+    }
 }
 
 /// The OPTION arm of [`selection_exception`]: which arm of an `option_select`
-/// register branch a deployment serves is an ICS declaration
-/// (`statement.options`), and the arms are mutually exclusive.
+/// register family a deployment serves is an ICS declaration
+/// (`statement.options`), and the arms of one family are mutually exclusive.
 ///
-/// An arm the ICS does not declare is not this SUT's behaviour, so driving it
-/// records a spurious failure the verdict pipeline would excuse anyway
-/// ([`crate::verdict`] step 3); the same citation excuses it here. With no
-/// statement NO arm is selected, so driving them all guarantees a red row no
-/// conformant server could avoid, which is what
-/// [`UnestablishedFact::OptionBranch`] excuses instead.
+/// An arm the ICS answered its family with something else for is not this
+/// SUT's behaviour, so driving it records a spurious failure the verdict
+/// pipeline would excuse anyway ([`crate::verdict`] step 3); the same citation
+/// excuses it here. Two ways the family goes unanswered are excused as
+/// [`UnestablishedFact::OptionBranch`] instead of deselected, because the
+/// answer is missing rather than given: no statement at all, and a statement
+/// that declares no arm of THIS family. Both would otherwise remove every row
+/// of the family from the run while the record still reads as the full claim.
+///
+/// # Errors
+/// A tag no register family declares, and a declaration answering one family
+/// with several mutually exclusive arms — neither has an honest outcome, so
+/// the run refuses instead of publishing one.
 fn unselected_option_branch(
     set: &ArtifactSet,
     statement: Option<&crate::party::Statement>,
     case: &CaseCore,
-) -> Option<Exception> {
-    let tag = case.option.as_ref()?;
-    match statement {
-        None => {
-            let branch = option_branch_entry(set, tag).map_or_else(
-                || "an option_select register branch".to_owned(),
-                |id| format!("register {id}'s option_select branch"),
-            );
-            Some(Exception::Unestablished {
-                fact: UnestablishedFact::OptionBranch,
-                citation: format!(
-                    "option {tag}: no party statement was supplied, so which arm of {branch} \
-                     this deployment serves is unestablished — the arms are mutually \
-                     exclusive, so neither may be asserted; ISO/IEC 9646 test selection"
-                ),
-            })
-        }
-        Some(stmt) if !stmt.options.contains(tag) => Some(Exception::Unrealized(format!(
-            "option {tag}: the ICS does not declare this register branch (statement.options) \
-             — ISO/IEC 9646 test selection"
-        ))),
-        Some(_) => None,
+) -> Result<Option<Exception>, String> {
+    let Some(tag) = case.option.as_ref() else {
+        return Ok(None);
+    };
+    let (id, family, arms) = option_family(set, tag)?;
+    let Some(stmt) = statement else {
+        return Ok(Some(Exception::Unestablished {
+            fact: UnestablishedFact::OptionBranch,
+            citation: format!(
+                "option {tag}: no party statement was supplied, so which arm of register {id}'s \
+                 `{family}` option family this deployment serves is unestablished — the arms \
+                 are mutually exclusive, so neither may be asserted; ISO/IEC 9646 test selection"
+            ),
+        }));
+    };
+    let declared: Vec<&crate::ids::OptionTag> = arms
+        .iter()
+        .filter(|arm| stmt.options.contains(arm))
+        .collect();
+    match declared.as_slice() {
+        [] => Ok(Some(Exception::Unestablished {
+            fact: UnestablishedFact::OptionBranch,
+            citation: format!(
+                "option {tag}: the ICS (statement.options) declares no arm of register {id}'s \
+                 `{family}` option family, so which arm this deployment serves is \
+                 unestablished — every row of the family would deselect and the record would \
+                 still read as the full claim; ISO/IEC 9646 test selection"
+            ),
+        })),
+        [only] if *only == tag => Ok(None),
+        [only] => Ok(Some(Exception::Unrealized(format!(
+            "option {tag}: the ICS declares {only} for register {id}'s `{family}` option \
+             family (statement.options), and the arms are mutually exclusive — ISO/IEC 9646 \
+             test selection"
+        )))),
+        several => Err(format!(
+            "option {tag}: the ICS (statement.options) declares {} for register {id}'s \
+             `{family}` option family, whose arms are mutually exclusive — a deployment serves \
+             exactly one, so no arm of this family can be selected",
+            several
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
     }
 }
 
@@ -1024,7 +1082,9 @@ fn unselected_option_branch(
 ///
 /// # Errors
 /// An interpreter defect propagated from the extension arm (a malformed SM
-/// operation anchor in the selection law).
+/// operation anchor in the selection law), or from the option arm (an option
+/// tag no register family declares, or a declaration answering one family
+/// with several mutually exclusive arms).
 fn selection_exception(
     set: &ArtifactSet,
     ixit: &Ixit,
@@ -1046,7 +1106,7 @@ fn selection_exception(
     if let Some(citation) = unclaimed_capabilities(statement, case) {
         return Ok(Some(Exception::Guarded(citation)));
     }
-    if let Some(exception) = unselected_option_branch(set, statement, case) {
+    if let Some(exception) = unselected_option_branch(set, statement, case)? {
         return Ok(Some(exception));
     }
     // Case-level spec-version floors (`CaseCore.applies`): a behaviour the
@@ -2277,13 +2337,19 @@ mod tests {
     }
 
     fn statement(capabilities: &[&str]) -> crate::party::Statement {
+        declaring(capabilities, &[])
+    }
+
+    /// A declaration claiming `capabilities` and answering its option
+    /// families with `options`.
+    fn declaring(capabilities: &[&str], options: &[&str]) -> crate::party::Statement {
         serde_json::from_value(serde_json::json!({
             "product": { "name": "p", "version": "1", "vendor": "v", "identifier": "i" },
             "schedule_release": "CNF-2.0",
             "spec_versions": { "rm": "1.2.0", "its_rest": "1.1.0" },
             "claims": { "capabilities": capabilities, "profiles": ["CORE"] },
             "tech_profiles": [ { "its": "its-rest", "formats": ["canonical-json"] } ],
-            "options": []
+            "options": options
         }))
         .unwrap()
     }
@@ -2337,7 +2403,25 @@ mod tests {
                 "outcomes": { "ok": { "status": 200 } }
             }))
             .unwrap();
-        let mut set = ArtifactSet::default();
+        let register: crate::model::register::AmbiguityRegister =
+            serde_json::from_value(serde_json::json!({
+                "AMB-90": {
+                    "ambiguity": "a", "source": "s", "handling": "h",
+                    "disposition": "option_select",
+                    "options": {
+                        "terminology-failure":
+                            ["terminology-fail-closed", "terminology-fail-open"]
+                    }
+                }
+            }))
+            .unwrap();
+        let mut set = ArtifactSet {
+            register: Some((
+                std::path::PathBuf::from("registers/ambiguities.yaml"),
+                register,
+            )),
+            ..ArtifactSet::default()
+        };
         set.bindings
             .push((std::path::PathBuf::from("b.yaml"), binding));
         let case: CaseCore = serde_json::from_value(serde_json::json!({
@@ -2379,21 +2463,31 @@ mod tests {
         );
     }
 
-    /// An option branch the ICS does not declare is not this SUT's behaviour,
-    /// so it is excused at drive time with the same citation the verdict
-    /// pipeline would apply — never driven into a spurious red row.
-    #[test]
-    fn an_undeclared_option_branch_is_excused_at_selection() {
-        let (set, mut case) = selection_world();
+    /// The case this world's option family gates.
+    fn fail_closed_case() -> CaseCore {
+        let (_, mut case) = selection_world();
         case.option = Some(crate::ids::OptionTag::parse("terminology-fail-closed").unwrap());
-        let statement = statement(&["EhrStatus"]);
+        case
+    }
+
+    /// An arm whose family the ICS answered with the OTHER arm is not this
+    /// SUT's behaviour, so it is excused at drive time with the same citation
+    /// the verdict pipeline would apply — never driven into a spurious red
+    /// row. Repointed for #462: the declaration now ANSWERS the family, which
+    /// is what makes the deselection honest; an empty declaration is the
+    /// separate ground below.
+    #[test]
+    fn an_arm_whose_family_the_ics_answered_otherwise_is_excused_at_selection() {
+        let (set, case) = (selection_world().0, fail_closed_case());
+        let statement = declaring(&["EhrStatus"], &["terminology-fail-open"]);
         let exception =
             selection_exception(&set, &ixit(&serde_json::json!({})), Some(&statement), &case)
                 .expect("the law is decidable")
-                .expect("an undeclared option branch is excused");
+                .expect("an arm the ICS answered otherwise is excused");
         match &exception {
             Exception::Unrealized(citation) => {
                 assert!(citation.contains("terminology-fail-closed"), "{citation}");
+                assert!(citation.contains("terminology-fail-open"), "{citation}");
                 assert!(citation.contains("statement.options"), "{citation}");
             }
             other => panic!("expected an unrealized exception, got {other:?}"),
@@ -2415,6 +2509,63 @@ mod tests {
             }
             other => panic!("expected an unestablished-fact exception, got {other:?}"),
         }
+    }
+
+    /// A declaration answering the family with NO arm leaves the fact
+    /// unestablished, exactly as a missing declaration does (#462).
+    ///
+    /// The opposite failure of the statement-blind sweep and the more
+    /// dangerous one: deselecting both rows silently would let a party pass a
+    /// family by declaring nothing about it.
+    #[test]
+    fn a_family_the_ics_answers_with_no_arm_is_unestablished_not_deselected() {
+        let (set, case) = (selection_world().0, fail_closed_case());
+        let statement = declaring(&["EhrStatus"], &[]);
+        let exception =
+            selection_exception(&set, &ixit(&serde_json::json!({})), Some(&statement), &case)
+                .expect("the law is decidable")
+                .expect("an unanswered family is excused, never silently deselected");
+        match &exception {
+            Exception::Unestablished { fact, citation } => {
+                assert_eq!(*fact, UnestablishedFact::OptionBranch);
+                assert!(citation.contains("AMB-90"), "{citation}");
+                assert!(citation.contains("terminology-failure"), "{citation}");
+                assert!(citation.contains("declares no arm"), "{citation}");
+            }
+            other => panic!("expected an unestablished-fact exception, got {other:?}"),
+        }
+    }
+
+    /// A declaration answering ONE family with several mutually exclusive
+    /// arms has no honest outcome, so the run refuses instead of driving
+    /// contradictory rows.
+    #[test]
+    fn a_family_answered_with_several_arms_refuses_the_run() {
+        let (set, case) = (selection_world().0, fail_closed_case());
+        let statement = declaring(
+            &["EhrStatus"],
+            &["terminology-fail-closed", "terminology-fail-open"],
+        );
+        let message =
+            selection_exception(&set, &ixit(&serde_json::json!({})), Some(&statement), &case)
+                .expect_err("mutually exclusive arms cannot both be served");
+        assert!(message.contains("terminology-failure"), "{message}");
+        assert!(message.contains("mutually exclusive"), "{message}");
+    }
+
+    /// An option tag no register family declares is a closed-vocabulary
+    /// violation, so the run refuses rather than guessing which rows it
+    /// deselects.
+    #[test]
+    fn an_option_tag_no_register_family_declares_refuses_the_run() {
+        let (set, mut case) = selection_world();
+        case.option = Some(crate::ids::OptionTag::parse("nobody-declares-this").unwrap());
+        let statement = declaring(&["EhrStatus"], &["nobody-declares-this"]);
+        let message =
+            selection_exception(&set, &ixit(&serde_json::json!({})), Some(&statement), &case)
+                .expect_err("an undeclared option tag has no family to select within");
+        assert!(message.contains("nobody-declares-this"), "{message}");
+        assert!(message.contains("closed vocabulary"), "{message}");
     }
 
     /// A statement-blind sweep excuses an EXTENSION route: no ICS claims it,

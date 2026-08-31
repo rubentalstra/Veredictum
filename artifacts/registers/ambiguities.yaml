@@ -873,7 +873,8 @@ AMB-39:
     the service cannot fulfill this aspect of the request, it MUST respond with
     HTTP status code 406 Not Acceptable").
   disposition: option_select
-  options: [sf-deprecated-types-supported, sf-deprecated-types-unsupported]
+  options:
+    sf-deprecated-types: [sf-deprecated-types-supported, sf-deprecated-types-unsupported]
   upstream_issue: 1499
 AMB-41:
   ambiguity: >-
@@ -1479,7 +1480,8 @@ AMB-61:
     own) — both entries draw on the same Resources.md §Alternative data
     formats list.
   disposition: option_select
-  options: [legacy-alt-formats-supported, legacy-alt-formats-unsupported]
+  options:
+    legacy-alt-formats: [legacy-alt-formats-supported, legacy-alt-formats-unsupported]
 AMB-62:
   ambiguity: >-
     RE-ADJUDICATED AGAIN 2026-07-28 (the create arm only; the update and
@@ -3380,7 +3382,8 @@ AMB-104:
     that entry governs what a duplicate UPLOAD does, this one what a partial id
     RESOLVES to on retrieval.
   disposition: option_select
-  options: [adl14-partial-id-latest, adl14-partial-id-exact]
+  options:
+    adl14-partial-id: [adl14-partial-id-latest, adl14-partial-id-exact]
   upstream_issue: 1550
 
 AMB-105:
@@ -7331,11 +7334,14 @@ AMB-167:
     -has_contribution-xml_not_acceptable carry `contribution-xml-unsupported`
     instead of asserting the 406 for every server; the COMMIT envelope stays
     AMB-165 report_only and unexercised (its shape, not merely its root
-    name, is withheld). ICS-COMPLETENESS CAVEAT: the verdict pipeline's
-    option_select review is satisfied by ANY one declared option of an
-    entry, so this entry's twenty tags are checked as a set, not per family; a
-    statement that declares no arm for a family silently deselects both of
-    its rows rather than being flagged. Reported upstream (#1607):
+    name, is withheld). ICS COMPLETENESS: this entry's twenty arms are TEN
+    independent choices, one per resource family and wire direction, and the
+    entry enumerates them as ten named families under `options`. A declaration
+    answers every family whose sibling rows its claim reaches, with exactly one
+    arm each. A family it leaves unanswered is a static-review finding
+    (`option-family-selection`) and a verdict-review finding, and the rows of
+    that family are recorded not-applicable naming the family nobody answered,
+    never deselected in silence. Reported upstream (#1607):
     reconcile the XSD document-element inventory with the REST resource
     surface — publish a document element (or an explicit root-name rule) for
     every resource whose Accept/Content-Type enums offer `application/xml`,
@@ -7343,26 +7349,16 @@ AMB-167:
     schemas do not define.
   disposition: option_select
   options:
-    - ehr-xml-supported
-    - ehr-xml-unsupported
-    - ehr-status-xml-supported
-    - ehr-status-xml-unsupported
-    - directory-xml-supported
-    - directory-xml-unsupported
-    - party-xml-supported
-    - party-xml-unsupported
-    - versioned-party-xml-supported
-    - versioned-party-xml-unsupported
-    - contribution-xml-supported
-    - contribution-xml-unsupported
-    - ehr-xml-write-accepted
-    - ehr-xml-write-refused
-    - ehr-status-xml-write-accepted
-    - ehr-status-xml-write-refused
-    - directory-xml-write-accepted
-    - directory-xml-write-refused
-    - party-xml-write-accepted
-    - party-xml-write-refused
+    ehr-xml: [ehr-xml-supported, ehr-xml-unsupported]
+    ehr-status-xml: [ehr-status-xml-supported, ehr-status-xml-unsupported]
+    directory-xml: [directory-xml-supported, directory-xml-unsupported]
+    party-xml: [party-xml-supported, party-xml-unsupported]
+    versioned-party-xml: [versioned-party-xml-supported, versioned-party-xml-unsupported]
+    contribution-xml: [contribution-xml-supported, contribution-xml-unsupported]
+    ehr-xml-write: [ehr-xml-write-accepted, ehr-xml-write-refused]
+    ehr-status-xml-write: [ehr-status-xml-write-accepted, ehr-status-xml-write-refused]
+    directory-xml-write: [directory-xml-write-accepted, directory-xml-write-refused]
+    party-xml-write: [party-xml-write-accepted, party-xml-write-refused]
   upstream_issue: 1607
 AMB-169:
   ambiguity: >-
@@ -7448,7 +7444,8 @@ AMB-169:
     negotiation cases. Revisits if a future ITS-REST release names a lineage,
     or defines a selection mechanism of its own.
   disposition: option_select
-  options: [xml-namespace-negotiated, xml-namespace-fixed]
+  options:
+    xml-namespace: [xml-namespace-negotiated, xml-namespace-fixed]
 
 AMB-170:
   ambiguity: >-
@@ -9858,7 +9855,8 @@ AMB-220:
     BOTH branches a non-empty result set is a wrong answer — the RM defines
     no pair the rows could denote — which is what the branch cases assert.
   disposition: option_select
-  options: [undefined-containment-refused, undefined-containment-empty]
+  options:
+    undefined-containment: [undefined-containment-refused, undefined-containment-empty]
   upstream_issue: 161
 AMB-221:
   ambiguity: >-
@@ -10149,7 +10147,8 @@ AMB-227:
     result set rather than on a single row" — and no case asserts a VALUE for
     SUM or AVG over a non-numeric input, because none is assigned.
   disposition: option_select
-  options: [aql-nonnumeric-aggregate-refused, aql-nonnumeric-aggregate-executed]
+  options:
+    aql-nonnumeric-aggregate: [aql-nonnumeric-aggregate-refused, aql-nonnumeric-aggregate-executed]
   upstream_issue: 229
 AMB-228:
   ambiguity: >-
@@ -10223,7 +10222,8 @@ AMB-229:
     narrowed C_OBJECT is grounded conformance in both directions. Reported
     upstream as the container-closure silence.
   disposition: option_select
-  options: [unmatched-member-refused, unmatched-member-accepted]
+  options:
+    unmatched-member: [unmatched-member-refused, unmatched-member-accepted]
   upstream_issue: 307
 AMB-230:
   ambiguity: >-

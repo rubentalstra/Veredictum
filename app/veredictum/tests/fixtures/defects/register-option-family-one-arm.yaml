@@ -1,0 +1,7 @@
+AMB-4:
+  ambiguity: "seeded defect: an option family enumerating a single arm"
+  source: "CNF platform_test_schedule master04"
+  handling: "h"
+  disposition: option_select
+  options:
+    solo-family: [only-one]

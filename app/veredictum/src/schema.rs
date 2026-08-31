@@ -741,14 +741,18 @@ pub fn ambiguity_register_schema() -> Value {
                 "source": { "type": "string", "minLength": 1, "description": "Where the silence/divergence was verified. Convention (machine-gated by the validate spec-ref check, issue FerroEHR#2545): the field splits into `;`/` + ` fragments; every fragment opening with a spec component token (RM, BASE, AM, QUERY, TERM, LANG, SM, CNF, ITS-REST, ITS-XML, ITS-JSON) is a citation clause and must machine-resolve against the vendored trees (document + § sections; {a,b} brace shorthands expand and every variant must resolve); any other fragment is adjudication prose and passes. A source with no citation clause at all fails — a silence claim must ground on at least one resolvable citation." },
                 "handling": { "type": "string", "minLength": 1 },
                 "disposition": { "enum": tokens(Disposition::ALL), "description": "The machine-readable handling class. The fixed_handling/editorial boundary (issue FerroEHR#2546) is one question — did the entry CHOOSE anything? editorial = a wording/typography defect with zero behavioural latitude (the corrected reading is forced by the surrounding released text); fixed_handling = real latitude existed and the entry pins this catalogue's choice. Neither changes gating; report_only and editorial additionally require an upstream_issue." },
-                "options": { "type": "array", "items": { "type": "string", "pattern": OPTION_TAG_PATTERN } },
+                "options": { "type": "object",
+                             "description": "For `option_select` only: the option FAMILIES the entry branches into, family name to that family's mutually exclusive arms. One entry adjudicates one ambiguity and may leave several independent choices open at once (AMB-167 leaves ten, one per REST resource family), so the arms are grouped rather than pooled: a pooled list cannot say which arms are alternatives to which, and a declaration answering one choice then looks like it answered them all. A declaration answers EVERY family whose sibling cases its claim reaches, with exactly one arm each.",
+                             "propertyNames": { "pattern": OPTION_TAG_PATTERN },
+                             "additionalProperties": { "type": "array", "minItems": 2, "uniqueItems": true,
+                                                       "items": { "type": "string", "pattern": OPTION_TAG_PATTERN } } },
                 "upstream_issue": { "type": "integer", "minimum": 1 }
             },
             "allOf": [
                 { "if": { "properties": { "disposition": { "const": "option_select" } } },
                   "then": { "required": ["ambiguity", "source", "handling", "disposition", "options"],
-                            "properties": { "options": { "minItems": 2 } } },
-                  "else": { "properties": { "options": { "maxItems": 0 } } } },
+                            "properties": { "options": { "minProperties": 1 } } },
+                  "else": { "properties": { "options": { "maxProperties": 0 } } } },
                 { "if": { "properties": { "disposition": { "enum": ["report_only", "editorial"] } }, "required": ["disposition"] },
                   "then": { "required": ["upstream_issue"] } }
             ]

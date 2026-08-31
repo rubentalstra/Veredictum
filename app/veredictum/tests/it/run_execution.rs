@@ -476,7 +476,7 @@ fn option_register() -> Result<veredictum::model::register::AmbiguityRegister, s
             "source": "ITS-REST docs/overview/Requests_and_responses.md §XML Format + §Data representation",
             "handling": "sibling cases carry option tags; the ICS options declaration selects",
             "disposition": "option_select",
-            "options": ["ehr-xml-supported", "ehr-xml-unsupported"]
+            "options": { "ehr-xml": ["ehr-xml-supported", "ehr-xml-unsupported"] }
         }
     }))
 }
@@ -498,6 +498,7 @@ fn xml_supported_case() -> Value {
         "id": "RUN-create_ehr-xml_supported", "kind": "functional", "component": "EHR",
         "sm_operation": "I_EHR_SERVICE.create_ehr",
         "test_purpose": "t", "description": "d", "spec_refs": [],
+        "capabilities": ["EhrOperations"],
         "option": "ehr-xml-supported",
         "ambiguities": ["AMB-167"],
         "flow": [{ "step": 1, "call": "create_ehr", "expect": "created" }]
@@ -510,6 +511,7 @@ fn xml_unsupported_case() -> Value {
         "id": "RUN-create_ehr-xml_unsupported", "kind": "functional", "component": "EHR",
         "sm_operation": "I_EHR_SERVICE.create_ehr",
         "test_purpose": "t", "description": "d", "spec_refs": [],
+        "capabilities": ["EhrOperations"],
         "option": "ehr-xml-unsupported",
         "ambiguities": ["AMB-167"],
         "flow": [{ "step": 1, "call": "create_ehr", "expect": "not_acceptable" }]
@@ -680,6 +682,86 @@ fn an_ics_declaring_one_arm_drives_exactly_that_arm() -> Fallible {
     assert!(citation.contains("statement.options"), "{citation}");
     Ok(())
 }
+/// A statement that answers the family with NO arm leaves the fact
+/// unestablished, exactly as a missing statement does (#462).
+///
+/// This is the mirror of the statement-blind sweep and the more dangerous
+/// half: an empty `options` vector deselects BOTH rows of every family, so a
+/// party could pass a family by declaring nothing about it. The run records
+/// each row not-applicable with the family named and counts the fact at run
+/// level, so the absence is in the record rather than in nobody's hands.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_statement_answering_no_arm_of_a_family_leaves_the_fact_unestablished() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/ehr"))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+
+    let statement: veredictum::party::Statement = serde_json::from_value(json!({
+        "product": { "name": "p", "version": "1", "vendor": "v", "identifier": "i" },
+        "schedule_release": "CNF-2.0",
+        "spec_versions": { "rm": "1.2.0", "its_rest": "1.1.0" },
+        "claims": { "capabilities": ["EhrOperations"], "profiles": ["CORE"] },
+        "tech_profiles": [{ "its": "its-rest", "formats": ["canonical-json"] }],
+        "options": []
+    }))?;
+
+    let world = option_pair_world()?;
+    let report = execute(
+        &world,
+        &ixit(&sut.base_url()),
+        Some(&statement),
+        Recording::Off,
+        &mut |_| {},
+    )?;
+
+    assert_eq!(report.interpreter_run, 0, "no arm of the family is driven");
+    assert!(
+        sut.requests().is_empty(),
+        "an unanswered family is never driven at the server"
+    );
+    for record in &report.records {
+        let [RowOutcome::NotApplicable { citation }] = record.rows.as_slice() else {
+            panic!(
+                "{}: expected one not-applicable row, got {:?}",
+                record.case, record.rows
+            );
+        };
+        assert!(citation.contains("AMB-167"), "{citation}");
+        assert!(citation.contains("ehr-xml"), "{citation}");
+        assert!(citation.contains("declares no arm"), "{citation}");
+    }
+    // The run's own account: the fact is unestablished for a statement-driven
+    // campaign too, which is what makes the silence visible.
+    assert_eq!(
+        report.unestablished.get(&UnestablishedFact::OptionBranch),
+        Some(&2)
+    );
+
+    // The same declaration is a static-review finding against the same
+    // catalogue, so the record and the judgement agree about the gap.
+    let cases: Vec<&veredictum::model::case::CaseCore> =
+        world.cases.iter().map(|(_, case)| case).collect();
+    let register = &world
+        .register
+        .as_ref()
+        .ok_or("the option world carries its register")?
+        .1;
+    let gaps = veredictum::verdict::option_family_gaps(&statement, cases, register);
+    let [gap] = gaps.as_slice() else {
+        panic!("expected exactly one unanswered family, got {gaps:?}");
+    };
+    assert_eq!(gap.family.as_str(), "ehr-xml");
+    assert!(gap.declared.is_empty(), "{:?}", gap.declared);
+    Ok(())
+}
+
 /// `POST /composition` — the WRITE half of the verifying signature case, and
 /// the request that must not reach a server whose posture the case needs and
 /// the ixit does not declare.

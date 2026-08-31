@@ -58,6 +58,15 @@ pub enum RunWarning<'a> {
         /// drive ([`crate::run::UnestablishedFact::excuses_case`]).
         excused: &'a std::collections::BTreeMap<crate::run::UnestablishedFact, usize>,
     },
+    /// The supplied declaration does not answer every option family the
+    /// claim reaches with exactly one arm: reported once per run, before
+    /// anything is driven, because an unanswered family removes every one of
+    /// its rows from the record while the claim still reads as complete.
+    OptionFamilySelection {
+        /// One gap per family, each carrying the finding the static review
+        /// and the `validate` gate report in the same words.
+        gaps: &'a [crate::verdict::OptionFamilyGap],
+    },
     /// Measurement records taken at one SUT version are being carried into
     /// a run against another, which the version-binding rule wants either
     /// re-measured or attested as an unchanged surface.
@@ -107,6 +116,14 @@ impl RunWarning<'_> {
                 lines.push(String::from(
                     "judge this record with `veredictum verdicts --statement <file>`, which re-applies the ICS filters",
                 ));
+                lines
+            }
+            RunWarning::OptionFamilySelection { gaps } => {
+                let mut lines = vec![format!(
+                    "the supplied statement does not answer {} option family/families the claim reaches with exactly one arm, so every row of each is recorded not-applicable",
+                    gaps.len()
+                )];
+                lines.extend(gaps.iter().map(|gap| format!("  {}", gap.message())));
                 lines
             }
         }
@@ -317,6 +334,16 @@ pub fn execute_run(
         None => None,
         Some(path) => Some(read_json(path, "statement")?),
     };
+    if let (Some(declared), Some((_, register))) = (statement.as_ref(), &set.register) {
+        let gaps = crate::verdict::option_family_gaps(
+            declared,
+            set.cases.iter().map(|(_, case)| case),
+            register,
+        );
+        if !gaps.is_empty() {
+            warn(RunWarning::OptionFamilySelection { gaps: &gaps });
+        }
+    }
     let report = crate::run::execute(&set, &ixit, statement.as_ref(), request.recording, progress)
         .map_err(|e| Error::Instrument(format!("execution defect: {e}")))?;
     let selection = Selection::of(statement.as_ref(), &report.unestablished);
@@ -777,7 +804,8 @@ mod tests {
                 } => seen
                     .borrow_mut()
                     .push(format!("{count} {measured_at} {running_at}")),
-                RunWarning::StatementBlindSelection { .. } => {
+                RunWarning::StatementBlindSelection { .. }
+                | RunWarning::OptionFamilySelection { .. } => {
                     panic!("carry-forward reports no selection warning")
                 }
             },

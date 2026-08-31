@@ -614,6 +614,44 @@ fn a_party_declaring_one_family_twice_fails_validate() {
     );
 }
 
+/// A declaration answers every option family its claim reaches with exactly
+/// one arm (#462).
+///
+/// The arms of a family are mutually exclusive, so dropping the one answer
+/// this declaration gives for `ehr-xml-write` leaves BOTH of that family's
+/// rows deselected while the claim still reads as complete. That is the shape
+/// a party could pass a family with by declaring nothing about it.
+#[test]
+fn a_declaration_answering_an_option_family_with_no_arm_fails_validate() {
+    let world = World::new();
+    world.edit(FIXTURE_STATEMENT, |text| {
+        text.replace("    \"ehr-xml-write-accepted\",\n", "")
+    });
+    assert_gate(
+        &world.findings(),
+        "option-family-selection",
+        "declares no arm of its `ehr-xml-write` option family",
+    );
+}
+
+/// The mirror: naming both arms of one family describes a deployment that
+/// cannot exist, so it is the same gate's finding.
+#[test]
+fn a_declaration_answering_an_option_family_with_both_arms_fails_validate() {
+    let world = World::new();
+    world.edit(FIXTURE_STATEMENT, |text| {
+        text.replace(
+            "    \"ehr-xml-write-accepted\",\n",
+            "    \"ehr-xml-write-accepted\",\n    \"ehr-xml-write-refused\",\n",
+        )
+    });
+    assert_gate(
+        &world.findings(),
+        "option-family-selection",
+        "ehr-xml-write-accepted, ehr-xml-write-refused",
+    );
+}
+
 /// The ixit beside the fixture declaration, which the signing-posture pairing
 /// reads from the declaration's own directory.
 const FIXTURE_IXIT: &str = "declaration/ixit.json";

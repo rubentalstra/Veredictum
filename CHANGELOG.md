@@ -75,6 +75,24 @@ version on.
   value that is not being declared has its own spelling — an empty string, or
   the `Undeclared` member of its vocabulary — so an omitted argument can never
   read as a declared absence. No argument was made optional to achieve it.
+- **A declaration that answers an option family with no arm is a finding, not a
+  silent deselection (#462).** The arms of an `option_select` register branch
+  are mutually exclusive, so a party declares exactly one. Nothing required the
+  declaration to answer at all: a family with no arm declared removed every one
+  of its rows from the run and satisfied the verdict review, so a vendor could
+  pass a family by declaring nothing about it. The register now groups its arms
+  into named FAMILIES (`options` is a mapping of family name to arms, and
+  AMB-167's twenty arms are the ten independent choices they always were), and
+  three places hold a declaration to answering each family the claim reaches
+  with exactly one arm: `validate --statement` reports
+  `option-family-selection`, the verdict pipeline's static review reports the
+  same sentence per family instead of once per entry, and a run records each
+  row of an unanswered family not-applicable naming the family, counts the fact
+  at run level, and prints a run-level warning before it drives anything. A
+  declaration naming several arms of one family, and an `option:` tag no
+  register family declares, refuse the run outright: neither has an honest
+  outcome. AMB-167's ICS-completeness caveat, which described the defect as a
+  known limitation, is re-grounded on the fix.
 - **The console's bundle is served under content-hashed names, and the hosted
   instance caches them for a year (#450).** `veredictum-console.<hash>.js` and
   its `.wasm` now carry the content hash cargo-leptos computed, so a browser
