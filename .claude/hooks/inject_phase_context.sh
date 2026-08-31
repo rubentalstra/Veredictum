@@ -34,7 +34,7 @@ else
   echo "The vendored openEHR spec text is MISSING from this checkout — specs/openehr/ is not there. Do not answer a spec question until it is restored: re-run scripts/vendor/spec-docs.sh. Never answer from memory, from a vendor's documentation, or from what a server did (.claude/rules/cnf-triage.md)."
 fi
 echo "Released machine-readable bundles (the second root for XSD / JSON-Schema / OpenAPI citations): specs/its-xml-schemas/, specs/its-json-schemas/, specs/rest-oas/."
-echo "The instrument's code lives HERE. Gate before every commit: cargo clippy --workspace --all-targets -- -D warnings && cargo nextest run --workspace && cargo run -- validate --root artifacts --specs specs/openehr (zero findings). --workspace is mandatory: without it the root gates read default-members, which excludes the console (#405)."
+echo "The instrument's code lives HERE. Gate before every commit with scripts/checks/gates.sh -- ONE script runs the whole documented battery, including the two rustdoc passes people skip. Do not reconstruct the list from memory (#466)."
 echo
 echo "=== tracker: open GitHub issues (gh issue view <n> --comments for the contract + discussion) ==="
 echo "--- pinned (current focus) ---"

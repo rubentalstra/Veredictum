@@ -294,37 +294,36 @@ actionlint                                        # workflow correctness + shell
 reuse lint                                        # REUSE 3.3 licensing
 ```
 
-The Rust tier. Run these before every commit; CI gates them on whether the
-change touched anything they read:
+The Rust tier. **One script runs the whole battery**, and it is the battery:
 
 ```bash
-cargo build --workspace --all-targets
-cargo nextest run --workspace            # never cargo test
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all --check
-cargo deny check
-RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --document-private-items
-cargo hack check --rust-version --all-targets --workspace   # the declared MSRV
-cargo machete                                    # no dependency nothing imports
+scripts/checks/gates.sh            # the guard tier and the rust tier
+scripts/checks/gates.sh --all      # everything, including deny, MSRV, machete
+scripts/checks/gates.sh --console  # the console's own two targets
+scripts/checks/gates.sh --list     # what it runs, without running it
 ```
 
-**`--workspace` is not decoration on any of those lines.** Without it a
-root-run command reads `default-members`, which is `app/veredictum` alone, so a
-green board says nothing whatever about the console (#405). CI passes it
-explicitly everywhere, and these lines match CI on purpose.
+That script exists because this list used to be prose in four places and nothing
+ran it. On 2026-08-31 five changes reached CI with a rustdoc failure the local
+run had not caught, every one because whoever ran "the gates" ran the cargo
+commands they remembered. Two were the session model's own. Run the script; do
+not reconstruct the list.
 
-**And `--workspace` is still not the console's gate.** It compiles the console
-with no features, which is not how it ships. The console has two real targets and
-they are their own tier:
+Three things it encodes that are easy to get wrong on your own:
 
-```bash
-cargo clippy -p veredictum-console --all-targets --features ssr -- -D warnings
-cargo clippy -p veredictum-console --lib --target wasm32-unknown-unknown \
-  --no-default-features --features hydrate -- -D warnings
-cargo nextest run -p veredictum-console --features ssr
-```
+- **`--workspace` is not decoration.** Without it a root-run command reads
+  `default-members`, which is `app/veredictum` alone, so a green board says
+  nothing whatever about the console (#405).
+- **`--workspace` is still not the console's gate.** It compiles the console
+  with no features, which is not how it ships. The console's two real targets
+  (`ssr` natively, `hydrate` on wasm32) are their own tier.
+- **CI runs TWO rustdoc passes**, and the second one — the console with
+  `--features ssr` — is the one nobody remembers. The workspace pass compiles the
+  console featureless, so a doc link from an ungated item into an `ssr`-gated one
+  cannot resolve there, and build, test, clippy and fmt all pass regardless.
 
-`/ui-gates` runs those plus `leptosfmt` and the browser journeys.
+
+`/ui-gates` adds `leptosfmt` and the browser journeys.
 
 The libFuzzer harnesses in `fuzz/` are their own nightly workspace, never a
 root member. CI compiles them on every pull request touching `app/` or `fuzz/`

@@ -48,12 +48,8 @@ Run these before you push. CI runs the same ones, behind a single required
 anything it reads.
 
 ```bash
-cargo build --all-targets
-cargo clippy --workspace --all-targets -- -D warnings
-cargo fmt --all --check
-cargo nextest run --workspace
-cargo deny check
-cargo run -- validate --root artifacts --specs specs/openehr   # zero findings
+scripts/checks/gates.sh          # the documented battery, in one place
+scripts/checks/gates.sh --list   # what it runs
 ```
 
 That last one is the gate the catalogue lives or dies by: it is every machine
