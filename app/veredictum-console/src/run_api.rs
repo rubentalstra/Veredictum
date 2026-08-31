@@ -182,9 +182,10 @@ impl SpecProfileChoice {
 /// closed vocabulary.
 ///
 /// The form is UNTRUSTED input like every other server-fn argument. It is
-/// narrowed to the typed [`DeclaredPostures`] at that boundary, where an
+/// narrowed to the typed `DeclaredPostures` at that boundary, where an
 /// unusable declaration is refused by name rather than composed into an ixit
-/// the run cannot use.
+/// the run cannot use. Named in prose rather than linked: that type is
+/// `ssr`-gated and this one is not, so a link breaks the featureless doc build.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PostureForm {
     /// The deployment's configured system identifier (`system_id`).
