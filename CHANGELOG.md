@@ -19,6 +19,32 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+- **A case needing an undeclared signing posture is excused before it writes
+  anything to the server (#456).** Four `SIG-VERSION` cases asking for
+  `signature: verifiable` were driven to completion — committing real
+  compositions to the server under test — and only then reported unjudgeable,
+  because the drive-time selection law had no arm for the `signing` posture
+  while every sibling missing-ixit fact resolved not-applicable at selection
+  time. Signing is conditional on deployment infrastructure (RM common
+  `master06-change_control_package.adoc` §Digital Signature: "If public key or
+  equivalent infrastructure is in place so that users are able to sign
+  content, a digital signature can be created"), so the mode is an ixit
+  declaration. An undeclared posture now records the case `not_applicable`
+  with that citation before a single request is sent; a declared one drives
+  and judges the case exactly as before.
+- **The console composes the deployment postures it used to drop (#456).** The
+  ixit it wrote carried three instances and nothing else, so a console-driven
+  run judged 31 rows of the first live public run not-applicable for facts the
+  operator was never asked for. The Scope step now collects the system
+  identifier, the dump location, the version-signing posture (digest with its
+  encoding and prefix, or an openPGP public key) and the openEHR generation
+  set, and it states in the interface which postures it cannot supply — the
+  SMART lane, the terminology topology, the exclusive-server flag, and any
+  second principal or second deployment — with what each omission costs a run.
+  An undeclared posture composes no key at all, so the engine's own citation
+  is what the row carries. A declaration the run could not use, such as an
+  openPGP mode with no key, is refused by name at the save rather than
+  silently dropped.
 - **A run with no party statement no longer publishes the losing arm of every
   mutually exclusive option pair as a failure (#455).** `--statement` is
   optional, and five arms of the drive-time selection law were gated on a

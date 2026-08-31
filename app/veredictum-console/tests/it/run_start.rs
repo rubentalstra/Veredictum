@@ -21,7 +21,7 @@ use std::io::{Read as _, Write as _};
 use std::sync::{Arc, Mutex};
 
 use veredictum_console::engine::{Credential, Engine, Secret};
-use veredictum_console::run_api::{AuthChoice, RunDraft};
+use veredictum_console::run_api::{AuthChoice, DeclaredPostures, RunDraft};
 use veredictum_console::run_job::{JobSlot, JobStatus};
 use veredictum_console::state::ConsoleState;
 
@@ -186,6 +186,7 @@ fn starting_a_run_writes_the_ixit_invalidates_the_export_and_moves_the_credentia
             statement_product: Some(String::from("EHRbase 2.34.0")),
             filter: Some(String::from(FILTER)),
             record_exchanges: false,
+            postures: DeclaredPostures::default(),
         }))),
         jobs: JobSlot::default(),
         client_ip_header: None,
@@ -373,6 +374,7 @@ async fn a_hosted_instance_refuses_a_private_target_at_the_start_seam()
             statement_product: None,
             filter: Some(String::from(FILTER)),
             record_exchanges: false,
+            postures: DeclaredPostures::default(),
         }))),
         jobs: JobSlot::default(),
         client_ip_header: None,

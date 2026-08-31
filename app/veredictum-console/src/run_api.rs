@@ -40,6 +40,326 @@ impl AuthChoice {
     }
 }
 
+/// The version-signing posture the operator declares — the mode half.
+///
+/// The mode is a closed vocabulary (RM common
+/// `master06-change_control_package.adoc` §Digital Signature: a deployment
+/// signs by digest or by openPGP). `Undeclared` is a first-class answer: a
+/// run whose ixit declares no posture records every `verifiable` case
+/// not-applicable with the engine's own citation, which is the honest
+/// outcome for a deployment fact nobody supplied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SigningChoice {
+    /// The operator declares no signing posture.
+    #[default]
+    Undeclared,
+    /// Plain digest, no public-key infrastructure.
+    Digest,
+    /// openPGP: a detached signature over the canonical form, verified
+    /// against a declared public key.
+    Pgp,
+}
+
+impl SigningChoice {
+    /// Every choice, in the order the control renders.
+    pub const ALL: [SigningChoice; 3] = [
+        SigningChoice::Undeclared,
+        SigningChoice::Digest,
+        SigningChoice::Pgp,
+    ];
+
+    /// The label the control carries.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Undeclared => "not declared",
+            Self::Digest => "digest",
+            Self::Pgp => "openPGP",
+        }
+    }
+
+    /// The id of this choice's button.
+    #[must_use]
+    pub fn control_id(self) -> &'static str {
+        match self {
+            Self::Undeclared => "signing-undeclared",
+            Self::Digest => "signing-digest",
+            Self::Pgp => "signing-pgp",
+        }
+    }
+}
+
+/// How a digest-mode signature is encoded on the wire.
+///
+/// Exactly the encodings the engine's own verifier implements, so a posture
+/// the console composes can never name one the run cannot verify under.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum DigestEncoding {
+    /// Standard base64 with padding.
+    #[default]
+    Base64,
+    /// URL-safe base64 without padding.
+    Base64Url,
+}
+
+impl DigestEncoding {
+    /// Every encoding, in the order the control renders.
+    pub const ALL: [DigestEncoding; 2] = [DigestEncoding::Base64, DigestEncoding::Base64Url];
+
+    /// The ixit declaration token.
+    #[must_use]
+    pub fn token(self) -> &'static str {
+        match self {
+            Self::Base64 => "base64",
+            Self::Base64Url => "base64url",
+        }
+    }
+
+    /// The id of this encoding's button.
+    #[must_use]
+    pub fn control_id(self) -> &'static str {
+        match self {
+            Self::Base64 => "digest-base64",
+            Self::Base64Url => "digest-base64url",
+        }
+    }
+}
+
+/// The openEHR generation set the deployment runs (`spec_profile`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SpecProfileChoice {
+    /// The operator declares no generation set.
+    #[default]
+    Undeclared,
+    /// The latest RELEASED openEHR generations.
+    Stable,
+    /// The development generations.
+    Development,
+}
+
+impl SpecProfileChoice {
+    /// Every choice, in the order the control renders.
+    pub const ALL: [SpecProfileChoice; 3] = [
+        SpecProfileChoice::Undeclared,
+        SpecProfileChoice::Stable,
+        SpecProfileChoice::Development,
+    ];
+
+    /// The label the control carries.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Undeclared => "not declared",
+            Self::Stable => "stable",
+            Self::Development => "development",
+        }
+    }
+
+    /// The id of this choice's button.
+    #[must_use]
+    pub fn control_id(self) -> &'static str {
+        match self {
+            Self::Undeclared => "profile-undeclared",
+            Self::Stable => "profile-stable",
+            Self::Development => "profile-development",
+        }
+    }
+
+    /// The declared generation set, `None` for an undeclared one.
+    #[cfg(feature = "ssr")]
+    #[must_use]
+    pub fn declared(self) -> Option<veredictum::ixit::SpecProfile> {
+        match self {
+            Self::Undeclared => None,
+            Self::Stable => Some(veredictum::ixit::SpecProfile::Stable),
+            Self::Development => Some(veredictum::ixit::SpecProfile::Development),
+        }
+    }
+}
+
+/// What the browser sends for the deployment postures: one flat form, so the
+/// public boundary carries no nested enum and every field is a scalar or a
+/// closed vocabulary.
+///
+/// The form is UNTRUSTED input like every other server-fn argument. It is
+/// narrowed to the typed [`DeclaredPostures`] at that boundary, where an
+/// unusable declaration is refused by name rather than composed into an ixit
+/// the run cannot use.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct PostureForm {
+    /// The deployment's configured system identifier (`system_id`).
+    pub system_id: String,
+    /// A location on the SUT's OWN file system the admin dump/load operations
+    /// may write to (`dump_location`). The console never opens it: it travels
+    /// to the SUT in the request body those operations carry.
+    pub dump_location: String,
+    /// The signing mode.
+    pub signing: SigningChoice,
+    /// The digest encoding, read only for the digest mode.
+    pub digest_encoding: DigestEncoding,
+    /// The fixed prefix a digest-mode signature carries, read only for the
+    /// digest mode. May be empty.
+    pub digest_prefix: String,
+    /// The armored openPGP public key, read only for the pgp mode.
+    pub pgp_public_key: String,
+    /// The openEHR generation set.
+    pub spec_profile: SpecProfileChoice,
+}
+
+/// The signing posture a draft carries, narrowed from the flat form.
+///
+/// The parameters of a mode travel with that mode, so a digest posture can
+/// never hold a key and a pgp posture can never hold an encoding.
+#[cfg(feature = "ssr")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SigningPosture {
+    /// Plain digest, no public-key infrastructure.
+    Digest {
+        /// How the digest is encoded on the wire.
+        encoding: DigestEncoding,
+        /// The fixed prefix the wire form carries before the encoded digest.
+        prefix: String,
+    },
+    /// openPGP, verified against this armored public key.
+    Pgp {
+        /// The armored public key.
+        public_key: String,
+    },
+}
+
+/// The deployment postures a draft declares, each absent by default.
+///
+/// An absent fact is a FIRST-CLASS state: it composes no key in the ixit, and
+/// the engine's own selection law then records the cases that need it
+/// not-applicable with a citation. Nothing here ever stands in for a
+/// declaration the operator did not make.
+#[cfg(feature = "ssr")]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct DeclaredPostures {
+    /// The deployment's configured system identifier.
+    pub system_id: Option<String>,
+    /// A location on the SUT's own file system for the admin dump/load
+    /// operations. The console never opens it.
+    pub dump_location: Option<String>,
+    /// The version-signing posture.
+    pub signing: Option<SigningPosture>,
+    /// The openEHR generation set.
+    pub spec_profile: Option<veredictum::ixit::SpecProfile>,
+}
+
+#[cfg(feature = "ssr")]
+impl DeclaredPostures {
+    /// The declared facts, one line each, for the interface to state back —
+    /// empty when the operator declared none.
+    ///
+    /// A pgp key is summarized rather than echoed: it is public material, and
+    /// a screen restating kilobytes of armor tells the reader nothing.
+    #[must_use]
+    pub fn summary(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        if let Some(system_id) = &self.system_id {
+            lines.push(format!("system_id {system_id}"));
+        }
+        if let Some(dump_location) = &self.dump_location {
+            lines.push(format!("dump_location {dump_location}"));
+        }
+        match &self.signing {
+            None => {}
+            Some(SigningPosture::Digest { encoding, prefix }) => lines.push(format!(
+                "signing digest (sha256, {}, prefix {:?})",
+                encoding.token(),
+                prefix
+            )),
+            Some(SigningPosture::Pgp { .. }) => {
+                lines.push(String::from("signing openPGP (public key declared)"));
+            }
+        }
+        if let Some(profile) = self.spec_profile {
+            lines.push(format!("spec_profile {}", profile.token()));
+        }
+        lines
+    }
+}
+
+/// The postures the flat form declares, or the refusal naming the one field
+/// that cannot be used.
+///
+/// Every value is UNTRUSTED input on a public endpoint, so each is capped and
+/// each unusable declaration is an error rather than a silently dropped
+/// field: a posture the operator believes they declared, and the run then
+/// judged without, is the defect this whole seam exists to close.
+///
+/// # Errors
+/// A value past its cap, a pgp mode with no armored key, and a digest prefix
+/// past its cap — each naming the field.
+#[cfg(feature = "ssr")]
+pub fn declared_postures(form: &PostureForm) -> Result<DeclaredPostures, String> {
+    /// A system identifier is a configured name, not a document.
+    const SYSTEM_ID_CAP_BYTES: usize = 256;
+    /// A path on the SUT's own file system, capped well past any real one.
+    const DUMP_LOCATION_CAP_BYTES: usize = 4_096;
+    /// A self-describing signature prefix (`sha256:`), never a payload.
+    const DIGEST_PREFIX_CAP_BYTES: usize = 64;
+    /// An armored public key, capped far above any real one.
+    const PGP_KEY_CAP_BYTES: usize = 65_536;
+    /// What the engine's own openPGP reader needs to see first.
+    const PGP_ARMOR_HEADER: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----";
+
+    fn capped(field: &str, value: &str, cap: usize) -> Result<Option<String>, String> {
+        let value = value.trim();
+        if value.len() > cap {
+            return Err(format!(
+                "{field} is {} bytes; the cap is {cap}",
+                value.len()
+            ));
+        }
+        Ok((!value.is_empty()).then(|| value.to_owned()))
+    }
+
+    let signing = match form.signing {
+        SigningChoice::Undeclared => None,
+        SigningChoice::Digest => Some(SigningPosture::Digest {
+            encoding: form.digest_encoding,
+            prefix: capped(
+                "the digest prefix",
+                &form.digest_prefix,
+                DIGEST_PREFIX_CAP_BYTES,
+            )?
+            .unwrap_or_default(),
+        }),
+        SigningChoice::Pgp => {
+            let key = capped(
+                "the openPGP public key",
+                &form.pgp_public_key,
+                PGP_KEY_CAP_BYTES,
+            )?
+            .ok_or_else(|| {
+                String::from(
+                    "the openPGP signing posture declares no public key: paste the \
+                     armored key the deployment signs with, or leave the posture undeclared",
+                )
+            })?;
+            if !key.contains(PGP_ARMOR_HEADER) {
+                return Err(format!(
+                    "the openPGP public key carries no {PGP_ARMOR_HEADER} line, so the run's \
+                     verifier cannot read it"
+                ));
+            }
+            Some(SigningPosture::Pgp { public_key: key })
+        }
+    };
+    Ok(DeclaredPostures {
+        system_id: capped("the system id", &form.system_id, SYSTEM_ID_CAP_BYTES)?,
+        dump_location: capped(
+            "the dump location",
+            &form.dump_location,
+            DUMP_LOCATION_CAP_BYTES,
+        )?,
+        signing,
+        spec_profile: form.spec_profile.declared(),
+    })
+}
+
 /// The server-side draft (ssr only; never serialized to the client).
 #[cfg(feature = "ssr")]
 #[derive(Debug)]
@@ -66,6 +386,9 @@ pub struct RunDraft {
     /// Whether the run persists its wire exchanges as `transcript.json`
     /// beside the results (#96). Off unless the operator asks for it.
     pub record_exchanges: bool,
+    /// The deployment postures the operator declared, each absent until they
+    /// declare it (#456).
+    pub postures: DeclaredPostures,
 }
 
 /// Every visitor's connection draft, one per submitter.
@@ -145,6 +468,9 @@ pub struct DraftView {
     pub filter: Option<String>,
     /// Whether the run will record its wire exchanges.
     pub record_exchanges: bool,
+    /// The deployment postures the draft declares, one line each — empty when
+    /// the operator declared none.
+    pub postures: Vec<String>,
 }
 
 /// The accepted claim, summarized for the overview the operator reads
@@ -360,6 +686,7 @@ pub mod read {
             statement: draft.statement_product.clone(),
             filter: draft.filter.clone(),
             record_exchanges: draft.record_exchanges,
+            postures: draft.postures.summary(),
         })
     }
 
@@ -400,6 +727,7 @@ pub mod read {
         statement_json: Option<String>,
         filter: Option<String>,
         record_exchanges: bool,
+        postures: &super::PostureForm,
     ) -> Result<Option<ClaimSummary>, String> {
         let summary = statement_json
             .as_deref()
@@ -437,6 +765,9 @@ pub mod read {
                 })
             })
             .transpose()?;
+        // Narrowed BEFORE the draft is touched, so a refused declaration
+        // leaves the stored scope exactly as it was.
+        let declared = super::declared_postures(postures)?;
         let mut guard = state.draft.lock().map_err(|e| e.to_string())?;
         let draft = guard
             .get_mut(submitter)
@@ -445,6 +776,7 @@ pub mod read {
         draft.statement_json = statement_json;
         draft.filter = filter;
         draft.record_exchanges = record_exchanges;
+        draft.postures = declared;
         Ok(summary)
     }
 
@@ -800,33 +1132,151 @@ pub mod read {
         Ok(document)
     }
 
+    /// One instance of the ixit document: where it is, and how the run
+    /// authenticates to it.
+    #[derive(Debug, Clone, Copy, serde::Serialize)]
+    struct IxitInstance<'d> {
+        /// The CDR base URL.
+        base_url: &'d str,
+        /// The authentication mode, carrying env-var NAMES only.
+        auth: IxitAuth,
+    }
+
+    /// The authentication modes the console composes — env-var NAMES only, so
+    /// a credential VALUE cannot reach a file by construction.
+    #[derive(Debug, Clone, Copy, serde::Serialize)]
+    #[serde(tag = "mode", rename_all = "snake_case")]
+    enum IxitAuth {
+        /// No Authorization header at all.
+        None,
+        /// HTTP Basic, from the named variables.
+        Basic {
+            /// The variable carrying the user.
+            user_env: &'static str,
+            /// The variable carrying the password.
+            password_env: &'static str,
+        },
+        /// A static bearer token, from the named variable.
+        Bearer {
+            /// The variable carrying the token.
+            token_env: &'static str,
+        },
+    }
+
+    /// The version-signing posture as the ixit spells it (RM common
+    /// `master06-change_control_package.adoc` §Digital Signature).
+    #[derive(Debug, Clone, Copy, serde::Serialize)]
+    #[serde(tag = "mode", rename_all = "snake_case")]
+    enum IxitSigning<'d> {
+        /// Plain digest: the wire form is `<prefix><encoding(hash(bytes))>`.
+        Digest {
+            /// The hash algorithm applied to the canonical bytes.
+            algorithm: &'static str,
+            /// How the digest is encoded on the wire.
+            encoding: &'static str,
+            /// The fixed prefix the wire form carries.
+            prefix: &'d str,
+        },
+        /// openPGP, verified against the declared armored public key.
+        Pgp {
+            /// The armored public key.
+            public_key: &'d str,
+        },
+    }
+
+    /// The ixit document the console composes for a run: the instances it can
+    /// reach, plus exactly the deployment postures the operator declared.
+    ///
+    /// Every posture is skipped when absent, because an absent key is what
+    /// makes the engine record a case not-applicable with its own citation. A
+    /// present key with a stand-in value would instead claim something about
+    /// somebody else's deployment.
+    #[derive(Debug, Clone, serde::Serialize)]
+    struct IxitDocument<'d> {
+        /// The named instances the flow addresses.
+        instances: std::collections::BTreeMap<&'static str, IxitInstance<'d>>,
+        /// The deployment's configured system identifier.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        system_id: Option<&'d str>,
+        /// A location on the SUT's own file system for the dump/load
+        /// operations.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        dump_location: Option<&'d str>,
+        /// The openEHR generation set.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        spec_profile: Option<&'static str>,
+        /// The version-signing posture.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        signing: Option<IxitSigning<'d>>,
+    }
+
     /// Renders the draft's ixit document.
     ///
     /// The three instances point at the CDR, each carrying env-var NAMES
     /// only: the values live in the draft and reach the spawned run's
-    /// environment alone.
-    #[must_use]
-    pub fn ixit_document(draft: &RunDraft) -> String {
+    /// environment alone. Beside them travel exactly the deployment postures
+    /// the operator declared (#456) — a fact nobody declared composes no key,
+    /// so the engine's selection law records the cases needing it
+    /// not-applicable with its own citation instead of being driven under a
+    /// guess.
+    ///
+    /// # Errors
+    /// The serializer's verbatim failure, and the engine reader's refusal of a
+    /// document the instrument cannot read.
+    pub fn ixit_document(draft: &RunDraft) -> Result<String, String> {
         let auth = match draft.auth {
-            super::AuthChoice::None => String::from(r#"{ "mode": "none" }"#),
-            super::AuthChoice::Basic => String::from(
-                r#"{ "mode": "basic", "user_env": "CONSOLE_SUT_USER", "password_env": "CONSOLE_SUT_PASS" }"#,
-            ),
-            super::AuthChoice::Bearer => {
-                String::from(r#"{ "mode": "bearer", "token_env": "CONSOLE_SUT_TOKEN" }"#)
-            }
+            super::AuthChoice::None => IxitAuth::None,
+            super::AuthChoice::Basic => IxitAuth::Basic {
+                user_env: "CONSOLE_SUT_USER",
+                password_env: "CONSOLE_SUT_PASS",
+            },
+            super::AuthChoice::Bearer => IxitAuth::Bearer {
+                token_env: "CONSOLE_SUT_TOKEN",
+            },
         };
-        let base = &draft.base_url;
-        format!(
-            r#"{{
-  "instances": {{
-    "sut": {{ "base_url": "{base}", "auth": {auth} }},
-    "admin": {{ "base_url": "{base}", "auth": {auth} }},
-    "unauthenticated": {{ "base_url": "{base}", "auth": {{ "mode": "none" }} }}
-  }}
-}}
-"#
-        )
+        let instance = |auth: IxitAuth| IxitInstance {
+            base_url: &draft.base_url,
+            auth,
+        };
+        let mut instances = std::collections::BTreeMap::new();
+        instances.insert("sut", instance(auth));
+        instances.insert("admin", instance(auth));
+        instances.insert("unauthenticated", instance(IxitAuth::None));
+        let signing = draft
+            .postures
+            .signing
+            .as_ref()
+            .map(|posture| match posture {
+                // NOTE: RM common master06 §Digital Signature leaves the hash
+                // to the deployment; sha256 is the one the engine's verifier
+                // implements, so it is the one this console can declare.
+                super::SigningPosture::Digest { encoding, prefix } => IxitSigning::Digest {
+                    algorithm: "sha256",
+                    encoding: encoding.token(),
+                    prefix,
+                },
+                super::SigningPosture::Pgp { public_key } => IxitSigning::Pgp { public_key },
+            });
+        let document = IxitDocument {
+            instances,
+            system_id: draft.postures.system_id.as_deref(),
+            dump_location: draft.postures.dump_location.as_deref(),
+            spec_profile: draft
+                .postures
+                .spec_profile
+                .map(veredictum::ixit::SpecProfile::token),
+            signing,
+        };
+        let mut rendered = serde_json::to_string_pretty(&document)
+            .map_err(|e| format!("the composed ixit did not serialize: {e}"))?;
+        rendered.push('\n');
+        // The composed bytes are held to the engine's OWN reader before a run
+        // is built on them: a document the instrument cannot read is a console
+        // defect, and it is refused here rather than at the spawned engine's
+        // first line.
+        serde_json::from_str::<veredictum::ixit::Ixit>(&rendered)
+            .map_err(|e| format!("the composed ixit does not parse: {e}"))?;
+        Ok(rendered)
     }
 
     /// Starts this submitter's drafted run.
@@ -920,7 +1370,7 @@ pub mod read {
         // run's directory is what guarantees no bundle is in it.
         crate::export_api::prepare::invalidate(&out_dir)?;
         let ixit_path = out_dir.join("ixit.json");
-        std::fs::write(&ixit_path, ixit_document(draft))
+        std::fs::write(&ixit_path, ixit_document(draft)?)
             .map_err(|e| format!("{}: {e}", ixit_path.display()))?;
         // The claim travels WITH the run: the job directory carries the exact
         // bytes the engine graded, and the verdicts read them back from there,
@@ -1103,8 +1553,8 @@ pub mod fns {
     use leptos::prelude::{ServerFnError, server};
 
     use super::{
-        AuthChoice, ClaimSummary, DraftView, ProbeAnswer, RunScreen, ScopePreview, ScopeTier,
-        StartOutcome, StatementRow, TierRow,
+        AuthChoice, ClaimSummary, DraftView, PostureForm, ProbeAnswer, RunScreen, ScopePreview,
+        ScopeTier, StartOutcome, StatementRow, TierRow,
     };
     use crate::run_job::RunId;
 
@@ -1176,6 +1626,7 @@ pub mod fns {
                 statement_product: None,
                 filter: None,
                 record_exchanges: false,
+                postures: super::DeclaredPostures::default(),
             },
         )
         .map_err(ServerFnError::new)?;
@@ -1271,6 +1722,7 @@ pub mod fns {
         statement_json: Option<String>,
         filter: Option<String>,
         record_exchanges: bool,
+        postures: PostureForm,
     ) -> Result<Option<ClaimSummary>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         let who = crate::submitter::current(&state);
@@ -1280,6 +1732,7 @@ pub mod fns {
             statement_json.filter(|s| !s.trim().is_empty()),
             filter.filter(|f| !f.is_empty()),
             record_exchanges,
+            &postures,
         )
         .map_err(ServerFnError::new)
     }

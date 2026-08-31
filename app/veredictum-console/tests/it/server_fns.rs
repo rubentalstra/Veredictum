@@ -272,7 +272,7 @@ async fn the_bench_endpoints_answer_over_an_empty_output_root()
 #[tokio::test]
 async fn the_run_endpoints_refuse_an_out_of_order_wizard() -> Result<(), Box<dyn std::error::Error>>
 {
-    use veredictum_console::run_api::{RunScreen, fns};
+    use veredictum_console::run_api::{PostureForm, RunScreen, fns};
     use veredictum_console::run_job::RunId;
 
     let scratch = assert_fs::TempDir::new()?;
@@ -301,7 +301,7 @@ async fn the_run_endpoints_refuse_an_out_of_order_wizard() -> Result<(), Box<dyn
         "an unknown run is not an idle console"
     );
 
-    let scope = fns::save_scope(None, None, false)
+    let scope = fns::save_scope(None, None, false, PostureForm::default())
         .await
         .expect_err("the scope step needs a connection draft")
         .to_string();
@@ -560,7 +560,7 @@ async fn the_bench_upload_route_refuses_a_document_that_is_not_a_result()
 #[tokio::test]
 async fn the_scope_step_accepts_a_claim_and_refuses_a_non_claim()
 -> Result<(), Box<dyn std::error::Error>> {
-    use veredictum_console::run_api::{AuthChoice, ScopeTier, fns};
+    use veredictum_console::run_api::{AuthChoice, PostureForm, ScopeTier, fns};
 
     let scratch = assert_fs::TempDir::new()?;
     let state = state_over(scratch.path());
@@ -590,7 +590,7 @@ async fn the_scope_step_accepts_a_claim_and_refuses_a_non_claim()
     let body = fns::fetch_statement_body(first.path.clone())
         .await
         .map_err(|e| e.to_string())?;
-    let summary = fns::save_scope(Some(body.clone()), None, true)
+    let summary = fns::save_scope(Some(body.clone()), None, true, PostureForm::default())
         .await
         .map_err(|e| e.to_string())?
         .ok_or("a pasted statement yields a claim summary")?;
@@ -613,13 +613,15 @@ async fn the_scope_step_accepts_a_claim_and_refuses_a_non_claim()
 
     // A document that is not JSON at all, and one that is JSON but not a
     // statement: each refused with what is wrong, never silently dropped.
-    let not_json = fns::save_scope(Some(String::from("{ not json")), None, false)
+    let bare = PostureForm::default();
+    let not_json = fns::save_scope(Some(String::from("{ not json")), None, false, bare.clone())
         .await
         .expect_err("a body that is not JSON is not a claim")
         .to_string();
     assert!(not_json.contains("not JSON"), "{not_json}");
 
-    let not_a_statement = fns::save_scope(Some(String::from(r#"{"hello":"world"}"#)), None, false)
+    let hello = String::from(r#"{"hello":"world"}"#);
+    let not_a_statement = fns::save_scope(Some(hello), None, false, bare.clone())
         .await
         .expect_err("a JSON document that is not a statement is not a claim")
         .to_string();
@@ -627,7 +629,7 @@ async fn the_scope_step_accepts_a_claim_and_refuses_a_non_claim()
 
     // The cap is checked before the parse, so an abusive body never reaches
     // the schema validator at all.
-    let oversized = fns::save_scope(Some("0".repeat(4 * 1024 * 1024)), None, false)
+    let oversized = fns::save_scope(Some("0".repeat(4 * 1024 * 1024)), None, false, bare)
         .await
         .expect_err("a body past the cap is refused")
         .to_string();
