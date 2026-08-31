@@ -704,14 +704,48 @@ jobs:
   # real release, because a pre-release moves no `:latest` and so changes
   # nothing to deploy. A failure here reddens `announce` with the recovery
   # named; it can never un-publish anything the release already published.
+  #
+  # An ORDINARY job, not a call to `hosted-deploy.yml`, because the deploy key
+  # and the host key are `hosted` environment secrets and a job inside a
+  # `workflow_call` workflow cannot read those even when it names the
+  # environment (#449, https://github.com/actions/runner/issues/1490, closed as
+  # not planned). The v0.1.4 release published everything and then failed here
+  # with an empty `ssh-key`. Every step of the deploy is
+  # `.github/actions/hosted-deploy`, which the manual redeploy path calls too,
+  # so there is one copy of the deploy and two thin callers.
   hosted:
     name: hosted console
     needs: [plan, scan-and-tag]
     if: needs.plan.outputs.is-release == 'true'
-    permissions: {}
-    uses: ./.github/workflows/hosted-deploy.yml
-    with:
-      expected-version: ${{ needs.plan.outputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The environment's own protection rules are what stands in front of a key
+    # that can reach the box; this job reads its secrets and hands them to the
+    # action, which is the only way a composite action can receive a secret.
+    environment: hosted
+    # One deploy at a time, whichever caller started it: `hosted-deploy.yml`
+    # names this same group, so a manual redeploy queues behind a release deploy
+    # rather than racing it for the box.
+    concurrency:
+      group: hosted-deploy
+      cancel-in-progress: false
+    # The checkout is all the token is for: the local action resolves against
+    # the runner's workspace. The registry reads inside the action are
+    # anonymous, and the deploy is one restricted command over SSH.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }} # == plan's commit: the dispatch-at-tag refusal makes them equal
+
+      - name: Deploy the hosted instrument
+        uses: ./.github/actions/hosted-deploy
+        with:
+          expected-version: ${{ needs.plan.outputs.version }}
+          ssh-key: ${{ secrets.HOSTED_SSH_KEY }}
+          known-hosts: ${{ secrets.HOSTED_KNOWN_HOSTS }}
 
   # ── crates.io ───────────────────────────────────────────────────────────────
   # LAST on purpose, and after the release is otherwise complete. A crates.io

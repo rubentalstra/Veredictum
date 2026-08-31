@@ -1,0 +1,210 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+
+# .github/actions/hosted-deploy — THE hosted-console deploy, every step of it.
+#
+# ONE owner of hosted-console delivery (#348, #412, #449): console.veredictum.eu,
+# the official conformance instrument (#388). Two callers, both thin, and they
+# run the identical steps because the steps are here:
+#
+#   - `.github/workflows/hosted-deploy.yml` — a manual redeploy, no expected
+#     version, so the expectation is derived from the `:latest` image itself.
+#   - `.github/workflows/release.yml`, the `hosted` job — a real release, after
+#     the scan-and-tag leg has moved `:latest`, with the tag's version supplied.
+#
+# WHY an action and not a reusable workflow. The deploy key and the host key are
+# `hosted` ENVIRONMENT secrets, and environment secrets are not available to a
+# job inside a `workflow_call` workflow even when that job names the environment
+# (https://github.com/actions/runner/issues/1490, closed as not planned). The
+# v0.1.4 release measured it: the deployment record was created on the tag, so
+# the environment was entered, and `INPUT_SSH_KEY` arrived empty. `secrets:
+# inherit` does not fix it either, because it passes the CALLER's secrets and a
+# job that uses `uses:` may not declare an `environment:`. So the caller is an
+# ordinary job that names the environment, reads the secrets, and hands them to
+# this action as inputs — a composite action cannot read `secrets` itself.
+#
+# A local action resolves against the runner's workspace
+# (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
+# so every caller checks the repository out first.
+#
+# The instrument runs on a box this repository provisions, because a conformance
+# run is a process that outlives the request that started it. #387 measured what
+# an autoscaling request platform did to that: several instances answered one
+# service, so a poll reached one that never held the run, and an instance with
+# no traffic for five minutes was terminated with the engine child inside it.
+# `deploy/hosted/` is the whole posture — the cloud-init, the compose file, the
+# proxy — and this action is the only thing that applies it.
+#
+# ONE IMAGE, and this deploy builds nothing (#420). The release image carries the
+# engine, the console and the data — the catalogue, the vendored oracle, the
+# party declarations — so the box only ever pulls, and what it judges against is
+# the data of a published release rather than of whatever branch last built an
+# overlay. A deploy is a pull and a recreate, and the box holds no checkout of
+# this repository at all.
+#
+# The deploy itself is `rubentalstra/hetzner-deploy-action`, written for this and
+# public because the gap was real: everything on the Marketplace either creates
+# servers, runs self-hosted runners, or ends at `docker compose up -d` and calls
+# that success. It waits for the container's own healthcheck and then fetches the
+# public URL FROM THIS RUNNER, requiring the served engine version — because a
+# bare 200 is not proof, the deployment being replaced answers 200 too.
+#
+# A composite action has no `pre` or `post` steps, and nothing here needs one:
+# the SSH key is written and removed inside a single step's trap, in the action
+# this calls.
+name: Deploy the hosted instrument
+description: Deploy console.veredictum.eu from the published image and verify what it serves.
+
+inputs:
+  expected-version:
+    description: >-
+      The version string the hosted console must serve before the deploy counts
+      as done (`X.Y.Z`, no `v`). Empty means "derive it from the `:latest`
+      image's own version label" — which is what a manual redeploy wants, since
+      it changes no image.
+    required: false
+    default: ""
+  ssh-key:
+    description: >-
+      The deploy key, restricted on the box to the one deploy command. An
+      environment secret the calling job reads; a composite action cannot read
+      `secrets` itself.
+    required: true
+  known-hosts:
+    description: The box's host key, from the same environment as `ssh-key`.
+    required: true
+  # The three constants of the hosted deployment. They are inputs rather than
+  # one `env:` block because a composite action has no job-level `env:`; a
+  # caller has no reason to pass them.
+  image:
+    description: The published image the box pulls.
+    required: false
+    default: ghcr.io/rubentalstra/veredictum
+  host:
+    description: The box the deploy key opens.
+    required: false
+    default: console.veredictum.eu
+  verify-base:
+    description: The public base URL the deploy's own verification fetches.
+    required: false
+    default: https://console.veredictum.eu
+
+runs:
+  using: composite
+  steps:
+    # The release caller's needs-edge guarantee, re-asserted at the point of use
+    # (the FerroEHR#2846 ruling): a release deploy means `:latest` must ALREADY
+    # be the tag's image, because `:latest` is what the box pulls. A stale tag
+    # fails here, before any deploy — never as a 20-minute blind poll.
+    # Anonymous registry reads: the image is public.
+    - name: The :latest tag is the release image
+      if: inputs.expected-version != ''
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        EXPECTED: ${{ inputs.expected-version }}
+      run: |
+        set -euo pipefail
+        tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+        digest_of() {
+          curl -fsS -o /dev/null -w '%{header_json}' \
+            -H "Authorization: Bearer ${tok}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/$1" \
+            | sed -nE 's/.*"docker-content-digest":\["([^"]+)"\].*/\1/p'
+        }
+        latest=$(digest_of latest)
+        tagged=$(digest_of "$EXPECTED")
+        if [ -z "$latest" ] || [ -z "$tagged" ] || [ "$latest" != "$tagged" ]; then
+          echo "::error::${IMAGE}:latest (${latest:-unreadable}) is not the ${EXPECTED} image (${tagged:-unreadable}) — the deploy would ship the OLD release; the tag-apply leg must land first." >&2
+          exit 1
+        fi
+        echo "${IMAGE}:latest == ${EXPECTED} (${latest})"
+
+    # The box mounts nothing, so an image without the data at /work would come
+    # up serving a console with no catalogue at all. The release image carries
+    # it and says so with a label, and this refuses to deploy an image that
+    # does not — which is what makes the #420 cutover safe: an older release,
+    # or a rollback to one, fails here instead of on the box.
+    - name: The image carries the catalogue
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        REF: ${{ inputs.expected-version || 'latest' }}
+      run: |
+        set -euo pipefail
+        tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+        idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+          -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+          "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${REF}")
+        child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
+        cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+          -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+          "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
+        carries=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
+          "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
+          | jq -r '.config.Labels["eu.veredictum.image.carries-catalogue"] // empty')
+        if [ "$carries" != "true" ]; then
+          echo "::error::${IMAGE}:${REF} does not declare eu.veredictum.image.carries-catalogue=true, so it carries no catalogue at /work. The box mounts nothing, so deploying it would serve an instrument with no catalogue. Deploy a release built after #420." >&2
+          exit 1
+        fi
+        echo "${IMAGE}:${REF} carries the catalogue"
+
+    # What the console must serve for this deploy to count. A release deploy is
+    # told the version its tag names; a manual redeploy derives it from the
+    # `:latest` image's own version label, anonymously, because the overlay is
+    # FROM that image and so what it declares is exactly what a successful
+    # deploy must serve.
+    #
+    # The console's server-rendered footer carries `engine X.Y.Z`, and
+    # check-console-pin holds that pin to the console version, so the footer
+    # IS the deployed version. A bare 200 is never accepted as proof: the
+    # deployment being replaced answers 200 too (FerroEHR measured that twice,
+    # at 4.0.4 and 4.0.10).
+    - name: What the console must serve
+      id: expect
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        EXPECTED: ${{ inputs.expected-version }}
+      run: |
+        set -euo pipefail
+        expected="${EXPECTED:-}"
+        if [ -z "$expected" ]; then
+          tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+          idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/latest")
+          child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
+          cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+            -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
+          expected=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
+            | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
+          if [ -z "$expected" ]; then
+            echo "::error::could not derive the expected version from :latest's org.opencontainers.image.version label — a verification that cannot decide must not pass (build-image.yml stamps the label, so an unreadable one is a registry or read defect to look at, not a shrug)." >&2
+            exit 1
+          fi
+          echo "expectation derived from :latest — waiting for '${expected}'"
+        fi
+        echo "version=${expected}" >> "$GITHUB_OUTPUT"
+
+    # The deploy, and the proof. The action waits for the container's own
+    # healthcheck, then fetches the public URL from THIS runner and requires
+    # the served engine version — a bare 200 is not proof, because the
+    # deployment being replaced answers 200 too.
+    - name: Deploy to the box and verify it serves the release
+      uses: rubentalstra/hetzner-deploy-action@23e875e1249a2fe2a27107291a638ab40da0172b # v1.0.1
+      with:
+        host: ${{ inputs.host }}
+        user: deploy
+        ssh-key: ${{ inputs.ssh-key }}
+        known-hosts: ${{ inputs.known-hosts }}
+        # One restricted command: the key on the box may run the deploy script
+        # and nothing else, so the action issues exactly one command and that
+        # command is the deploy.
+        remote-command: deploy
+        verify-url: ${{ inputs.verify-base }}/
+        verify-contains: engine ${{ steps.expect.outputs.version }}
+        verify-timeout: "600"

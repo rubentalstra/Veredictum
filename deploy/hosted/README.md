@@ -144,12 +144,20 @@ git.
 
 ## How a deploy happens
 
-`.github/workflows/hosted-deploy.yml` is the only thing that deploys, on exactly
-two occasions:
+`.github/actions/hosted-deploy` is the only thing that deploys, and it carries
+every step. Two callers reach it, on exactly two occasions:
 
-1. **A real release.** `release.yml` calls it after the scan-and-tag leg applies
-   the image tags. A pre-release moves no `:latest`, so it deploys nothing.
-2. **A manual `workflow_dispatch`.**
+1. **A real release.** The `hosted` job in `release.yml`, after the scan-and-tag
+   leg applies the image tags. A pre-release moves no `:latest`, so it deploys
+   nothing.
+2. **A manual `workflow_dispatch`** of `.github/workflows/hosted-deploy.yml`.
+
+Both callers are a checkout plus the action, so they run identical steps. The
+release path is an ordinary job rather than a call to `hosted-deploy.yml`
+because the deploy key lives in the `hosted` environment, and a job inside a
+`workflow_call` workflow cannot read environment secrets even when it names the
+environment ([actions/runner#1490](https://github.com/actions/runner/issues/1490),
+closed as not planned).
 
 There is deliberately no push trigger. A push to `deploy/hosted/**` publishes no
 image, and the posture on the box comes out of an image, so a push-triggered run
