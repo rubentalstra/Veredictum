@@ -1422,6 +1422,30 @@ impl ApiVisitor {
         body
     }
 
+    /// Posts `form` and returns the status with the body, refusing nothing.
+    ///
+    /// The sibling `call` asserts success, which is right for every step of a
+    /// journey; a refusal is the subject here rather than a failure.
+    async fn call_expecting_a_refusal(
+        &self,
+        path: &str,
+        form: &str,
+    ) -> (reqwest::StatusCode, String) {
+        let url = format!("{}{path}", self.origin);
+        let response = self
+            .client
+            .post(&url)
+            .header(self.header.as_str(), self.address)
+            .header("accept", "application/json")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(form.to_owned())
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("POST {url}: {e}"));
+        let status = response.status();
+        (status, response.text().await.unwrap_or_default())
+    }
+
     /// Drives connect, scope and start as this visitor, returning the run's
     /// own address.
     ///
@@ -1551,6 +1575,31 @@ async fn e2e_two_visitors_drive_two_runs_at_once() {
     // Visitor one is the browser, driving the wizard.
     let first = drive_to_live(&h, &base_url, "first-visitor", TWO_VISITOR_FILTER).await;
     h.wait_xpath("//span[contains(., 'running')]").await;
+
+    // A malformed call is the CALLER's mistake and answers as one (#484).
+    // Every `#[server]` fn is a public endpoint, so this is part of the
+    // interface: the same form with `postures` left out, which server_fn
+    // answers with 500 and its own serializer's phrasing unless something
+    // rewrites it.
+    let (status, body) = second
+        .call_expecting_a_refusal(
+            <SaveScope as ServerFn>::PATH,
+            "filter=&record_exchanges=false",
+        )
+        .await;
+    assert_eq!(
+        status,
+        reqwest::StatusCode::BAD_REQUEST,
+        "a caller's mistake is 4xx, not 5xx: {body}"
+    );
+    assert!(
+        body.contains("`postures`"),
+        "the refusal names the argument: {body}"
+    );
+    assert!(
+        !body.contains("Args|"),
+        "the serializer's own phrasing does not reach a caller: {body}"
+    );
 
     // Visitor two is this journey, over the same public endpoints.
     let other = second

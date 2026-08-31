@@ -35,6 +35,7 @@ compile_error!("features \"hydrate\" and \"ssr\" cannot be enabled at the same t
 pub const ENGINE_PIN: &str = "0.1.4";
 
 pub mod app;
+pub mod arg_refusal;
 pub mod bench_api;
 pub mod capture;
 pub mod catalogue_api;

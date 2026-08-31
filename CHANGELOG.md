@@ -63,6 +63,18 @@ version on.
   contents and warnings untouched.
 
 ### Fixed
+- **A malformed call to a console endpoint answers 400 with a sentence, not
+  500 with a serializer's phrasing (#484).** Every `#[server]` function is a
+  publicly reachable HTTP endpoint, and a call whose arguments will not decode
+  never reaches its handler: `server_fn` builds that response itself and
+  documents the status it uses, 500, for every error it carries
+  (<https://docs.rs/leptos/latest/leptos/server_fn/response/trait.Res.html>).
+  A caller's mistake therefore read as the server breaking, and the body was
+  `Args|missing field \`postures\``. A decoding failure is now 400, and the
+  body names the argument and says that every argument is required because a
+  value that is not being declared has its own spelling — an empty string, or
+  the `Undeclared` member of its vocabulary — so an omitted argument can never
+  read as a declared absence. No argument was made optional to achieve it.
 - **The console's bundle is served under content-hashed names, and the hosted
   instance caches them for a year (#450).** `veredictum-console.<hash>.js` and
   its `.wasm` now carry the content hash cargo-leptos computed, so a browser

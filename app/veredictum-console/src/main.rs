@@ -105,6 +105,13 @@ async fn main() -> anyhow::Result<()> {
             },
         )
         .fallback(leptos_axum::file_and_error_handler(shell))
+        // AFTER the server functions are registered, and that is the whole
+        // point: "the middleware is applied only to routes added before
+        // calling `layer`"
+        // (<https://docs.rs/axum/latest/axum/routing/struct.Router.html#method.layer>),
+        // so a layer placed higher up would cover the four routes above and
+        // none of the endpoints whose refusals it exists to rewrite (#484).
+        .layer(axum::middleware::from_fn(caller_faults_are_4xx))
         .with_state(leptos_options);
 
     // The artifact sweeper (#412). The instrument now runs on a host that does
@@ -156,6 +163,50 @@ async fn main() -> anyhow::Result<()> {
     .await?;
     Ok(())
 }
+
+/// Gives a malformed call a caller's status and a caller's sentence (#484).
+///
+/// `server_fn` answers every error it raises with 500, argument decoding
+/// included, and offers no hook to change it
+/// (<https://docs.rs/leptos/latest/leptos/server_fn/response/trait.Res.html>).
+/// So the encoded error is read back here: a decoding failure becomes 400 with
+/// this crate's own wording, and the server's own errors pass through with
+/// their status and body untouched.
+#[cfg(feature = "ssr")]
+async fn caller_faults_are_4xx(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::response::IntoResponse as _;
+
+    let response = next.run(request).await;
+    if response.status() != axum::http::StatusCode::INTERNAL_SERVER_ERROR {
+        return response;
+    }
+
+    let (parts, body) = response.into_parts();
+    // NOTE: no openEHR spec governs this — our own design; a body too large
+    // to read back is not an encoded refusal, so it keeps the framework's own
+    // status and says nothing more.
+    let Ok(bytes) = axum::body::to_bytes(body, MAX_REFUSAL_BYTES).await else {
+        return axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+
+    let Ok(encoded) = std::str::from_utf8(&bytes) else {
+        return (parts, bytes).into_response();
+    };
+    match veredictum_console::arg_refusal::caller_fault(encoded) {
+        Some(sentence) => (axum::http::StatusCode::BAD_REQUEST, sentence).into_response(),
+        None => (parts, bytes).into_response(),
+    }
+}
+
+/// The largest error body the refusal layer reads back before giving up.
+///
+/// A server-function error is one encoded sentence, so anything past this is
+/// not one and is answered as the framework wrote it.
+#[cfg(feature = "ssr")]
+const MAX_REFUSAL_BYTES: usize = 64 * 1024;
 
 /// Resolves when the process receives SIGTERM (what `docker stop` and every
 /// orchestrator send PID 1) or SIGINT (Ctrl-C in a terminal), so axum drains
