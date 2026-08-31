@@ -34,6 +34,6 @@
 # uid the image runs as.
 services:
   console:
-    image: ghcr.io/rubentalstra/veredictum:0.1.3
+    image: ghcr.io/rubentalstra/veredictum:0.1.4
     ports:
       - "127.0.0.1:3210:3000"
