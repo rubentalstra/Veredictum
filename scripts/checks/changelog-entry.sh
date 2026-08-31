@@ -28,7 +28,7 @@
 # rather than news: the crates' `tests/`, `specs/` (vendored, refreshed only by its own
 # script), `scripts/`, `.github/`, `.claude/`, and prose.
 #
-# Usage:  changelog-entry.sh <base-ref> <head-ref>
+# Usage:  changelog-entry.sh [<base-ref> [<head-ref>]]   (default: origin/main HEAD)
 #
 # Exits 0 when no user-visible path was touched, or when `CHANGELOG.md` gained at
 # least one non-blank added line. Exits 1 otherwise, naming the paths that
@@ -52,8 +52,10 @@ readonly USER_VISIBLE_PATHS=(
   'app/[^/]+/Cargo\.toml$'
 )
 
-base="${1:?usage: changelog-entry.sh <base-ref> <head-ref>}"
-head="${2:?usage: changelog-entry.sh <base-ref> <head-ref>}"
+# The refs default to the shape a local run wants, so the same invocation
+# works from a working tree and from the workflow, which passes both.
+base="${1:-origin/main}"
+head="${2:-HEAD}"
 
 pattern="$(printf '%s|' "${USER_VISIBLE_PATHS[@]}")"
 pattern="^(${pattern%|})"

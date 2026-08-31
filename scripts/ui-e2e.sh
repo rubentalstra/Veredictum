@@ -102,6 +102,43 @@ git_tree_state() {
 }
 TREE_STATE_BEFORE="$(git_tree_state)"
 
+# ── One run at a time ───────────────────────────────────────────────────────
+# The console port, the driver port and the browser container's name are all
+# fixed, and teardown removes that container by name. So a second run started
+# beside a first one kills the first one's browser mid-click, which surfaces as
+# a WebDriver transport error in whatever journey happened to be running. That
+# is not flakiness and retrying does not fix it: the runs are mutually
+# exclusive by construction. The second run waits for the first instead.
+LOCK_DIR="$ROOT/target/ui-e2e.lock"
+LOCK_HELD=""
+release_lock() {
+  rm -f "$LOCK_DIR/pid"
+  rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+acquire_lock() {
+  local waited=0 owner
+  while ! mkdir "$LOCK_DIR" 2>/dev/null; do
+    owner="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+    if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
+      echo "── a previous harness run (pid ${owner}) died holding the lock; taking it"
+      release_lock
+      continue
+    fi
+    if [[ "$waited" -eq 0 ]]; then
+      echo "── another harness run holds ${LOCK_DIR} (pid ${owner:-unknown}); waiting"
+    fi
+    sleep 5
+    waited=$((waited + 5))
+    if [[ "$waited" -ge 1800 ]]; then
+      echo "FATAL: waited ${waited}s for ${LOCK_DIR}; remove it if no run is live." >&2
+      exit 1
+    fi
+  done
+  printf '%s' "$$" > "$LOCK_DIR/pid"
+  LOCK_HELD=1
+}
+acquire_lock
+
 CONSOLE_PID=""
 DRIVER_PID=""
 SUTS_UP=""
@@ -116,6 +153,7 @@ cleanup() {
     docker compose -p veredictum-e2e-ehrbase \
       -f "$ROOT/docker/e2e-ehrbase.yml" down -v >/dev/null 2>&1 || true
   fi
+  [[ -n "$LOCK_HELD" ]] && release_lock
   return 0
 }
 trap cleanup EXIT
