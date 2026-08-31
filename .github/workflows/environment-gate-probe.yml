@@ -39,11 +39,21 @@ jobs:
           set -euo pipefail
           echo "GITHUB_REF=${GITHUB_REF}"
           echo "the environment admitted this ref and the reviewer released it"
-          # Presence only. A length is not the key, and an empty secret would
-          # otherwise be found by the first real submission instead of here.
-          if [ "${#KEY}" -gt 1000 ]; then
-            echo "REGISTRY_SIGN_KEY is present and of key-like length"
-          else
-            echo "::error::REGISTRY_SIGN_KEY is absent or too short to be an armored secret key. A console record is signed from this environment and nowhere else." >&2
-            exit 1
-          fi
+          # Shape, not size. The first attempt asserted a length over 1000 and
+          # failed on a perfectly good key: an armored ed25519 secret key is
+          # about 996 bytes, because the curve is small. A magic number was
+          # never the right test — the armor header is
+          # (https://www.rfc-editor.org/rfc/rfc4880#section-6.2), and it is
+          # checked without printing anything the log should not carry.
+          case "$KEY" in
+            "-----BEGIN PGP PRIVATE KEY BLOCK-----"*)
+              echo "REGISTRY_SIGN_KEY carries an armored OpenPGP private key" ;;
+            "")
+              echo "::error::REGISTRY_SIGN_KEY is empty or unset in the registry-signing environment. A console record is signed from that environment and nowhere else." >&2
+              exit 1 ;;
+            *)
+              # The length only, never a byte of the value: enough to tell a
+              # truncated or wrongly-pasted secret from an absent one.
+              echo "::error::REGISTRY_SIGN_KEY is set (${#KEY} characters) but does not begin with an OpenPGP private-key armor header. It is not an armored secret key." >&2
+              exit 1 ;;
+          esac
