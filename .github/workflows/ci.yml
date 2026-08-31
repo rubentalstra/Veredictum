@@ -462,6 +462,89 @@ jobs:
           config: .hadolint.yaml
           failure-threshold: warning
 
+  # The image is BUILT, not merely linted. Until now nothing below the release
+  # lane built it, and the measured consequence is on record: `.dockerignore`
+  # excluded `assets/` while `export.rs` `include_str!`s the seal card, so the
+  # from-source target could not compile at all on main and nobody knew for four
+  # months (#379, found in #378 only because a criterion happened to depend on
+  # it). Since #420 the stakes are higher — the image now CARRIES the catalogue,
+  # the vendored oracle and the party declarations, and the hosted instrument
+  # mounts nothing — so "it builds" and "it contains what it must" are the same
+  # gate.
+  #
+  # It runs the engine inside the freshly built image, over the data that image
+  # baked. That is a stronger claim than poking at paths: validate reads the
+  # catalogue and the oracle and reports zero findings, which no missing or
+  # truncated tree can survive.
+  #
+  # NO build cache, deliberately. `load` needs a single platform, because
+  # "loading the build result for multi-platform images is not supported"
+  # (https://docs.docker.com/build/builders/drivers/) — and a GitHub Actions
+  # cache is writable by any pull request run, including a fork's. This lane
+  # publishes nothing, so a poisoned cache could not ship a bad image; what it
+  # could do is hand this guard a false green, and no other lane builds this
+  # target from cold to catch that. A guard that can be talked into passing is
+  # the failure class the lane exists to remove, so it pays the full build. The
+  # `docker` path filter is what keeps that cost off unrelated changes.
+  image-build:
+    name: the image builds and carries its data
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Build the from-source target
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: runtime-from-source
+          push: false
+          # `load` exports type=docker, which is what makes the image reachable
+          # by the assertions below (docker/build-push-action inputs reference).
+          load: true
+          tags: veredictum-ci-image-build:${{ github.sha }}
+      - name: The engine in the image validates the catalogue in the image
+        env:
+          IMAGE: veredictum-ci-image-build:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # The paths are the image's own VEREDICTUM_ROOT and VEREDICTUM_SPECS.
+          # Named explicitly because validate takes them as flags, so a lane
+          # that relied on the environment would pass while proving less.
+          docker run --rm --entrypoint /usr/local/bin/veredictum "$IMAGE" \
+            validate --root /work/artifacts --specs /work/specs/openehr
+      - name: The image declares that it carries the catalogue
+        env:
+          IMAGE: veredictum-ci-image-build:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          carries=$(docker image inspect "$IMAGE" \
+            --format '{{index .Config.Labels "eu.veredictum.image.carries-catalogue"}}')
+          if [ "$carries" != "true" ]; then
+            echo "::error::the image does not declare eu.veredictum.image.carries-catalogue=true, which the hosted deploy requires before it will deploy anything (#420)." >&2
+            exit 1
+          fi
+          # `validate` takes --root and --specs and no party flag, so the run
+          # above proves nothing about /work/party. The image is exported and
+          # read instead: distroless carries no shell, so there is nothing to
+          # exec that could list a directory from inside.
+          cid=$(docker create "$IMAGE")
+          present=$(docker export "$cid" | tar -tf - \
+            | grep -cE '^work/(artifacts|specs/openehr|party)/$' || true)
+          docker rm -f "$cid" >/dev/null
+          if [ "$present" -ne 3 ]; then
+            echo "::error::the image does not carry all three of /work/artifacts, /work/specs/openehr and /work/party (found ${present} of 3). The hosted instrument mounts nothing, so a missing tree there is an instrument with no catalogue, no oracle or no party declarations (#420)." >&2
+            exit 1
+          fi
+          echo "the image declares it carries the catalogue, and all three trees are present"
+
   # ── The Rust tier ───────────────────────────────────────────────────────────
   # rustfmt compiles nothing, so a restored target or registry cache here is
   # pure download time — `cache: false` is deliberate, not an oversight.
@@ -977,6 +1060,7 @@ jobs:
       - guards
       - workflow-audit
       - dockerfile-lint
+      - image-build
       - fmt
       - clippy
       - test
