@@ -128,7 +128,11 @@ pub enum Exception {
     /// Every binding of the case's operations is `unrealized` on this ITS —
     /// not-applicable with the binding's citation.
     Unrealized(String),
-    /// A guard excludes the case on this SUT (citation carried).
+    /// A party- or deployment-declared fact puts the case outside this SUT's
+    /// test scope: an unclaimed capability, an undeclared instance or
+    /// `${ixit:…}` value, a missing terminology, generation-set or
+    /// administrative requirement, or no SMART lane. The case's `guards:`
+    /// prose is read nowhere; the citation is the arm's own.
     Guarded(String),
     /// The case is `draft`/`retired` — never verdict-bearing.
     Status(String),

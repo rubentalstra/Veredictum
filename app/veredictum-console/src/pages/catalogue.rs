@@ -467,7 +467,7 @@ fn case_view(chapter_key: &str, case: CaseDetail) -> impl IntoView + use<> {
                     {fact_list("Verdict-bearing capabilities", case.capabilities)}
                     {fact_list("Exercises (informative coverage)", case.exercises)}
                     {fact_list("Applies (spec-version windows)", case.applies)}
-                    {fact_list("Guards (cited run conditions)", case.guards)}
+                    {fact_list("Guards (cited prose, not selection)", case.guards)}
                     {fact_list("Formats", case.formats)}
                     {fact_list(
                         "Register option",

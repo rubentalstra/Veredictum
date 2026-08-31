@@ -39,7 +39,7 @@ spec_refs:
   - "ITS-REST overview Requests_and_responses §HTTP status codes"
 applies: { rm: ">=1.0.2", its_rest: ">=1.1.0" }   # admin EHR deletion arrived in Release-1.1.0 — ITS-REST overview Amendment_record.md §Release-1.1.0 (SPECITS-80)
 guards:
-  - "ITS-REST Admin API is DEVELOPMENT-stage — docs/admin/Description.md §Status: \"This specification is in the `DEVELOPMENT` state\", and docs/overview/Preface.md §Conformance is \"tbd.\"; guarded until the Admin API stabilises"
+  - "ITS-REST Admin API is DEVELOPMENT-stage — docs/admin/Description.md §Status: \"This specification is in the `DEVELOPMENT` state\", and docs/overview/Preface.md §Conformance is \"tbd.\"; neither sentence exempts the operation semantics the release does state, which is what this row asserts"
   - "admin_ehr_delete_all realizes NO SM operation — I_ADMIN_SERVICE.physical_ehr_delete takes a single `an_ehr_id: UUID [1]` and the I_ADMIN_ARCHIVE list operations archive rather than delete (register AMB-33); the `delete_all` variant anchor is a catalogue naming convention, never an SM claim"
   - "the async `202 Accepted` branch the operation declares — ITS-REST specifications/operations/admin_ehr_delete_all.yaml (\"The server may execute this operation asynchronously (e.g. in batches), in which case returns status `202 Accepted`\") — is a MAY on the SERVICE with no request form behind it, so THIS case cannot require or distinguish it: the binding declares `accepted` as its own kind (the 2026-07-28 schedule release, #544) while `ok_empty` deliberately keeps `alt_status: [202]`, because the emptiness probe below asserts the deletion HAPPENED and must not refute a conformant asynchronous server (register AMB-139)"
 requires:

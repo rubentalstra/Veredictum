@@ -33,8 +33,8 @@ spec_refs:
 applies: { rm: ">=1.0.2" }
 guards:
   - "EXTENSION ROUTE — no openEHR spec governs the /admin/archive/* routes; our own design/extension, declared in vocab/wire_surface.yaml served_extensions and adjudicated by register AMB-33. The row gates the DemographicArchive CAPABILITY verdict only, never ITS-REST wire conformance"
-  - "ITS-REST Admin API is DEVELOPMENT-stage — admin.openapi.yaml carries x-status: DEVELOPMENT (not STABLE); guarded until the Admin API stabilises"
-  - "The relationship this case names must EXIST, so that the refusal is about the id's KIND and not about it being unknown; minting it is precondition state (requires.party_relationship), which drives the /demographic/party_relationship extension route (register AMB-32) — a party serving neither extension family runs neither half"
+  - "ITS-REST Admin API is DEVELOPMENT-stage — specifications/admin.openapi.yaml carries x-status: DEVELOPMENT (not STABLE), so the surface may still change; the release states the operation semantics this row asserts and no released sentence exempts a DEVELOPMENT-state specification from them"
+  - "The relationship this case names must EXIST, so that the refusal is about the id's KIND and not about it being unknown — minting it is precondition state (requires.party_relationship), which drives the /demographic/party_relationship extension route (register AMB-32)"
 # The relationship is PROVISIONED STATE, not a flow step: a case whose subject
 # is `archive_parties` must drive nothing else, or the realization it evidences
 # stops being the one it is about. `requires.party_relationship` mints
