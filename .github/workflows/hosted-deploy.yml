@@ -1,41 +1,22 @@
 # SPDX-FileCopyrightText: Veredictum contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# The ONE owner of hosted-console delivery (#348, #412): console.veredictum.eu,
-# the official conformance instrument (#388).
+# The MANUAL redeploy of console.veredictum.eu, the official conformance
+# instrument (#388). Every step of the deploy lives in
+# `.github/actions/hosted-deploy`, which `release.yml`'s `hosted` job calls too,
+# so a manual redeploy and a release deploy run the identical steps (#449). Read
+# that action for the posture, the one-image ruling (#420) and the deploy
+# mechanics; this file is a trigger, an environment and a call.
 #
-# The instrument runs on a box this repository provisions, because a conformance
-# run is a process that outlives the request that started it. #387 measured what
-# an autoscaling request platform did to that: several instances answered one
-# service, so a poll reached one that never held the run, and an instance with
-# no traffic for five minutes was terminated with the engine child inside it.
-# `deploy/hosted/` is the whole posture — the cloud-init, the compose file, the
-# proxy — and this file is the only thing that applies it.
+# This workflow has no `workflow_call` trigger, and that is the whole point of
+# #449: environment secrets are not available to a job inside a `workflow_call`
+# workflow even when the job names the environment
+# (https://github.com/actions/runner/issues/1490, closed as not planned), so the
+# release pipeline calls the ACTION from an ordinary job of its own rather than
+# calling this workflow.
 #
-# ONE IMAGE, and this lane builds nothing (#420). The release image carries the
-# engine, the console and the data — the catalogue, the vendored oracle, the
-# party declarations — so the box only ever pulls, and what it judges against is
-# the data of a published release rather than of whatever branch last built an
-# overlay. A deploy is a pull and a recreate, and the box holds no checkout of
-# this repository at all.
-#
-# The deploy itself is `rubentalstra/hetzner-deploy-action`, written for this and
-# public because the gap was real: everything on the Marketplace either creates
-# servers, runs self-hosted runners, or ends at `docker compose up -d` and calls
-# that success. It waits for the container's own healthcheck and then fetches the
-# public URL FROM THIS RUNNER, requiring the served engine version — because a
-# bare 200 is not proof, the deployment being replaced answers 200 too.
-#
-# Triggers:
-#   - workflow_call from the release pipeline (release.yml), after the
-#     scan-and-tag leg that applies the image tags. The overlay is
-#     `FROM ghcr.io/rubentalstra/veredictum:latest`, which that leg moves on a
-#     real release tag, so nothing is hand-bumped at a cut. A pre-release moves
-#     no `:latest`, so there is nothing to deploy.
-#   - workflow_dispatch: a manual redeploy.
-#
-# There is deliberately NO push trigger. The posture files travel INSIDE the
-# published image at /app/posture, and the one script the deploy key may run
+# There is deliberately NO push trigger either. The posture files travel INSIDE
+# the published image at /app/posture, and the one script the deploy key may run
 # installs them out of the image it pulled (#423) — so a posture change reaches
 # the box with the release that carries it. A push to `deploy/hosted/**`
 # publishes no image, so a push-triggered run would go green having applied
@@ -43,38 +24,25 @@
 #
 # Provisioning is #403, once: the box, the DNS, and a deploy key restricted to
 # one command, stored in the `hosted` ENVIRONMENT rather than as repository
-# secrets. An empty secret is a hard failure here rather than a skip — the job
-# runs only on the upstream repository, so a missing key is always a
+# secrets. An empty secret is a hard failure in the action rather than a skip —
+# the job runs only on the upstream repository, so a missing key is always a
 # misconfiguration, and a green run must mean a deploy actually happened (the
 # FerroEHR#2755 ruling).
 #
-# A failure here can never redden CI; called from the release pipeline it reddens
-# that pipeline's `announce` leg, which names the recovery.
+# A failure here can never redden CI.
 name: Hosted deploy
 
 on:
-  workflow_call:
-    inputs:
-      expected-version:
-        description: >-
-          The version string the hosted console must serve before the deploy
-          counts as done (`X.Y.Z`, no `v`). Empty means "derive it from the
-          `:latest` image's own version label" — which is what a manual
-          redeploy wants, since it changes no image.
-        required: false
-        type: string
-        default: ""
   workflow_dispatch:
 
 permissions: {}
 
+# One deploy at a time, whichever caller started it: `release.yml`'s `hosted`
+# job names this same group, so a manual redeploy and a release deploy queue
+# behind each other rather than racing for the box.
 concurrency:
   group: hosted-deploy
   cancel-in-progress: false
-
-env:
-  IMAGE: ghcr.io/rubentalstra/veredictum
-  HOSTED_BASE: https://console.veredictum.eu
 
 jobs:
   deploy:
@@ -86,120 +54,24 @@ jobs:
     # The deploy key and the host key are ENVIRONMENT secrets, not repository
     # ones, so they are reachable only from a job that names this environment —
     # and the environment's own protection rules are what stands in front of
-    # them. A caller does not hold them and cannot pass the wrong ones.
+    # them. This job reads them and passes them to the action as inputs, which
+    # is the only way a composite action can receive a secret.
     environment: hosted
-    # Nothing here reads this repository or writes a registry: the checks are
-    # anonymous registry reads, and the deploy is one restricted command over
-    # SSH. The secrets it needs are the environment's, not the token's.
-    permissions: {}
+    # The checkout is all the token is for: the local action resolves against
+    # the runner's workspace. The registry reads inside the action are
+    # anonymous, and the deploy is one restricted command over SSH.
+    permissions:
+      contents: read
     steps:
-      # The needs-edge's guarantee, re-asserted at the point of use (the
-      # FerroEHR#2846 ruling): a release call means `:latest` must ALREADY be
-      # the tag's image, because `:latest` is what the box pulls. A stale tag
-      # fails here, before any deploy — never as a 20-minute blind poll.
-      # Anonymous registry reads: the image is public.
-      - name: The :latest tag is the release image
-        if: inputs.expected-version != ''
-        env:
-          EXPECTED: ${{ inputs.expected-version }}
-        run: |
-          set -euo pipefail
-          tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
-          digest_of() {
-            curl -fsS -o /dev/null -w '%{header_json}' \
-              -H "Authorization: Bearer ${tok}" \
-              -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
-              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/$1" \
-              | sed -nE 's/.*"docker-content-digest":\["([^"]+)"\].*/\1/p'
-          }
-          latest=$(digest_of latest)
-          tagged=$(digest_of "$EXPECTED")
-          if [ -z "$latest" ] || [ -z "$tagged" ] || [ "$latest" != "$tagged" ]; then
-            echo "::error::${IMAGE}:latest (${latest:-unreadable}) is not the ${EXPECTED} image (${tagged:-unreadable}) — the deploy would ship the OLD release; the tag-apply leg must land first." >&2
-            exit 1
-          fi
-          echo "${IMAGE}:latest == ${EXPECTED} (${latest})"
-
-      # The box mounts nothing, so an image without the data at /work would come
-      # up serving a console with no catalogue at all. The release image carries
-      # it and says so with a label, and this refuses to deploy an image that
-      # does not — which is what makes the #420 cutover safe: an older release,
-      # or a rollback to one, fails here instead of on the box.
-      - name: The image carries the catalogue
-        env:
-          REF: ${{ inputs.expected-version || 'latest' }}
-        run: |
-          set -euo pipefail
-          tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
-          idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
-            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
-            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${REF}")
-          child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
-          cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
-            -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
-            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
-          carries=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
-            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
-            | jq -r '.config.Labels["eu.veredictum.image.carries-catalogue"] // empty')
-          if [ "$carries" != "true" ]; then
-            echo "::error::${IMAGE}:${REF} does not declare eu.veredictum.image.carries-catalogue=true, so it carries no catalogue at /work. The box mounts nothing, so deploying it would serve an instrument with no catalogue. Deploy a release built after #420." >&2
-            exit 1
-          fi
-          echo "${IMAGE}:${REF} carries the catalogue"
-
-      # What the console must serve for this deploy to count. A release call is
-      # told the version its tag names; a posture push or a manual redeploy
-      # derives it from the `:latest` image's own version label, anonymously,
-      # because the overlay is FROM that image and so what it declares is
-      # exactly what a successful deploy must serve.
-      #
-      # The console's server-rendered footer carries `engine X.Y.Z`, and
-      # check-console-pin holds that pin to the console version, so the footer
-      # IS the deployed version. A bare 200 is never accepted as proof: the
-      # deployment being replaced answers 200 too (FerroEHR measured that twice,
-      # at 4.0.4 and 4.0.10).
-      - name: What the console must serve
-        id: expect
-        env:
-          EXPECTED: ${{ inputs.expected-version }}
-        run: |
-          set -euo pipefail
-          expected="${EXPECTED:-}"
-          if [ -z "$expected" ]; then
-            tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
-            idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
-              -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
-              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/latest")
-            child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
-            cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
-              -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
-              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
-            expected=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
-              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
-              | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
-            if [ -z "$expected" ]; then
-              echo "::error::could not derive the expected version from :latest's org.opencontainers.image.version label — a verification that cannot decide must not pass (build-image.yml stamps the label, so an unreadable one is a registry or read defect to look at, not a shrug)." >&2
-              exit 1
-            fi
-            echo "expectation derived from :latest — waiting for '${expected}'"
-          fi
-          echo "version=${expected}" >> "$GITHUB_OUTPUT"
-
-      # The deploy, and the proof. The action waits for the container's own
-      # healthcheck, then fetches the public URL from THIS runner and requires
-      # the served engine version — a bare 200 is not proof, because the
-      # deployment being replaced answers 200 too.
-      - name: Deploy to the box and verify it serves the release
-        uses: rubentalstra/hetzner-deploy-action@23e875e1249a2fe2a27107291a638ab40da0172b # v1.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          host: console.veredictum.eu
-          user: deploy
+          persist-credentials: false
+
+      # No expected version: a manual redeploy changes no image, so the action
+      # derives what the console must serve from the `:latest` image's own
+      # version label.
+      - name: Deploy the hosted instrument
+        uses: ./.github/actions/hosted-deploy
+        with:
           ssh-key: ${{ secrets.HOSTED_SSH_KEY }}
           known-hosts: ${{ secrets.HOSTED_KNOWN_HOSTS }}
-          # One restricted command: the key on the box may run the deploy script
-          # and nothing else, so the action issues exactly one command and that
-          # command is the deploy.
-          remote-command: deploy
-          verify-url: ${{ env.HOSTED_BASE }}/
-          verify-contains: engine ${{ steps.expect.outputs.version }}
-          verify-timeout: "600"
