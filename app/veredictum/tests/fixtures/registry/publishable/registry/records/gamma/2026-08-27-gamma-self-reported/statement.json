@@ -1,0 +1,14 @@
+{
+  "product": {
+    "name": "Gamma CDR",
+    "version": "5.2.1",
+    "vendor": "Gamma Integrations",
+    "identifier": "gamma"
+  },
+  "schedule_release": "cnf-2.0-w2",
+  "claims": {
+    "profiles": [
+      "CORE"
+    ]
+  }
+}

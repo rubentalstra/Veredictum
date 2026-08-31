@@ -16,6 +16,12 @@
 //! is [`veredictum::registry::entry_defects`], which the library tests
 //! exercise against seeded defects. What lives here is the half that needs the
 //! committed tree.
+//!
+//! Every assertion over a tree of entries runs over TWO trees: the committed
+//! registry, and a fixture tree that mirrors the repository's own layout. An
+//! entry names every path it stands on relative to the repository root, so a
+//! tree with that shape is scored by exactly the same assertions, and each
+//! one refuses to pass having read nothing.
 
 #![expect(
     clippy::expect_used,
@@ -33,9 +39,9 @@ use sha2::{Digest as _, Sha256};
 
 use veredictum::ixit::{AuthMode, Ixit};
 use veredictum::registry::{
-    ArtifactRole, DeploymentKind, EntryId, EntryKind, Provenance,
+    ArtifactRole, DeploymentKind, EntryDefect, EntryId, EntryKind, Provenance,
     READABLE_REGISTRY_SCHEMA_VERSIONS, READABLE_RULES_VERSIONS, REGISTRY_SCHEMA_VERSION,
-    RULES_VERSION, RegistryEntry, entry_defects,
+    RULES_VERSION, RegistryEntry, Tier, entry_defects,
 };
 
 /// The committed entries tree, relative to the repository root.
@@ -52,19 +58,69 @@ const BENCH_SUBMISSIONS: &str = "benchmarks/submissions";
 /// registry entry stands behind them.
 const BENCH_EXAMPLES: &str = "examples";
 
+/// The fixture tree that gives every assertion below material of its own.
+///
+/// It mirrors the repository's layout — entries, records, topologies and the
+/// benchmark submissions tree — because an entry states every path it stands
+/// on relative to a repository root, so a tree with that shape is scored
+/// without loosening a single assertion. It sits outside `registry/`
+/// deliberately: merging a file there IS publication, and a fixture row on a
+/// public board would be a claim nobody made.
+const FIXTURES: &str = "app/veredictum/tests/fixtures/registry/publishable";
+
+/// The entry documents the gate must REFUSE, each named for its defect.
+///
+/// A refusal cannot live in a tree the assertions above require to be clean,
+/// so it lives here and is read one document at a time.
+const REFUSALS: &str = "app/veredictum/tests/fixtures/registry/refused";
+
+/// How many entries the fixture tree carries.
+const FIXTURE_ENTRIES: usize = 4;
+
+/// How many artifacts those entries pin by digest.
+const FIXTURE_ARTIFACTS: usize = 16;
+
 /// The repository root, from this crate's manifest directory.
 fn repo_root() -> PathBuf {
     Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).to_path_buf()
 }
 
-/// Every JSON file under one repository-relative directory, sorted, as paths
-/// relative to the repository root.
-fn json_files_under(relative: &str) -> Vec<String> {
-    let root = repo_root();
+/// One tree of entries an assertion runs over, and how a failure names it.
+#[derive(Debug)]
+struct Root {
+    /// What a failure message calls this tree.
+    label: &'static str,
+    /// What a repository-relative path resolves against.
+    dir: PathBuf,
+}
+
+/// Every tree the gate assertions score: the committed registry first, then
+/// the fixture tree.
+///
+/// The committed registry carries nothing until the first submission merges,
+/// and an assertion that iterated nothing reads exactly like an assertion that
+/// held. Keeping both trees in every loop means a real entry is scored the
+/// moment one exists, and the logic is exercised until then.
+fn roots() -> Vec<Root> {
+    vec![
+        Root {
+            label: "the committed registry:",
+            dir: repo_root(),
+        },
+        Root {
+            label: "the fixture tree:",
+            dir: repo_root().join(FIXTURES),
+        },
+    ]
+}
+
+/// Every JSON file under one directory of `root`, sorted, as paths relative to
+/// `root` itself.
+fn json_files_under(root: &Path, relative: &str) -> Vec<String> {
     let dir = root.join(relative);
     let mut found = Vec::new();
     if dir.is_dir() {
-        collect(&root, &dir, &mut found);
+        collect(root, &dir, &mut found);
     }
     found.sort();
     found
@@ -87,29 +143,29 @@ fn collect(root: &Path, dir: &Path, found: &mut Vec<String>) {
     }
 }
 
-/// Reads one committed document as JSON.
-fn read_document(relative: &str) -> serde_json::Value {
-    let path = repo_root().join(relative);
+/// Reads one document of `root` as JSON.
+fn read_document(root: &Path, relative: &str) -> serde_json::Value {
+    let path = root.join(relative);
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("{} is unreadable: {e}", path.display()));
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{relative} is not valid JSON: {e}"))
 }
 
-/// Every committed entry, paired with its repository-relative path.
-fn entries() -> Vec<(String, RegistryEntry)> {
-    json_files_under(ENTRIES)
+/// Every entry of one root, paired with its path relative to that root.
+fn entries(root: &Path) -> Vec<(String, RegistryEntry)> {
+    json_files_under(root, ENTRIES)
         .into_iter()
         .map(|relative| {
-            let parsed: RegistryEntry = serde_json::from_value(read_document(&relative))
+            let parsed: RegistryEntry = serde_json::from_value(read_document(root, &relative))
                 .unwrap_or_else(|e| panic!("{relative} does not parse as a registry entry: {e}"));
             (relative, parsed)
         })
         .collect()
 }
 
-/// The lowercase-hex SHA-256 of one committed file.
-fn digest_of(relative: &str) -> String {
-    let path = repo_root().join(relative);
+/// The lowercase-hex SHA-256 of one file under `root`.
+fn digest_of(root: &Path, relative: &str) -> String {
+    let path = root.join(relative);
     let bytes = std::fs::read(&path)
         .unwrap_or_else(|e| panic!("{relative} is pinned by an entry and unreadable: {e}"));
     Sha256::digest(&bytes)
@@ -141,49 +197,72 @@ fn violations(validator: &jsonschema::Validator, document: &serde_json::Value) -
 #[test]
 fn every_entry_validates_against_the_published_schema() {
     let validator = validator_for("registry-entry.schema.json");
-    for relative in json_files_under(ENTRIES) {
-        let document = read_document(&relative);
-        let found = violations(&validator, &document);
-        assert!(
-            found.is_empty(),
-            "{relative} violates the published registry-entry schema: {}",
-            found.join("; ")
-        );
-        let parsed: Result<RegistryEntry, _> = serde_json::from_value(document);
-        assert!(
-            parsed.is_ok(),
-            "{relative} does not parse as a registry entry: {:?}",
-            parsed.err()
-        );
+    let mut scored = 0_usize;
+    for root in roots() {
+        for relative in json_files_under(&root.dir, ENTRIES) {
+            let document = read_document(&root.dir, &relative);
+            let found = violations(&validator, &document);
+            assert!(
+                found.is_empty(),
+                "{} {relative} violates the published registry-entry schema: {}",
+                root.label,
+                found.join("; ")
+            );
+            let parsed: Result<RegistryEntry, _> = serde_json::from_value(document);
+            assert!(
+                parsed.is_ok(),
+                "{} {relative} does not parse as a registry entry: {:?}",
+                root.label,
+                parsed.err()
+            );
+            scored += 1;
+        }
     }
+    assert!(
+        scored >= FIXTURE_ENTRIES,
+        "the published schema was applied to {scored} entries and the fixture tree carries \
+         {FIXTURE_ENTRIES}, so this assertion read less than the material committed for it"
+    );
 }
 
 #[test]
 fn every_entry_is_publishable_by_the_rules_it_declares() {
-    for (relative, entry) in entries() {
-        let defects = entry_defects(&entry);
-        assert!(
-            defects.is_empty(),
-            "{relative} falls short of the published submission rules: {}",
-            defects
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join("; ")
-        );
-        assert!(
-            READABLE_REGISTRY_SCHEMA_VERSIONS.contains(&entry.registry_schema_version.as_str()),
-            "{relative} declares a registry format this release cannot read: {:?} is outside \
-             {READABLE_REGISTRY_SCHEMA_VERSIONS:?}",
-            entry.registry_schema_version
-        );
-        assert!(
-            READABLE_RULES_VERSIONS.contains(&entry.rules_version.as_str()),
-            "{relative} declares rules this release does not accept: {:?} is outside \
-             {READABLE_RULES_VERSIONS:?}",
-            entry.rules_version
-        );
+    let mut scored = 0_usize;
+    for root in roots() {
+        for (relative, entry) in entries(&root.dir) {
+            let defects = entry_defects(&entry);
+            assert!(
+                defects.is_empty(),
+                "{} {relative} falls short of the published submission rules: {}",
+                root.label,
+                defects
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            );
+            assert!(
+                READABLE_REGISTRY_SCHEMA_VERSIONS.contains(&entry.registry_schema_version.as_str()),
+                "{} {relative} declares a registry format this release cannot read: {:?} is \
+                 outside {READABLE_REGISTRY_SCHEMA_VERSIONS:?}",
+                root.label,
+                entry.registry_schema_version
+            );
+            assert!(
+                READABLE_RULES_VERSIONS.contains(&entry.rules_version.as_str()),
+                "{} {relative} declares rules this release does not accept: {:?} is outside \
+                 {READABLE_RULES_VERSIONS:?}",
+                root.label,
+                entry.rules_version
+            );
+            scored += 1;
+        }
     }
+    assert!(
+        scored >= FIXTURE_ENTRIES,
+        "the submission rules were applied to {scored} entries and the fixture tree carries \
+         {FIXTURE_ENTRIES}, so this assertion read less than the material committed for it"
+    );
 }
 
 /// A merged entry stays publishable at the version it was accepted under. The
@@ -242,63 +321,107 @@ fn the_published_schema_refuses_a_version_outside_the_readable_set() {
 
 #[test]
 fn every_entry_sits_at_the_path_its_own_fields_name() {
-    for (relative, entry) in entries() {
-        assert_eq!(
-            relative,
-            entry.expected_path(),
-            "an entry is filed under its kind, its system and its id, so a reader finds it \
-             without an index"
-        );
+    let mut scored = 0_usize;
+    for root in roots() {
+        for (relative, entry) in entries(&root.dir) {
+            assert_eq!(
+                relative,
+                entry.expected_path(),
+                "{} an entry is filed under its kind, its system and its id, so a reader finds \
+                 it without an index",
+                root.label
+            );
+            scored += 1;
+        }
     }
+    assert!(
+        scored >= FIXTURE_ENTRIES,
+        "{scored} entry paths were checked and the fixture tree carries {FIXTURE_ENTRIES}, so \
+         this assertion read less than the material committed for it"
+    );
 }
 
 #[test]
 fn entry_ids_are_unique_across_the_registry() {
-    let mut seen: BTreeMap<String, String> = BTreeMap::new();
-    for (relative, entry) in entries() {
-        let id = entry.entry_id.as_str().to_owned();
-        if let Some(first) = seen.insert(id.clone(), relative.clone()) {
-            panic!(
-                "{relative} reuses the entry id {id}, which {first} already carries; \
-                 supersede-by-reference resolves ids, so a repeat makes an edge ambiguous"
-            );
+    let mut scored = 0_usize;
+    for root in roots() {
+        let mut seen: BTreeMap<String, String> = BTreeMap::new();
+        for (relative, entry) in entries(&root.dir) {
+            let id = entry.entry_id.as_str().to_owned();
+            if let Some(first) = seen.insert(id.clone(), relative.clone()) {
+                panic!(
+                    "{} {relative} reuses the entry id {id}, which {first} already carries; \
+                     supersede-by-reference resolves ids, so a repeat makes an edge ambiguous",
+                    root.label
+                );
+            }
+            scored += 1;
         }
     }
+    assert!(
+        scored >= FIXTURE_ENTRIES,
+        "{scored} entry ids were compared and the fixture tree carries {FIXTURE_ENTRIES}, so \
+         this assertion read less than the material committed for it"
+    );
 }
 
 #[test]
 fn every_artifact_is_committed_at_the_digest_the_entry_pins() {
-    for (relative, entry) in entries() {
-        for artifact in &entry.artifacts {
-            let path = repo_root().join(&artifact.path);
-            assert!(
-                path.is_file(),
-                "{relative} pins {} as its {} artifact, and nothing is committed there",
-                artifact.path,
-                artifact.role
-            );
-            assert_eq!(
-                digest_of(&artifact.path),
-                artifact.sha256.as_str(),
-                "{relative} pins {} at a digest its committed bytes do not produce",
-                artifact.path
-            );
+    let mut scored = 0_usize;
+    for root in roots() {
+        for (relative, entry) in entries(&root.dir) {
+            for artifact in &entry.artifacts {
+                let path = root.dir.join(&artifact.path);
+                assert!(
+                    path.is_file(),
+                    "{} {relative} pins {} as its {} artifact, and nothing is committed there",
+                    root.label,
+                    artifact.path,
+                    artifact.role
+                );
+                assert_eq!(
+                    digest_of(&root.dir, &artifact.path),
+                    artifact.sha256.as_str(),
+                    "{} {relative} pins {} at a digest its committed bytes do not produce",
+                    root.label,
+                    artifact.path
+                );
+                scored += 1;
+            }
         }
     }
+    assert!(
+        scored >= FIXTURE_ARTIFACTS,
+        "{scored} pinned artifacts were re-digested and the fixture entries pin \
+         {FIXTURE_ARTIFACTS}, so this assertion read less than the material committed for it"
+    );
 }
 
 #[test]
 fn every_superseded_id_is_an_entry_the_registry_carries() {
-    let published: Vec<EntryId> = entries().into_iter().map(|(_, e)| e.entry_id).collect();
-    for (relative, entry) in entries() {
-        for superseded in &entry.supersedes {
-            assert!(
-                published.contains(superseded),
-                "{relative} supersedes {superseded}, which the registry does not carry; a \
-                 forward pointer to nothing leaves the replaced claim unfindable"
-            );
+    let mut scored = 0_usize;
+    for root in roots() {
+        let published: Vec<EntryId> = entries(&root.dir)
+            .into_iter()
+            .map(|(_, e)| e.entry_id)
+            .collect();
+        for (relative, entry) in entries(&root.dir) {
+            for superseded in &entry.supersedes {
+                assert!(
+                    published.contains(superseded),
+                    "{} {relative} supersedes {superseded}, which the registry does not carry; a \
+                     forward pointer to nothing leaves the replaced claim unfindable",
+                    root.label
+                );
+                scored += 1;
+            }
         }
     }
+    assert_ne!(
+        scored, 0,
+        "no supersede edge was resolved at all, so this assertion proved nothing; the fixture \
+         tree carries one entry that replaces another exactly so it cannot"
+    );
 }
 
 /// The bench board reads its numbers from the submissions tree and its tier
@@ -307,82 +430,314 @@ fn every_superseded_id_is_an_entry_the_registry_carries() {
 /// record nobody committed publishes a row with no evidence.
 #[test]
 fn every_published_bench_record_is_paired_with_exactly_one_entry() {
-    let records: Vec<String> = json_files_under(BENCH_SUBMISSIONS)
-        .into_iter()
-        .filter(|path| !path.starts_with(&format!("{BENCH_SUBMISSIONS}/{BENCH_EXAMPLES}/")))
-        .collect();
-    let mut pinned: BTreeMap<String, String> = BTreeMap::new();
-    for (relative, entry) in entries() {
-        if entry.kind() != EntryKind::Bench {
-            continue;
+    let mut scored = 0_usize;
+    for root in roots() {
+        let records: Vec<String> = json_files_under(&root.dir, BENCH_SUBMISSIONS)
+            .into_iter()
+            .filter(|path| !path.starts_with(&format!("{BENCH_SUBMISSIONS}/{BENCH_EXAMPLES}/")))
+            .collect();
+        let mut pinned: BTreeMap<String, String> = BTreeMap::new();
+        for (relative, entry) in entries(&root.dir) {
+            if entry.kind() != EntryKind::Bench {
+                continue;
+            }
+            let artifact = entry
+                .artifact(ArtifactRole::BenchResult)
+                .unwrap_or_else(|| panic!("{relative} is a bench entry with no bench record"));
+            if let Some(first) = pinned.insert(artifact.path.clone(), relative.clone()) {
+                panic!(
+                    "{} {relative} and {first} both publish {}; one record is one claim",
+                    root.label, artifact.path
+                );
+            }
         }
-        let artifact = entry
-            .artifact(ArtifactRole::BenchResult)
-            .unwrap_or_else(|| panic!("{relative} is a bench entry with no bench record"));
-        if let Some(first) = pinned.insert(artifact.path.clone(), relative.clone()) {
-            panic!(
-                "{relative} and {first} both publish {}; one record is one claim",
-                artifact.path
+        for record in &records {
+            assert!(
+                pinned.contains_key(record),
+                "{} {record} is committed as a board row and no registry entry stands behind it",
+                root.label
             );
         }
+        for (record, relative) in &pinned {
+            assert!(
+                records.contains(record),
+                "{} {relative} publishes {record}, which is not committed as a board row",
+                root.label
+            );
+            scored += 1;
+        }
     }
-    for record in &records {
-        assert!(
-            pinned.contains_key(record),
-            "{record} is committed as a board row and no registry entry stands behind it"
-        );
-    }
-    for (record, relative) in &pinned {
-        assert!(
-            records.contains(record),
-            "{relative} publishes {record}, which is not committed as a board row"
-        );
-    }
+    assert_ne!(
+        scored, 0,
+        "no bench record was paired at all, so this assertion proved nothing in either \
+         direction; the fixture tree carries one record and the entry that publishes it"
+    );
 }
 
 /// A reproduced entry is produced here, so the deployment it names has to be
 /// one this repository composes from its own recipe.
 #[test]
 fn every_reproduced_entry_names_a_committed_topology() {
-    let declared: Vec<String> = topologies()
-        .into_iter()
-        .map(|(_, document)| {
-            document
-                .get("id")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned()
-        })
-        .collect();
-    for (relative, entry) in entries() {
-        if !matches!(entry.provenance, Provenance::Reproduced { .. }) {
-            continue;
+    let mut scored = 0_usize;
+    for root in roots() {
+        let declared: Vec<String> = topologies(&root.dir)
+            .into_iter()
+            .map(|(_, document)| {
+                document
+                    .get("id")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned()
+            })
+            .collect();
+        for (relative, entry) in entries(&root.dir) {
+            if !matches!(entry.provenance, Provenance::Reproduced { .. }) {
+                continue;
+            }
+            assert_eq!(
+                entry.subject.deployment.kind,
+                DeploymentKind::ReproducibleTopology,
+                "{} {relative} claims the reproduced tier over a deployment the lane cannot \
+                 compose",
+                root.label
+            );
+            let named = entry
+                .subject
+                .deployment
+                .topology
+                .as_deref()
+                .unwrap_or_default();
+            assert!(
+                declared.iter().any(|id| id == named),
+                "{} {relative} names the topology {named:?}, which no committed declaration \
+                 carries",
+                root.label
+            );
+            scored += 1;
         }
-        assert_eq!(
-            entry.subject.deployment.kind,
-            DeploymentKind::ReproducibleTopology,
-            "{relative} claims the reproduced tier over a deployment the lane cannot compose"
-        );
-        let named = entry
-            .subject
-            .deployment
-            .topology
-            .as_deref()
+    }
+    assert_ne!(
+        scored, 0,
+        "no reproduced entry was resolved against a topology at all, so this assertion proved \
+         nothing; the fixture tree carries one reproduced entry over a declared topology"
+    );
+}
+
+/// The fixture tree is what stops every assertion above from passing having
+/// read nothing, so what it carries is asserted here rather than assumed: one
+/// entry per tier, both entry kinds, the supersede edge, and the artifact
+/// count the digest assertion holds itself to.
+#[test]
+fn the_fixture_tree_carries_one_entry_per_tier() {
+    let fixtures = repo_root().join(FIXTURES);
+    let committed = entries(&fixtures);
+    assert_eq!(
+        committed.len(),
+        FIXTURE_ENTRIES,
+        "the assertions above hold themselves to {FIXTURE_ENTRIES} fixture entries"
+    );
+
+    let mut tiers: Vec<Tier> = committed.iter().map(|(_, entry)| entry.tier()).collect();
+    tiers.sort_unstable();
+    tiers.dedup();
+    assert_eq!(
+        tiers,
+        Tier::ALL.to_vec(),
+        "the tier is the discriminant of the provenance block and each variant requires \
+         different evidence, so a tier with no fixture is a third of the gate nothing scores"
+    );
+
+    let mut kinds: Vec<EntryKind> = committed.iter().map(|(_, entry)| entry.kind()).collect();
+    kinds.sort_unstable();
+    kinds.dedup();
+    assert_eq!(
+        kinds,
+        EntryKind::ALL.to_vec(),
+        "the two boards are separate surfaces, and the bench pairing assertion has nothing to \
+         pair without a bench entry"
+    );
+
+    let pinned: usize = committed
+        .iter()
+        .map(|(_, entry)| entry.artifacts.len())
+        .sum();
+    assert_eq!(
+        pinned, FIXTURE_ARTIFACTS,
+        "the digest assertion holds itself to {FIXTURE_ARTIFACTS} pinned artifacts"
+    );
+
+    let edges: usize = committed
+        .iter()
+        .map(|(_, entry)| entry.supersedes.len())
+        .sum();
+    assert_ne!(
+        edges, 0,
+        "the supersede assertion resolves nothing unless one fixture entry replaces another"
+    );
+}
+
+/// The published schema one record document is held to, by its file name.
+///
+/// A closed vocabulary: a name this match does not carry aborts the gate,
+/// because a document nobody validates is a fixture that can drift into
+/// nonsense while every assertion above stays green.
+fn record_schema(name: &str) -> Option<&'static str> {
+    match name {
+        "results.json" => Some("results.schema.json"),
+        "transcript.json" => Some("run-transcript.schema.json"),
+        "ixit.json" => Some("ixit.schema.json"),
+        "statement.json" => Some("statement.schema.json"),
+        // NOTE: no verdicts schema is published under `schemas/`, so the
+        // verdicts document is the one record file with nothing to hold it to.
+        "verdicts.json" => None,
+        other => panic!("{other} is a record document no published schema is named for"),
+    }
+}
+
+/// The evidence a fixture entry pins is a real instance of its own published
+/// schema, so the tree the assertions above score cannot drift into documents
+/// that only look like a record.
+#[test]
+fn every_fixture_record_document_matches_its_published_schema() {
+    let fixtures = repo_root().join(FIXTURES);
+    let mut scored = 0_usize;
+    for relative in json_files_under(&fixtures, "registry/records") {
+        let name = Path::new(&relative)
+            .file_name()
+            .and_then(|name| name.to_str())
             .unwrap_or_default();
+        let Some(schema_file) = record_schema(name) else {
+            continue;
+        };
+        let found = violations(
+            &validator_for(schema_file),
+            &read_document(&fixtures, &relative),
+        );
         assert!(
-            declared.iter().any(|id| id == named),
-            "{relative} names the topology {named:?}, which no committed declaration carries"
+            found.is_empty(),
+            "{relative} violates {schema_file}: {}",
+            found.join("; ")
+        );
+        scored += 1;
+    }
+    for relative in json_files_under(&fixtures, BENCH_SUBMISSIONS) {
+        let found = violations(
+            &validator_for("bench-result.schema.json"),
+            &read_document(&fixtures, &relative),
+        );
+        assert!(
+            found.is_empty(),
+            "{relative} violates the published bench-result schema: {}",
+            found.join("; ")
+        );
+        scored += 1;
+    }
+    assert_ne!(
+        scored, 0,
+        "no fixture record document was validated at all, so this assertion proved nothing"
+    );
+}
+
+/// Whether the published schema refuses a document as well as the gate does.
+///
+/// The two readers overlap without being the same reader: the schema judges
+/// one document's shape, and the gate also judges what its fields say about
+/// each other. Each refusal fixture declares which of the two catches it, so
+/// neither can quietly stop catching it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SchemaVerdict {
+    /// The published schema refuses the document on its own.
+    Refuses,
+    /// The schema admits it, because the rule it breaks is a relation between
+    /// fields the published schema does not express.
+    Admits,
+}
+
+/// Every refusal fixture, as the one defect the gate must report for it and
+/// the verdict the published schema reaches on the same bytes.
+fn refusals() -> Vec<(&'static str, EntryDefect, SchemaVerdict)> {
+    vec![
+        (
+            "blank-conflict-of-interest.json",
+            EntryDefect::EmptyField {
+                field: "disclosure.conflict_of_interest",
+            },
+            SchemaVerdict::Refuses,
+        ),
+        (
+            "unreadable-format-version.json",
+            EntryDefect::SchemaVersion {
+                declared: String::from("0.9.0"),
+            },
+            SchemaVerdict::Refuses,
+        ),
+        (
+            "signature-nothing-pins.json",
+            EntryDefect::UndeclaredSignature {
+                path: String::from(
+                    "registry/records/gamma/2026-08-27-gamma-self-reported/verdicts.json.asc",
+                ),
+            },
+            SchemaVerdict::Admits,
+        ),
+        (
+            "reproduced-over-a-local-build.json",
+            EntryDefect::UnreproducibleDeployment {
+                kind: DeploymentKind::LocalBuild,
+            },
+            SchemaVerdict::Admits,
+        ),
+    ]
+}
+
+/// The gate says no as well as yes, and it says no for the reason the fixture
+/// was authored for: the defect is compared by kind, so rewording a diagnostic
+/// cannot turn a refusal into a pass.
+#[test]
+fn every_refusal_fixture_is_refused_with_the_defect_it_carries() {
+    let root = repo_root();
+    let validator = validator_for("registry-entry.schema.json");
+    let authored = refusals();
+    assert_eq!(
+        json_files_under(&root, REFUSALS).len(),
+        authored.len(),
+        "every document under {REFUSALS} names the defect it was authored for, so a fixture with \
+         no expectation is a refusal nothing checks"
+    );
+    for (file, expected, verdict) in authored {
+        let relative = format!("{REFUSALS}/{file}");
+        let document = read_document(&root, &relative);
+        let found = violations(&validator, &document);
+        match verdict {
+            SchemaVerdict::Refuses => assert_ne!(
+                found.len(),
+                0,
+                "{file} must also violate the published registry-entry schema"
+            ),
+            SchemaVerdict::Admits => assert_eq!(
+                found,
+                Vec::<String>::new(),
+                "{file} is refused by the gate alone, and the schema now refuses it too: say so \
+                 rather than leaving the two readers disagreeing about which one caught it"
+            ),
+        }
+        let entry: RegistryEntry = serde_json::from_value(document)
+            .unwrap_or_else(|e| panic!("{relative} does not parse as a registry entry: {e}"));
+        assert_eq!(
+            entry_defects(&entry),
+            vec![expected],
+            "{file} is authored to carry exactly one defect"
         );
     }
 }
 
-/// Every committed topology declaration, paired with its path.
-fn topologies() -> Vec<(String, serde_json::Value)> {
-    json_files_under(TOPOLOGIES)
+/// Every topology declaration under one root, paired with its path.
+fn topologies(root: &Path) -> Vec<(String, serde_json::Value)> {
+    json_files_under(root, TOPOLOGIES)
         .into_iter()
         .filter(|path| path.ends_with("/topology.json"))
         .map(|relative| {
-            let document = read_document(&relative);
+            let document = read_document(root, &relative);
             (relative, document)
         })
         .collect()
@@ -402,65 +757,78 @@ fn field<'a>(document: &'a serde_json::Value, name: &str) -> Option<&'a str> {
 #[test]
 fn every_topology_declares_a_deployment_the_lane_can_compose() {
     let validator = validator_for("registry-topology.schema.json");
-    for (relative, document) in topologies() {
-        let found = violations(&validator, &document);
-        assert!(
-            found.is_empty(),
-            "{relative} violates the published topology schema: {}",
-            found.join("; ")
-        );
-        let id = field(&document, "id").unwrap_or_default();
-        assert_eq!(
-            relative,
-            format!("{TOPOLOGIES}/{id}/topology.json"),
-            "a topology is filed under its own id"
-        );
-        for named in ["compose_file", "ixit", "statement"] {
-            if let Some(path) = field(&document, named) {
-                assert!(
-                    repo_root().join(path).is_file(),
-                    "{relative} names {path} as its {named}, and nothing is committed there"
-                );
-            }
-        }
-
-        let ixit_path = field(&document, "ixit").expect("the schema makes the ixit mandatory");
-        let ixit: Ixit = serde_json::from_value(read_document(ixit_path))
-            .unwrap_or_else(|e| panic!("{ixit_path} does not parse as an ixit: {e}"));
-        let base_url = field(&document, "base_url").expect("the schema makes base_url mandatory");
-        let Some((_, sut)) = ixit
-            .instances
-            .iter()
-            .find(|(name, _)| name.as_str() == "sut")
-        else {
-            panic!("{ixit_path} declares no `sut` instance")
-        };
-        assert_eq!(
-            sut.base_url, base_url,
-            "{relative} composes {base_url} and its ixit drives {}",
-            sut.base_url
-        );
-
-        let credentials = document
-            .get("credentials")
-            .and_then(serde_json::Value::as_object)
-            .expect("the schema makes credentials mandatory");
-        for (name, instance) in &ixit.instances {
-            if let AuthMode::Basic {
-                user_env,
-                password_env,
-            } = &instance.auth
-            {
-                for variable in [user_env, password_env] {
+    let mut scored = 0_usize;
+    for root in roots() {
+        for (relative, document) in topologies(&root.dir) {
+            let found = violations(&validator, &document);
+            assert!(
+                found.is_empty(),
+                "{} {relative} violates the published topology schema: {}",
+                root.label,
+                found.join("; ")
+            );
+            let id = field(&document, "id").unwrap_or_default();
+            assert_eq!(
+                relative,
+                format!("{TOPOLOGIES}/{id}/topology.json"),
+                "{} a topology is filed under its own id",
+                root.label
+            );
+            for named in ["compose_file", "ixit", "statement"] {
+                if let Some(path) = field(&document, named) {
                     assert!(
-                        credentials.contains_key(variable),
-                        "{relative} declares no {variable} for the `{name}` instance, so the \
-                         reproduction lane would drive it with nothing"
+                        root.dir.join(path).is_file(),
+                        "{} {relative} names {path} as its {named}, and nothing is committed there",
+                        root.label
                     );
                 }
             }
+
+            let ixit_path = field(&document, "ixit").expect("the schema makes the ixit mandatory");
+            let ixit: Ixit = serde_json::from_value(read_document(&root.dir, ixit_path))
+                .unwrap_or_else(|e| panic!("{ixit_path} does not parse as an ixit: {e}"));
+            let base_url =
+                field(&document, "base_url").expect("the schema makes base_url mandatory");
+            let Some((_, sut)) = ixit
+                .instances
+                .iter()
+                .find(|(name, _)| name.as_str() == "sut")
+            else {
+                panic!("{ixit_path} declares no `sut` instance")
+            };
+            assert_eq!(
+                sut.base_url, base_url,
+                "{} {relative} composes {base_url} and its ixit drives {}",
+                root.label, sut.base_url
+            );
+
+            let credentials = document
+                .get("credentials")
+                .and_then(serde_json::Value::as_object)
+                .expect("the schema makes credentials mandatory");
+            for (name, instance) in &ixit.instances {
+                if let AuthMode::Basic {
+                    user_env,
+                    password_env,
+                } = &instance.auth
+                {
+                    for variable in [user_env, password_env] {
+                        assert!(
+                            credentials.contains_key(variable),
+                            "{} {relative} declares no {variable} for the `{name}` instance, so \
+                             the reproduction lane would drive it with nothing",
+                            root.label
+                        );
+                    }
+                }
+            }
+            scored += 1;
         }
     }
+    assert_ne!(
+        scored, 0,
+        "no topology declaration was read at all, so this assertion proved nothing"
+    );
 }
 
 /// The renderer under test, and the tree it reads.

@@ -1,0 +1,16 @@
+{
+  "id": "beta-topology",
+  "display_name": "Beta CDR",
+  "compose_from": {
+    "repository": "beta-health/beta",
+    "path": "docker-compose.yml"
+  },
+  "ixit": "registry/topologies/beta-topology/ixit.json",
+  "base_url": "http://127.0.0.1:8081/beta/rest/openehr/v1",
+  "ready_url": "http://127.0.0.1:8081/beta/rest/openehr/v1/definition/template/adl1.4",
+  "credentials": {
+    "SUT_USER": "beta",
+    "SUT_PASS": "beta"
+  },
+  "provenance": "A fixture topology. The compose document is named by repository and path, so the reproduction lane would fetch it at run time, and the Basic-auth pair is what the declaration exports into the environment the ixit's auth modes reference."
+}

@@ -1,0 +1,844 @@
+{
+  "baselines": [
+    {
+      "base_url": "http://127.0.0.1:18091/ehrbase/rest/openehr/v1",
+      "cdr": "ehrbase",
+      "cross": {
+        "mixed": {
+          "operations": {
+            "create_composition": {
+              "p50_us": {
+                "iqr": 0.0,
+                "median": 13007.0
+              },
+              "p75_us": {
+                "iqr": 0.0,
+                "median": 19503.0
+              },
+              "p90_us": {
+                "iqr": 0.0,
+                "median": 23407.0
+              },
+              "p999_us": {
+                "iqr": 0.0,
+                "median": 26015.0
+              },
+              "p99_us": {
+                "iqr": 0.0,
+                "median": 25743.0
+              },
+              "repetitions": 3,
+              "throughput_ops_s": {
+                "iqr": 0.0,
+                "median": 10.0
+              }
+            },
+            "get_ehr": {
+              "p50_us": {
+                "iqr": 0.0,
+                "median": 2701.0
+              },
+              "p75_us": {
+                "iqr": 0.0,
+                "median": 4051.0
+              },
+              "p90_us": {
+                "iqr": 0.0,
+                "median": 4863.0
+              },
+              "p999_us": {
+                "iqr": 0.0,
+                "median": 5403.0
+              },
+              "p99_us": {
+                "iqr": 0.0,
+                "median": 5347.0
+              },
+              "repetitions": 3,
+              "throughput_ops_s": {
+                "iqr": 0.0,
+                "median": 16.666666666666668
+              }
+            }
+          },
+          "regime": "open-loop"
+        }
+      },
+      "display_name": "EHRbase",
+      "finished_at": "2026-08-28T09:24:00Z",
+      "images": {
+        "database": "docker.io/library/postgres@sha256:0000000000000000000000000000000000000000000000000000000000000001",
+        "server": "docker.io/ehrbase/ehrbase@sha256:0000000000000000000000000000000000000000000000000000000000000002"
+      },
+      "posture": {
+        "items": [
+          {
+            "assurance": "declared-only",
+            "declared": "off",
+            "item": "audit",
+            "readings": [
+              {
+                "bracket": "before",
+                "evidence": "released ITS-REST defines no read operation for an audit trail",
+                "observed": "(not observable)",
+                "outcome": "not-observable"
+              },
+              {
+                "bracket": "after",
+                "evidence": "released ITS-REST defines no read operation for an audit trail",
+                "observed": "(not observable)",
+                "outcome": "not-observable"
+              }
+            ]
+          },
+          {
+            "assurance": "verified",
+            "declared": "none",
+            "item": "version_signing",
+            "readings": [
+              {
+                "bracket": "before",
+                "evidence": "three versions committed by this run read back with no signature attribute",
+                "observed": "none",
+                "outcome": "confirmed"
+              },
+              {
+                "bracket": "after",
+                "evidence": "three versions committed by this run read back with no signature attribute",
+                "observed": "none",
+                "outcome": "confirmed"
+              }
+            ]
+          },
+          {
+            "assurance": "verified",
+            "declared": "template",
+            "item": "commit_validation",
+            "readings": [
+              {
+                "bracket": "before",
+                "evidence": "the pack's invalid twin was refused 422 inside the measured window",
+                "observed": "template",
+                "outcome": "confirmed"
+              },
+              {
+                "bracket": "after",
+                "evidence": "the pack's invalid twin was refused 422 inside the measured window",
+                "observed": "template",
+                "outcome": "confirmed"
+              }
+            ]
+          },
+          {
+            "assurance": "verified",
+            "declared": "basic",
+            "item": "authn",
+            "readings": [
+              {
+                "bracket": "before",
+                "evidence": "one uncredentialed read was refused 401",
+                "observed": "basic",
+                "outcome": "confirmed"
+              },
+              {
+                "bracket": "after",
+                "evidence": "one uncredentialed read was refused 401",
+                "observed": "basic",
+                "outcome": "confirmed"
+              }
+            ]
+          },
+          {
+            "assurance": "verified",
+            "declared": "off",
+            "item": "tls",
+            "readings": [
+              {
+                "bracket": "before",
+                "evidence": "the recorded base URL names the http scheme",
+                "observed": "off",
+                "outcome": "confirmed"
+              },
+              {
+                "bracket": "after",
+                "evidence": "the recorded base URL names the http scheme",
+                "observed": "off",
+                "outcome": "confirmed"
+              }
+            ]
+          },
+          {
+            "assurance": "verified",
+            "declared": "off",
+            "item": "compression",
+            "readings": [
+              {
+                "bracket": "before",
+                "evidence": "one read stating Accept-Encoding came back with no Content-Encoding",
+                "observed": "off",
+                "outcome": "confirmed"
+              },
+              {
+                "bracket": "after",
+                "evidence": "one read stating Accept-Encoding came back with no Content-Encoding",
+                "observed": "off",
+                "outcome": "confirmed"
+              }
+            ]
+          },
+          {
+            "assurance": "declared-only",
+            "declared": "single",
+            "item": "tenancy",
+            "readings": [
+              {
+                "bracket": "before",
+                "evidence": "released ITS-REST defines no read operation for tenancy",
+                "observed": "(not observable)",
+                "outcome": "not-observable"
+              },
+              {
+                "bracket": "after",
+                "evidence": "released ITS-REST defines no read operation for tenancy",
+                "observed": "(not observable)",
+                "outcome": "not-observable"
+              }
+            ]
+          }
+        ],
+        "profile": "minimal",
+        "summary": "The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant."
+      },
+      "recipe": {
+        "file": "docker-compose.yml",
+        "git_ref": "v2.35.1",
+        "repository": "https://github.com/ehrbase/ehrbase"
+      },
+      "repetitions": [
+        {
+          "phases": {
+            "mixed": {
+              "dispatched_measured_arrivals": 1600,
+              "duration_s": 60,
+              "generator_bound": false,
+              "offered_load_sustained_per_s": 26.666666666666668,
+              "operations": {
+                "create_composition": {
+                  "count": 600,
+                  "errors": 0,
+                  "errors_by_class": {},
+                  "hdr_v2_base64": "HISTEwAAAaAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAAIMCBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBuEBBn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bl8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8G",
+                  "max_us": 26015,
+                  "p50_us": 13007,
+                  "p75_us": 19503,
+                  "p90_us": 23407,
+                  "p999_us": 26015,
+                  "p99_us": 25743,
+                  "throughput_ops_s": 10.0
+                },
+                "get_ehr": {
+                  "count": 1000,
+                  "errors": 0,
+                  "errors_by_class": {},
+                  "hdr_v2_base64": "HISTEwAAAZAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAADUKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCi8KFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKFQoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwo=",
+                  "max_us": 5403,
+                  "p50_us": 2701,
+                  "p75_us": 4051,
+                  "p90_us": 4863,
+                  "p999_us": 5403,
+                  "p99_us": 5347,
+                  "throughput_ops_s": 16.666666666666668
+                }
+              },
+              "planned_measured_arrivals": 1600,
+              "rate_per_s": 26.666666666666668,
+              "regime": "open-loop",
+              "warmup_arrivals": 267,
+              "warmup_s": 10
+            }
+          },
+          "repetition": 1
+        },
+        {
+          "phases": {
+            "mixed": {
+              "dispatched_measured_arrivals": 1600,
+              "duration_s": 60,
+              "generator_bound": false,
+              "offered_load_sustained_per_s": 26.666666666666668,
+              "operations": {
+                "create_composition": {
+                  "count": 600,
+                  "errors": 0,
+                  "errors_by_class": {},
+                  "hdr_v2_base64": "HISTEwAAAaAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAAIMCBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBuEBBn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bl8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8G",
+                  "max_us": 26015,
+                  "p50_us": 13007,
+                  "p75_us": 19503,
+                  "p90_us": 23407,
+                  "p999_us": 26015,
+                  "p99_us": 25743,
+                  "throughput_ops_s": 10.0
+                },
+                "get_ehr": {
+                  "count": 1000,
+                  "errors": 0,
+                  "errors_by_class": {},
+                  "hdr_v2_base64": "HISTEwAAAZAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAADUKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCi8KFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKFQoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwo=",
+                  "max_us": 5403,
+                  "p50_us": 2701,
+                  "p75_us": 4051,
+                  "p90_us": 4863,
+                  "p999_us": 5403,
+                  "p99_us": 5347,
+                  "throughput_ops_s": 16.666666666666668
+                }
+              },
+              "planned_measured_arrivals": 1600,
+              "rate_per_s": 26.666666666666668,
+              "regime": "open-loop",
+              "warmup_arrivals": 267,
+              "warmup_s": 10
+            }
+          },
+          "repetition": 2
+        },
+        {
+          "phases": {
+            "mixed": {
+              "dispatched_measured_arrivals": 1600,
+              "duration_s": 60,
+              "generator_bound": false,
+              "offered_load_sustained_per_s": 26.666666666666668,
+              "operations": {
+                "create_composition": {
+                  "count": 600,
+                  "errors": 0,
+                  "errors_by_class": {},
+                  "hdr_v2_base64": "HISTEwAAAaAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAAIMCBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBoECBuEBBn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bn8GfwZ/Bl8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQY/Bj0GPwY9Bj8GPQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYdBh8GHQYdBh0GHwYdBh0GHQYfBh0GHQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8GDQYNBg0GDQYNBg0GDQYPBg0GDQYNBg0GDQYNBg0GDwYNBg0GDQYNBg0GDQYNBg8G",
+                  "max_us": 26015,
+                  "p50_us": 13007,
+                  "p75_us": 19503,
+                  "p90_us": 23407,
+                  "p999_us": 26015,
+                  "p99_us": 25743,
+                  "throughput_ops_s": 10.0
+                },
+                "get_ehr": {
+                  "count": 1000,
+                  "errors": 0,
+                  "errors_by_class": {},
+                  "hdr_v2_base64": "HISTEwAAAZAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAADUKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCjMKMwozCi8KFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKGQoXChkKFwoZChcKFQoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwoJCgsKCwoLCgkKCwoLCgsKCQoLCgsKCwo=",
+                  "max_us": 5403,
+                  "p50_us": 2701,
+                  "p75_us": 4051,
+                  "p90_us": 4863,
+                  "p999_us": 5403,
+                  "p99_us": 5347,
+                  "throughput_ops_s": 16.666666666666668
+                }
+              },
+              "planned_measured_arrivals": 1600,
+              "rate_per_s": 26.666666666666668,
+              "regime": "open-loop",
+              "warmup_arrivals": 267,
+              "warmup_s": 10
+            }
+          },
+          "repetition": 3
+        }
+      ],
+      "resources": {
+        "database_cpus": "4.0",
+        "database_memory": "8g",
+        "database_shm_size": "1g",
+        "server_cpus": "4.0",
+        "server_memory": "8g"
+      },
+      "seed_phases": [
+        {
+          "bulk_load_writes_per_s": 24.096385542168676,
+          "compositions_per_ehr": 5,
+          "ehrs": 200,
+          "elapsed_s": 41.5,
+          "name": "seed",
+          "regime": "closed-loop",
+          "whole_loop_ms_per_composition": 41.5,
+          "workers": 8
+        }
+      ],
+      "started_at": "2026-08-28T09:12:00Z",
+      "sut_version": "2.35.1"
+    }
+  ],
+  "boundary_statement": "This is a benchmark record for comparative speed. It is not a conformance record, not a certificate, and not a performance-class rating; a bench result may motivate a class run, never substitute for one.",
+  "cross": {
+    "mixed": {
+      "operations": {
+        "create_composition": {
+          "p50_us": {
+            "iqr": 0.0,
+            "median": 9503.0
+          },
+          "p75_us": {
+            "iqr": 0.0,
+            "median": 14255.0
+          },
+          "p90_us": {
+            "iqr": 0.0,
+            "median": 17103.0
+          },
+          "p999_us": {
+            "iqr": 0.0,
+            "median": 19007.0
+          },
+          "p99_us": {
+            "iqr": 0.0,
+            "median": 18815.0
+          },
+          "repetitions": 3,
+          "throughput_ops_s": {
+            "iqr": 0.0,
+            "median": 10.0
+          }
+        },
+        "get_ehr": {
+          "p50_us": {
+            "iqr": 0.0,
+            "median": 2000.0
+          },
+          "p75_us": {
+            "iqr": 0.0,
+            "median": 3001.0
+          },
+          "p90_us": {
+            "iqr": 0.0,
+            "median": 3601.0
+          },
+          "p999_us": {
+            "iqr": 0.0,
+            "median": 4001.0
+          },
+          "p99_us": {
+            "iqr": 0.0,
+            "median": 3961.0
+          },
+          "repetitions": 3,
+          "throughput_ops_s": {
+            "iqr": 0.0,
+            "median": 16.666666666666668
+          }
+        }
+      },
+      "regime": "open-loop"
+    }
+  },
+  "environment": {
+    "arch": "x86_64",
+    "available_parallelism": 8,
+    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "os": "linux",
+    "total_memory_bytes": 33662697472
+  },
+  "finished_at": "2026-08-28T09:24:00Z",
+  "label": "Alpha CDR 3.1",
+  "methodology": {
+    "coordinated_omission_free": true,
+    "open_loop": true,
+    "repetitions": 3,
+    "seed_once_measure_n": true,
+    "statement": "Seed once, measure N times. Measured phases are open-loop: arrivals fire at their planned instants regardless of any other request's completion, and every latency is measured from the planned arrival instant, so coordinated omission cannot hide a stall. Seed phases are closed-loop by construction and are reported as bulk-load throughput only."
+  },
+  "pack": {
+    "description": "A hand-authored record used only by the console's own read gates. It drives one seed phase and one open-loop measured phase over two operations, which is the smallest shape that exercises every section the benchmark surface renders.",
+    "fixtures": {
+      "blood_pressure.opt": "3a0d31bd3b5dc6329e53c0d6f22fdbaece62c684136b86139d0729cff8796128",
+      "bp_composition.json": "468081c259c737d35d7f80403562b3f333e479d267286faf80fd7c087eaba947"
+    },
+    "id": "console-fixture",
+    "max_failed_share": 0.01,
+    "seed": 6216465318106710868,
+    "version": "1.0.0"
+  },
+  "posture": {
+    "items": [
+      {
+        "assurance": "declared-only",
+        "declared": "off",
+        "item": "audit",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "released ITS-REST defines no read operation for an audit trail",
+            "observed": "(not observable)",
+            "outcome": "not-observable"
+          },
+          {
+            "bracket": "after",
+            "evidence": "released ITS-REST defines no read operation for an audit trail",
+            "observed": "(not observable)",
+            "outcome": "not-observable"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "none",
+        "item": "version_signing",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "three versions committed by this run read back with no signature attribute",
+            "observed": "none",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "three versions committed by this run read back with no signature attribute",
+            "observed": "none",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "template",
+        "item": "commit_validation",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "the pack's invalid twin was refused 422 inside the measured window",
+            "observed": "template",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "the pack's invalid twin was refused 422 inside the measured window",
+            "observed": "template",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "basic",
+        "item": "authn",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "one uncredentialed read was refused 401",
+            "observed": "basic",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "one uncredentialed read was refused 401",
+            "observed": "basic",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "off",
+        "item": "tls",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "the recorded base URL names the http scheme",
+            "observed": "off",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "the recorded base URL names the http scheme",
+            "observed": "off",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "verified",
+        "declared": "off",
+        "item": "compression",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "one read stating Accept-Encoding came back with no Content-Encoding",
+            "observed": "off",
+            "outcome": "confirmed"
+          },
+          {
+            "bracket": "after",
+            "evidence": "one read stating Accept-Encoding came back with no Content-Encoding",
+            "observed": "off",
+            "outcome": "confirmed"
+          }
+        ]
+      },
+      {
+        "assurance": "declared-only",
+        "declared": "single",
+        "item": "tenancy",
+        "readings": [
+          {
+            "bracket": "before",
+            "evidence": "released ITS-REST defines no read operation for tenancy",
+            "observed": "(not observable)",
+            "outcome": "not-observable"
+          },
+          {
+            "bracket": "after",
+            "evidence": "released ITS-REST defines no read operation for tenancy",
+            "observed": "(not observable)",
+            "outcome": "not-observable"
+          }
+        ]
+      }
+    ],
+    "profile": "minimal",
+    "summary": "The bare spec-conformant surface: no audit trail, unsigned versions, commits validated against the operational template, uncompressed responses, one tenant."
+  },
+  "relative": [
+    {
+      "baseline": "ehrbase",
+      "derivation": "The relative index is the target's cross-repetition median divided by the baseline's cross-repetition median for the same phase, operation and metric, both measured on the same host in the same session. It is dimensionless. On a latency metric a value below 1.0 means the target answered faster than the baseline and above 1.0 slower; on throughput the sense inverts, because there a larger number is the faster system.",
+      "display_name": "EHRbase",
+      "gaps": [],
+      "phases": {
+        "mixed": {
+          "operations": {
+            "create_composition": {
+              "metrics": {
+                "p50_us": {
+                  "baseline_median": 13007.0,
+                  "index": 0.7306065964480665,
+                  "target_median": 9503.0
+                },
+                "p75_us": {
+                  "baseline_median": 19503.0,
+                  "index": 0.7309131928421269,
+                  "target_median": 14255.0
+                },
+                "p90_us": {
+                  "baseline_median": 23407.0,
+                  "index": 0.7306788567522536,
+                  "target_median": 17103.0
+                },
+                "p999_us": {
+                  "baseline_median": 26015.0,
+                  "index": 0.7306169517586008,
+                  "target_median": 19007.0
+                },
+                "p99_us": {
+                  "baseline_median": 25743.0,
+                  "index": 0.7308782970127802,
+                  "target_median": 18815.0
+                },
+                "throughput_ops_s": {
+                  "baseline_median": 10.0,
+                  "index": 1.0,
+                  "target_median": 10.0
+                }
+              }
+            },
+            "get_ehr": {
+              "metrics": {
+                "p50_us": {
+                  "baseline_median": 2701.0,
+                  "index": 0.7404664938911514,
+                  "target_median": 2000.0
+                },
+                "p75_us": {
+                  "baseline_median": 4051.0,
+                  "index": 0.7408047395704764,
+                  "target_median": 3001.0
+                },
+                "p90_us": {
+                  "baseline_median": 4863.0,
+                  "index": 0.7404894098293234,
+                  "target_median": 3601.0
+                },
+                "p999_us": {
+                  "baseline_median": 5403.0,
+                  "index": 0.7405145289653896,
+                  "target_median": 4001.0
+                },
+                "p99_us": {
+                  "baseline_median": 5347.0,
+                  "index": 0.740789227604264,
+                  "target_median": 3961.0
+                },
+                "throughput_ops_s": {
+                  "baseline_median": 16.666666666666668,
+                  "index": 1.0,
+                  "target_median": 16.666666666666668
+                }
+              }
+            }
+          },
+          "regime": "open-loop"
+        }
+      }
+    }
+  ],
+  "repetitions": [
+    {
+      "phases": {
+        "mixed": {
+          "dispatched_measured_arrivals": 1600,
+          "duration_s": 60,
+          "generator_bound": false,
+          "offered_load_sustained_per_s": 26.666666666666668,
+          "operations": {
+            "create_composition": {
+              "count": 600,
+              "errors": 0,
+              "errors_by_class": {},
+              "hdr_v2_base64": "HISTEwAAAaYAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAAL0BBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBpEBBlsGXQZbBl0GWwZdBlsGXQZbBl0GWwZdBlsGXQZbBl0GWwZdBlsGXQZbBjMGKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GGwYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBg8GCQYJBgkGBwYJBgkGCQYJBgkGCQYJBgkGCQYJBgkGCQYJBgkGCQYHBgkGCQYJBgkGCQYJBgkG",
+              "max_us": 19007,
+              "p50_us": 9503,
+              "p75_us": 14255,
+              "p90_us": 17103,
+              "p999_us": 19007,
+              "p99_us": 18815,
+              "throughput_ops_s": 10.0
+            },
+            "get_ehr": {
+              "count": 1000,
+              "errors": 0,
+              "errors_by_class": {},
+              "hdr_v2_base64": "HISTEwAAAZAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAACcKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolChkKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQo=",
+              "max_us": 4001,
+              "p50_us": 2000,
+              "p75_us": 3001,
+              "p90_us": 3601,
+              "p999_us": 4001,
+              "p99_us": 3961,
+              "throughput_ops_s": 16.666666666666668
+            }
+          },
+          "planned_measured_arrivals": 1600,
+          "rate_per_s": 26.666666666666668,
+          "regime": "open-loop",
+          "warmup_arrivals": 267,
+          "warmup_s": 10
+        }
+      },
+      "repetition": 1
+    },
+    {
+      "phases": {
+        "mixed": {
+          "dispatched_measured_arrivals": 1600,
+          "duration_s": 60,
+          "generator_bound": false,
+          "offered_load_sustained_per_s": 26.666666666666668,
+          "operations": {
+            "create_composition": {
+              "count": 600,
+              "errors": 0,
+              "errors_by_class": {},
+              "hdr_v2_base64": "HISTEwAAAaYAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAAL0BBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBpEBBlsGXQZbBl0GWwZdBlsGXQZbBl0GWwZdBlsGXQZbBl0GWwZdBlsGXQZbBjMGKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GGwYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBg8GCQYJBgkGBwYJBgkGCQYJBgkGCQYJBgkGCQYJBgkGCQYJBgkGCQYHBgkGCQYJBgkGCQYJBgkG",
+              "max_us": 19007,
+              "p50_us": 9503,
+              "p75_us": 14255,
+              "p90_us": 17103,
+              "p999_us": 19007,
+              "p99_us": 18815,
+              "throughput_ops_s": 10.0
+            },
+            "get_ehr": {
+              "count": 1000,
+              "errors": 0,
+              "errors_by_class": {},
+              "hdr_v2_base64": "HISTEwAAAZAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAACcKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolChkKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQo=",
+              "max_us": 4001,
+              "p50_us": 2000,
+              "p75_us": 3001,
+              "p90_us": 3601,
+              "p999_us": 4001,
+              "p99_us": 3961,
+              "throughput_ops_s": 16.666666666666668
+            }
+          },
+          "planned_measured_arrivals": 1600,
+          "rate_per_s": 26.666666666666668,
+          "regime": "open-loop",
+          "warmup_arrivals": 267,
+          "warmup_s": 10
+        }
+      },
+      "repetition": 2
+    },
+    {
+      "phases": {
+        "mixed": {
+          "dispatched_measured_arrivals": 1600,
+          "duration_s": 60,
+          "generator_bound": false,
+          "offered_load_sustained_per_s": 26.666666666666668,
+          "operations": {
+            "create_composition": {
+              "count": 600,
+              "errors": 0,
+              "errors_by_class": {},
+              "hdr_v2_base64": "HISTEwAAAaYAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAAL0BBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBrsBBpEBBlsGXQZbBl0GWwZdBlsGXQZbBl0GWwZdBlsGXQZbBl0GWwZdBlsGXQZbBjMGKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GLQYtBisGLQYtBi0GKwYtBi0GLQYrBi0GGwYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBhUGFQYVBhUGEwYVBhUGFQYVBhUGFQYVBhMGFQYVBhUGFQYVBhUGFQYTBhUGFQYVBg8GCQYJBgkGBwYJBgkGCQYJBgkGCQYJBgkGCQYJBgkGCQYJBgkGCQYHBgkGCQYJBgkGCQYJBgkG",
+              "max_us": 19007,
+              "p50_us": 9503,
+              "p75_us": 14255,
+              "p90_us": 17103,
+              "p999_us": 19007,
+              "p99_us": 18815,
+              "throughput_ops_s": 10.0
+            },
+            "get_ehr": {
+              "count": 1000,
+              "errors": 0,
+              "errors_by_class": {},
+              "hdr_v2_base64": "HISTEwAAAZAAAAAAAAAAAwAAAAAAAAABAAAAACPDRgA/8AAAAAAAACcKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolCiUKJQolChkKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQoRChEKEQo=",
+              "max_us": 4001,
+              "p50_us": 2000,
+              "p75_us": 3001,
+              "p90_us": 3601,
+              "p999_us": 4001,
+              "p99_us": 3961,
+              "throughput_ops_s": 16.666666666666668
+            }
+          },
+          "planned_measured_arrivals": 1600,
+          "rate_per_s": 26.666666666666668,
+          "regime": "open-loop",
+          "warmup_arrivals": 267,
+          "warmup_s": 10
+        }
+      },
+      "repetition": 3
+    }
+  ],
+  "scale": {
+    "declared_workers": true,
+    "factor": 1.0,
+    "reference_configuration": true
+  },
+  "schema_version": "0.1.0",
+  "seed_phases": [
+    {
+      "bulk_load_writes_per_s": 24.096385542168676,
+      "compositions_per_ehr": 5,
+      "ehrs": 200,
+      "elapsed_s": 41.5,
+      "name": "seed",
+      "regime": "closed-loop",
+      "whole_loop_ms_per_composition": 41.5,
+      "workers": 8
+    }
+  ],
+  "started_at": "2026-08-28T09:00:00Z",
+  "submittable": true,
+  "target": {
+    "base_url": "http://alpha.invalid/openehr/v1",
+    "sut_version": "3.1.0"
+  },
+  "version_at_time": "2026-08-28T09:02:11Z"
+}

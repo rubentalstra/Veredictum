@@ -1,0 +1,19 @@
+{
+  "sut": {
+    "name": "Beta CDR",
+    "version": "2.0.0"
+  },
+  "runner": {
+    "name": "veredictum",
+    "version": "0.1.3",
+    "verification_pack_status": "passed"
+  },
+  "schedule_release": "cnf-2.0-w2",
+  "tech_profile": {
+    "its": "its-rest",
+    "formats": [
+      "canonical-json"
+    ]
+  },
+  "ixit_digest": "a2ee0218f6815be4"
+}

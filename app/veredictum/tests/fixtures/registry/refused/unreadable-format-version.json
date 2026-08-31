@@ -1,0 +1,70 @@
+{
+  "registry_schema_version": "0.9.0",
+  "entry_id": "2026-08-27-gamma-self-reported",
+  "rules_version": "1.1.0",
+  "submitter": {
+    "name": "Gamma Integrations",
+    "contact": "mailto:conformance@gamma.invalid",
+    "relationship": "integrator"
+  },
+  "subject": {
+    "system": "gamma",
+    "display_name": "Gamma CDR",
+    "version": "5.2.1",
+    "deployment": {
+      "kind": "local-build",
+      "reproduction_authorized": false
+    }
+  },
+  "disclosure": {
+    "instrument_version": "0.1.3",
+    "run_started_at": "2026-08-27T14:30:00Z",
+    "environment": {
+      "os": "linux",
+      "arch": "aarch64",
+      "host_class": "laptop, 10 cores, SUT and load generator on one host"
+    },
+    "sut_configuration": "basic auth, template validation off, no audit",
+    "conflict_of_interest": "the submitter integrates the system for its own customers"
+  },
+  "result": {
+    "kind": "conformance",
+    "catalogue_revision": "0.1.3",
+    "statement": "registry/records/gamma/2026-08-27-gamma-self-reported/statement.json"
+  },
+  "artifacts": [
+    {
+      "role": "results",
+      "path": "registry/records/gamma/2026-08-27-gamma-self-reported/results.json",
+      "sha256": "9667aab6af3d6333de5e90e11dcef0185e178aadf6b68eb841b795a8dcc05b64"
+    },
+    {
+      "role": "verdicts",
+      "path": "registry/records/gamma/2026-08-27-gamma-self-reported/verdicts.json",
+      "sha256": "52c76514ae397eeab4a7c5fc1b4e54f56eeaff4cd1e62dca8f6af9ca8082dad9"
+    },
+    {
+      "role": "ixit",
+      "path": "registry/records/gamma/2026-08-27-gamma-self-reported/ixit.json",
+      "sha256": "aedf8eec255f7847fe65cb03e2c8283fb7e4b5a67617afba29c6b3399409eecc"
+    },
+    {
+      "role": "statement",
+      "path": "registry/records/gamma/2026-08-27-gamma-self-reported/statement.json",
+      "sha256": "d8c0fe7ec3171e52a4403ae93a2059c58611a971db46f76b151a841a839214a5"
+    },
+    {
+      "role": "signature",
+      "path": "registry/records/gamma/2026-08-27-gamma-self-reported/verdicts.json.asc",
+      "sha256": "460f61f0a83fb5f4e5430dc6046650212214b2ea95be816bba63f5ce7b6abd55"
+    }
+  ],
+  "provenance": {
+    "tier": "self-reported",
+    "scheme": "openpgp-detached",
+    "signature": "registry/records/gamma/2026-08-27-gamma-self-reported/verdicts.json.asc",
+    "signs": "registry/records/gamma/2026-08-27-gamma-self-reported/verdicts.json",
+    "identity": "0123456789ABCDEF",
+    "verify_command": "gpg --verify verdicts.json.asc"
+  }
+}
