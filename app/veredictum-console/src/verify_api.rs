@@ -16,10 +16,13 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The armored public key `/verify` checks against is operator configuration;
-/// this is the copy the page shows when none is mounted.
-pub const NO_KEY_HINT: &str =
-    "Set VEREDICTUM_VERIFY_KEY to an armored OpenPGP public key file and restart the console.";
+/// The copy the page shows when no verifying key resolves.
+///
+/// The image ships one and names it in `VEREDICTUM_VERIFY_KEY`, so reaching
+/// this state means that default was overridden or the file it names is
+/// unreadable. The wording says so, because "set this variable" reads as a
+/// missing-configuration bug to somebody whose instance shipped with it set.
+pub const NO_KEY_HINT: &str = "This instance has no verifying key: the image ships one and names it in VEREDICTUM_VERIFY_KEY, so that default has been overridden or the file it points at cannot be read. Point VEREDICTUM_VERIFY_KEY at an armored OpenPGP public key file and restart the console.";
 
 /// The server-owned route a bundle is posted to.
 pub const UPLOAD_PATH: &str = "/verify/upload";

@@ -544,6 +544,31 @@ jobs:
             exit 1
           fi
           echo "the image declares it carries the catalogue, and all three trees are present"
+      - name: The image carries the verifying key its environment names
+        env:
+          IMAGE: veredictum-ci-image-build:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # #430 baked the registry signing public half so /verify works on a
+          # fresh instance. Its own tests pin the BUILD INSTRUCTION -- that the
+          # COPY destination and the ENV value agree -- which is not the same
+          # claim as a built image carrying the file. This is that claim.
+          baked=$(docker image inspect "$IMAGE" \
+            --format '{{range .Config.Env}}{{println .}}{{end}}' \
+            | sed -n 's/^VEREDICTUM_VERIFY_KEY=//p')
+          if [ -z "$baked" ]; then
+            echo "::error::the image sets no VEREDICTUM_VERIFY_KEY, so /verify checks nothing and the reader-facing half of the trust story is dead on arrival (#430)." >&2
+            exit 1
+          fi
+          cid=$(docker create "$IMAGE")
+          # docker cp fails loudly on an absent path, and the byte comparison is
+          # what distinguishes the committed public half from something else
+          # sitting at that path.
+          docker cp "$cid:$baked" ./image-verify-key.asc
+          docker rm -f "$cid" >/dev/null
+          diff -u registry/keys/registry-signing.pub.asc ./image-verify-key.asc
+          rm -f ./image-verify-key.asc
+          echo "the image carries the committed verifying key at ${baked}"
 
   # ── The Rust tier ───────────────────────────────────────────────────────────
   # rustfmt compiles nothing, so a restored target or registry cache here is
