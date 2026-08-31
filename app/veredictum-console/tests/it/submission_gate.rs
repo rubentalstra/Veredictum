@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 
 use veredictum_console::engine::{Credential, Engine, Secret};
 use veredictum_console::github::AppConfig;
-use veredictum_console::run_api::{AuthChoice, RunDraft, StartOutcome};
+use veredictum_console::run_api::{AuthChoice, DeclaredPostures, RunDraft, StartOutcome};
 use veredictum_console::run_job::{JobSlot, JobStatus, RunId};
 use veredictum_console::state::ConsoleState;
 use veredictum_console::submit_api::read::{Composed, SubmitError, compose_with, screen_with};
@@ -113,6 +113,7 @@ fn state_over(out: &Path, port: u16, statement: String) -> ConsoleState {
             // judgement from the recorded exchanges, so a submission without
             // them could never be checked.
             record_exchanges: true,
+            postures: DeclaredPostures::default(),
         }))),
         jobs: JobSlot::default(),
         client_ip_header: None,

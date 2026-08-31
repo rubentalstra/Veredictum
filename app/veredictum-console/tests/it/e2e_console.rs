@@ -1451,9 +1451,21 @@ impl ApiVisitor {
             ),
         )
         .await;
+        // `postures` is a REQUIRED argument, so this visitor declares one like
+        // any other caller: an undeclared posture is a stated absence rather
+        // than an omitted field. A form that leaves it out is refused, which is
+        // the behaviour the console wants and the reason this is spelled here
+        // instead of the argument being made optional.
         self.call(
             <SaveScope as ServerFn>::PATH,
-            &format!("filter={}&record_exchanges=false", encode(filter)),
+            &format!(
+                "filter={}&record_exchanges=false\
+                 &postures[system_id]=&postures[dump_location]=\
+                 &postures[signing]=Undeclared&postures[digest_encoding]=Base64\
+                 &postures[digest_prefix]=&postures[pgp_public_key]=\
+                 &postures[spec_profile]=Undeclared",
+                encode(filter)
+            ),
         )
         .await;
         let answer = self.call(<StartRun as ServerFn>::PATH, "").await;

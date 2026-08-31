@@ -8,7 +8,10 @@
 //! operator checked (#100).
 
 use veredictum_console::engine::{Credential, Engine, Secret};
-use veredictum_console::run_api::{AuthChoice, RunDraft, ScopeTier};
+use veredictum_console::run_api::{
+    AuthChoice, DeclaredPostures, DigestEncoding, PostureForm, RunDraft, ScopeTier, SigningChoice,
+    SigningPosture, SpecProfileChoice,
+};
 
 use crate::engine_gate;
 
@@ -156,6 +159,7 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
             statement_product: None,
             filter: None,
             record_exchanges: false,
+            postures: DeclaredPostures::default(),
         },
     )
     .map_err(|e| format!("save: {e}"))?;
@@ -198,6 +202,7 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
             statement_product: None,
             filter: None,
             record_exchanges: false,
+            postures: DeclaredPostures::default(),
         }))),
         sign_key: None,
         verify_key: None,
@@ -228,6 +233,7 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
         Some(body),
         None,
         false,
+        &PostureForm::default(),
     )
     .map_err(|e| format!("a committed example must pass: {e}"))?
     .ok_or("a pasted claim must yield a summary")?;
@@ -247,6 +253,7 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
         )),
         None,
         false,
+        &PostureForm::default(),
     );
     assert!(
         stray.is_err(),
@@ -259,6 +266,7 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
         Some(String::from("not json")),
         None,
         false,
+        &PostureForm::default(),
     );
     assert!(not_json.is_err(), "non-JSON must be refused");
 
@@ -269,6 +277,7 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
         None,
         None,
         false,
+        &PostureForm::default(),
     )
     .map_err(|e| format!("no-claim save: {e}"))?;
     assert_eq!(none, None);
@@ -466,6 +475,7 @@ fn a_composed_tier_claim_saves_through_the_pasted_claim_path()
         Some(document.clone()),
         None,
         false,
+        &PostureForm::default(),
     )
     .map_err(|e| format!("the composed claim must pass its own schema: {e}"))?
     .ok_or("a composed claim must yield a summary")?;
@@ -527,5 +537,126 @@ fn the_example_loader_refuses_paths_outside_the_party_tree()
         );
         assert!(answer.is_err(), "{} must be refused", refused.display());
     }
+    Ok(())
+}
+/// The posture form is UNTRUSTED input on a public endpoint, and an unusable
+/// declaration is REFUSED by name rather than dropped: an operator who
+/// believes they declared a signing posture must never get a run that judged
+/// without one (#456).
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn an_unusable_posture_declaration_is_refused_by_name() -> Result<(), Box<dyn std::error::Error>> {
+    // Undeclared is a first-class answer: nothing declared, nothing refused.
+    let none = veredictum_console::run_api::declared_postures(&PostureForm::default())
+        .map_err(|e| format!("an empty form declares nothing: {e}"))?;
+    assert_eq!(none, DeclaredPostures::default());
+
+    // The pgp mode with no key: the operator picked a posture and supplied
+    // nothing, which is exactly the confusion this refusal exists to name.
+    let keyless = veredictum_console::run_api::declared_postures(&PostureForm {
+        signing: SigningChoice::Pgp,
+        ..PostureForm::default()
+    })
+    .expect_err("a pgp posture with no key cannot verify anything");
+    assert!(keyless.contains("no public key"), "{keyless}");
+
+    let junk = veredictum_console::run_api::declared_postures(&PostureForm {
+        signing: SigningChoice::Pgp,
+        pgp_public_key: String::from("not a key"),
+        ..PostureForm::default()
+    })
+    .expect_err("a key the verifier cannot read is refused");
+    assert!(junk.contains("PGP PUBLIC KEY BLOCK"), "{junk}");
+
+    let oversized = veredictum_console::run_api::declared_postures(&PostureForm {
+        system_id: "s".repeat(4096),
+        ..PostureForm::default()
+    })
+    .expect_err("an abusive system id is capped");
+    assert!(oversized.contains("the cap is"), "{oversized}");
+
+    // A declared digest posture narrows to the typed carrier, parameters and
+    // all, and an empty prefix stays empty rather than becoming a stand-in.
+    let digest = veredictum_console::run_api::declared_postures(&PostureForm {
+        signing: SigningChoice::Digest,
+        digest_encoding: DigestEncoding::Base64Url,
+        system_id: String::from("  cdr.example.org  "),
+        spec_profile: SpecProfileChoice::Stable,
+        ..PostureForm::default()
+    })
+    .map_err(|e| format!("a digest posture is declarable: {e}"))?;
+    assert_eq!(
+        digest,
+        DeclaredPostures {
+            system_id: Some(String::from("cdr.example.org")),
+            dump_location: None,
+            signing: Some(SigningPosture::Digest {
+                encoding: DigestEncoding::Base64Url,
+                prefix: String::new(),
+            }),
+            spec_profile: Some(veredictum::ixit::SpecProfile::Stable),
+        }
+    );
+    Ok(())
+}
+
+/// The Scope save carries the postures onto the draft, and a REFUSED
+/// declaration leaves the stored scope exactly as it was — the refusal is not
+/// a half-applied save.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn the_scope_save_stores_the_postures_and_a_refusal_changes_nothing()
+-> Result<(), Box<dyn std::error::Error>> {
+    let state = drafted_state();
+    let who = engine_gate::gate_submitter();
+    veredictum_console::run_api::read::save_scope(
+        &state,
+        who,
+        None,
+        None,
+        false,
+        &PostureForm {
+            signing: SigningChoice::Digest,
+            digest_prefix: String::from("sha256:"),
+            system_id: String::from("cdr.example.org"),
+            ..PostureForm::default()
+        },
+    )
+    .map_err(|e| format!("the posture save must pass: {e}"))?;
+    let view =
+        veredictum_console::run_api::read::draft_view(&state, who).ok_or("the draft reads back")?;
+    assert_eq!(
+        view.postures,
+        vec![
+            String::from("system_id cdr.example.org"),
+            String::from("signing digest (sha256, base64, prefix \"sha256:\")"),
+        ],
+        "the interface states back exactly what was declared"
+    );
+
+    let refused = veredictum_console::run_api::read::save_scope(
+        &state,
+        who,
+        None,
+        None,
+        false,
+        &PostureForm {
+            signing: SigningChoice::Pgp,
+            ..PostureForm::default()
+        },
+    );
+    assert!(refused.is_err(), "a keyless pgp posture is refused");
+    let after = veredictum_console::run_api::read::draft_view(&state, who)
+        .ok_or("the draft survives a refusal")?;
+    assert_eq!(
+        after.postures, view.postures,
+        "a refused declaration overwrote the stored one"
+    );
     Ok(())
 }

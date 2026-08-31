@@ -10,8 +10,8 @@
 use leptos::prelude::{
     Action, AddAnyAttr, ClassAttribute, CollectView, Effect, ElementChild, Get, GlobalAttributes,
     IntoAny, IntoView, Memo, OnAttribute, OnTargetAttribute, PropAttribute, Resource, RwSignal,
-    ServerFnError, Set, StyleAttribute, Suspend, Suspense, Transition, Update, With, component,
-    view,
+    ServerFnError, Set, Show, StyleAttribute, Suspend, Suspense, Transition, Update, With,
+    component, view,
 };
 use leptos_meta::Title;
 use leptos_router::components::{A, Redirect};
@@ -28,8 +28,8 @@ use crate::run_api::fns::{
     fetch_statements, fetch_tier_counts, probe_and_save, save_scope, start_run,
 };
 use crate::run_api::{
-    AuthChoice, ClaimSummary, ProbeAnswer, RecordedRun, RunScreen, ScopePreview, ScopeTier,
-    StartOutcome, StatementRow, TierRow,
+    AuthChoice, ClaimSummary, DigestEncoding, PostureForm, ProbeAnswer, RecordedRun, RunScreen,
+    ScopePreview, ScopeTier, SigningChoice, SpecProfileChoice, StartOutcome, StatementRow, TierRow,
 };
 use crate::run_job::{JobStatus, JobView, RunId};
 
@@ -396,6 +396,7 @@ pub fn Scope() -> impl IntoView {
     });
     let filter = RwSignal::new(String::new());
     let record_exchanges = RwSignal::new(false);
+    let postures = PostureSignals::new();
     // Every mutation below reports BOTH outcomes as a toast and keeps its
     // inline pane. The answers land in each action's own async continuation,
     // so no signal-writing Effect mediates
@@ -436,6 +437,7 @@ pub fn Scope() -> impl IntoView {
                 Some(input.statement_json),
                 Some(input.filter),
                 input.record_exchanges,
+                input.postures,
             )
             .await
             {
@@ -562,7 +564,7 @@ pub fn Scope() -> impl IntoView {
                     <p class="mt-1 text-sm text-ink-muted">
                         "Off by default. The transcript keeps every request and response the run drove, so it can carry real patient data from the server you are grading. It lands beside results.json in the run's output directory, and the sealed record covers it."
                     </p>
-                </div> <div class="flex items-center gap-2">
+                </div> {posture_picker(postures)} <div class="flex items-center gap-2">
                     <button
                         type="button"
                         class=BTN_SECONDARY
@@ -580,6 +582,7 @@ pub fn Scope() -> impl IntoView {
                                 statement_json: statement_json.get(),
                                 filter: filter.get(),
                                 record_exchanges: record_exchanges.get(),
+                                postures: postures.read(),
                             });
                             preview.dispatch(filter.get());
                         }
@@ -852,6 +855,282 @@ fn statement_picker(
     }
 }
 
+/// The deployment postures the form collects, held as one bundle so the
+/// picker takes one argument instead of seven.
+#[derive(Debug, Clone, Copy)]
+struct PostureSignals {
+    /// The deployment's configured system identifier.
+    system_id: RwSignal<String>,
+    /// A location on the SUT's own file system for the dump/load operations.
+    dump_location: RwSignal<String>,
+    /// The signing mode.
+    signing: RwSignal<SigningChoice>,
+    /// The digest encoding, read only for the digest mode.
+    digest_encoding: RwSignal<DigestEncoding>,
+    /// The prefix a digest-mode signature carries.
+    digest_prefix: RwSignal<String>,
+    /// The armored openPGP public key.
+    pgp_public_key: RwSignal<String>,
+    /// The openEHR generation set.
+    spec_profile: RwSignal<SpecProfileChoice>,
+}
+
+impl PostureSignals {
+    /// Fresh signals, every posture undeclared.
+    fn new() -> Self {
+        Self {
+            system_id: RwSignal::new(String::new()),
+            dump_location: RwSignal::new(String::new()),
+            signing: RwSignal::new(SigningChoice::Undeclared),
+            digest_encoding: RwSignal::new(DigestEncoding::Base64),
+            digest_prefix: RwSignal::new(String::new()),
+            pgp_public_key: RwSignal::new(String::new()),
+            spec_profile: RwSignal::new(SpecProfileChoice::Undeclared),
+        }
+    }
+
+    /// What the form says right now, for one Save-scope dispatch.
+    fn read(self) -> PostureForm {
+        PostureForm {
+            system_id: self.system_id.get(),
+            dump_location: self.dump_location.get(),
+            signing: self.signing.get(),
+            digest_encoding: self.digest_encoding.get(),
+            digest_prefix: self.digest_prefix.get(),
+            pgp_public_key: self.pgp_public_key.get(),
+            spec_profile: self.spec_profile.get(),
+        }
+    }
+}
+
+/// One button of a segmented control: the choice it selects, and whether it
+/// is the selected one — the Connect step's auth control is the precedent, and
+/// it keeps the closed vocabulary in the type system rather than in a parsed
+/// string.
+fn choice_button<A, S>(
+    id: &'static str,
+    label: &'static str,
+    active: A,
+    select: S,
+) -> impl IntoView + use<A, S>
+where
+    A: Fn() -> bool + Send + Sync + 'static,
+    S: Fn() + 'static,
+{
+    view! {
+        <button
+            id=id
+            type="button"
+            class=move || {
+                if active() {
+                    "rounded-control bg-accent px-3 py-1.5 text-sm font-medium text-on-accent"
+                } else {
+                    "rounded-control border border-line px-3 py-1.5 text-sm text-ink"
+                }
+            }
+            on:click=move |_| select()
+        >
+            {label}
+        </button>
+    }
+}
+
+/// The two scalar postures: the configured system identifier, and the dump
+/// location on the server's own file system.
+fn posture_scalars(postures: PostureSignals) -> impl IntoView + use<> {
+    view! {
+        <div class="space-y-4">
+            <div class="space-y-1">
+                <h3 class="text-sm font-semibold text-ink-heading">"Deployment postures"</h3>
+                <p class="text-sm text-ink-muted">
+                    "Facts about your deployment that no openEHR operation discloses, so the instrument can only read them from a declaration. Leave one undeclared and the cases that need it come back not-applicable with the citation, never judged against a guess."
+                </p>
+            </div>
+            <div>
+                <label class=LABEL for="posture-system-id">
+                    "System id (optional)"
+                </label>
+                <input
+                    id="posture-system-id"
+                    type="text"
+                    class=format!("{INPUT} mt-1 w-full font-mono")
+                    placeholder="cdr.example.org"
+                    prop:value=move || postures.system_id.get()
+                    on:input:target=move |ev| postures.system_id.set(ev.target().value())
+                />
+                <p class="mt-1 text-sm text-ink-muted">
+                    "The identifier the server stamps into the version uids it mints."
+                </p>
+            </div>
+            <div>
+                <label class=LABEL for="posture-dump-location">
+                    "Dump location (optional)"
+                </label>
+                <input
+                    id="posture-dump-location"
+                    type="text"
+                    class=format!("{INPUT} mt-1 w-full font-mono")
+                    placeholder="/var/lib/openehr/dump"
+                    prop:value=move || postures.dump_location.get()
+                    on:input:target=move |ev| postures.dump_location.set(ev.target().value())
+                />
+                <p class="mt-1 text-sm text-ink-muted">
+                    "A directory on the SERVER's own file system the admin dump and load operations may write to. The console never opens it: it travels to the server in those requests."
+                </p>
+            </div>
+        </div>
+    }
+}
+
+/// The digest posture's own parameters: the encoding, and the fixed prefix the
+/// wire form carries.
+fn posture_digest_fields(postures: PostureSignals) -> impl IntoView + use<> {
+    let encoding = postures.digest_encoding;
+    let encoding_buttons = move || {
+        DigestEncoding::ALL
+            .into_iter()
+            .map(|choice| {
+                choice_button(
+                    choice.control_id(),
+                    choice.token(),
+                    move || encoding.get() == choice,
+                    move || encoding.set(choice),
+                )
+            })
+            .collect_view()
+    };
+    view! {
+        <div class="space-y-2 border-l border-line pl-3">
+            <p class="text-sm text-ink-muted">
+                "Digest: sha256, the algorithm this instrument's verifier implements. Another hash is not declarable here, and its rows stay not-applicable."
+            </p>
+            <div class="flex flex-wrap items-center gap-2">{encoding_buttons}</div>
+            <div>
+                <label class=LABEL for="posture-digest-prefix">
+                    "Signature prefix (optional)"
+                </label>
+                <input
+                    id="posture-digest-prefix"
+                    type="text"
+                    class=format!("{INPUT} mt-1 w-full font-mono")
+                    placeholder="sha256:"
+                    prop:value=move || postures.digest_prefix.get()
+                    on:input:target=move |ev| postures.digest_prefix.set(ev.target().value())
+                />
+            </div>
+        </div>
+    }
+}
+
+/// The openPGP posture's own parameter: the armored public half.
+fn posture_pgp_field(postures: PostureSignals) -> impl IntoView + use<> {
+    view! {
+        <div class="space-y-2 border-l border-line pl-3">
+            <label class=LABEL for="posture-pgp-key">
+                "openPGP public key"
+            </label>
+            <textarea
+                id="posture-pgp-key"
+                class=format!("{TEXTAREA} mt-1 h-40")
+                placeholder="-----BEGIN PGP PUBLIC KEY BLOCK-----"
+                prop:value=move || postures.pgp_public_key.get()
+                on:input:target=move |ev| postures.pgp_public_key.set(ev.target().value())
+            ></textarea>
+            <p class="text-sm text-ink-muted">
+                "The armored public half the detached signatures verify against. Public key material only, never a private key."
+            </p>
+        </div>
+    }
+}
+
+/// The version-signing posture: the mode, and whichever parameters that mode
+/// carries.
+fn posture_signing(postures: PostureSignals) -> impl IntoView + use<> {
+    let signing = postures.signing;
+    let signing_buttons = move || {
+        SigningChoice::ALL
+            .into_iter()
+            .map(|choice| {
+                choice_button(
+                    choice.control_id(),
+                    choice.label(),
+                    move || signing.get() == choice,
+                    move || signing.set(choice),
+                )
+            })
+            .collect_view()
+    };
+    let digest_fields = move || posture_digest_fields(postures).into_any();
+    let pgp_field = move || posture_pgp_field(postures).into_any();
+    view! {
+        <div class="space-y-2">
+            <span class=LABEL>"Version signing"</span>
+            <div class="flex flex-wrap items-center gap-2">{signing_buttons}</div>
+            <p class="text-sm text-ink-muted">
+                "Signing needs public-key or equivalent infrastructure in place, so it is a property of your deployment rather than of openEHR. The stored-signature cases run either way; only the verifying ones need the mode."
+            </p>
+            <Show when=move || signing.get() == SigningChoice::Digest>{digest_fields}</Show>
+            <Show when=move || signing.get() == SigningChoice::Pgp>{pgp_field}</Show>
+        </div>
+    }
+}
+
+/// The openEHR generation set the deployment runs.
+fn posture_profile(postures: PostureSignals) -> impl IntoView + use<> {
+    let profile = postures.spec_profile;
+    let profile_buttons = move || {
+        SpecProfileChoice::ALL
+            .into_iter()
+            .map(|choice| {
+                choice_button(
+                    choice.control_id(),
+                    choice.label(),
+                    move || profile.get() == choice,
+                    move || profile.set(choice),
+                )
+            })
+            .collect_view()
+    };
+    view! {
+        <div class="space-y-2">
+            <span class=LABEL>"openEHR generation set"</span>
+            <div class="flex flex-wrap items-center gap-2">{profile_buttons}</div>
+            <p class="text-sm text-ink-muted">
+                "Which generation set the server implements. A minor openEHR release is a compatible superset, so the two accept different surface while looking identical on the wire."
+            </p>
+        </div>
+    }
+}
+
+/// What this console does NOT supply, and what each omission costs a run.
+///
+/// Stated rather than guessed: a fact the wizard cannot collect honestly is
+/// named here, so a reader knows why those rows come back not-applicable.
+fn posture_gaps() -> impl IntoView + use<> {
+    let body = String::from(
+        "SMART App Launch: minting a scope-carrying token needs a signing key on this host, and a public endpoint that names a file is a file-read primitive. The SMART cases stay not-applicable.\n\
+         Terminology servers: which servers answer for which namespaces, and what the server does with a value set it cannot resolve, is a topology this form does not collect.\n\
+         Exclusive server: the flag travels in one block with the hardware facts a performance claim rests on, and this console collects no hardware facts.\n\
+         A second principal or a second deployment (a read-only role, a second signing posture): each needs its own credentials or its own guarded target, and this wizard composes one.",
+    );
+    view! { <Pane label="postures this console does not supply" body=body /> }
+}
+
+/// The deployment-posture section: the facts the console CAN collect, and a
+/// plain statement of the ones it cannot.
+///
+/// Every fact here is a deployment declaration no released openEHR operation
+/// discloses, which is why the instrument reads it from the ixit. Undeclared
+/// is a real answer: the run records the cases that need it not-applicable
+/// with the engine's own citation, and no value here is ever guessed.
+fn posture_picker(postures: PostureSignals) -> impl IntoView + use<> {
+    let scalars = posture_scalars(postures).into_any();
+    let signing = posture_signing(postures).into_any();
+    let profile = posture_profile(postures).into_any();
+    let gaps = posture_gaps().into_any();
+    view! { <div class="space-y-4">{scalars}{signing}{profile}{gaps}</div> }.into_any()
+}
+
 /// What one Save-scope dispatch carries: the pasted claim, the filter, and
 /// the wire-recording choice, read off the form at click time.
 #[derive(Debug, Clone)]
@@ -862,6 +1141,8 @@ struct ScopeInput {
     filter: String,
     /// Whether the run persists its wire exchanges.
     record_exchanges: bool,
+    /// The deployment postures the operator declared.
+    postures: PostureForm,
 }
 
 /// The one sentence a saved scope is reported by, in the toast and inline —

@@ -680,3 +680,205 @@ fn an_ics_declaring_one_arm_drives_exactly_that_arm() -> Fallible {
     assert!(citation.contains("statement.options"), "{citation}");
     Ok(())
 }
+/// `POST /composition` — the WRITE half of the verifying signature case, and
+/// the request that must not reach a server whose posture the case needs and
+/// the ixit does not declare.
+fn create_composition_binding() -> Value {
+    json!({
+        "sm_operation": "I_EHR_COMPOSITION.create_composition",
+        "its": "its-rest",
+        "request": { "method": "POST", "path": "/composition" },
+        "outcomes": { "created": { "status": 201 } },
+        "captures": { "version_uid": { "from": "header ETag", "strip": "weak-quotes" } }
+    })
+}
+
+/// `GET /version` — the `ORIGINAL_VERSION` envelope read the signature family
+/// is judged against (RM `VERSIONED_OBJECT.version_with_id`).
+fn version_envelope_binding() -> Value {
+    json!({
+        "sm_operation": "I_EHR_COMPOSITION.get_versioned_composition",
+        "its": "its-rest",
+        "variant": "version",
+        "request": { "method": "GET", "path": "/version" },
+        "outcomes": { "ok": { "status": 200 } }
+    })
+}
+
+/// A case that COMMITS a composition and then asserts the stored signature
+/// verifies — the shape of the committed `SIG-VERSION-verifiable` battery.
+fn verifying_signature_case() -> Value {
+    json!({
+        "id": "RUN-signature_verifiable", "kind": "functional", "component": "SECURITY",
+        "sm_operation": "I_EHR_COMPOSITION.create_composition",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "flow": [
+            {
+                "step": 1, "call": "create_composition", "expect": "created",
+                "capture": { "version_uid": "created.version_uid" }
+            },
+            {
+                "step": 2, "call": "I_EHR_COMPOSITION.get_versioned_composition",
+                "variant": "version", "expect": "ok",
+                "assert": [{ "assert": "signature", "of": "${version_uid}", "verifiable": true }]
+            }
+        ]
+    })
+}
+
+/// The served `ORIGINAL_VERSION` envelope, signed the way a `digest`-mode
+/// deployment signs it: base64 of the SHA-256 of the agreed canonical form
+/// (RFC 8785 JCS of the version minus `signature`).
+fn signed_envelope() -> Result<Value, Box<dyn std::error::Error>> {
+    use base64::Engine as _;
+    use sha2::Digest as _;
+
+    let mut served = json!({
+        "_type": "ORIGINAL_VERSION",
+        "uid": { "value": "8849182c-82ad-4088-a07f-48ead4180515::sut.example::1" },
+        "lifecycle_state": { "value": "complete" },
+        "data": { "_type": "COMPOSITION", "name": { "value": "signed" } }
+    });
+    let canonical = veredictum::exec::signature::canonical_form(&served)?;
+    let digest = base64::engine::general_purpose::STANDARD
+        .encode(sha2::Sha256::digest(canonical.as_bytes()));
+    let map = served
+        .as_object_mut()
+        .ok_or("the served envelope is an object")?;
+    map.insert("signature".to_owned(), Value::String(digest));
+    Ok(served)
+}
+
+/// The topology with the party's `digest` signing posture declared, which is
+/// what makes the verifying half of the battery drivable.
+fn signing_ixit(base_url: &str) -> Result<veredictum::ixit::Ixit, serde_json::Error> {
+    serde_json::from_value(json!({
+        "instances": { "sut": { "base_url": base_url, "auth": { "mode": "none" } } },
+        "signing": {
+            "mode": "digest", "algorithm": "sha256", "encoding": "base64", "prefix": ""
+        }
+    }))
+}
+
+/// The fake SUT serving the commit and the signed read-back, plus the world
+/// the verifying case drives in.
+fn signature_world()
+-> Result<(FakeSut, veredictum::artifacts::ArtifactSet), Box<dyn std::error::Error>> {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/composition"))
+            .respond_with(ResponseTemplate::new(201).insert_header(
+                "ETag",
+                "\"8849182c-82ad-4088-a07f-48ead4180515::sut.example::1\"",
+            )),
+    );
+    sut.mount(
+        Mock::given(method("GET"))
+            .and(path("/version"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(signed_envelope()?)),
+    );
+    let mut set = artifact_set(&[create_composition_binding(), version_envelope_binding()]);
+    set.cases.push((
+        std::path::PathBuf::from("c.yaml"),
+        case(verifying_signature_case()),
+    ));
+    Ok((sut, set))
+}
+
+/// A case asserting `signature: verifiable` where the ixit declares no
+/// `signing` posture is excused at SELECTION time, and the campaign sends the
+/// server NOTHING: the commit its flow opens with never happens.
+///
+/// This is the property the assert-time refusal could not give. RM common
+/// `master06-change_control_package.adoc` §Digital Signature conditions
+/// signing on the deployment, so an undeclared posture is a selection fact —
+/// deciding it after the flow has run mutates somebody else's server for a
+/// fact the run was never able to judge.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_undeclared_signing_posture_excuses_the_case_before_anything_is_written() -> Fallible {
+    let (sut, set) = signature_world()?;
+
+    let report = execute(
+        &set,
+        &ixit(&sut.base_url()),
+        None,
+        Recording::Off,
+        &mut |_| {},
+    )?;
+
+    assert_eq!(report.interpreter_run, 0, "nothing was driven");
+    let recorded = report
+        .records
+        .iter()
+        .find(|r| r.case.as_str() == "RUN-signature_verifiable")
+        .ok_or("the excused case is recorded")?;
+    assert_eq!(recorded.rows_driven, 0);
+    let [RowOutcome::NotApplicable { citation }] = recorded.rows.as_slice() else {
+        panic!("expected one not-applicable row, got {:?}", recorded.rows);
+    };
+    assert!(citation.contains("`signing`"), "{citation}");
+    assert!(citation.contains("§Digital Signature"), "{citation}");
+    assert!(citation.contains("ISO/IEC 9646"), "{citation}");
+
+    // The defect this pins: the case used to DRIVE and report unjudgeable at
+    // assert time, so the commit had already landed on the server.
+    let requests = sut.requests();
+    assert!(
+        requests.is_empty(),
+        "the excused case reached the server: {:?}",
+        requests
+            .iter()
+            .map(|r| format!("{} {}", r.method, r.url.path()))
+            .collect::<Vec<_>>()
+    );
+    Ok(())
+}
+
+/// The same world with the posture DECLARED: the case drives, the commit
+/// reaches the server, and the row is judged rather than excused — so the
+/// selection arm above cannot become a way to never test signing.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_declared_signing_posture_drives_and_judges_the_case() -> Fallible {
+    let (sut, set) = signature_world()?;
+
+    let report = execute(
+        &set,
+        &signing_ixit(&sut.base_url())?,
+        None,
+        Recording::Off,
+        &mut |_| {},
+    )?;
+
+    assert_eq!(report.interpreter_run, 1, "the declared posture drives");
+    assert!(
+        report.exceptions.is_empty(),
+        "a declared posture excuses nothing: {:?}",
+        report.exceptions
+    );
+    let recorded = report
+        .records
+        .iter()
+        .find(|r| r.case.as_str() == "RUN-signature_verifiable")
+        .ok_or("the driven case is recorded")?;
+    assert_eq!(recorded.rows.as_slice(), [RowOutcome::Passed]);
+
+    let paths: Vec<String> = sut
+        .requests()
+        .iter()
+        .map(|r| format!("{} {}", r.method, r.url.path()))
+        .collect();
+    assert!(
+        paths.iter().any(|line| line.contains("/composition")),
+        "the commit never reached the server: {paths:?}"
+    );
+    Ok(())
+}

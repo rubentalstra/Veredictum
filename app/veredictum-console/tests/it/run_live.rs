@@ -10,7 +10,10 @@
 //! is ended by the console with its partial record discarded.
 
 use veredictum_console::engine::{Credential, Engine, RunSpec, Secret};
-use veredictum_console::run_api::{AuthChoice, RunDraft, RunScreen, StartOutcome, read};
+use veredictum_console::run_api::{
+    AuthChoice, DeclaredPostures, DigestEncoding, PostureForm, RunDraft, RunScreen, SigningPosture,
+    StartOutcome, read,
+};
 use veredictum_console::run_job::{JobSlot, JobStatus, JobView, Latest, Limits, RunId};
 use veredictum_console::submitter::{Submitter, of_request};
 
@@ -106,9 +109,10 @@ fn a_job_supervises_a_run_to_its_finished_view() -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-#[test]
-fn the_generated_ixit_carries_names_and_never_values() {
-    let draft = RunDraft {
+/// A draft carrying `postures`, with the credential values the redaction
+/// tests look for.
+fn posture_draft(postures: DeclaredPostures) -> RunDraft {
+    RunDraft {
         base_url: String::from("http://cdr.example"),
         sut_name: String::from("x"),
         sut_version: String::from("y"),
@@ -128,8 +132,18 @@ fn the_generated_ixit_carries_names_and_never_values() {
         statement_product: None,
         filter: None,
         record_exchanges: false,
-    };
-    let document = read::ixit_document(&draft);
+        postures,
+    }
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn the_generated_ixit_carries_names_and_never_values() -> Result<(), Box<dyn std::error::Error>> {
+    let draft = posture_draft(DeclaredPostures::default());
+    let document = read::ixit_document(&draft)?;
     assert!(document.contains("CONSOLE_SUT_USER"));
     assert!(document.contains("CONSOLE_SUT_PASS"));
     assert!(
@@ -142,6 +156,160 @@ fn the_generated_ixit_carries_names_and_never_values() {
         parsed.is_ok(),
         "the generated ixit does not parse: {parsed:?}"
     );
+    Ok(())
+}
+
+/// What the console composes is PINNED, posture by posture (#456): a future
+/// edit that drops one fails here instead of silently costing a run its rows.
+///
+/// The declared document is compared verbatim, so both halves are covered at
+/// once — the keys that must be present, and the values they must carry.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn the_composed_ixit_pins_every_posture_the_console_supplies()
+-> Result<(), Box<dyn std::error::Error>> {
+    let draft = posture_draft(DeclaredPostures {
+        system_id: Some(String::from("cdr.example.org")),
+        dump_location: Some(String::from("/var/lib/openehr/dump")),
+        signing: Some(SigningPosture::Digest {
+            encoding: DigestEncoding::Base64,
+            prefix: String::from("sha256:"),
+        }),
+        spec_profile: Some(veredictum::ixit::SpecProfile::Development),
+    });
+    let document = read::ixit_document(&draft)?;
+    assert_eq!(
+        document,
+        r#"{
+  "instances": {
+    "admin": {
+      "base_url": "http://cdr.example",
+      "auth": {
+        "mode": "basic",
+        "user_env": "CONSOLE_SUT_USER",
+        "password_env": "CONSOLE_SUT_PASS"
+      }
+    },
+    "sut": {
+      "base_url": "http://cdr.example",
+      "auth": {
+        "mode": "basic",
+        "user_env": "CONSOLE_SUT_USER",
+        "password_env": "CONSOLE_SUT_PASS"
+      }
+    },
+    "unauthenticated": {
+      "base_url": "http://cdr.example",
+      "auth": {
+        "mode": "none"
+      }
+    }
+  },
+  "system_id": "cdr.example.org",
+  "dump_location": "/var/lib/openehr/dump",
+  "spec_profile": "development",
+  "signing": {
+    "mode": "digest",
+    "algorithm": "sha256",
+    "encoding": "base64",
+    "prefix": "sha256:"
+  }
+}
+"#,
+        "the composed ixit drifted"
+    );
+
+    // The pgp posture composes the OTHER signing shape, key and all.
+    let pgp = posture_draft(DeclaredPostures {
+        signing: Some(SigningPosture::Pgp {
+            public_key: String::from("-----BEGIN PGP PUBLIC KEY BLOCK-----\narmor\n"),
+        }),
+        ..DeclaredPostures::default()
+    });
+    let document = read::ixit_document(&pgp)?;
+    assert!(document.contains(r#""mode": "pgp""#), "{document}");
+    assert!(
+        document.contains("BEGIN PGP PUBLIC KEY BLOCK"),
+        "{document}"
+    );
+    Ok(())
+}
+
+/// Every digest vocabulary the console offers is one the engine's verifier
+/// implements: composed, read back through the published ixit reader, and
+/// handed to `verify`, which answers `Ok` for a mode it understands and `Err`
+/// naming the unknown token for one it does not.
+///
+/// A console offering a posture the run cannot verify under would turn a
+/// declaration into an inconclusive row, which is the failure this pin closes.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[expect(
+    clippy::disallowed_types,
+    reason = "the wire-bodies family: the verifier reads a served ORIGINAL_VERSION envelope as a value, exactly as the driver hands it one"
+)]
+#[test]
+fn every_offered_digest_vocabulary_is_one_the_engine_verifies_under()
+-> Result<(), Box<dyn std::error::Error>> {
+    let envelope = serde_json::json!({
+        "_type": "ORIGINAL_VERSION",
+        "uid": { "value": "8849182c-82ad-4088-a07f-48ead4180515::sut.example::1" },
+        "signature": "not-the-digest"
+    });
+    for encoding in DigestEncoding::ALL {
+        let draft = posture_draft(DeclaredPostures {
+            signing: Some(SigningPosture::Digest {
+                encoding,
+                prefix: String::new(),
+            }),
+            ..DeclaredPostures::default()
+        });
+        let document = read::ixit_document(&draft)?;
+        let ixit: veredictum::ixit::Ixit = serde_json::from_str(&document)?;
+        let Ok(instance) = ixit.default_instance() else {
+            return Err("the composed ixit declares no sut instance".into());
+        };
+        let mode = ixit
+            .signing_of(instance)
+            .ok_or("the composed posture reads back")?;
+        let verified = veredictum::exec::signature::verify(&envelope, "not-the-digest", mode);
+        assert!(
+            verified.is_ok(),
+            "the engine's verifier does not implement {}: {verified:?}",
+            encoding.token()
+        );
+    }
+    Ok(())
+}
+
+/// An UNDECLARED posture composes no key at all, which is what makes the
+/// engine record the cases that need it not-applicable with its own citation
+/// (RM common `master06-change_control_package.adoc` §Digital Signature makes
+/// signing conditional on the deployment). A stand-in value here would claim
+/// something about somebody else's server.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ?"
+)]
+#[test]
+fn an_undeclared_posture_composes_no_key() -> Result<(), Box<dyn std::error::Error>> {
+    let document = read::ixit_document(&posture_draft(DeclaredPostures::default()))?;
+    for key in ["signing", "system_id", "dump_location", "spec_profile"] {
+        assert!(
+            !document.contains(key),
+            "an undeclared {key} was composed anyway: {document}"
+        );
+    }
+    // And the instances the console DOES compose stay there.
+    for instance in ["sut", "admin", "unauthenticated"] {
+        assert!(document.contains(instance), "{document}");
+    }
+    Ok(())
 }
 
 #[expect(
@@ -194,6 +362,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
             statement_product: Some(String::from("EHRbase 2.34.0")),
             filter: None,
             record_exchanges: false,
+            postures: DeclaredPostures::default(),
         }))),
         sign_key: None,
         verify_key: None,
@@ -368,6 +537,7 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
             statement_product: None,
             filter: None,
             record_exchanges: false,
+            postures: DeclaredPostures::default(),
         }))),
         sign_key: None,
         verify_key: None,
@@ -381,8 +551,8 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
     // The Scope step with the box ticked: the save is what carries the choice
     // onto the draft that start_run then reads.
     let who = engine_gate::gate_submitter();
-    let saved =
-        read::save_scope(&state, who, None, None, true).map_err(|e| format!("scope: {e}"))?;
+    let saved = read::save_scope(&state, who, None, None, true, &PostureForm::default())
+        .map_err(|e| format!("scope: {e}"))?;
     assert_eq!(saved, None, "no claim was pasted, so there is no summary");
     let view = read::draft_view(&state, who).ok_or("the draft exists after the scope save")?;
     assert!(view.record_exchanges, "the ticked box reached the draft");
@@ -906,6 +1076,7 @@ fn the_start_seam_answers_with_the_run_already_in_flight() -> Result<(), Box<dyn
             statement_product: None,
             filter: Some(String::from("I_EHR_SERVICE.create_ehr-main")),
             record_exchanges: false,
+            postures: DeclaredPostures::default(),
         }))),
         sign_key: None,
         verify_key: None,

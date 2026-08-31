@@ -740,6 +740,92 @@ fn unsatisfied_administrative(case: &CaseCore, ixit: &Ixit) -> Option<String> {
     None
 }
 
+/// Whether one assertion asks for the VERIFYING half of the version-signature
+/// battery, the only signature fact a declared posture is needed for.
+///
+/// `present`, `equals` and `distinct_from` read the served envelope's own
+/// `signature` member and are mode-agnostic, so they drive on any deployment.
+fn asserts_verifiable(assertion: &crate::model::assertion::Assertion) -> bool {
+    matches!(
+        assertion,
+        crate::model::assertion::Assertion::Signature {
+            verifiable: Some(true),
+            ..
+        }
+    )
+}
+
+/// The instance a step addresses: its `on:` selector, the default `sut`
+/// otherwise.
+fn step_instance(step: &crate::model::case::FlowStep) -> Option<InstanceName> {
+    match &step.on {
+        Some(name) => Some(name.clone()),
+        None => InstanceName::parse("sut").ok(),
+    }
+}
+
+/// The instances a `signature: verifiable` fact is judged on: the instance
+/// each asserting step ran on, plus the LAST step's instance when the row's
+/// `postconditions:` carry the fact, which is the step those are judged
+/// against.
+fn verifying_instances(case: &CaseCore) -> Vec<InstanceName> {
+    let mut named: Vec<InstanceName> = Vec::new();
+    let mut note = |name: Option<InstanceName>| {
+        if let Some(name) = name
+            && !named.contains(&name)
+        {
+            named.push(name);
+        }
+    };
+    for step in &case.flow {
+        if step.assertions.iter().any(asserts_verifiable) {
+            note(step_instance(step));
+        }
+    }
+    if case.postconditions.iter().any(asserts_verifiable) {
+        note(case.flow.last().and_then(step_instance));
+    }
+    named
+}
+
+/// Why THIS party's declarations do not satisfy a case that asserts
+/// `signature: verifiable` — the selection guard for the verifying half of
+/// the version-signature battery.
+///
+/// RM common `master06-change_control_package.adoc` §Digital Signature makes
+/// signing conditional on the deployment ("If public key or equivalent
+/// infrastructure is in place so that users are able to sign content, a
+/// digital signature can be created") and the signature itself optional
+/// ("The signature, if present, is generated according to the openPGP
+/// standard"), so the mode is an IXIT declaration and no released operation
+/// discloses it. Undeclared, the run holds no mode to verify under and no key
+/// material to verify against, so the case is not-applicable WITH the
+/// citation at SELECTION time. Deciding it at assert time instead drives the
+/// flow first, which commits real content to somebody else's server for a
+/// fact this run was never able to judge.
+fn unsatisfied_signing(case: &CaseCore, ixit: &Ixit) -> Option<String> {
+    for name in verifying_instances(case) {
+        // An undeclared instance is the `undeclared_instances` guard's
+        // business; skip it here so one case never reports two citations.
+        let Some(instance) = ixit.instance(&name) else {
+            continue;
+        };
+        if ixit.signing_of(instance).is_none() {
+            return Some(format!(
+                "instance {name}: the ixit declares no `signing` posture and the case asserts \
+                 `signature: verifiable` — RM common master06-change_control_package.adoc \
+                 §Digital Signature conditions signing on the deployment (\"If public key or \
+                 equivalent infrastructure is in place so that users are able to sign content, a \
+                 digital signature can be created\"; \"The signature, if present, is generated \
+                 according to the openPGP standard\"), so the mode is a deployment fact no \
+                 released operation discloses and this run holds neither a mode to verify under \
+                 nor key material to verify against"
+            ));
+        }
+    }
+    None
+}
+
 /// The reserved catalogue pseudo-interface anchoring the SMART Platform
 /// operations the SM models no interface for (pinned in
 /// `validate::NON_SM_REST_OPERATIONS`; register AMB-161 adjudicates the
@@ -1003,20 +1089,20 @@ fn selection_exception(
                 .to_owned(),
         )));
     }
-    if let Some(citation) = unsatisfied_terminology(case, ixit) {
-        return Ok(Some(Exception::Guarded(format!(
-            "{citation}; ISO/IEC 9646 test selection"
-        ))));
-    }
-    if let Some(citation) = unsatisfied_spec_profile(case, ixit) {
-        return Ok(Some(Exception::Guarded(format!(
-            "{citation}; ISO/IEC 9646 test selection"
-        ))));
-    }
-    if let Some(citation) = unsatisfied_administrative(case, ixit) {
-        return Ok(Some(Exception::Guarded(format!(
-            "{citation}; ISO/IEC 9646 test selection"
-        ))));
+    // The per-instance declaration guards: a premise the party's ixit does
+    // not declare excuses the case, in this order, one citation per case.
+    let instance_guards: [fn(&CaseCore, &Ixit) -> Option<String>; 4] = [
+        unsatisfied_terminology,
+        unsatisfied_spec_profile,
+        unsatisfied_administrative,
+        unsatisfied_signing,
+    ];
+    for guard in instance_guards {
+        if let Some(citation) = guard(case, ixit) {
+            return Ok(Some(Exception::Guarded(format!(
+                "{citation}; ISO/IEC 9646 test selection"
+            ))));
+        }
     }
     let missing_instances = undeclared_instances(case, ixit);
     if !missing_instances.is_empty() {
@@ -3116,5 +3202,89 @@ mod tests {
         assert!(synthesized.parameters.is_none());
         assert_eq!(synthesized.flow.len(), 1);
         assert_eq!(synthesized.id, case.id);
+    }
+
+    /// The signing arm is a DECLARATION guard over the committed catalogue:
+    /// every case that asserts `signature: verifiable` is excused when the
+    /// addressed instance declares no posture, and every one of them selects
+    /// through when it does — so the arm can never become a way to never test
+    /// signing.
+    #[test]
+    fn the_committed_verifying_cases_turn_on_the_declared_posture() {
+        let crate_dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+        let loaded = crate::artifacts::load_root(&crate_dir.join("artifacts")).unwrap();
+        assert!(loaded.errors.is_empty());
+        let verifying: Vec<&CaseCore> = loaded
+            .set
+            .cases
+            .iter()
+            .map(|(_, case)| case)
+            .filter(|case| !verifying_instances(case).is_empty())
+            .collect();
+        assert!(
+            verifying.len() >= 8,
+            "the catalogue's verifying battery shrank to {}",
+            verifying.len()
+        );
+
+        // The instances those cases address, each declared twice over: once
+        // with a posture and once without, so the only difference between the
+        // two topologies is the declaration itself.
+        let addressed: std::collections::BTreeSet<String> = verifying
+            .iter()
+            .flat_map(|case| verifying_instances(case))
+            .map(|name| name.as_str().to_owned())
+            .collect();
+        let instances = |signing: bool| {
+            let mut map = serde_json::Map::new();
+            for name in &addressed {
+                let mut instance = serde_json::json!({
+                    "base_url": "http://sut.example", "auth": { "mode": "none" }
+                });
+                if signing && let Some(object) = instance.as_object_mut() {
+                    object.insert(
+                        "signing".to_owned(),
+                        serde_json::json!({
+                            "mode": "digest", "algorithm": "sha256",
+                            "encoding": "base64", "prefix": ""
+                        }),
+                    );
+                }
+                map.insert(name.clone(), instance);
+            }
+            serde_json::from_value::<Ixit>(serde_json::json!({ "instances": map })).unwrap()
+        };
+        let declared = instances(true);
+        let silent = instances(false);
+
+        for case in &verifying {
+            let citation = unsatisfied_signing(case, &silent)
+                .unwrap_or_else(|| panic!("{}: an undeclared posture excuses the case", case.id));
+            assert!(citation.contains("`signature: verifiable`"), "{citation}");
+            assert!(
+                unsatisfied_signing(case, &declared).is_none(),
+                "{}: a declared posture drives the case",
+                case.id
+            );
+        }
+
+        // And the whole selection law agrees on the battery's anchor case:
+        // with the posture declared nothing else excuses it, so it drives.
+        let anchor = verifying
+            .iter()
+            .find(|case| case.id.as_str() == "SIG-VERSION-verifiable")
+            .expect("the catalogue carries SIG-VERSION-verifiable");
+        let exception = selection_exception(&loaded.set, &silent, None, anchor)
+            .unwrap()
+            .expect("an undeclared posture is a selection exception");
+        assert!(
+            matches!(&exception, Exception::Guarded(citation) if citation.contains("`signing`")),
+            "{exception:?}"
+        );
+        assert!(
+            selection_exception(&loaded.set, &declared, None, anchor)
+                .unwrap()
+                .is_none()
+        );
     }
 }
