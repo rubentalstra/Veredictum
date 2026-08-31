@@ -19,6 +19,18 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **The registry signing key exists, and its public half is committed
+  (#403).** `registry/keys/registry-signing.pub.asc` is what a reader checks a
+  published console record against, with the instrument through
+  `veredictum verify-record` or without it through `gpg --verify`. The primary
+  key certifies and an ed25519 subkey signs, so a verified record names the
+  subkey fingerprint. The secret half is in the `registry-signing` environment
+  and nowhere else: it was generated in a throwaway keyring, never entered a
+  personal one, and that environment carries required reviewers plus a branch
+  policy naming `main` alone. Before it was used, the engine's own signing and
+  verification code was run over this exact key material, because the committed
+  test keypair is RSA and an EdDSA key would otherwise have reached production
+  on a path nothing here had exercised.
 - **A finished run submits itself to the registry (#391).** The console's
   `/run/submit` screen states what the run knows — the endpoint it drove, when
   it started, the catalogue revision, the engine version — and collects the
