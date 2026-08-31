@@ -1,0 +1,143 @@
+# SPDX-FileCopyrightText: Veredictum contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Is the instrument up, and is it serving the release it should? (#412)
+#
+# The instrument runs on a box this repository owns, so nothing outside this
+# repository is watching it. Four layers do, and this is the fourth: the
+# container's own healthcheck answers "is the process serving", the restart
+# policy answers "is it coming back", the deploy's verification answers "did
+# what we shipped land" — and none of them notices a box that stopped answering
+# at 3am on a Sunday.
+#
+# It opens an ISSUE rather than sending mail, because an issue is a record with
+# a history and mail is a thing nobody kept. One issue, reused: a box that is
+# down for a day should not produce 96 of them.
+name: Hosted watch
+
+on:
+  schedule:
+    # Every fifteen minutes. Cheap, and the window in which nobody notices is
+    # the number that matters here.
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: hosted-watch
+  cancel-in-progress: true
+
+env:
+  HOSTED_BASE: https://console.veredictum.eu
+  IMAGE: ghcr.io/rubentalstra/veredictum
+  ISSUE_TITLE: "The hosted instrument is not serving what it should"
+
+jobs:
+  watch:
+    name: is it up, and is it the right version
+    if: github.repository == 'rubentalstra/Veredictum'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      - name: Ask the instrument
+        id: ask
+        run: |
+          set -euo pipefail
+
+          # /healthz sits outside the route tree, so it answers even when the
+          # bundle or the app shell is broken. It claims only that the server
+          # accepts connections, which is exactly the first question.
+          health="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' "${HOSTED_BASE}/healthz" || echo 000)"
+
+          # And the served version, from the footer the shell renders. A 200 is
+          # not enough: an old deployment answers 200 too.
+          body="$(curl -sS -m 30 "${HOSTED_BASE}/" || true)"
+          served="$(printf '%s' "$body" | grep -oE 'engine [0-9][0-9A-Za-z.+-]*' | head -1 | cut -d' ' -f2 || true)"
+
+          # What it SHOULD serve: the release pointer's own version label.
+          tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+          idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+            -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
+            "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/latest" || true)
+          child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
+          expected=""
+          if [ -n "$child" ]; then
+            cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+              -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
+            expected=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
+              "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
+              | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
+          fi
+
+          verdict=ok
+          detail=""
+          if [ "$health" != "200" ]; then
+            verdict=down
+            detail="\`/healthz\` answered ${health}. The box is not serving at all, or not reachable."
+          elif [ -z "$served" ]; then
+            verdict=degraded
+            detail="\`/healthz\` answered 200 and the landing page carries no \`engine X.Y.Z\` footer. The server is up and the application is not rendering."
+          elif [ -n "$expected" ] && [ "$served" != "$expected" ]; then
+            verdict=stale
+            detail="It serves engine \`${served}\` and the release pointer names \`${expected}\`. A deploy did not land, or landed and was rolled back."
+          fi
+
+          {
+            echo "verdict=${verdict}"
+            echo "served=${served:-none}"
+            echo "expected=${expected:-unknown}"
+            echo "detail=${detail}"
+          } >> "$GITHUB_OUTPUT"
+          echo "verdict=${verdict} served=${served:-none} expected=${expected:-unknown}"
+
+      # One issue, reused. A box down for a day produces one record with a
+      # comment per check, not ninety-six issues nobody reads.
+      - name: Say so, once
+        if: steps.ask.outputs.verdict != 'ok'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERDICT: ${{ steps.ask.outputs.verdict }}
+          DETAIL: ${{ steps.ask.outputs.detail }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --repo "$REPO" --state open --search "$ISSUE_TITLE in:title" \
+            --json number --jq '.[0].number // empty')"
+          note="**${VERDICT}** — ${DETAIL}
+
+          Checked at $(date -u +%Y-%m-%dT%H:%M:%SZ) by [this run](${RUN_URL})."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$REPO" --body "$note"
+            echo "commented on #${existing}"
+          else
+            gh issue create --repo "$REPO" --title "$ISSUE_TITLE" \
+              --label bug --label P0 \
+              --body "The scheduled watch found the hosted instrument not serving what it should. This issue is reused for as long as that holds, one comment per check, and closed when a check finds it healthy again.
+
+          ${note}
+
+          The instrument runs on a box this repository provisions (#412), so nothing outside this repository is watching it. What to look at, in order: whether the box answers at all, then \`docker compose ps\` and the console container's logs, then whether the deploy lane's last run went green."
+            echo "opened a new issue"
+          fi
+
+      # And closed when it recovers, so an open issue always means a live
+      # problem rather than one somebody forgot to tidy.
+      - name: Close it when it recovers
+        if: steps.ask.outputs.verdict == 'ok'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SERVED: ${{ steps.ask.outputs.served }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          existing="$(gh issue list --repo "$REPO" --state open --search "$ISSUE_TITLE in:title" \
+            --json number --jq '.[0].number // empty')"
+          [ -n "$existing" ] || { echo "healthy, and nothing was open"; exit 0; }
+          gh issue close "$existing" --repo "$REPO" --comment "Recovered: the instrument serves engine \`${SERVED}\` again, seen by [this run](${RUN_URL})."
+          echo "closed #${existing}"
