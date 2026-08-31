@@ -13,7 +13,7 @@
 use std::path::{Path, PathBuf};
 
 use veredictum::pipeline::{
-    Error, assets, catalogue, judgement, measured, read_json, to_json_document,
+    Error, assets, catalogue, judgement, measured, read_json, replay, to_json_document,
 };
 
 /// Anything a seam or a fixture read can fail with, so a test body
@@ -975,5 +975,153 @@ fn an_unreadable_ixit_is_a_read_failure_not_a_parse_failure() -> Fallible {
         panic!("expected the read failure, got {error}");
     };
     assert_eq!(path, &absent);
+    Ok(())
+}
+
+// ── the replay seam's selection posture ────────────────────────────────────
+
+/// The ixit of the named fixture declaration the seams above read.
+fn ixit_path() -> PathBuf {
+    repo_root().join("fixtures/declaration/ixit.json")
+}
+
+/// A transcript of a campaign that drove nothing, written into `dir`.
+///
+/// The posture a replay records is decided before any case is judged, so an
+/// empty recording isolates it: the catalogue and the ixit still load, and no
+/// case outcome can stand in for the advisory.
+fn empty_transcript(dir: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let transcript = veredictum::transcript::RunTranscript {
+        sut: veredictum::party::Sut {
+            name: String::from("selection-gate"),
+            version: String::from("0"),
+        },
+        schedule_release: String::from("cnf-2.0-w2"),
+        cases: Vec::new(),
+    };
+    let path = dir.join("transcript.json");
+    std::fs::write(&path, to_json_document(&transcript, "transcript")?)?;
+    Ok(path)
+}
+
+/// Re-judges the empty recording, driving no case, and returns everything the
+/// replay reported alongside the document it emitted.
+fn replay_posture(
+    statement: Option<&Path>,
+    ixit: &Path,
+    transcript: &Path,
+) -> Result<(Vec<String>, veredictum::party::Results), Error> {
+    let root = artifacts();
+    let none: [String; 0] = [];
+    let request = replay::ReplayRequest {
+        root: &root,
+        ixit,
+        transcript,
+        statement,
+        filter: None,
+        only: Some(&none),
+    };
+    let reported = std::cell::RefCell::new(Vec::new());
+    let outcome = replay::replay_run(
+        &request,
+        &|warning| reported.borrow_mut().extend(warning.lines()),
+        &mut |_| {},
+    )?;
+    Ok((reported.into_inner(), outcome.results))
+}
+
+/// A replay with no statement stamps `statement_blind` AND says so, in the
+/// lines the run-level advisory renders (#471). The silence this replaces was
+/// reachable by hand: the re-derivation gate passes `--statement` from the
+/// record's own artifact, so nothing in the lane ever printed the warning it
+/// was not raising.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_blind_replay_stamps_its_basis_and_announces_it() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let transcript = empty_transcript(dir.path())?;
+    let (reported, results) = replay_posture(None, &ixit_path(), &transcript)?;
+    assert_eq!(
+        results.selection_basis,
+        Some(veredictum::party::SelectionBasis::StatementBlind),
+        "a replay with no statement records a whole-catalogue sweep"
+    );
+    let opening = reported.first().ok_or("a blind replay announces itself")?;
+    assert!(opening.contains("--statement"), "{reported:?}");
+    for fact in veredictum::run::UnestablishedFact::ALL {
+        assert!(
+            reported.iter().any(|line| line.contains(fact.token())),
+            "{} is not named: {reported:?}",
+            fact.token()
+        );
+    }
+    Ok(())
+}
+
+/// The advisory a blind replay prints is the one a blind run prints: one
+/// rendering, so the two commands cannot drift into two sentences that mean
+/// the same thing.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn the_replay_advisory_is_the_run_advisory() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let transcript = empty_transcript(dir.path())?;
+    let (reported, _) = replay_posture(None, &ixit_path(), &transcript)?;
+    let excused = std::collections::BTreeMap::new();
+    let run_advisory = veredictum::pipeline::conformance::Selection::of(None, &excused)
+        .advisory()
+        .ok_or("a blind campaign announces itself")?;
+    assert_eq!(reported, run_advisory.lines());
+    Ok(())
+}
+
+/// A replay carrying the record's statement stamps `statement` and reports
+/// nothing: the advisory belongs to the blind campaign alone.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_replay_that_carries_a_statement_reports_no_advisory() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let transcript = empty_transcript(dir.path())?;
+    let statement = statement_path();
+    let (reported, results) = replay_posture(Some(&statement), &ixit_path(), &transcript)?;
+    assert_eq!(
+        results.selection_basis,
+        Some(veredictum::party::SelectionBasis::Statement)
+    );
+    assert_eq!(reported, Vec::<String>::new());
+    Ok(())
+}
+
+/// The re-derivation gate's own property (#471): a record an ICS selected,
+/// re-judged blind, is refused rather than reported as agreeing, while the
+/// record the statement-carrying replay produced agrees with itself. Both
+/// documents come out of the replay seam here, so the refusal is decided over
+/// facts a real campaign records rather than over a hand-built pair.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_blind_replay_is_refused_against_a_record_a_statement_selected() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let transcript = empty_transcript(dir.path())?;
+    let ixit = ixit_path();
+    let statement = statement_path();
+    let (_, submitted) = replay_posture(Some(&statement), &ixit, &transcript)?;
+    let (_, blind) = replay_posture(None, &ixit, &transcript)?;
+    let refused = replay::selection_agreement(&submitted, &blind);
+    assert!(refused.refuses(), "{refused}");
+    let again = submitted.clone();
+    let agreed = replay::selection_agreement(&submitted, &again);
+    assert_eq!(agreed, replay::SelectionAgreement::Same);
     Ok(())
 }
