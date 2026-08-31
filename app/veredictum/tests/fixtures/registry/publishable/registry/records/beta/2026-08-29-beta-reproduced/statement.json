@@ -1,0 +1,14 @@
+{
+  "product": {
+    "name": "Beta CDR",
+    "version": "2.0.0",
+    "vendor": "Beta Health",
+    "identifier": "beta"
+  },
+  "schedule_release": "cnf-2.0-w2",
+  "claims": {
+    "profiles": [
+      "CORE"
+    ]
+  }
+}

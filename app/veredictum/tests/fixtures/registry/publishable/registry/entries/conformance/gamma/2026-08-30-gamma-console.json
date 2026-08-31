@@ -1,0 +1,86 @@
+{
+  "registry_schema_version": "1.1.0",
+  "entry_id": "2026-08-30-gamma-console",
+  "rules_version": "1.1.0",
+  "submitter": {
+    "name": "Gamma Integrations",
+    "contact": "mailto:conformance@gamma.invalid",
+    "relationship": "integrator"
+  },
+  "subject": {
+    "system": "gamma",
+    "display_name": "Gamma CDR",
+    "version": "5.3.0",
+    "deployment": {
+      "kind": "hosted-endpoint",
+      "endpoint": "https://gamma.invalid/openehr/v1",
+      "reproduction_authorized": true
+    }
+  },
+  "disclosure": {
+    "instrument_version": "0.1.3",
+    "run_started_at": "2026-08-30T08:15:00Z",
+    "environment": {
+      "os": "linux",
+      "arch": "x86_64",
+      "host_class": "the hosted instrument, 4 cores",
+      "cores": 4
+    },
+    "sut_configuration": "basic auth, template validation, audit on",
+    "conflict_of_interest": "the submitter integrates the system for its own customers"
+  },
+  "result": {
+    "kind": "conformance",
+    "catalogue_revision": "0.1.3",
+    "statement": "registry/records/gamma/2026-08-30-gamma-console/statement.json"
+  },
+  "artifacts": [
+    {
+      "role": "results",
+      "path": "registry/records/gamma/2026-08-30-gamma-console/results.json",
+      "sha256": "88a65c864254d31eea5ff95113f65f84447ff601e8d04b237af49ca228cb2fe7"
+    },
+    {
+      "role": "verdicts",
+      "path": "registry/records/gamma/2026-08-30-gamma-console/verdicts.json",
+      "sha256": "3383e43204717c69c3cc49a563d0311d81ea362b64511eaffe8d26cfbbd03037"
+    },
+    {
+      "role": "transcript",
+      "path": "registry/records/gamma/2026-08-30-gamma-console/transcript.json",
+      "sha256": "c12d2ac76851a7ad3de4ba5e00a08c1bc4722f996ff279990f357f813b1cea69"
+    },
+    {
+      "role": "ixit",
+      "path": "registry/records/gamma/2026-08-30-gamma-console/ixit.json",
+      "sha256": "aedf8eec255f7847fe65cb03e2c8283fb7e4b5a67617afba29c6b3399409eecc"
+    },
+    {
+      "role": "statement",
+      "path": "registry/records/gamma/2026-08-30-gamma-console/statement.json",
+      "sha256": "38a557c201fac3762d63ad15509dac5be56dc4dfc73f316b48808723230d5ad4"
+    },
+    {
+      "role": "signature",
+      "path": "registry/records/gamma/2026-08-30-gamma-console/verdicts.json.asc",
+      "sha256": "6dc4c813a5c591769170be74fc59e1371567b6ae07493466fdb8d2eddc2a4f70"
+    }
+  ],
+  "provenance": {
+    "tier": "console",
+    "instrument_origin": "https://console.veredictum.eu",
+    "console_run_id": "018f3b1e-6f0a-7c21-9a3d-6c2f5d4b8e77",
+    "workflow_ref": "rubentalstra/Veredictum/.github/workflows/registry-console.yml@refs/heads/main",
+    "run_id": "33377542606",
+    "run_attempt": 1,
+    "scheme": "openpgp-detached",
+    "signature": "registry/records/gamma/2026-08-30-gamma-console/verdicts.json.asc",
+    "signs": "registry/records/gamma/2026-08-30-gamma-console/verdicts.json",
+    "identity": "0123456789ABCDEF",
+    "verify_command": "veredictum verify-record --record ."
+  },
+  "supersedes": [
+    "2026-08-27-gamma-self-reported"
+  ],
+  "supersede_reason": "the hosted instrument re-drove the catalogue against the endpoint the submitter named and this repository's lane re-derived the verdicts, so the claim no longer rests on the submitter's own signature"
+}

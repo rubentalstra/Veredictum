@@ -1,0 +1,62 @@
+{
+  "registry_schema_version": "1.1.0",
+  "entry_id": "2026-08-29-beta-reproduced",
+  "rules_version": "1.1.0",
+  "submitter": {
+    "name": "Veredictum maintainers",
+    "contact": "https://github.com/rubentalstra/Veredictum",
+    "relationship": "maintainer"
+  },
+  "subject": {
+    "system": "beta",
+    "display_name": "Beta CDR",
+    "version": "2.0.0",
+    "deployment": {
+      "kind": "reproducible-topology",
+      "topology": "beta-topology",
+      "reproduction_authorized": true
+    }
+  },
+  "disclosure": {
+    "instrument_version": "0.1.3",
+    "run_started_at": "2026-08-29T00:00:00Z",
+    "environment": {
+      "os": "linux",
+      "arch": "x86_64",
+      "host_class": "GitHub-hosted runner, 4 cores",
+      "cores": 4
+    },
+    "sut_configuration": "basic auth, template validation, the topology's own defaults",
+    "conflict_of_interest": "this repository's reproduction lane performed the run and maintains the instrument"
+  },
+  "result": {
+    "kind": "conformance",
+    "catalogue_revision": "0.1.3",
+    "statement": "registry/records/beta/2026-08-29-beta-reproduced/statement.json"
+  },
+  "artifacts": [
+    {
+      "role": "results",
+      "path": "registry/records/beta/2026-08-29-beta-reproduced/results.json",
+      "sha256": "d28f631e937f5bac93cf3250d9cbf66203ad2d2d32a7a446774f741511ef60e2"
+    },
+    {
+      "role": "verdicts",
+      "path": "registry/records/beta/2026-08-29-beta-reproduced/verdicts.json",
+      "sha256": "2746705baf2ac553aa6291b6a01e4675d2255f29254b8d77cd100c1e5332df0e"
+    },
+    {
+      "role": "statement",
+      "path": "registry/records/beta/2026-08-29-beta-reproduced/statement.json",
+      "sha256": "42f0b53c1f879e4c36ffd00d7eb6228f2c7f7c171551320dfdc85f9e2fbb978a"
+    }
+  ],
+  "provenance": {
+    "tier": "reproduced",
+    "workflow_ref": "rubentalstra/Veredictum/.github/workflows/registry-reproduce.yml@refs/heads/main",
+    "run_id": "33377542605",
+    "run_attempt": 1,
+    "predicate_type": "https://slsa.dev/provenance/v1",
+    "verify_command": "gh attestation verify verdicts.json --repo rubentalstra/Veredictum"
+  }
+}

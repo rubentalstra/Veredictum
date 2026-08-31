@@ -1,0 +1,18 @@
+{
+  "instances": {
+    "sut": {
+      "base_url": "https://gamma.invalid/openehr/v1",
+      "auth": {
+        "mode": "basic",
+        "user_env": "SUT_USER",
+        "password_env": "SUT_PASS"
+      }
+    },
+    "unauthenticated": {
+      "base_url": "https://gamma.invalid/openehr/v1",
+      "auth": {
+        "mode": "none"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "review": [],
+  "capabilities": [],
+  "capability_tallies": [],
+  "profiles": [
+    [
+      "CORE",
+      "pass"
+    ],
+    [
+      "STANDARD",
+      "fail"
+    ]
+  ],
+  "security": null,
+  "performance": [],
+  "coverage": {
+    "selected": 135,
+    "driven": 130,
+    "passed": 101,
+    "failed": 29,
+    "inconclusive": 0
+  }
+}

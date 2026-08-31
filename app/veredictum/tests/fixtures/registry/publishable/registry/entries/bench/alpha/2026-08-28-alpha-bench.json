@@ -1,0 +1,63 @@
+{
+  "registry_schema_version": "1.1.0",
+  "entry_id": "2026-08-28-alpha-bench",
+  "rules_version": "1.1.0",
+  "submitter": {
+    "name": "Alpha Health",
+    "contact": "https://alpha.invalid/contact",
+    "relationship": "vendor"
+  },
+  "subject": {
+    "system": "alpha",
+    "display_name": "Alpha CDR",
+    "version": "3.1.0",
+    "deployment": {
+      "kind": "container-image",
+      "images": {
+        "server": "registry.alpha.invalid/alpha@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "reproduction_authorized": false
+    }
+  },
+  "disclosure": {
+    "instrument_version": "0.1.3",
+    "run_started_at": "2026-08-28T09:00:00Z",
+    "environment": {
+      "os": "linux",
+      "arch": "x86_64",
+      "host_class": "dedicated server, 8 cores, load generator and SUT on separate hosts",
+      "cpu_model": "AMD EPYC 7763 64-Core Processor",
+      "cores": 8,
+      "memory_bytes": 33662697472
+    },
+    "sut_configuration": "basic auth, template validation, no audit, no signing",
+    "conflict_of_interest": "the submitter builds the system"
+  },
+  "result": {
+    "kind": "bench",
+    "pack_id": "console-fixture",
+    "pack_version": "1.0.0",
+    "repetitions": 3,
+    "posture_profile": "minimal"
+  },
+  "artifacts": [
+    {
+      "role": "bench-result",
+      "path": "benchmarks/submissions/alpha/2026-08-28-9cdab133.json",
+      "sha256": "85e23f6f1ab46b9002c0f8281aef10eab801ce72520015f248e10096ae6aaab8"
+    },
+    {
+      "role": "signature",
+      "path": "registry/records/alpha/2026-08-28-alpha-bench/bench-result.json.asc",
+      "sha256": "02d338b7fb141e526a1c29c2e338224bd9740f6fc3f5aa70c33be53b7a1d449b"
+    }
+  ],
+  "provenance": {
+    "tier": "self-reported",
+    "scheme": "openpgp-detached",
+    "signature": "registry/records/alpha/2026-08-28-alpha-bench/bench-result.json.asc",
+    "signs": "benchmarks/submissions/alpha/2026-08-28-9cdab133.json",
+    "identity": "0123456789ABCDEF",
+    "verify_command": "gpg --verify bench-result.json.asc"
+  }
+}
