@@ -452,8 +452,34 @@ fn read_finished(out_dir: &Path, clean_exit: bool) -> Result<Finished, Error> {
 /// [`Error::NotFound`] when neither names an existing binary, plus
 /// everything [`Engine::verified`] refuses.
 pub fn locate() -> Result<Engine, Error> {
-    if let Ok(explicit) = std::env::var(ENGINE_ENV) {
-        return Engine::verified(Path::new(&explicit));
+    locate_with(std::env::var(ENGINE_ENV).ok().as_deref())
+}
+
+/// Resolves the engine from an explicit override, or from `PATH` when there is
+/// none.
+///
+/// Separate from [`locate`] so the override branch is testable: reading the
+/// variable happens once, in the caller, and `std::env::set_var` is unsafe in
+/// this edition while `unsafe` is forbidden in this crate.
+///
+/// # Errors
+/// [`Error::NotFound`] when neither the override nor `PATH` yields a file,
+/// naming which of the two was looked at; otherwise whatever
+/// [`Engine::verified`] reports.
+pub fn locate_with(explicit: Option<&str>) -> Result<Engine, Error> {
+    if let Some(explicit) = explicit {
+        // A missing override is a typo in an operator's configuration, so the
+        // diagnostic names the variable and the path it held. Without this the
+        // failure surfaced as a bare "No such file or directory (os error 2)"
+        // that named neither.
+        return match Engine::verified(Path::new(explicit)) {
+            Err(Error::Probe(source)) if source.kind() == std::io::ErrorKind::NotFound => {
+                Err(Error::NotFound(format!(
+                    "{ENGINE_ENV} names `{explicit}`, and there is no file there"
+                )))
+            }
+            other => other,
+        };
     }
     match Engine::verified(Path::new("veredictum")) {
         Err(Error::Probe(source)) if source.kind() == std::io::ErrorKind::NotFound => {
@@ -545,9 +571,30 @@ pub fn opt_token<T: serde::Serialize>(
 #[cfg(test)]
 mod tests {
     use super::{
-        Credential, ENGINE_VERSION, RunSpec, Secret, VerdictsSpec, args, opt_token, token,
-        verdicts_args,
+        Credential, ENGINE_ENV, ENGINE_VERSION, Error, RunSpec, Secret, VerdictsSpec, args,
+        locate_with, opt_token, token, verdicts_args,
     };
+
+    /// An override naming a file that is not there is an operator's typo, and
+    /// the diagnostic has to name the variable it came from. Before #379 this
+    /// surfaced as a bare "No such file or directory (os error 2)".
+    #[test]
+    fn an_override_naming_nothing_names_the_variable_it_came_from() {
+        let missing = "/nonexistent/veredictum-engine-that-is-not-there";
+        match locate_with(Some(missing)) {
+            Err(Error::NotFound(message)) => {
+                assert!(
+                    message.contains(ENGINE_ENV),
+                    "the diagnostic must name the variable: {message}"
+                );
+                assert!(
+                    message.contains(missing),
+                    "the diagnostic must name the path it held: {message}"
+                );
+            }
+            other => panic!("expected a typed NotFound, got {other:?}"),
+        }
+    }
 
     /// The manifest's crates.io pin and [`ENGINE_VERSION`] are one fact in
     /// two places; this is the lock between them.
