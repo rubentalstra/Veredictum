@@ -51,8 +51,9 @@ pub const SLUG_HEX_CHARS: usize = 12;
 ///
 /// Every member is text, because a form sends text: the typed reading — the
 /// relationship vocabulary, the two integers, the authorization flag — happens
-/// once, server-side, in [`read::compose`], and each refusal names the field it
-/// is about.
+/// once, server-side, in this module's `read::compose`, and each refusal names
+/// the field it is about. That reader is server-only, so the reference here is
+/// plain text rather than a link the featureless doc build cannot resolve.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DisclosureForm {
     /// Who is publishing the entry.
