@@ -566,15 +566,6 @@ pub enum ProbeAnswer {
     },
 }
 
-/// One pickable party statement.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StatementRow {
-    /// The path under the party tree (`<dir>/statement.json`).
-    pub path: String,
-    /// The declared product name and version.
-    pub product: String,
-}
-
 /// The honest scope preview: what a run over this scope will PROCESS.
 ///
 /// Every case in filter scope lands as an outcome or a recorded exception,
@@ -656,7 +647,7 @@ pub mod read {
 
     use super::{
         ClaimSummary, DraftView, RecordedResults, RecordedRun, RunDraft, RunScreen, ScopePreview,
-        ScopeTier, StartOutcome, StatementRow, TierRow,
+        ScopeTier, StartOutcome, TierRow,
     };
     use crate::run_job::{Latest, RunId};
     use crate::state::ConsoleState;
@@ -781,47 +772,6 @@ pub mod read {
         Ok(summary)
     }
 
-    /// One committed statement's body, for the example fillers.
-    ///
-    /// The path is untrusted client input: it must canonicalize to a
-    /// `statement.json` under the mounted party tree, or it is refused.
-    ///
-    /// # Errors
-    /// The refusal above, or the filesystem's verbatim failure.
-    pub fn statement_body(state: &ConsoleState, path: &str) -> Result<String, String> {
-        let candidate = std::path::Path::new(path)
-            .canonicalize()
-            .map_err(|e| format!("{path}: {e}"))?;
-        let party = state
-            .party
-            .canonicalize()
-            .map_err(|e| format!("{}: {e}", state.party.display()))?;
-        if !candidate.starts_with(&party)
-            || candidate.file_name() != Some(std::ffi::OsStr::new("statement.json"))
-        {
-            return Err(String::from(
-                "refused: only a statement.json under the mounted party tree loads as an example",
-            ));
-        }
-        std::fs::read_to_string(&candidate).map_err(|e| format!("{}: {e}", candidate.display()))
-    }
-
-    /// The pickable statements: every `*/statement.json` under the party
-    /// tree, path-sorted, with the product identity read through the
-    /// published lib.
-    ///
-    /// # Errors
-    /// The verbatim read failure when the party tree cannot be listed.
-    pub fn statement_rows(state: &ConsoleState) -> Result<Vec<StatementRow>, String> {
-        Ok(committed_statements(state)?
-            .into_iter()
-            .map(|(path, statement)| StatementRow {
-                path: path.display().to_string(),
-                product: format!("{} {}", statement.product.name, statement.product.version),
-            })
-            .collect())
-    }
-
     /// The scope preview over the loaded catalogue.
     ///
     /// The filter-scoped case set IS what a run processes, so the count is
@@ -903,59 +853,6 @@ pub mod read {
             });
         }
         Ok(rows)
-    }
-
-    /// Every committed statement under the mounted party tree, path-sorted
-    /// and parsed through the published lib.
-    ///
-    /// # Errors
-    /// The verbatim read or parse failure.
-    fn committed_statements(
-        state: &ConsoleState,
-    ) -> Result<Vec<(std::path::PathBuf, veredictum::party::Statement)>, String> {
-        let mut found = Vec::new();
-        let entries = std::fs::read_dir(&state.party)
-            .map_err(|e| format!("{}: {e}", state.party.display()))?;
-        for entry in entries {
-            let entry = entry.map_err(|e| e.to_string())?;
-            let candidate = entry.path().join("statement.json");
-            if !candidate.is_file() {
-                continue;
-            }
-            let body = std::fs::read_to_string(&candidate)
-                .map_err(|e| format!("{}: {e}", candidate.display()))?;
-            let statement: veredictum::party::Statement =
-                serde_json::from_str(&body).map_err(|e| format!("{}: {e}", candidate.display()))?;
-            found.push((candidate, statement));
-        }
-        found.sort_by(|a, b| a.0.cmp(&b.0));
-        Ok(found)
-    }
-
-    /// The schedule release a composed claim targets.
-    ///
-    /// The console never invents one: the committed statements under the
-    /// mounted party tree declare it, and they must agree.
-    ///
-    /// # Errors
-    /// The party tree's verbatim read failure, an empty party tree, or
-    /// committed statements that disagree.
-    fn schedule_release(state: &ConsoleState) -> Result<String, String> {
-        let declared: std::collections::BTreeSet<String> = committed_statements(state)?
-            .into_iter()
-            .map(|(_, statement)| statement.schedule_release)
-            .collect();
-        let mut declared = declared.into_iter();
-        match (declared.next(), declared.next()) {
-            (Some(release), None) => Ok(release),
-            (Some(first), Some(second)) => Err(format!(
-                "the committed statements declare different schedule releases ({first} and {second}), so the console cannot pick the one a composed claim targets"
-            )),
-            _ => Err(format!(
-                "{}: no committed statement declares the schedule release a composed claim targets",
-                state.party.display()
-            )),
-        }
     }
 
     /// The spec-component versions a composed claim declares.
@@ -1113,7 +1010,7 @@ pub mod read {
                 version,
                 vendor: String::from("unknown"),
             },
-            schedule_release: schedule_release(state)?,
+            schedule_release: String::from(veredictum::party::SCHEDULE_RELEASE),
             spec_versions: catalogue_spec_versions(validation)?,
             claims: veredictum::party::Claims {
                 capabilities,
@@ -1555,7 +1452,7 @@ pub mod fns {
 
     use super::{
         AuthChoice, ClaimSummary, DraftView, PostureForm, ProbeAnswer, RunScreen, ScopePreview,
-        ScopeTier, StartOutcome, StatementRow, TierRow,
+        ScopeTier, StartOutcome, TierRow,
     };
     use crate::run_job::RunId;
 
@@ -1643,16 +1540,6 @@ pub mod fns {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         let who = crate::submitter::current(&state);
         Ok(super::read::draft_view(&state, who))
-    }
-
-    /// The pickable party statements.
-    ///
-    /// # Errors
-    /// The verbatim read failure when the party tree cannot be listed.
-    #[server]
-    pub async fn fetch_statements() -> Result<Vec<StatementRow>, ServerFnError> {
-        let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::read::statement_rows(&state).map_err(ServerFnError::new)
     }
 
     /// The scope preview for a filter.
@@ -1772,16 +1659,5 @@ pub mod fns {
         let who = crate::submitter::current(&state);
         super::read::compose_claim(&state, who, &tiers.unwrap_or_default())
             .map_err(ServerFnError::new)
-    }
-
-    /// One committed statement's body, for the example fillers.
-    ///
-    /// # Errors
-    /// The path refusal (only a statement.json under the party tree loads),
-    /// or the filesystem's verbatim failure.
-    #[server]
-    pub async fn fetch_statement_body(path: String) -> Result<String, ServerFnError> {
-        let state: crate::state::ConsoleState = leptos::prelude::expect_context();
-        super::read::statement_body(&state, &path).map_err(ServerFnError::new)
     }
 }

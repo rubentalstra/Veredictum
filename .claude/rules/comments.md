@@ -98,10 +98,10 @@ history carries it. A comment describes the code as it IS.
 - **Adjudicated 2026-08-27 (#125): a corpus-local README is NOT a sanctioned
   exception to rule 11.** A document committed beside the material it
   describes moves and dies like any other internal document, so the guard
-  refuses every in-repo markdown citation — an `artifacts/`, `party/`,
-  `scripts/`, `website/`, `schemas/`, `fuzz/`, `app/` or `verification-pack/`
-  path ending in `.md`, and the root documents by name — and a comment grounds
-  on the material itself instead (the committed test keypair's armored
+  refuses every in-repo markdown citation — an `artifacts/`, `fixtures/`,
+  `registry/`, `scripts/`, `website/`, `schemas/`, `fuzz/`, `app/` or
+  `verification-pack/` path ending in `.md`, and the root documents by name —
+  and a comment grounds on the material itself instead (the committed test keypair's armored
   certificate carries its own user id and subkey binding, so nothing outside
   the packets has to state its identity). That check reads COMMENT LINES only,
   because `specs/**` is full of `.md` documents that ARE the oracle and a

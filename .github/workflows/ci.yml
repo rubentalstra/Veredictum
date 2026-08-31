@@ -147,7 +147,7 @@ jobs:
           # (#55); no code lives at the root any more. The legend generator is
           # named individually (#189) because the test job runs its --check and
           # the rest of scripts/render/ has nothing to do with that job.
-          if echo "$changed" | grep -qE '^(app/|artifacts/|schemas/|party/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|scripts/render/bench-legend\.sh$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
+          if echo "$changed" | grep -qE '^(app/|artifacts/|schemas/|fixtures/|specs/|verification-pack/|website/|fuzz/|scripts/vendor/|scripts/checks/|scripts/render/bench-legend\.sh$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|rustfmt\.toml$|clippy\.toml$|deny\.toml$|\.config/nextest\.toml$|\.github/workflows/ci\.yml$)'; then
             echo "code=true" >> "$GITHUB_OUTPUT"
           else
             echo "code=false" >> "$GITHUB_OUTPUT"

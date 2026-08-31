@@ -20,8 +20,8 @@ images, which is what makes a screenshot diff mean something.
 
 ## The landing
 
-The four counts are the catalogue's own: case cores, operation bindings, party
-statements, and validate findings. A findings count above zero means the
+The four counts are the catalogue's own: case cores, operation bindings,
+capability-matrix rows, and validate findings. A findings count above zero means the
 catalogue itself needs attention before any server is graded.
 
 ![The console landing in light mode](console/img/landing-light.png)
@@ -61,8 +61,12 @@ answer renders verbatim before anything continues.
 ![The connect step in dark mode](console/img/connect-dark.png)
 
 Scope takes the claim the run grades: the vendor's own statement.json (the
-ICS, the document that says which profiles and capabilities are claimed)
-pasted into the box, or a committed example loaded into it.
+ICS, the document that says which profiles and capabilities are claimed),
+pasted into the box. The console offers no declaration of its own to load,
+because the claim belongs to whoever makes it: ISO/IEC 9646-7 assigns an ICS
+proforma's support and supported-values columns to the supplier of the
+implementation, and the proforma itself is the capability matrix this
+instrument publishes.
 
 The claim can also be built on the screen. The tier row offers CORE, STANDARD,
 OPTIONS and SEC-BASIC with the capabilities the capability matrix puts in each

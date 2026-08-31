@@ -142,8 +142,8 @@
         <figcaption>One run, one judgement, one entry</figcaption>
         <pre><code><span class="p">$</span> veredictum run --root artifacts --ixit ./my-ixit.json \
       --sut-name my-cdr --sut-version 1.2.3 \
-      --statement party/my-cdr/statement.json --out ./run
-<span class="p">$</span> veredictum verdicts --statement party/my-cdr/statement.json \
+      --statement ./my-statement.json --out ./run
+<span class="p">$</span> veredictum verdicts --statement ./my-statement.json \
       --results ./run/results.json --root artifacts --out ./judgement</code></pre>
       </figure>
       <p class="after-code">Then copy <code>results.json</code> and <code>verdicts.json</code>

@@ -18,7 +18,7 @@
 #   artifacts/      the catalogue — a case, a binding or a register entry
 #                   changes what a run reports about somebody's server
 #   schemas/        the published JSON Schemas an integrator authors against
-#   party/          the committed statements a published record is judged against
+#   registry/       the submission rules a published entry is accepted under
 #   docker/         the container image, and the ignore file that decides what
 #   .dockerignore   its build can even see
 #   Cargo.toml      the package identity, the dependency set, and the lint tables
@@ -44,7 +44,7 @@ readonly USER_VISIBLE_PATHS=(
   'app/veredictum-console/src/'
   'artifacts/'
   'schemas/'
-  'party/'
+  'registry/'
   'docker/'
   '\.dockerignore$'
   'Cargo\.toml$'

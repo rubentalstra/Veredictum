@@ -1474,7 +1474,7 @@ mod tests {
         entry.subject.deployment.endpoint = Some(String::from("https://cdr.example/openehr/v1"));
         entry.result = ResultBlock::Conformance {
             catalogue_revision: String::from("0.1.4"),
-            statement: String::from("party/example/statement.json"),
+            statement: String::from("records/example/statement.json"),
         };
         entry.artifacts = vec![
             ArtifactRef {
@@ -1788,7 +1788,7 @@ mod tests {
         let mut entry = bench_entry();
         entry.result = ResultBlock::Conformance {
             catalogue_revision: String::from("4cee001c"),
-            statement: String::from("party/example/statement.json"),
+            statement: String::from("records/example/statement.json"),
         };
         let defects = entry_defects(&entry);
         assert!(

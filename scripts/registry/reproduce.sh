@@ -25,8 +25,15 @@
 #   run/results.json  the recorded catalogue run
 #   judgement/…       verdicts.json and the rendered documents
 #
+# WHY THE IXIT IS OURS AND THE CLAIM IS NOT. This repository composes the
+# deployment, so it knows the addresses and writes the ixit. It does not know
+# what the vendor supports, and ISO/IEC 9646-7 assigns an ICS proforma's support
+# and supported-values columns to "the supplier of the implementation", so
+# `statement` may only cite a declaration the supplier published. With none
+# cited the run asserts no claim, and no conformance verdict follows.
+#
 # WHY THE IXIT TRAVELS WITH THE BUNDLE. A topology declares the principals its
-# composed deployment actually has, which is narrower than a party's own
+# composed deployment actually has, which is narrower than a supplier's own
 # declaration: the quickstarts stand up one clinical principal, so every case
 # addressing an admin or read-only principal is recorded not-applicable at
 # selection time. A reader cannot check that reason against a digest alone, so
@@ -212,7 +219,13 @@ judge_args=(
 if [[ -n "$STATEMENT" ]]; then
   judge_args+=(--statement "$STATEMENT")
 else
-  echo "::error::$TOPOLOGY declares no statement, and a verdict is computed against one" >&2
+  # A verdict is computed against a CLAIM, and the claim belongs to the
+  # supplier of the implementation (ISO/IEC 9646-7 assigns an ICS proforma's
+  # support columns to them). A topology that cites no published supplier
+  # declaration therefore yields an observation, which needs the survey output
+  # this lane does not have yet.
+  # TODO(#487): produce a survey bundle here instead of refusing.
+  echo "::error::$TOPOLOGY cites no supplier declaration, so this run can assert no claim and no conformance verdict; a survey is issue #487" >&2
   exit 1
 fi
 # The same tolerance as the run step: a judgement carrying review findings

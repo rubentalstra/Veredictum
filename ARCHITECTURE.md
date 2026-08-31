@@ -22,7 +22,10 @@ WHAT THE SPLIT CHANGED, and nothing else: `cnf-runner` is `veredictum`; the
 paths that were under `tools/cnf-runner/` map to this repository's trees —
 after the #55 restructure the code is `app/veredictum/` (a virtual workspace
 root; the console is `app/veredictum-console/`) and the data trees stay
-root-mapped (`artifacts/`, `schemas/`, `party/`, `verification-pack/`);
+root-mapped (`artifacts/`, `schemas/`, `verification-pack/`); the party tree
+that used to sit beside them is gone (#465), because a declaration's support
+columns belong to the supplier of the implementation and the one filled-in
+example that remains is a named test fixture under `fixtures/`;
 `specs/openehr/` is `specs/openehr/`. References belonging to the
 FerroEHR repository — its issue numbers, its committed conformance baselines —
 are qualified as such, because they do not resolve here. FerroEHR named as a
@@ -1850,11 +1853,15 @@ flag on a catalogue change, and a stale coverage record is worse than a
 regenerated one.
 
 The **claim-completeness gates** (issue FerroEHR#622) close the same loop on the CLAIM
-side, so a certification claim can never be hollow. `validate` sweeps the
-committed party statements beside the artifact root
-(`<root>/../party/*/statement.json`) and relates them to the catalogue:
+side, so a certification claim can never be hollow. Half of them read the
+capability matrix alone, and half are relations between a claim and the
+catalogue — the static conformance review of ISO/IEC 9646-1 and -7. Nothing is
+swept from beside the artifact root: ISO/IEC 9646-7 assigns an ICS proforma's
+support and supported-values columns to the supplier of the implementation, so
+a declaration is SUPPLIED, by `veredictum validate --statement <file>` or by
+the run and judgement commands that already take one (#465).
 
-- **`claim-completeness`** — a capability a statement claims must have at
+- **`claim-completeness`** — a capability a SUPPLIED declaration claims must have at
   least one verdict-bearing catalogue case (an active case naming it whose
   gating is not suspended by a `report_only` register entry). Declaring a
   capability IS the obligation to run the framework against it, so a hollow
@@ -1871,7 +1878,7 @@ committed party statements beside the artifact root
   must keep; falling below it names the capability and the shortfall. Floors
   ratchet UP only: raising one to the current depth is always safe, so the
   committed floors are derived from the catalogue and re-derived by a test.
-- **`workload-coverage`** — a claimed capability the measured
+- **`workload-coverage`** — a MATRIX ROW the measured
   hospital-simulation workload does not exercise must carry a register-linked
   `workload_exclusion` on its matrix row, which the certificate's Workload
   Coverage table renders in place of the bare `NO — catalogue gap` cell; an

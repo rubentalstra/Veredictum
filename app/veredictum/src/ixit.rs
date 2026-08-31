@@ -604,7 +604,7 @@ mod tests {
                     "audience": "cnf-smart-sut",
                     "subject": "cnf-smart-app",
                     "roles": ["USER"],
-                    "key_file": "../smart/cnf-smart-test.key.pem",
+                    "key_file": "../smart-test-issuer/cnf-smart-test.key.pem",
                     "kid": "cnf-smart-test",
                     "ttl_seconds": 300
                 }
@@ -625,16 +625,16 @@ mod tests {
 
         // A relative key file resolves against the ixit document's directory,
         // never the runner's working directory.
-        declared.rebase_paths(Path::new("/party/ferroehr"));
+        declared.rebase_paths(Path::new("/fixtures/declaration"));
         assert_eq!(
             declared.smart.as_ref().unwrap().mint.key_file,
-            PathBuf::from("/party/ferroehr/../smart/cnf-smart-test.key.pem")
+            PathBuf::from("/fixtures/declaration/../smart-test-issuer/cnf-smart-test.key.pem")
         );
         // Rebasing is idempotent for an already-absolute path.
         declared.rebase_paths(Path::new("/elsewhere"));
         assert_eq!(
             declared.smart.as_ref().unwrap().mint.key_file,
-            PathBuf::from("/party/ferroehr/../smart/cnf-smart-test.key.pem")
+            PathBuf::from("/fixtures/declaration/../smart-test-issuer/cnf-smart-test.key.pem")
         );
     }
 

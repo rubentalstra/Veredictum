@@ -31,7 +31,6 @@ fn state_over(out: &Path, verify_key: Option<PathBuf>) -> ConsoleState {
     ConsoleState {
         root: engine_gate::repo_root().join("artifacts"),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: out.to_path_buf(),
         catalogue: std::sync::Arc::new(Err(String::from("not loaded for this gate"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(

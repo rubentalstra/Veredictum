@@ -41,7 +41,33 @@ impl Validation {
 /// [`Error::Catalogue`] when the root itself cannot be opened. Files that
 /// fail their own load stages are reported as findings, not as an error.
 pub fn validate_tree(root: &Path, specs: Option<&Path>) -> Result<Validation, Error> {
-    let loaded = crate::artifacts::load_root(root).map_err(Error::Catalogue)?;
+    validate_tree_reviewing(root, specs, None)
+}
+
+/// Loads an artifact root, adds one supplied DECLARATION to the pass, and runs
+/// every machine gate over both.
+///
+/// `declaration` is the path of a submitted `statement.json`; the `ixit.json`
+/// beside it joins the pass too. The gates that are relations between a claim
+/// and the catalogue — the static conformance review — have a subject only
+/// when one is supplied. ISO/IEC 9646-7 assigns the support and
+/// supported-values columns of an ICS proforma to the supplier of the
+/// implementation, so this repository authors the proforma
+/// (`vocab/capability_matrix.yaml`) and never the answers.
+///
+/// # Errors
+/// [`Error::Catalogue`] when the root itself cannot be opened, or on a
+/// schema-compilation defect. A declaration that fails to load is reported as
+/// a finding, not as an error.
+pub fn validate_tree_reviewing(
+    root: &Path,
+    specs: Option<&Path>,
+    declaration: Option<&Path>,
+) -> Result<Validation, Error> {
+    let mut loaded = crate::artifacts::load_root(root).map_err(Error::Catalogue)?;
+    if let Some(path) = declaration {
+        loaded.review_declaration(path).map_err(Error::Catalogue)?;
+    }
     let findings = validate(&Context {
         set: &loaded.set,
         load_errors: &loaded.errors,

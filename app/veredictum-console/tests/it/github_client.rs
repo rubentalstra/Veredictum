@@ -30,7 +30,8 @@ const TOKEN: &str = "ghs_stubinstallationtoken";
 fn identity(server: &MockServer) -> AppConfig {
     AppConfig {
         app_id: String::from("1234567"),
-        key_file: engine_gate::repo_root().join("party/smart/cnf-smart-test.key.pem"),
+        key_file: engine_gate::repo_root()
+            .join("fixtures/smart-test-issuer/cnf-smart-test.key.pem"),
         installation_id: String::from("89012345"),
         repo: String::from(REPO),
         api_base: server.uri(),

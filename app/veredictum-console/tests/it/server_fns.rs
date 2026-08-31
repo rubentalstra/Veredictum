@@ -31,7 +31,6 @@ fn state_over(out: &Path) -> ConsoleState {
     ConsoleState {
         root,
         specs,
-        party: engine_gate::repo_root().join("party"),
         out: out.to_path_buf(),
         catalogue: std::sync::Arc::new(catalogue),
         draft: std::sync::Arc::new(std::sync::Mutex::new(
@@ -321,19 +320,21 @@ async fn the_run_endpoints_refuse_an_out_of_order_wizard() -> Result<(), Box<dyn
         .to_string();
     assert!(!empty.is_empty(), "{empty}");
 
-    // A statement path is user input: only a statement.json under the party
-    // tree loads at all.
-    let outside = fns::fetch_statement_body(String::from("../../etc/passwd"))
+    // #465: no endpoint dereferences a path any more, so a path pasted into
+    // the claim box is refused as the non-declaration it is.
+    let outside = fns::save_scope(Some(String::from("../../etc/passwd")), None, false)
         .await
-        .expect_err("a path outside the party tree never loads")
+        .expect_err("a path is not a declaration")
         .to_string();
     assert!(!outside.is_empty(), "{outside}");
     Ok(())
 }
 
-/// The reads the Scope screen renders come off the committed party tree and
-/// the committed catalogue, and the tier rows cover the four tiers the
-/// verdict machinery answers for.
+/// The reads the Scope screen renders come off the committed catalogue alone,
+/// and the tier rows cover the four tiers the verdict machinery answers for.
+///
+/// #465: nothing on this screen offers a declaration. The claim is the
+/// supplier's, so the only inputs are the tiers and the pasted bytes.
 #[expect(
     clippy::panic_in_result_fn,
     reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
@@ -345,20 +346,6 @@ async fn the_scope_reads_come_off_the_committed_trees() -> Result<(), Box<dyn st
     let scratch = assert_fs::TempDir::new()?;
     let state = state_over(scratch.path());
     let _owner = provide(&state);
-
-    let statements = fns::fetch_statements().await.map_err(|e| e.to_string())?;
-    assert!(
-        !statements.is_empty(),
-        "the party tree carries committed statements"
-    );
-    let first = statements.first().ok_or("one statement row")?;
-    let body = fns::fetch_statement_body(first.path.clone())
-        .await
-        .map_err(|e| e.to_string())?;
-    assert!(
-        serde_json::from_str::<veredictum::party::Statement>(&body).is_ok(),
-        "a committed statement parses through the published lib's own model"
-    );
 
     let tiers = fns::fetch_tier_counts().await.map_err(|e| e.to_string())?;
     let named: Vec<ScopeTier> = tiers.iter().map(|row| row.tier).collect();
@@ -584,12 +571,9 @@ async fn the_scope_step_accepts_a_claim_and_refuses_a_non_claim()
         "the fixture answered, so the draft carries a probe result"
     );
 
-    // A committed statement: accepted, and summarized from its own fields.
-    let statements = fns::fetch_statements().await.map_err(|e| e.to_string())?;
-    let first = statements.first().ok_or("one committed statement")?;
-    let body = fns::fetch_statement_body(first.path.clone())
-        .await
-        .map_err(|e| e.to_string())?;
+    // The named ICS fixture's own bytes: accepted, and summarized from its
+    // own fields.
+    let body = std::fs::read_to_string(engine_gate::declaration_fixture())?;
     let summary = fns::save_scope(Some(body.clone()), None, true, PostureForm::default())
         .await
         .map_err(|e| e.to_string())?

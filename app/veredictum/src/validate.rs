@@ -95,14 +95,15 @@ pub enum CheckId {
     /// reconciliation of every performance workload (write share inside the
     /// 10:1..50:1 derivation band; stage templates resolve in the corpus).
     JourneyEnvelope,
-    /// Claim completeness: a capability a committed party statement claims has
-    /// at least one verdict-bearing catalogue case, and a capability whose
-    /// every case resolves excused or deselected names the register entry that
+    /// Claim completeness — the static conformance review of ISO/IEC 9646-1
+    /// and -7: a capability a SUPPLIED declaration claims has at least one
+    /// verdict-bearing catalogue case, and a capability whose every case
+    /// resolves excused or deselected names the register entry that
     /// adjudicated that. Declaring a capability IS the obligation to run the
     /// framework against it, so a hollow claim cannot enter a run. The gate
-    /// also holds a `Signing` claim to the ixit committed beside the statement,
-    /// since a posture declared nowhere leaves every `verifiable` row
-    /// inconclusive.
+    /// also holds a `Signing` claim to the ixit supplied beside the
+    /// declaration, since a posture declared nowhere leaves every `verifiable`
+    /// row inconclusive.
     ClaimCompleteness,
     /// Guard scope: a `guards:` entry may not state a capability-scoped
     /// selection rule. That rule is global, implemented once in the runner's
@@ -117,21 +118,22 @@ pub enum CheckId {
     /// believes it concludes the case is held back while it drives and gates.
     /// Applicability is decided by the typed fields alone.
     GuardCondition,
-    /// A party statement's declared `served_extensions` families each resolve
-    /// in the catalogue's outward wire-surface axis and are declared once. A
-    /// statement publishes the route families its own party declares, never the
-    /// catalogue's global table, which is one product's own design and a false
-    /// claim about any other vendor.
+    /// A supplied declaration's `served_extensions` families each resolve in
+    /// the catalogue's outward wire-surface axis and are declared once. A
+    /// declaration publishes the route families its own supplier declares,
+    /// never the catalogue's global table, which is one product's own design
+    /// and a false claim about any other vendor.
     ServedExtensionDeclaration,
     /// Per-capability case-count floors: one token case never certifies a
     /// capability. The capability matrix records each row's `min_cases`, and a
     /// battery below its floor is a finding naming the shortfall. Floors
     /// ratchet up only.
     CapabilityDepth,
-    /// Measured-workload coverage: every claimed capability is either exercised
-    /// by the hospital-simulation journeys the performance workloads name, or
-    /// carries a register-linked `workload_exclusion` the certificate renders.
-    /// A bare `NO — catalogue gap` row is an undecided hole.
+    /// Measured-workload coverage: every capability the matrix defines is
+    /// either exercised by the hospital-simulation journeys the performance
+    /// workloads name, or carries a register-linked `workload_exclusion` the
+    /// certificate renders. A bare `NO — catalogue gap` row is an undecided
+    /// hole.
     WorkloadCoverage,
     /// Realization scoping: an `extension` binding drives a route no openEHR
     /// specification governs, so it is fenced off from every released-wire
@@ -534,8 +536,9 @@ const SIGNING_CAPABILITY: &str = "Signing";
 /// carries no executed evidence — the same hollow claim
 /// [`check_claim_completeness`] refuses, one document further out.
 ///
-/// The pairing is by party directory. A statement committed without an ixit
-/// beside it is silent here: there is no second declaration to contradict.
+/// The pairing is by the declaration's own directory. A declaration supplied
+/// without an ixit beside it is silent here: there is no second declaration to
+/// contradict.
 fn check_signing_posture_declared(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     for (party_path, statement) in &set.parties {
         let claims_signing = statement
@@ -872,15 +875,15 @@ fn mentions_word(text: &str, word: &str) -> bool {
     })
 }
 
-/// A party's declared `served_extensions` families resolve in the catalogue's
-/// outward wire-surface axis, and each is declared once.
+/// A supplier's declared `served_extensions` families resolve in the
+/// catalogue's outward wire-surface axis, and each is declared once.
 ///
-/// The statement renders the route detail of exactly what the party declares,
-/// so an unresolvable family would publish a family name with no routes behind
-/// it, and a repeated one would publish the same family twice. The declaration
-/// is per party by construction: a route family is one product's own design
-/// (no openEHR specification governs it), so no party's statement may carry
-/// another's surface.
+/// The declaration renders the route detail of exactly what its supplier
+/// declares, so an unresolvable family would publish a family name with no
+/// routes behind it, and a repeated one would publish the same family twice.
+/// The declaration is per supplier by construction: a route family is one
+/// product's own design (no openEHR specification governs it), so no
+/// declaration may carry another product's surface.
 fn check_served_extension_declarations(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     let known: BTreeSet<&str> = set
         .wire_surface
@@ -1146,9 +1149,13 @@ fn workload_exercised(set: &ArtifactSet) -> BTreeSet<&'static str> {
     exercised
 }
 
-/// A claimed capability the measured workload never touches is either a
+/// A matrix row the measured workload never touches is either a
 /// journey-catalogue gap to close or an adjudicated exclusion — never a bare
 /// `NO — catalogue gap` row on a published certificate.
+///
+/// The driver is the capability matrix, which is the ICS proforma this
+/// repository authors: every row it defines is measured or excluded,
+/// whatever any supplier happens to claim.
 fn check_workload_coverage(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     let Some((matrix_path, matrix)) = &set.matrix else {
         return;
@@ -1159,26 +1166,20 @@ fn check_workload_coverage(set: &ArtifactSet, findings: &mut Vec<Finding>) {
     let matrix_who = matrix_path.display().to_string();
     let exercised = workload_exercised(set);
 
-    for (party_path, statement) in &set.parties {
-        let who = party_path.display().to_string();
-        for cap in &statement.claims.capabilities {
-            let Some(entry) = matrix.get(cap) else {
-                continue;
-            };
-            if exercised.contains(cap.as_str()) || entry.workload_exclusion.is_some() {
-                continue;
-            }
-            push(
-                findings,
-                CheckId::WorkloadCoverage,
-                &who,
-                format!(
-                    "claimed capability {cap} is neither exercised by the measured \
-                     hospital-simulation workload nor carries a `workload_exclusion` — extend \
-                     the journey catalogue or adjudicate the exclusion in the capability matrix"
-                ),
-            );
+    for (name, entry) in matrix.entries() {
+        if exercised.contains(name.as_str()) || entry.workload_exclusion.is_some() {
+            continue;
         }
+        push(
+            findings,
+            CheckId::WorkloadCoverage,
+            &matrix_who,
+            format!(
+                "{name} is neither exercised by the measured hospital-simulation workload nor \
+                 carries a `workload_exclusion` — extend the journey catalogue or adjudicate the \
+                 exclusion in the capability matrix"
+            ),
+        );
     }
 
     for (name, entry) in matrix.entries() {

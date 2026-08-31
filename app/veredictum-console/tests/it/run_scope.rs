@@ -47,7 +47,6 @@ fn the_scope_preview_counts_what_the_engine_processes() -> Result<(), Box<dyn st
     let state = veredictum_console::state::ConsoleState {
         root: root.clone(),
         specs,
-        party: engine_gate::repo_root().join("party"),
         out: engine_gate::repo_root().join("out"),
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
@@ -128,7 +127,6 @@ fn the_draft_view_carries_no_secret() -> Result<(), Box<dyn std::error::Error>> 
     let state = veredictum_console::state::ConsoleState {
         root: "artifacts".into(),
         specs: "specs/openehr".into(),
-        party: "party".into(),
         out: "out".into(),
         catalogue: std::sync::Arc::new(Err(String::from("unused"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(
@@ -186,7 +184,6 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
     veredictum_console::state::ConsoleState {
         root: root.clone(),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: engine_gate::repo_root().join("out"),
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
@@ -214,9 +211,9 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
     }
 }
 
-/// #101: a pasted claim is held to the PUBLISHED statement schema — a
-/// committed example passes with its summary, a shape serde would tolerate
-/// but the schema forbids is refused, and non-JSON is refused.
+/// #101: a pasted claim is held to the PUBLISHED statement schema — the named
+/// ICS fixture passes with its summary, a shape serde would tolerate but the
+/// schema forbids is refused, and non-JSON is refused.
 #[expect(
     clippy::panic_in_result_fn,
     reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
@@ -225,8 +222,7 @@ fn drafted_state() -> veredictum_console::state::ConsoleState {
 fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dyn std::error::Error>>
 {
     let state = drafted_state();
-    let body =
-        std::fs::read_to_string(engine_gate::repo_root().join("party/ehrbase/statement.json"))?;
+    let body = std::fs::read_to_string(engine_gate::declaration_fixture())?;
     let summary = veredictum_console::run_api::read::save_scope(
         &state,
         engine_gate::gate_submitter(),
@@ -235,12 +231,12 @@ fn a_pasted_claim_is_schema_validated_before_it_is_stored() -> Result<(), Box<dy
         false,
         &PostureForm::default(),
     )
-    .map_err(|e| format!("a committed example must pass: {e}"))?
+    .map_err(|e| format!("the ICS fixture must pass: {e}"))?
     .ok_or("a pasted claim must yield a summary")?;
-    assert_eq!(summary.product, "EHRbase 2.34.0");
+    assert_eq!(summary.product, "Fixture CDR 0.0.0-fixture");
     assert!(
         !summary.profiles.is_empty(),
-        "the ehrbase example claims at least one tier"
+        "the ICS fixture claims at least one tier"
     );
 
     // additionalProperties: false — serde would ignore the stray key, the
@@ -506,37 +502,50 @@ fn a_composed_tier_claim_saves_through_the_pasted_claim_path()
     Ok(())
 }
 
-/// #101: the example loader serves only a statement.json under the mounted
-/// party tree — anything else is refused, path traversal included.
+/// #465: a declaration reaches the console only as PASTED BYTES.
+///
+/// The example loader this test used to fence read a client-supplied path
+/// under a mounted party tree; the tree and the loader are both gone, so the
+/// file-read primitive no longer exists. A path in the paste box is therefore
+/// a document that is not a declaration, and it is refused as one, while the
+/// fixture's own bytes are accepted.
 #[expect(
     clippy::panic_in_result_fn,
     reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
 )]
 #[test]
-fn the_example_loader_refuses_paths_outside_the_party_tree()
--> Result<(), Box<dyn std::error::Error>> {
+fn a_declaration_reaches_the_console_only_as_pasted_bytes() -> Result<(), Box<dyn std::error::Error>>
+{
     let state = drafted_state();
-    let good = veredictum_console::run_api::read::statement_body(
-        &state,
-        &engine_gate::repo_root()
-            .join("party/ehrbase/statement.json")
-            .display()
-            .to_string(),
-    )
-    .map_err(|e| format!("the committed example must load: {e}"))?;
-    assert!(good.contains("EHRbase"));
-
-    for refused in [
-        engine_gate::repo_root().join("Cargo.toml"),
-        engine_gate::repo_root().join("party/ehrbase/../../Cargo.toml"),
-        engine_gate::repo_root().join("party/ehrbase/ixit.json"),
+    let fixture = engine_gate::declaration_fixture();
+    for pasted in [
+        String::from("../../etc/passwd"),
+        String::from("party/ehrbase/statement.json"),
+        fixture.display().to_string(),
     ] {
-        let answer = veredictum_console::run_api::read::statement_body(
+        let answer = veredictum_console::run_api::read::save_scope(
             &state,
-            &refused.display().to_string(),
+            engine_gate::gate_submitter(),
+            Some(pasted.clone()),
+            None,
+            false,
         );
-        assert!(answer.is_err(), "{} must be refused", refused.display());
+        assert!(
+            answer.is_err(),
+            "{pasted} must be refused: a path is not a declaration"
+        );
     }
+
+    let summary = veredictum_console::run_api::read::save_scope(
+        &state,
+        engine_gate::gate_submitter(),
+        Some(std::fs::read_to_string(&fixture)?),
+        None,
+        false,
+    )
+    .map_err(|e| format!("the fixture's own bytes must pass: {e}"))?
+    .ok_or("pasted bytes must yield a summary")?;
+    assert_eq!(summary.product, "Fixture CDR 0.0.0-fixture");
     Ok(())
 }
 /// The posture form is UNTRUSTED input on a public endpoint, and an unusable

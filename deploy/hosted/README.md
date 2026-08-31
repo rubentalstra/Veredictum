@@ -8,8 +8,8 @@ that CI re-derives and signs. Anyone may run the console themselves, and a local
 run is that operator's own claim — which is the entire reason the hosted
 instance exists.
 
-It also serves the reading surfaces: the catalogue, the party statements, the
-vendored specification oracle, the boards, and record verification.
+It also serves the reading surfaces: the catalogue, the vendored specification
+oracle, the boards, and record verification.
 
 ## Why a box, and not a platform
 
@@ -55,8 +55,8 @@ publishes for both architectures, so it buys nothing here.
 ## The image
 
 **One image, and this directory builds none of it.** `ghcr.io/rubentalstra/veredictum`
-carries the engine, the console and the release's own catalogue, vendored
-specification oracle and party declarations (#420), which is why this instance
+carries the engine, the console and the release's own catalogue and vendored
+specification oracle (#420), which is why this instance
 mounts nothing at all. `docker/Dockerfile` is where that is built, at a release.
 
 Two consequences worth stating. A record produced here names a catalogue

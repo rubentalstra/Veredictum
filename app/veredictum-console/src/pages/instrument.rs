@@ -64,9 +64,9 @@ pub fn Instrument() -> impl IntoView {
                                     icon=icondata_lu::LuCable
                                 />
                                 <StatCard
-                                    label="Party statements"
-                                    value=s.parties.to_string()
-                                    icon=icondata_lu::LuUsers
+                                    label="Capability rows"
+                                    value=s.capabilities.to_string()
+                                    icon=icondata_lu::LuListChecks
                                 />
                                 <StatCard
                                     label="Validate findings"

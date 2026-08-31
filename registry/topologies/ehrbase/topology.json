@@ -6,7 +6,6 @@
     "EHRBASE_PORT": "8090"
   },
   "ixit": "registry/topologies/ehrbase/ixit.json",
-  "statement": "party/ehrbase/statement.json",
   "base_url": "http://127.0.0.1:8090/ehrbase/rest/openehr/v1",
   "ready_url": "http://127.0.0.1:8090/ehrbase/rest/openehr/v1/definition/template/adl1.4",
   "credentials": {

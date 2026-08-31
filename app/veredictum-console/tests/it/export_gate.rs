@@ -50,7 +50,6 @@ fn state_over(out: &Path, jobs: JobSlot) -> ConsoleState {
     ConsoleState {
         root,
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: out.to_path_buf(),
         sign_key: Some(key("cnf-signing.sec.asc")),
         verify_key: Some(key("cnf-signing.pub.asc")),
@@ -107,10 +106,7 @@ fn driven(out: &Path) -> Result<Option<(ConsoleState, Engine)>, Box<dyn std::err
     let port = engine_gate::fixture_sut()?;
     let ixit = engine_gate::write_ixit(&job_dir, port)?;
     let statement = job_dir.join("statement.json");
-    std::fs::copy(
-        engine_gate::repo_root().join("party/ehrbase/statement.json"),
-        &statement,
-    )?;
+    std::fs::copy(engine_gate::declaration_fixture(), &statement)?;
 
     slot.start(
         id,

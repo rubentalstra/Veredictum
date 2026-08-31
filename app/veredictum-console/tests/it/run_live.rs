@@ -337,7 +337,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
     let ixit = engine_gate::write_ixit(scratch.path(), port)?;
     let out = scratch.path().join("record-run");
     std::fs::create_dir_all(&out)?;
-    let statement = engine_gate::repo_root().join("party/ehrbase/statement.json");
+    let statement = engine_gate::declaration_fixture();
     // What start_run does for a pasted claim: the accepted bytes travel with
     // the run, and the verdicts read them back from the job directory.
     std::fs::copy(&statement, out.join("statement.json"))?;
@@ -346,7 +346,6 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
     let state = veredictum_console::state::ConsoleState {
         root: root.clone(),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: scratch.path().to_path_buf(),
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
@@ -359,7 +358,7 @@ fn the_record_surfaces_read_a_finished_statement_run() -> Result<(), Box<dyn std
             credentials: vec![],
             probed_ok: true,
             statement_json: Some(std::fs::read_to_string(&statement)?),
-            statement_product: Some(String::from("EHRbase 2.34.0")),
+            statement_product: Some(String::from("Fixture CDR 0.0.0-fixture")),
             filter: None,
             record_exchanges: false,
             postures: DeclaredPostures::default(),
@@ -521,7 +520,6 @@ fn a_recorded_run_fills_the_drawer_with_its_wire() -> Result<(), Box<dyn std::er
     let state = veredictum_console::state::ConsoleState {
         root: root.clone(),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: scratch.path().to_path_buf(),
         catalogue: std::sync::Arc::new(
             veredictum::pipeline::catalogue::validate_tree(&root, None).map_err(|e| e.to_string()),
@@ -639,7 +637,6 @@ fn state_over(out: &std::path::Path) -> veredictum_console::state::ConsoleState 
     veredictum_console::state::ConsoleState {
         root: engine_gate::repo_root().join("artifacts"),
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: out.to_path_buf(),
         catalogue: std::sync::Arc::new(Err(String::from("unused by the live screen"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(
@@ -1062,7 +1059,6 @@ fn the_start_seam_answers_with_the_run_already_in_flight() -> Result<(), Box<dyn
     let state = veredictum_console::state::ConsoleState {
         root,
         specs: engine_gate::repo_root().join("specs/openehr"),
-        party: engine_gate::repo_root().join("party"),
         out: scratch.path().to_path_buf(),
         catalogue: std::sync::Arc::new(Err(String::from("unused by the start seam"))),
         draft: std::sync::Arc::new(std::sync::Mutex::new(engine_gate::drafts_of(RunDraft {

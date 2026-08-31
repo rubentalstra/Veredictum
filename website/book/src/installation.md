@@ -20,7 +20,7 @@ reads all three as paths you pass on the command line, so the code and the data
 travel separately.
 
 That split is deliberate. The catalogue and the specification oracle together
-are over 300 MB of data, which no package registry accepts, and a party may
+are over 300 MB of data, which no package registry accepts, and an operator may
 legitimately want to point the instrument at a catalogue of their own. So the
 published crate and the published image carry the code, and a clone of the
 repository is where the data lives:
@@ -84,8 +84,8 @@ passed.
 
 The catalogue and the specification oracle are not baked into the image either,
 so the data you grade against is the data you can see in your own checkout: run
-compose beside a clone and the `/work` mount carries `artifacts/`,
-`specs/openehr/` and `party/`; run it beside an empty directory and the console
+compose beside a clone and the `/work` mount carries `artifacts/` and
+`specs/openehr/`; run it beside an empty directory and the console
 comes up and says what it is missing. The console has no login, so both
 invocations above bind it to loopback; exposing it further is the operator's
 decision, behind their own gate. [The console chapter](console.md) shows what it
@@ -137,7 +137,7 @@ veredictum validate --root artifacts --specs specs/openehr
 A working install over an intact clone prints one line and exits zero:
 
 ```text
-1146 case(s), 249 binding(s), 2 party statement(s), 0 finding(s)
+1146 case(s), 249 binding(s), 43 capability row(s), 0 finding(s)
 ```
 
 Any finding count above zero is a failure of the catalogue, not of your setup,

@@ -10,12 +10,18 @@ the console put in front of you.
 ## The parties and the claim
 
 - **Party:** the vendor whose product is being graded and who makes the
-  conformance claim. Each party directory under `party/` carries the two
-  documents below.
+  conformance claim. The two documents below are theirs to write and travel
+  with the submission they describe; this repository commits neither.
 - **ICS (Implementation Conformance Statement):** the party's claim document,
   `statement.json`. It declares which profile tiers and which capabilities
   the product claims. A verdict certifies this claim against the recorded
   evidence, so a run without a statement produces results but no verdict.
+- **ICS proforma:** the blank form an ICS fills in,
+  `artifacts/vocab/capability_matrix.yaml`. ISO/IEC 9646-7 assigns every cell
+  of it to the test specification's author except the support and
+  supported-values columns, which belong to the supplier of the
+  implementation. So the proforma is published here, one row per capability
+  with its specification citation, and the answers never are.
   The term comes from the ISO/IEC 9646 conformance-testing methodology.
 - **IXIT (Implementation eXtra Information for Testing):** the deployment
   facts needed to drive the claim, `ixit.json`: the endpoint URLs, the

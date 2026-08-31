@@ -240,7 +240,7 @@ pub fn execute_run(
             version: env!("CARGO_PKG_VERSION").to_owned(),
             verification_pack_status: crate::party::VerificationPackStatus::Passed,
         },
-        schedule_release: "cnf-2.0-w2".to_owned(),
+        schedule_release: crate::party::SCHEDULE_RELEASE.to_owned(),
         tech_profile: tech_profile(statement.as_ref()),
         ixit_digest: ixit_digest(&ixit_text),
         selection_basis: Some(selection_basis(statement.as_ref())),

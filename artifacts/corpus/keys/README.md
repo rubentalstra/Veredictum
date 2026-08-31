@@ -17,10 +17,10 @@ pinned `pgp` crate implements.
   their own server so it signs each committed VERSION. That deployment is the
   party's, not this repository's — FerroEHR mounts this file as
   `FERROEHR__SIGNING__KEY_PATH` in its own `docker/sut-signing-pgp.yml`, which
-  lives in the FerroEHR tree and is named only in the topology text of
-  `party/ferroehr/ixit.json` here.
+  lives in the FerroEHR tree and is named only in the topology text of the
+  ixit fixture here.
 - `cnf-signing.pub.asc` — the armored OpenPGP **public** key. Inlined into the
-  `sut_pgp` instance's own `signing` block in `party/ferroehr/ixit.json`; the
+  `sut_pgp` instance's own `signing` block in the ixit fixture; the
   runner verifies `ORIGINAL_VERSION.signature` against it (RFC 9580 detached
   signature over the agreed canonical form: RFC 8785 JCS of the version minus
   `signature`).
@@ -46,8 +46,8 @@ CNF Test Version Signing <cnf-signing@test.ehrbase-rs.local>
 created 2026-07-24, no expiry. That user ID predates this repository, and the
 recipe below reproduces it verbatim so a regeneration yields the same identity
 rather than a second one. Re-cutting the pair under a new identity is a
-deliberate change, not a cleanup: the public key is inlined into
-`party/ferroehr/ixit.json`, so both would have to move together.
+deliberate change, not a cleanup: the public key is inlined into the ixit
+fixture, so both would have to move together.
 
 **Regeneration.** Read the identity back from the committed key first, so the
 recipe cannot silently drift from it:

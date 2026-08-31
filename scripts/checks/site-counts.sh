@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # The website's catalogue counts cannot drift from the catalogue (#35).
 #
-# The landing page and the book state how many cases, bindings, party
-# statements and outcome kinds the catalogue carries. Those literals are
+# The landing page and the book state how many cases, bindings, capability
+# matrix rows and outcome kinds the catalogue carries. Those literals are
 # hand-typed, and nothing held them to the artifacts: a schedule release that
 # moves a count would silently leave the public site wrong. This guard reads
 # the truth from the instrument itself — the `validate` summary line for
-# cases/bindings/statements, the outcome vocabulary for the kinds — and fails
-# on any count-bearing phrase whose number disagrees.
+# cases/bindings/capability rows, the outcome vocabulary for the kinds — and
+# fails on any count-bearing phrase whose number disagrees.
 #
 # Usage: scripts/checks/site-counts.sh [<validate summary line>]
 #   With no argument it runs `cargo run -- validate` itself (the CI test job
@@ -25,9 +25,9 @@ if [[ -z "$summary" ]]; then
 fi
 cases=$(grep -oE '[0-9]+ case\(s\)' <<<"$summary" | grep -oE '^[0-9]+')
 bindings=$(grep -oE '[0-9]+ binding\(s\)' <<<"$summary" | grep -oE '^[0-9]+')
-statements=$(grep -oE '[0-9]+ party statement\(s\)' <<<"$summary" | grep -oE '^[0-9]+')
+capabilities=$(grep -oE '[0-9]+ capability row\(s\)' <<<"$summary" | grep -oE '^[0-9]+')
 outcomes=$(grep -cE '^[a-z_]+: ' artifacts/vocab/outcomes.yaml)
-for truth in cases bindings statements outcomes; do
+for truth in cases bindings capabilities outcomes; do
   [[ -n "${!truth}" ]] || { echo "::error::could not derive the ${truth} count" >&2; exit 1; }
 done
 
@@ -52,7 +52,7 @@ check "$bindings" '[0-9]+ (operation bindings|binding\(s\)|bindings today)' "bin
 # spans, so the prose patterns above never see them — proven by mutation.
 check "$cases" '"n">[0-9]+</span><span class="l">spec-cited cases' "cases (fact card)"
 check "$bindings" '"n">[0-9]+</span><span class="l">operation bindings' "bindings (fact card)"
-check "$statements" '[0-9]+ party statement\(s\)' "party statements"
+check "$capabilities" '[0-9]+ capability row\(s\)' "capability rows"
 check "$outcomes" 'There are [0-9]+ of them' "outcome kinds"
 
 # The credits section counts how many case cores cite the CNF Test Schedule
@@ -83,4 +83,4 @@ done < <(grep -roE -- 'cargo install veredictum[^`<]*--version [0-9a-zA-Z.-]+' "
 if [[ "$failures" -gt 0 ]]; then
   exit 1
 fi
-echo "site-counts: every count on the site matches the catalogue (${cases} cases, ${bindings} bindings, ${statements} statements, ${outcomes} outcome kinds) — OK."
+echo "site-counts: every count on the site matches the catalogue (${cases} cases, ${bindings} bindings, ${capabilities} capability rows, ${outcomes} outcome kinds) — OK."

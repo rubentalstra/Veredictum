@@ -10,7 +10,7 @@ services:
   console:
     # The release pointer scan-and-tag moves on a real release tag. One image
     # (#420): it carries the engine, the console and the release's own
-    # catalogue, oracle and party declarations, so this instance mounts nothing.
+    # catalogue and oracle, so this instance mounts nothing.
     # `.env` names the exact reference so a rollback can move it.
     image: ${CONSOLE_IMAGE:-ghcr.io/rubentalstra/veredictum:latest}
     container_name: veredictum-console

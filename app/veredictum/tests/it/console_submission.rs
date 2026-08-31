@@ -175,7 +175,7 @@ fn prepare_submission(
         root.join("artifacts/corpus/keys/cnf-signing.pub.asc"),
         tree.path().join("registry/keys/registry-signing.pub.asc"),
     )?;
-    let statement_source = root.join("party/ehrbase/statement.json");
+    let statement_source = root.join("fixtures/declaration/statement.json");
     let statement = record.join("statement.json");
     let _statement = std::fs::copy(&statement_source, &statement)?;
 

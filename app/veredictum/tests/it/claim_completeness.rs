@@ -7,9 +7,13 @@
 //! fires. A gate that has never been seen to fail proves nothing — no openEHR
 //! spec governs that bar, it is our own design.
 //!
-//! The world here is BOTH committed halves — the artifact tree AND the party
-//! statements beside it — because every one of these gates is a relation
-//! between a claim and the catalogue.
+//! The world is the committed artifact tree plus the named ICS FIXTURE
+//! (`fixtures/declaration/`), because a gate that is a relation between a
+//! claim and the catalogue needs both sides. The fixture is a filled-in
+//! declaration for a product that does not exist: ISO/IEC 9646-7 assigns an
+//! ICS proforma's support and supported-values columns to the supplier of the
+//! implementation, so this repository commits the proforma
+//! (`vocab/capability_matrix.yaml`) and never a real answer sheet.
 
 #![expect(
     clippy::expect_used,
@@ -42,8 +46,12 @@ fn copy_tree(from: &std::path::Path, to: &std::path::Path) {
     }
 }
 
-/// A temp copy of the production world: `<tmp>/artifacts` + `<tmp>/party`,
-/// the same sibling layout `load_root` sweeps.
+/// The named ICS fixture inside a [`World`], the path
+/// [`World::findings`] supplies to the pass.
+const FIXTURE_STATEMENT: &str = "declaration/statement.json";
+
+/// A temp copy of the production world: `<tmp>/artifacts` plus the named ICS
+/// fixture at `<tmp>/declaration`, which is supplied to the pass explicitly.
 struct World {
     dir: assert_fs::TempDir,
 }
@@ -55,7 +63,10 @@ impl World {
             &crate_dir().join("artifacts"),
             &dir.path().join("artifacts"),
         );
-        copy_tree(&crate_dir().join("party"), &dir.path().join("party"));
+        copy_tree(
+            &crate_dir().join("fixtures/declaration"),
+            &dir.path().join("declaration"),
+        );
         Self { dir }
     }
 
@@ -79,7 +90,10 @@ impl World {
     }
 
     fn findings(&self) -> Vec<Finding> {
-        let loaded = load_root(&self.dir.path().join("artifacts")).expect("schema compilation");
+        let mut loaded = load_root(&self.dir.path().join("artifacts")).expect("schema compilation");
+        loaded
+            .review_declaration(&self.dir.path().join(FIXTURE_STATEMENT))
+            .expect("schema compilation");
         validate(&Context {
             set: &loaded.set,
             load_errors: &loaded.errors,
@@ -116,17 +130,26 @@ const SEEDED_HOLLOW_ROW: &str = "SeededHollowCapability: { family: Platform, tie
      required: false, min_cases: 0, source: \"seeded defect — no catalogue case names this \
      capability\" }";
 
-/// The committed world — artifact tree AND party statements — is clean under
-/// every gate, including the four new ones. Everything below seeds one
-/// violation into a copy of exactly this world, so any finding is
-/// attributable to the seed.
+/// The committed world — the artifact tree plus the named ICS fixture — is
+/// clean under every gate. Everything below seeds one violation into a copy of
+/// exactly this world, so any finding is attributable to the seed.
+///
+/// The first assertion is the #465 property: nothing supplies a declaration
+/// except a caller who names one.
 #[test]
-fn the_committed_world_including_party_claims_is_clean() {
-    let loaded = load_root(&crate_dir().join("artifacts")).expect("schema compilation");
+fn the_committed_world_plus_the_ics_fixture_is_clean() {
+    let mut loaded = load_root(&crate_dir().join("artifacts")).expect("schema compilation");
+    assert!(
+        loaded.set.parties.is_empty(),
+        "a declaration was swept from beside the artifact root — the support columns of an ICS \
+         proforma belong to the supplier (ISO/IEC 9646-7), so nothing here may commit one"
+    );
+    loaded
+        .review_declaration(&crate_dir().join("fixtures/declaration/statement.json"))
+        .expect("schema compilation");
     assert!(
         !loaded.set.parties.is_empty(),
-        "the party sweep found no statement.json beside the artifact root — every claim gate \
-         below would be vacuous"
+        "the ICS fixture did not load — every claim gate below would be vacuous"
     );
     let findings = validate(&Context {
         set: &loaded.set,
@@ -135,7 +158,7 @@ fn the_committed_world_including_party_claims_is_clean() {
     });
     assert!(
         findings.is_empty(),
-        "the committed artifact tree + party statements must be clean, found:\n{}",
+        "the committed artifact tree + the ICS fixture must be clean, found:\n{}",
         findings
             .iter()
             .map(ToString::to_string)
@@ -271,7 +294,7 @@ fn a_claimed_capability_with_no_cases_fails_validate() {
             1,
         )
     });
-    world.edit("party/ferroehr/statement.json", |text| {
+    world.edit(FIXTURE_STATEMENT, |text| {
         text.replacen(
             "\"capabilities\": [\n",
             "\"capabilities\": [\n      \"SeededHollowCapability\",\n",
@@ -308,7 +331,7 @@ fn an_excused_only_capability_without_its_adjudication_fails_validate() {
             1,
         )
     });
-    world.edit("party/ferroehr/statement.json", |text| {
+    world.edit(FIXTURE_STATEMENT, |text| {
         text.replacen(
             "\"capabilities\": [\n",
             "\"capabilities\": [\n      \"SeededExcusedCapability\",\n",
@@ -553,16 +576,15 @@ fn an_adjudication_citing_an_absent_register_entry_fails_validate() {
     );
 }
 
-const FERROEHR_STATEMENT: &str = "party/ferroehr/statement.json";
 const SIGNING_CASE: &str = "artifacts/schedule/security/SIG-VERSION-signature_present.yaml";
 
-/// A party may declare only extension families the catalogue axis carries
-/// (FerroEHR#2377): the statement renders the ROUTE DETAIL of what it declares, so a
-/// name with nothing behind it would publish an empty promise.
+/// A supplier may declare only extension families the catalogue axis carries
+/// (FerroEHR#2377): the declaration renders the ROUTE DETAIL of what it
+/// declares, so a name with nothing behind it would publish an empty promise.
 #[test]
 fn a_party_declaring_an_unknown_extension_family_fails_validate() {
     let world = World::new();
-    world.edit(FERROEHR_STATEMENT, |text| {
+    world.edit(FIXTURE_STATEMENT, |text| {
         text.replace(
             "\"served_extensions\": [\n",
             "\"served_extensions\": [\n    \"no-such-family\",\n",
@@ -579,7 +601,7 @@ fn a_party_declaring_an_unknown_extension_family_fails_validate() {
 #[test]
 fn a_party_declaring_one_family_twice_fails_validate() {
     let world = World::new();
-    world.edit(FERROEHR_STATEMENT, |text| {
+    world.edit(FIXTURE_STATEMENT, |text| {
         text.replace(
             "\"served_extensions\": [\n",
             "\"served_extensions\": [\n    \"health\",\n",
@@ -592,7 +614,9 @@ fn a_party_declaring_one_family_twice_fails_validate() {
     );
 }
 
-const FERROEHR_IXIT: &str = "party/ferroehr/ixit.json";
+/// The ixit beside the fixture declaration, which the signing-posture pairing
+/// reads from the declaration's own directory.
+const FIXTURE_IXIT: &str = "declaration/ixit.json";
 
 /// An ixit declaring one reachable instance and NO signing posture at either
 /// level — what a party running no version signing looks like.
@@ -632,7 +656,7 @@ const IXIT_WITH_INSTANCE_SIGNING: &str = r#"{
 #[test]
 fn a_signing_claim_without_a_declared_posture_fails_validate() {
     let world = World::new();
-    world.write(FERROEHR_IXIT, IXIT_WITHOUT_SIGNING);
+    world.write(FIXTURE_IXIT, IXIT_WITHOUT_SIGNING);
     assert_gate(
         &world.findings(),
         "claim-completeness",
@@ -646,7 +670,7 @@ fn a_signing_claim_without_a_declared_posture_fails_validate() {
 #[test]
 fn a_signing_posture_declared_on_the_instance_alone_satisfies_the_claim() {
     let world = World::new();
-    world.write(FERROEHR_IXIT, IXIT_WITH_INSTANCE_SIGNING);
+    world.write(FIXTURE_IXIT, IXIT_WITH_INSTANCE_SIGNING);
     let findings = world.findings();
     let signing: Vec<String> = findings
         .iter()

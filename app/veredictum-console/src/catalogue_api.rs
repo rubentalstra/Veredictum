@@ -19,8 +19,8 @@ pub struct InstrumentSummary {
     pub cases: u64,
     /// The loaded operation-binding count.
     pub bindings: u64,
-    /// The committed party-statement count.
-    pub parties: u64,
+    /// The capability-matrix row count: the ICS proforma's own rows.
+    pub capabilities: u64,
     /// The validation finding count; zero is the only passing result.
     pub findings: u64,
     /// The artifact root, for display.
@@ -180,7 +180,12 @@ pub mod read {
             Ok(validation) => InstrumentView::Loaded(InstrumentSummary {
                 cases: count(validation.loaded.set.cases.len()),
                 bindings: count(validation.loaded.set.bindings.len()),
-                parties: count(validation.loaded.set.parties.len()),
+                capabilities: validation
+                    .loaded
+                    .set
+                    .matrix
+                    .as_ref()
+                    .map_or(0, |(_, matrix)| count(matrix.entries().len())),
                 findings: count(validation.findings.len()),
                 root: state.root.display().to_string(),
                 specs: state.specs.display().to_string(),

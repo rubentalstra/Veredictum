@@ -1,9 +1,9 @@
 {
   "product": {
-    "name": "FerroEHR",
-    "version": "4.0.13",
-    "vendor": "Ruben Talstra",
-    "identifier": "urn:rubentalstra:ferroehr"
+    "name": "Fixture CDR",
+    "version": "0.0.0-fixture",
+    "vendor": "Veredictum test fixtures",
+    "identifier": "urn:veredictum:fixture:cdr"
   },
   "schedule_release": "cnf-2.0-w2",
   "spec_versions": {
@@ -123,9 +123,9 @@
     "environment_ref": "ixit.json#/environment"
   },
   "attestation": {
-    "signatory": "Ruben Talstra",
-    "role": "Owner",
+    "signatory": "Veredictum test fixtures",
+    "role": "Fixture",
     "date": "2026-08-31",
-    "statement": "We declare conformance of FerroEHR to the openEHR CNF 2.0 platform test schedule under the declared capabilities, options and technology profile; every claim derives from the committed machine-verified results."
+    "statement": "This document is a TEST FIXTURE. It attests nothing about any product: Fixture CDR does not exist, and no supplier has signed this. It exercises the shape ISO/IEC 9646-7 assigns to the supplier of an implementation, so the static conformance review can be seen to fire."
   }
 }

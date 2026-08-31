@@ -44,9 +44,9 @@
 # ── The runner machinery ────────────────────────────────────────────────────
 /src/                               @rubentalstra
 
-# ── Party declarations ──────────────────────────────────────────────────────
-# Statements and IXIT declarations: whose claim is whose.
-/party/                             @rubentalstra
+# ── Test fixtures ───────────────────────────────────────────────────────────
+# The named ICS fixture and the SMART lane's committed test issuer.
+/fixtures/                          @rubentalstra
 
 # ── Supply chain, CI and release ────────────────────────────────────────────
 # Everything that decides what gets built, signed and published.

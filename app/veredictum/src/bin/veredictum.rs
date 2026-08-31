@@ -6,13 +6,14 @@
 //! ```text
 //! veredictum emit-schemas --out DIR     write the published JSON-Schema set
 //! veredictum validate --root DIR [--specs DIR] [--write-report]
+//!                     [--statement FILE]
 //!                                       validate an artifact tree (all gates);
 //!                                       --specs enables the SM/spec-ref
 //!                                       resolution checks against the vendored
-//!                                       spec tree (specs/openehr). The
-//!                                       committed party statements beside the
-//!                                       root (<root>/../party/*/statement.json)
-//!                                       are swept in for the claim gates.
+//!                                       spec tree (specs/openehr).
+//!                                       --statement adds the static
+//!                                       conformance review of one submitted
+//!                                       declaration
 //! veredictum run --root DIR --ixit FILE --out DIR [--sut-name N] [--sut-version V] [--statement F]
 //!                [--record-exchanges] [--sign-key FILE]
 //!                                       drive the catalogue against a live SUT
@@ -126,7 +127,9 @@ use veredictum::pipeline::assets::{
     conformance_assets, performance_assets, schema_files, stress_overlay,
 };
 use veredictum::pipeline::bench::{BenchRequest, compare_bench, describe_packs, run_bench};
-use veredictum::pipeline::catalogue::{coverage_report_path, validate_tree, write_coverage_report};
+use veredictum::pipeline::catalogue::{
+    coverage_report_path, validate_tree_reviewing, write_coverage_report,
+};
 use veredictum::pipeline::conformance::{RunRequest, RunWarning, execute_run};
 use veredictum::pipeline::judgement::{JudgementRequest, judge};
 use veredictum::pipeline::measured::{
@@ -232,6 +235,14 @@ enum Command {
         /// this explicitly.
         #[arg(long)]
         write_report: bool,
+        /// A submitted declaration (`statement.json`) to hold to the static
+        /// conformance review, with the `ixit.json` beside it.
+        ///
+        /// ISO/IEC 9646-7 assigns an ICS proforma's support and
+        /// supported-values columns to the supplier of the implementation, so
+        /// no declaration is committed here and none is swept from the tree.
+        #[arg(long)]
+        statement: Option<PathBuf>,
     },
     /// Execute the performance schedule's open-loop measured run(s) against
     /// a live SUT and merge the §8.10 measurement records into an existing
@@ -618,7 +629,8 @@ fn main() -> ExitCode {
             root,
             specs,
             write_report,
-        } => validate_command(&root, specs.as_deref(), write_report),
+            statement,
+        } => validate_command(&root, specs.as_deref(), write_report, statement.as_deref()),
         Command::Replay {
             root,
             ixit,
@@ -767,8 +779,13 @@ fn emit_schemas_command(out: &Path) -> ExitCode {
     }
 }
 
-fn validate_command(root: &Path, specs: Option<&Path>, write_report: bool) -> ExitCode {
-    let validation = match validate_tree(root, specs) {
+fn validate_command(
+    root: &Path,
+    specs: Option<&Path>,
+    write_report: bool,
+    declaration: Option<&Path>,
+) -> ExitCode {
+    let validation = match validate_tree_reviewing(root, specs, declaration) {
         Ok(validation) => validation,
         Err(e) => return fail(&e),
     };
@@ -783,10 +800,15 @@ fn validate_command(root: &Path, specs: Option<&Path>, write_report: bool) -> Ex
         }
     }
     println!(
-        "{} case(s), {} binding(s), {} party statement(s), {} finding(s)",
+        "{} case(s), {} binding(s), {} capability row(s), {} finding(s)",
         validation.loaded.set.cases.len(),
         validation.loaded.set.bindings.len(),
-        validation.loaded.set.parties.len(),
+        validation
+            .loaded
+            .set
+            .matrix
+            .as_ref()
+            .map_or(0, |(_, matrix)| matrix.entries().len()),
         validation.findings.len()
     );
     if validation.is_clean() {

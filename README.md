@@ -232,16 +232,25 @@ cd Veredictum
 # 1. Check the catalogue itself. Zero findings is the only passing result.
 veredictum validate --root artifacts --specs specs/openehr
 
-# 2. Declare your deployment: copy an example and edit the endpoints, the
-#    credential variable names and the postures your server actually serves.
-cp -r party/ehrbase party/mine
+# 2. Write the two documents that describe YOUR deployment, against the
+#    published schemas in schemas/: mine/ixit.json (the endpoints, the
+#    credential variable names, the postures your server serves) and
+#    mine/statement.json (what you claim it supports). This repository commits
+#    no declaration about anybody's product: the support columns of the ICS
+#    proforma in artifacts/vocab/capability_matrix.yaml are the supplier's to
+#    fill in. fixtures/declaration/ shows the shape.
 
-# 3. Drive the catalogue against your running server.
-veredictum run --root artifacts --ixit party/mine/ixit.json --out out/ \
-    --sut-name my-cdr --sut-version 1.2.3 --statement party/mine/statement.json
+# 3. Hold your claim to the static conformance review, which reports a claim
+#    the catalogue cannot test at all.
+veredictum validate --root artifacts --specs specs/openehr \
+    --statement mine/statement.json
 
-# 4. Compute the verdicts and render the submission documents.
-veredictum verdicts --root artifacts --statement party/mine/statement.json \
+# 4. Drive the catalogue against your running server.
+veredictum run --root artifacts --ixit mine/ixit.json --out out/ \
+    --sut-name my-cdr --sut-version 1.2.3 --statement mine/statement.json
+
+# 5. Compute the verdicts and render the submission documents.
+veredictum verdicts --root artifacts --statement mine/statement.json \
     --results out/results.json --out out/
 ```
 

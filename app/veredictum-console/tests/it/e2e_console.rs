@@ -700,8 +700,6 @@ struct DrivenSut<'a> {
     identity: (&'a str, &'a str),
     /// Basic credentials, when the SUT wants them.
     basic: Option<(&'a str, &'a str)>,
-    /// The substring locating the party statement option at Scope.
-    statement: &'a str,
     /// The case-id filter for the run.
     filter: &'a str,
     /// Whether the journey ticks "Record the wire exchanges" on Scope (#96).
@@ -716,8 +714,10 @@ struct DrivenSut<'a> {
 
 /// Checks CORE and composes the tier claim into the paste box (#100).
 ///
-/// The vendor's own document replaces it immediately after, so the driven
-/// journey still holds exactly one draft and grades exactly one claim.
+/// This IS the claim the journey grades. Since #465 the console offers no
+/// committed declaration to load over it: the support columns of an ICS
+/// proforma belong to the supplier of the implementation (ISO/IEC 9646-7), so
+/// pasting or composing are the only ways one enters.
 async fn compose_tier_claim(h: &Harness) {
     h.wait_css("input#tier-core")
         .await
@@ -797,17 +797,6 @@ async fn drive_wizard(h: &Harness, sut: &DrivenSut<'_>, scope_shot: Option<&str>
 
     h.wait_xpath("//h1[contains(., 'Scope')]").await;
     compose_tier_claim(h).await;
-    // The claim goes in as the document itself (#101): the example button
-    // fills the paste box the way a vendor pastes their own statement.json.
-    h.wait_xpath(&format!(
-        "//button[contains(., 'Load') and contains(., '{}')]",
-        sut.statement
-    ))
-    .await
-    .click()
-    .await
-    .expect("load the example claim");
-    h.wait_xpath("//p[contains(., 'Loaded ')]").await;
     h.wait_css("input#filter")
         .await
         .send_keys(sut.filter)
@@ -927,7 +916,6 @@ async fn e2e_wizard_drives_a_run_to_its_verdicts() {
         base_url: &base_url,
         identity: ("my-cdr", "unknown"),
         basic: None,
-        statement: "EHRbase",
         filter: "I_EHR_SERVICE.create_ehr-main",
         record_exchanges: true,
         probe_answer: "HTTP 500",
@@ -1314,7 +1302,6 @@ async fn e2e_wizard_grades_the_real_cdrs() {
             base_url: &ferroehr,
             identity: ("FerroEHR", "latest"),
             basic: Some(("ferroehr", "ferroehr")),
-            statement: "FerroEHR",
             filter: "I_EHR_SERVICE.",
             record_exchanges: false,
             probe_answer: "The server answered",
@@ -1325,7 +1312,6 @@ async fn e2e_wizard_grades_the_real_cdrs() {
             base_url: &ehrbase,
             identity: ("EHRbase", "latest"),
             basic: Some(("ehrbase-user", "SuperSecretPassword")),
-            statement: "EHRbase",
             filter: "I_EHR_SERVICE.",
             record_exchanges: false,
             probe_answer: "The server answered",

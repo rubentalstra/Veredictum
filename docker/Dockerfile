@@ -13,8 +13,8 @@
 # than its pin, so the two travel as one artifact.
 #
 # The catalogue, the corpora and the vendored specification oracle stay
-# MOUNTED: they are 347 MB the server reads as paths, and a party may point at
-# their own. Run it locally as
+# MOUNTED: they are 347 MB the server reads as paths, and an operator may point
+# at their own. Run it locally as
 #
 #   docker run --rm -p 127.0.0.1:3000:3000 -v "$PWD:/work" \
 #     ghcr.io/rubentalstra/veredictum:<tag>
@@ -154,13 +154,12 @@ ENV LEPTOS_OUTPUT_NAME=veredictum-console \
     VEREDICTUM_ENGINE=/usr/local/bin/veredictum \
     VEREDICTUM_ROOT=/work/artifacts \
     VEREDICTUM_SPECS=/work/specs/openehr \
-    VEREDICTUM_PARTY=/work/party \
     VEREDICTUM_OUT=/work/out \
     VEREDICTUM_VERIFY_KEY=/app/keys/registry-signing.pub.asc
 
 # ── The data the instrument judges against, in the image ──────────────────────
-# The catalogue, the vendored specification oracle and the party declarations
-# ship WITH the release rather than being mounted (#420). Two reasons, and the
+# The catalogue and the vendored specification oracle ship WITH the release
+# rather than being mounted (#420). Two reasons, and the
 # second is the one that matters: an instance with no volume cannot mount them
 # at all, and a record has to name a catalogue revision that belongs to a
 # published version. An image whose data came from whatever branch built it
@@ -174,7 +173,6 @@ ENV LEPTOS_OUTPUT_NAME=veredictum-console \
 # that, so the local development loop reads the working tree as before.
 COPY artifacts/ /work/artifacts/
 COPY specs/openehr/ /work/specs/openehr/
-COPY party/ /work/party/
 # The SECOND root a citation resolves against. `validate` derives it from the
 # specs root's PARENT (`bundle_root`: `/work/specs/openehr` to `/work/specs`),
 # so these three have to sit beside the docs tree rather than inside it. Without
@@ -251,7 +249,7 @@ LABEL org.opencontainers.image.title="Veredictum console" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"
 # Not an OCI predefined key, because none of them means this: the image carries
-# the catalogue, the oracle and the party declarations at /work. The hosted
+# the catalogue and the oracle at /work. The hosted
 # deploy REQUIRES it, so an image built before #420 cannot be deployed to an
 # instance that mounts nothing and would find /work empty.
 LABEL eu.veredictum.image.carries-catalogue="true"

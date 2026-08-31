@@ -1,5 +1,5 @@
 ---
-paths: ["app/veredictum/src/**", "artifacts/**", "party/**", "schemas/**"]
+paths: ["app/veredictum/src/**", "artifacts/**", "fixtures/**", "schemas/**"]
 ---
 
 # Red-run triage (the attribution law)
