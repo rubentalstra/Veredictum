@@ -15,7 +15,8 @@
             "status": 201,
             "headers": {
               "ETag": "W/\"8849182c-82ad-4088-a07f-48ead4180515::openEHRSys.example.com::1\"",
-              "Location": "/ehr/7d44b88c-4199-4bad-97dc-d78268e01391"
+              "Location": "/ehr/7d44b88c-4199-4bad-97dc-d78268e01391",
+              "Last-Modified": "Wed, 22 Jul 2026 09:14:03 GMT"
             },
             "body": {
               "_type": "EHR",
@@ -43,7 +44,8 @@
           "step": 3,
           "request": {
             "method": "GET",
-            "path": "/ehr/7d44b88c-4199-4bad-97dc-d78268e01391"
+            "path": "/ehr/7d44b88c-4199-4bad-97dc-d78268e01391",
+            "accept": "application/json"
           },
           "response": {
             "status": 200,
@@ -76,7 +78,8 @@
             "status": 201,
             "headers": {
               "ETag": "W/\"8849182c-82ad-4088-a07f-48ead4180515::openEHRSys.example.com::1\"",
-              "Location": "/ehr/7d44b88c-4199-4bad-97dc-d78268e01392"
+              "Location": "/ehr/7d44b88c-4199-4bad-97dc-d78268e01392",
+              "Last-Modified": "Wed, 22 Jul 2026 09:14:03 GMT"
             },
             "body": {
               "_type": "EHR",
@@ -95,7 +98,8 @@
           "response": {
             "status": 201,
             "headers": {
-              "ETag": "W/\"8849182c-82ad-4088-a07f-48ead4180515::openEHRSys.example.com::2\""
+              "ETag": "W/\"8849182c-82ad-4088-a07f-48ead4180515::openEHRSys.example.com::2\"",
+              "Last-Modified": "Wed, 22 Jul 2026 09:14:03 GMT"
             },
             "body": {
               "_type": "EHR",
@@ -139,7 +143,8 @@
           "step": 1,
           "request": {
             "method": "GET",
-            "path": "/definition/template/adl2/openEHR-EHR-COMPOSITION.cnf_minimal.v1.0.0"
+            "path": "/definition/template/adl2/openEHR-EHR-COMPOSITION.cnf_minimal.v1.0.0",
+            "accept": "text/plain"
           },
           "response": {
             "status": 200,

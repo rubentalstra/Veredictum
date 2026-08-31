@@ -265,6 +265,76 @@ fn a_recorded_document_diverging_from_its_fixture_stops_passing() {
     );
 }
 
+/// A binding's header matchers are EXECUTED expectations, and the pack player
+/// ran none of them before #473: an entry could reproduce `passed` over a
+/// recording whose served media type contradicted the type its own request
+/// asked for.
+#[test]
+fn a_served_type_contradicting_the_recorded_ask_stops_passing() {
+    let (set, mut transcript) = load();
+    let entry = transcript
+        .entries
+        .iter_mut()
+        .find(|e| e.case.as_str() == "I_DEFINITION_ADL2.get_artefact-retrieve")
+        .expect("the pack carries the ADL2 retrieval entry");
+    let served = entry
+        .steps
+        .first_mut()
+        .expect("the entry records its one step");
+    assert_eq!(
+        served.request.accept.as_deref(),
+        Some("text/plain"),
+        "the recorded ask is what makes the negotiated matcher judgeable"
+    );
+    let name = served
+        .response
+        .headers
+        .keys()
+        .find(|k| k.eq_ignore_ascii_case("content-type"))
+        .cloned()
+        .expect("the recording serves a content type");
+    let _replaced = served
+        .response
+        .headers
+        .insert(name, "application/json".to_owned());
+
+    let (expected, produced) = replay_entry(&set, entry).expect("replay");
+    assert!(
+        matches!(produced, RowOutcome::Failed { step: 1, .. }),
+        "a served type contradicting the ask must fail the row at its own step, produced {produced:?}"
+    );
+    assert!(
+        !verdict_matches(expected, &produced),
+        "a violated header matcher must not reproduce `passed`"
+    );
+}
+
+/// A pack entry whose expectation declares a `negotiated` matcher and whose
+/// recording carries no ask is REFUSED, never passed: the evaluator answers "no
+/// failure" for an absent ask, so evaluating anyway would let a wrong media
+/// type through (#473).
+#[test]
+fn an_entry_declaring_a_negotiated_matcher_without_an_ask_is_refused() {
+    let (set, mut transcript) = load();
+    let entry = transcript
+        .entries
+        .iter_mut()
+        .find(|e| e.case.as_str() == "I_DEFINITION_ADL2.get_artefact-retrieve")
+        .expect("the pack carries the ADL2 retrieval entry");
+    entry
+        .steps
+        .first_mut()
+        .expect("the entry records its one step")
+        .request
+        .accept = None;
+
+    let refusal = replay_entry(&set, entry).expect_err("the entry must be refused");
+    assert!(
+        refusal.contains("negotiated matcher") && refusal.contains("Content-Type"),
+        "the refusal must name the matcher and the header: {refusal}"
+    );
+}
+
 /// A `signature` assertion whose only fact is `present` is judged from the
 /// recorded envelope (#469): the member is in the recording, so the replay
 /// reads it rather than refusing the entry.

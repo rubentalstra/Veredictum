@@ -34,7 +34,7 @@ use crate::exec::state::{Captured, VarStore};
 use crate::exec::{StepDriver, StepObservation, outcome};
 use crate::ids::{CaptureName, CaseId, CorpusKey, SmOperationRef, ViewName};
 use crate::model::assertion::{Assertion, PostconditionRole};
-use crate::model::binding::WireFrom;
+use crate::model::binding::{HeaderMatcher, WireExpectation, WireFrom};
 use crate::model::case::{CaseCore, FlowStep};
 use crate::vocab::{FormatName, OutcomeKind};
 
@@ -62,6 +62,18 @@ pub struct RecordedRequest {
     /// Digest of the request body, so a replay can tell two shapes apart.
     #[serde(default)]
     pub body_digest: Option<String>,
+    /// The `Accept` the step negotiated, when a binding's header expectation
+    /// needs it.
+    ///
+    /// A `negotiated` matcher compares the served `Content-Type` against what
+    /// the request asked for, and a recording that omits the ask cannot judge
+    /// it. Optional so an entry whose expectation declares no such matcher
+    /// carries nothing it does not need; an entry that DOES declare one and
+    /// omits this is refused rather than passed, by the player's own
+    /// ungrounded-header guard. Named in prose rather than linked: the guard is
+    /// private and a public item may not link to it.
+    #[serde(default)]
+    pub accept: Option<String>,
 }
 
 /// The adjudicated expectation for one step exchange.
@@ -199,6 +211,50 @@ impl<'a> TranscriptPlayer<'a> {
             return Some(exact);
         }
         bindings.find(|b| b.sm_operation == op && b.variant.is_none())
+    }
+
+    /// Refuses the entry when the outcome's expectation declares a header
+    /// matcher this recording cannot ground.
+    ///
+    /// `negotiated` compares the served `Content-Type` against the `Accept` the
+    /// request carried. A recording that omits the ask makes that comparison
+    /// unsound, and the evaluator answers "no failure" for an absent ask, so
+    /// evaluating anyway would let a wrong media type reproduce a pass. The
+    /// entry is refused by name instead, the same discipline
+    /// [`Self::refuse_unrecorded`] applies to an assertion family.
+    fn refuse_ungrounded_headers(
+        case: &CaseCore,
+        step: &FlowStep,
+        expectation: &WireExpectation,
+        recorded: &TranscriptStep,
+    ) -> Result<(), String> {
+        if recorded.request.accept.is_some() {
+            return Ok(());
+        }
+        let ungrounded: Vec<&str> = expectation
+            .headers
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .filter(|(_, declarations)| {
+                declarations
+                    .all()
+                    .iter()
+                    .any(|h| matches!(h.matcher, HeaderMatcher::Negotiated))
+            })
+            .map(|(name, _)| name.as_str())
+            .collect();
+        if ungrounded.is_empty() {
+            return Ok(());
+        }
+        Err(format!(
+            "case {} step {} declares a negotiated matcher on {}, and the recorded request \
+             carries no `accept`; a pack entry may not claim a verdict over a header the replay \
+             cannot judge",
+            case.id,
+            step.step,
+            ungrounded.join(", ")
+        ))
     }
 
     /// Refuses the entry when `step` asserts a family the replay cannot judge.
@@ -380,7 +436,36 @@ impl StepDriver for TranscriptPlayer<'_> {
             Some(loaded) => loaded,
             None => &mut no_corpus,
         };
+        // Binding header matchers are EXECUTED expectations, not documentation
+        // (#473): before this the player judged status, captures and assertions
+        // and never these, so an entry could reproduce a pass over a recording
+        // whose headers violated its own binding.
         let mut assertion_failures = Vec::new();
+        if let outcome::Observation::Kind(kind) = observation
+            && let Some(expectation) = binding.outcome(kind)
+        {
+            Self::refuse_ungrounded_headers(case, step, expectation, recorded)?;
+            // `last_version_uid` and `spec_versions` are None because a pack
+            // recording tracks neither: the uid matcher then asserts presence
+            // only and a dated rule is out of scope, which is what both
+            // evaluators already do for a party that declares nothing.
+            let header_ctx = crate::exec::headers::RequestContext {
+                accept: recorded.request.accept.as_deref(),
+                last_version_uid: None,
+                spec_versions: None,
+            };
+            assertion_failures.extend(
+                crate::exec::headers::evaluate(
+                    expectation,
+                    &recorded.response.headers,
+                    recorded.response.body.as_ref(),
+                    &header_ctx,
+                    vars,
+                )
+                .into_iter()
+                .map(crate::exec::assertions::AssertionOutcome::Mismatch),
+            );
+        }
         let mut advisories = Vec::new();
         for assertion in &step.assertions {
             match crate::exec::assertions::eval_from_exchange(assertion, facts, ground) {
