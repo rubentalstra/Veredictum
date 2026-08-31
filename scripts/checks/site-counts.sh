@@ -19,14 +19,20 @@ cd "$(dirname "$0")/../.."
 
 SURFACES=(website/landing/index.html website/book/src README.md ARCHITECTURE.md)
 
+# Every extraction below ends in `|| true`, and that is load-bearing: under
+# `set -e` a `$( … | grep )` whose grep matches nothing exits the script on the
+# spot, so the diagnostic underneath was unreachable and CI failed with no
+# message at all (POSIX shell rule: the pipeline's status is its last command's,
+# <https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html>).
+# The empty value is what the loop is written to catch.
 summary="${1:-}"
 if [[ -z "$summary" ]]; then
-  summary="$(cargo run --quiet --locked -- validate --root artifacts --specs specs/openehr | grep -E '[0-9]+ case\(s\)')"
+  summary="$(cargo run --quiet --locked -- validate --root artifacts --specs specs/openehr | grep -E '[0-9]+ case\(s\)' || true)"
 fi
-cases=$(grep -oE '[0-9]+ case\(s\)' <<<"$summary" | grep -oE '^[0-9]+')
-bindings=$(grep -oE '[0-9]+ binding\(s\)' <<<"$summary" | grep -oE '^[0-9]+')
-capabilities=$(grep -oE '[0-9]+ capability row\(s\)' <<<"$summary" | grep -oE '^[0-9]+')
-outcomes=$(grep -cE '^[a-z_]+: ' artifacts/vocab/outcomes.yaml)
+cases=$(grep -oE '[0-9]+ case\(s\)' <<<"$summary" | grep -oE '^[0-9]+' || true)
+bindings=$(grep -oE '[0-9]+ binding\(s\)' <<<"$summary" | grep -oE '^[0-9]+' || true)
+capabilities=$(grep -oE '[0-9]+ capability row\(s\)' <<<"$summary" | grep -oE '^[0-9]+' || true)
+outcomes=$(grep -cE '^[a-z_]+: ' artifacts/vocab/outcomes.yaml || true)
 for truth in cases bindings capabilities outcomes; do
   [[ -n "${!truth}" ]] || { echo "::error::could not derive the ${truth} count" >&2; exit 1; }
 done
@@ -60,7 +66,11 @@ check "$outcomes" 'There are [0-9]+ of them' "outcome kinds"
 # Each is derivable from the tree, so each is held to it.
 schedule_citers=$(grep -rlE 'platform_test_schedule' artifacts/schedule --include='*.yaml' | wc -l | tr -d ' ')
 pazos_citers=$(grep -rlE 'platform_test_schedule master(06|07|08|09)' artifacts/schedule --include='*.yaml' | wc -l | tr -d ' ')
-provenance_records=$(grep -cE '^[[:space:]]+provenance: ' artifacts/corpus/MANIFEST.yaml | tr -d ' ')
+provenance_records=$(grep -cE '^[[:space:]]+provenance: ' artifacts/corpus/MANIFEST.yaml || true)
+for truth in schedule_citers pazos_citers provenance_records; do
+  [[ "${!truth}" =~ ^[1-9][0-9]*$ ]] || { echo "::error::could not derive the ${truth} count" >&2; exit 1; }
+done
+
 check "$schedule_citers" '[0-9]+ of the [0-9]+ case cores here cite' "Test Schedule citers"
 check "$pazos_citers" '[0-9]+ of the [0-9]+ case cores cite' "Pazos-chapter citers"
 check "$provenance_records" 'the [0-9]+ corpus provenance records' "corpus provenance records"

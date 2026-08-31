@@ -529,6 +529,7 @@ fn a_declaration_reaches_the_console_only_as_pasted_bytes() -> Result<(), Box<dy
             Some(pasted.clone()),
             None,
             false,
+            &PostureForm::default(),
         );
         assert!(
             answer.is_err(),
@@ -542,6 +543,7 @@ fn a_declaration_reaches_the_console_only_as_pasted_bytes() -> Result<(), Box<dy
         Some(std::fs::read_to_string(&fixture)?),
         None,
         false,
+        &PostureForm::default(),
     )
     .map_err(|e| format!("the fixture's own bytes must pass: {e}"))?
     .ok_or("pasted bytes must yield a summary")?;

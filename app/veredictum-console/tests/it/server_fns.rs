@@ -322,10 +322,15 @@ async fn the_run_endpoints_refuse_an_out_of_order_wizard() -> Result<(), Box<dyn
 
     // #465: no endpoint dereferences a path any more, so a path pasted into
     // the claim box is refused as the non-declaration it is.
-    let outside = fns::save_scope(Some(String::from("../../etc/passwd")), None, false)
-        .await
-        .expect_err("a path is not a declaration")
-        .to_string();
+    let outside = fns::save_scope(
+        Some(String::from("../../etc/passwd")),
+        None,
+        false,
+        PostureForm::default(),
+    )
+    .await
+    .expect_err("a path is not a declaration")
+    .to_string();
     assert!(!outside.is_empty(), "{outside}");
     Ok(())
 }
