@@ -22,7 +22,8 @@ use hdrhistogram::Histogram;
 use veredictum::ids::CaseId;
 use veredictum::ixit::Environment;
 use veredictum::party::{
-    OutcomeRecord, OutcomeStatus, Results, Runner, Sut, TechProfile, VerificationPackStatus,
+    OutcomeRecord, OutcomeStatus, Results, Runner, SelectionBasis, Sut, TechProfile,
+    VerificationPackStatus,
 };
 use veredictum::perf::{Measurement, OperationMeasurement, PerfClass, class_verdict};
 use veredictum::pipeline::conformance::ixit_digest;
@@ -95,6 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             formats: vec![FormatName::CanonicalJson],
         },
         ixit_digest: ixit_digest("{\"example\":true}"),
+        selection_basis: Some(SelectionBasis::Statement),
         restapi_specs_version: Some("1.1.0".to_owned()),
         outcomes: vec![
             outcome(

@@ -67,6 +67,7 @@ fn results_of(report: &RunReport) -> Results {
             formats: veredictum::vocab::FormatName::ALL.to_vec(),
         },
         ixit_digest: String::from("0"),
+        selection_basis: Some(veredictum::party::SelectionBasis::StatementBlind),
         restapi_specs_version: None,
         outcomes: report.records.iter().map(OutcomeRecord::from).collect(),
         measurements: Vec::new(),

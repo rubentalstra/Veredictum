@@ -459,6 +459,38 @@ impl From<&CaseRecord> for OutcomeRecord {
     }
 }
 
+/// What ISO/IEC 9646 test selection had to select the campaign with.
+///
+/// The ICS is the list of components and capabilities a party is answerable
+/// for (CNF profiles `master02-overview.adoc` §Overview), so a campaign
+/// driven without one is a sweep of the whole catalogue rather than a
+/// party-scoped record. A reader of the results document alone must be able
+/// to tell the two apart, because the option arms, the extension routes, the
+/// claimed capabilities and the release floors are all selected from the ICS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionBasis {
+    /// A party statement was supplied, so selection applied the ICS.
+    Statement,
+    /// No party statement was supplied: nothing selected the party's option
+    /// arms, extension routes, claimed capabilities or release floors.
+    StatementBlind,
+}
+
+impl SelectionBasis {
+    /// All variants, in vocabulary order (schema emission derives from this).
+    pub const ALL: &[SelectionBasis] = &[SelectionBasis::Statement, SelectionBasis::StatementBlind];
+
+    /// The basis token.
+    #[must_use]
+    pub fn token(self) -> &'static str {
+        match self {
+            SelectionBasis::Statement => "statement",
+            SelectionBasis::StatementBlind => "statement_blind",
+        }
+    }
+}
+
 /// One ambiguity disposition record: which register entry the run was subject
 /// to, and (for `option_select`) which option branch the ICS selected.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -483,6 +515,15 @@ pub struct Results {
     pub tech_profile: TechProfile,
     /// The digest of the ixit topology the run drove (provenance).
     pub ixit_digest: String,
+    /// What selection had to select this campaign with: the party's ICS, or
+    /// nothing.
+    ///
+    /// Absent only in a document written before the member existed (v0.1.4 and
+    /// earlier), where absence is UNKNOWN and never either basis — a reader
+    /// that defaults it to `statement` credits a blind sweep with a scope it
+    /// never had.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selection_basis: Option<SelectionBasis>,
     /// The `restapi_specs_version` the SUT's own System OPTIONS manifest
     /// served during the campaign, when that exchange was driven (released
     /// OAS `system.openapi.yaml` `Options` — every member optional, so
@@ -643,6 +684,52 @@ mod tests {
             { "case": "C-z", "status": "passed", "rows_driven": 1, "rows_total": 1 }
         ]));
         assert!(cited.check_invariants().is_ok());
+    }
+
+    /// A reader of the results document ALONE tells a party-scoped record from
+    /// a statement-blind sweep, and a document written before the member
+    /// existed reads as unknown rather than as either basis.
+    #[test]
+    fn the_recorded_selection_basis_survives_the_document() {
+        let document = |extra: &str| -> Results {
+            serde_json::from_str(&format!(
+                r#"{{
+                    "sut": {{ "name": "s", "version": "1" }},
+                    "runner": {{ "name": "veredictum", "version": "0",
+                                 "verification_pack_status": "passed" }},
+                    "schedule_release": "CNF-2.0",
+                    "tech_profile": {{ "its": "its-rest", "formats": ["canonical-json"] }},
+                    "ixit_digest": "d"{extra}
+                }}"#
+            ))
+            .unwrap()
+        };
+        assert_eq!(
+            document(r#", "selection_basis": "statement_blind""#).selection_basis,
+            Some(SelectionBasis::StatementBlind)
+        );
+        assert_eq!(
+            document(r#", "selection_basis": "statement""#).selection_basis,
+            Some(SelectionBasis::Statement)
+        );
+        assert_eq!(
+            document("").selection_basis,
+            None,
+            "absence is unknown, never either basis"
+        );
+
+        let blind = document(r#", "selection_basis": "statement_blind""#);
+        let text = serde_json::to_string(&blind).unwrap();
+        assert!(
+            text.contains(r#""selection_basis":"statement_blind""#),
+            "{text}"
+        );
+        for basis in SelectionBasis::ALL {
+            assert_eq!(
+                serde_json::to_value(basis).unwrap(),
+                serde_json::Value::String(basis.token().to_owned())
+            );
+        }
     }
 
     #[test]

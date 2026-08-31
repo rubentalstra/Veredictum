@@ -13,7 +13,7 @@
 
 use serde_json::{Value, json};
 use veredictum::exec::RowOutcome;
-use veredictum::run::{Exception, Progress, execute};
+use veredictum::run::{Exception, Progress, UnestablishedFact, execute};
 use veredictum::transcript::Recording;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -464,5 +464,219 @@ fn a_statement_takes_the_cases_it_claims_nothing_for_out_of_the_campaign() -> Fa
             citation: citation.clone()
         }]
     );
+    Ok(())
+}
+/// The register the option pair below belongs to: one `option_select` entry
+/// enumerating both arms, which is how the catalogue records a behaviour the
+/// release leaves to the service.
+fn option_register() -> Result<veredictum::model::register::AmbiguityRegister, serde_json::Error> {
+    serde_json::from_value(json!({
+        "AMB-167": {
+            "ambiguity": "the release declares application/xml on the EHR resource without defining its document root, so a service MAY offer XML or MAY refuse it under the XML Format 406 MUST",
+            "source": "ITS-REST docs/overview/Requests_and_responses.md §XML Format + §Data representation",
+            "handling": "sibling cases carry option tags; the ICS options declaration selects",
+            "disposition": "option_select",
+            "options": ["ehr-xml-supported", "ehr-xml-unsupported"]
+        }
+    }))
+}
+
+/// `POST /ehr` with both arms of the negotiation branch declared, so the
+/// offering arm and the refusal arm are each drivable.
+fn create_ehr_binding_with_refusal() -> Value {
+    json!({
+        "sm_operation": "I_EHR_SERVICE.create_ehr",
+        "its": "its-rest",
+        "request": { "method": "POST", "path": "/ehr" },
+        "outcomes": { "created": { "status": 201 }, "not_acceptable": { "status": 406 } }
+    })
+}
+
+/// The offering arm: the service serves the XML representation.
+fn xml_supported_case() -> Value {
+    json!({
+        "id": "RUN-create_ehr-xml_supported", "kind": "functional", "component": "EHR",
+        "sm_operation": "I_EHR_SERVICE.create_ehr",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "option": "ehr-xml-supported",
+        "ambiguities": ["AMB-167"],
+        "flow": [{ "step": 1, "call": "create_ehr", "expect": "created" }]
+    })
+}
+
+/// The refusal arm: the service refuses the representation it never defined.
+fn xml_unsupported_case() -> Value {
+    json!({
+        "id": "RUN-create_ehr-xml_unsupported", "kind": "functional", "component": "EHR",
+        "sm_operation": "I_EHR_SERVICE.create_ehr",
+        "test_purpose": "t", "description": "d", "spec_refs": [],
+        "option": "ehr-xml-unsupported",
+        "ambiguities": ["AMB-167"],
+        "flow": [{ "step": 1, "call": "create_ehr", "expect": "not_acceptable" }]
+    })
+}
+
+/// The catalogue plus the register, carrying both arms of the one branch.
+fn option_pair_world() -> Result<veredictum::artifacts::ArtifactSet, serde_json::Error> {
+    let mut set = artifact_set(&[create_ehr_binding_with_refusal()]);
+    set.register = Some((
+        std::path::PathBuf::from("registers/ambiguities.yaml"),
+        option_register()?,
+    ));
+    for document in [xml_supported_case(), xml_unsupported_case()] {
+        set.cases
+            .push((std::path::PathBuf::from("c.yaml"), case(document)));
+    }
+    Ok(set)
+}
+
+/// A statement-blind campaign reports NEITHER arm of a mutually exclusive
+/// option pair as a failure.
+///
+/// The arms are the halves of one `option_select` register branch, so a server
+/// serves exactly one of them: driving both guarantees a red row no conformant
+/// server could avoid. With no ICS to select the arm from, each case is
+/// recorded not-applicable with the citation naming the fact that was missing:
+/// never passed, because nothing was driven, and never failed, because nothing
+/// the server did is at issue.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_statement_blind_run_reports_no_arm_of_a_mutually_exclusive_option_pair_as_a_failure()
+-> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/ehr"))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+
+    let report = execute(
+        &option_pair_world()?,
+        &ixit(&sut.base_url()),
+        None,
+        Recording::Off,
+        &mut |_| {},
+    )?;
+
+    // The criterion the live run violated: no row of the pair is a failure.
+    let failures: Vec<(&str, &RowOutcome)> = report
+        .records
+        .iter()
+        .flat_map(|record| {
+            record
+                .rows
+                .iter()
+                .map(move |row| (record.case.as_str(), row))
+        })
+        .filter(|(_, row)| matches!(row, RowOutcome::Failed { .. }))
+        .collect();
+    assert!(
+        failures.is_empty(),
+        "a statement-blind campaign published an option arm as a failure: {failures:?}"
+    );
+
+    assert_eq!(report.considered, 2);
+    assert_eq!(report.interpreter_run, 0, "neither arm is driven blind");
+    for record in &report.records {
+        let rolled = veredictum::party::OutcomeRecord::from(record);
+        assert_eq!(
+            rolled.status,
+            veredictum::party::OutcomeStatus::NotApplicable,
+            "{}: {rolled:?}",
+            record.case
+        );
+        assert_eq!(record.rows_driven, 0, "{}", record.case);
+        let [RowOutcome::NotApplicable { citation }] = record.rows.as_slice() else {
+            panic!(
+                "{}: expected one not-applicable row, got {:?}",
+                record.case, record.rows
+            );
+        };
+        assert!(citation.contains("AMB-167"), "{citation}");
+        assert!(
+            citation.contains("no party statement was supplied"),
+            "{citation}"
+        );
+    }
+    let recorded: Vec<&str> = report.records.iter().map(|r| r.case.as_str()).collect();
+    assert_eq!(
+        recorded,
+        vec![
+            "RUN-create_ehr-xml_supported",
+            "RUN-create_ehr-xml_unsupported"
+        ],
+        "both arms are recorded, both as selection records"
+    );
+    assert!(
+        sut.requests().is_empty(),
+        "an unselectable arm is never driven at the server"
+    );
+
+    // The run's own account of what it could not select, and how many cases
+    // that touched — reported once at run level, not per row.
+    assert_eq!(
+        report.unestablished.get(&UnestablishedFact::OptionBranch),
+        Some(&2)
+    );
+    Ok(())
+}
+
+/// The same pair driven WITH an ICS declaring one arm: that arm drives against
+/// the server and the other is excused. The blind run's silence is therefore
+/// the absent ICS, never an undrivable pair.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn an_ics_declaring_one_arm_drives_exactly_that_arm() -> Fallible {
+    let sut = FakeSut::start();
+    sut.mount(
+        Mock::given(method("POST"))
+            .and(path("/ehr"))
+            .respond_with(ResponseTemplate::new(201)),
+    );
+
+    let statement: veredictum::party::Statement = serde_json::from_value(json!({
+        "product": { "name": "p", "version": "1", "vendor": "v", "identifier": "i" },
+        "schedule_release": "CNF-2.0",
+        "spec_versions": { "rm": "1.2.0", "its_rest": "1.1.0" },
+        "claims": { "capabilities": ["EhrOperations"], "profiles": ["CORE"] },
+        "tech_profiles": [{ "its": "its-rest", "formats": ["canonical-json"] }],
+        "options": ["ehr-xml-supported"]
+    }))?;
+
+    let report = execute(
+        &option_pair_world()?,
+        &ixit(&sut.base_url()),
+        Some(&statement),
+        Recording::Off,
+        &mut |_| {},
+    )?;
+
+    assert_eq!(report.interpreter_run, 1, "the declared arm drives");
+    assert!(
+        report.unestablished.is_empty(),
+        "an ICS establishes every selection fact: {:?}",
+        report.unestablished
+    );
+    let driven = report
+        .records
+        .iter()
+        .find(|r| r.case.as_str() == "RUN-create_ehr-xml_supported")
+        .ok_or("the declared arm is recorded")?;
+    assert_eq!(driven.rows.as_slice(), [RowOutcome::Passed]);
+    let excused = report
+        .records
+        .iter()
+        .find(|r| r.case.as_str() == "RUN-create_ehr-xml_unsupported")
+        .ok_or("the undeclared arm is recorded")?;
+    let [RowOutcome::NotApplicable { citation }] = excused.rows.as_slice() else {
+        panic!("expected one not-applicable row, got {:?}", excused.rows);
+    };
+    assert!(citation.contains("statement.options"), "{citation}");
     Ok(())
 }

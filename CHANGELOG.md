@@ -19,6 +19,28 @@ version on.
 ## [Unreleased]
 
 ### Fixed
+- **A run with no party statement no longer publishes the losing arm of every
+  mutually exclusive option pair as a failure (#455).** `--statement` is
+  optional, and five arms of the drive-time selection law were gated on a
+  statement being present, so a statement-blind run drove BOTH halves of each
+  `option_select` register branch. The arms are mutually exclusive, so one half
+  had to go red whatever the server did: the first live public run reported 46
+  such rows, none of them the server's. Two of those arms now hold without a
+  statement, because the missing declaration is what manufactures their
+  failure. An `option:` case with no arm selected, and a case driving an
+  extension route no released openEHR text governs, are each recorded
+  `not_applicable` with a citation naming the fact that was missing, so the row
+  reads as neither a pass nor a failure. The other three arms keep widening the
+  sweep rather than excusing cases: a deployment claiming every capability at
+  the latest release passes those, and `veredictum verdicts --statement`
+  re-applies both filters at judgement time.
+- **`results.json` records whether selection had a statement (#455).** The new
+  `selection_basis` member reads `statement` or `statement_blind`, so a reader
+  tells a party-scoped record from a whole-catalogue sweep from the document
+  alone. `schemas/results.schema.json` carries it as an optional enum; a
+  document written before the member existed reads as unknown, never as either
+  basis. A blind `veredictum run` also prints one run-level advisory naming
+  every selection fact it could not establish and how many cases each excused.
 - **`equivalent` judges the XML and the plain-text form its own binding asked
   for (#457).** Three retrieval rows reported that the instrument could not
   judge a body it had itself negotiated: `I_DEFINITION_ADL14.get_opt` sends

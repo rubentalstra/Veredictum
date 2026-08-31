@@ -26,6 +26,101 @@ use crate::refgrammar::{IxitField, ValueRef};
 use crate::transcript::{CaseTranscript, Recording};
 use crate::vocab::CaseStatus;
 
+/// A selection fact only the party's ICS (`statement.json`) establishes, so a
+/// campaign driven with no statement cannot decide it.
+///
+/// ISO/IEC 9646 selects the cases a party is answerable for from its ICS, and
+/// the CNF profiles are exactly that list ("A profile may be defined logically
+/// as a particular list of platform components and capabilities" — CNF
+/// profiles `master02-overview.adoc` §Overview). With no statement there is no
+/// such list, and every fact below is undecided.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnestablishedFact {
+    /// Which arm of an `option_select` register branch this deployment serves
+    /// (`statement.options`).
+    OptionBranch,
+    /// Whether the party serves an extension route no released openEHR
+    /// specification governs (`statement.claims.capabilities`).
+    ExtensionRealization,
+    /// Which capabilities the party claims, which narrows the sweep to the
+    /// scope the party answers for (`statement.claims.capabilities`).
+    ClaimedCapabilities,
+    /// Which openEHR releases the party declares, which a case's and its
+    /// bindings' `applies` floors are read against
+    /// (`statement.spec_versions`).
+    SpecVersionFloor,
+}
+
+impl UnestablishedFact {
+    /// All variants, in vocabulary order.
+    pub const ALL: &[UnestablishedFact] = &[
+        UnestablishedFact::OptionBranch,
+        UnestablishedFact::ExtensionRealization,
+        UnestablishedFact::ClaimedCapabilities,
+        UnestablishedFact::SpecVersionFloor,
+    ];
+
+    /// The fact's token.
+    #[must_use]
+    pub fn token(self) -> &'static str {
+        match self {
+            UnestablishedFact::OptionBranch => "option_branch",
+            UnestablishedFact::ExtensionRealization => "extension_realization",
+            UnestablishedFact::ClaimedCapabilities => "claimed_capabilities",
+            UnestablishedFact::SpecVersionFloor => "spec_version_floor",
+        }
+    }
+
+    /// Whether a case whose selection turns on this fact is EXCUSED when the
+    /// fact is unestablished, rather than driven.
+    ///
+    /// A case is excused only where the missing fact MANUFACTURES its failure.
+    /// The arms of an `option_select` branch are mutually exclusive, so
+    /// driving both publishes the losing arm as a failure no conformant server
+    /// could avoid (AMB-167: "Neither answer is non-conformant, so neither may
+    /// be asserted unconditionally"), and an extension route is governed by no
+    /// released openEHR text at all, so nothing on the wire makes an unserved
+    /// one a defect.
+    ///
+    /// The other two facts only NARROW a sweep the catalogue can honestly
+    /// drive: a fully conformant deployment claiming every capability at the
+    /// latest release passes those cases, and the verdict pipeline re-applies
+    /// both filters at judgement time
+    /// ([`crate::verdict::compute`]), so a blind run drives them and records
+    /// what the wire did.
+    #[must_use]
+    pub fn excuses_case(self) -> bool {
+        matches!(
+            self,
+            UnestablishedFact::OptionBranch | UnestablishedFact::ExtensionRealization
+        )
+    }
+
+    /// What the fact decides, for the run-level advisory.
+    #[must_use]
+    pub fn decides(self) -> &'static str {
+        match self {
+            UnestablishedFact::OptionBranch => {
+                "which arm of a mutually exclusive option_select register branch this deployment \
+                 serves"
+            }
+            UnestablishedFact::ExtensionRealization => {
+                "whether this deployment serves an extension route no released openEHR \
+                 specification governs"
+            }
+            UnestablishedFact::ClaimedCapabilities => {
+                "which capabilities the party claims, so the record is not narrowed to any \
+                 party's scope"
+            }
+            UnestablishedFact::SpecVersionFloor => {
+                "which openEHR releases the party declares, so no case or binding release floor \
+                 was read"
+            }
+        }
+    }
+}
+
 /// Why a case was not interpreter-run (the registered-exception taxonomy).
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "detail")]
@@ -37,6 +132,15 @@ pub enum Exception {
     Guarded(String),
     /// The case is `draft`/`retired` — never verdict-bearing.
     Status(String),
+    /// A selection fact only the ICS establishes, which this campaign had no
+    /// statement to read — the case is excused with its citation, never
+    /// driven blind ([`UnestablishedFact::excuses_case`]).
+    Unestablished {
+        /// The ICS fact the campaign lacked.
+        fact: UnestablishedFact,
+        /// The citation grounding the exclusion.
+        citation: String,
+    },
 }
 
 /// One run's execution report.
@@ -46,6 +150,11 @@ pub struct RunReport {
     pub records: Vec<CaseRecord>,
     /// Cases the interpreter could not drive, each with its reason.
     pub exceptions: Vec<(CaseId, Exception)>,
+    /// Cases excused because a selection fact only the ICS establishes was
+    /// unestablished, counted per fact — the run-level account a
+    /// statement-blind campaign reports once instead of per row. Empty for a
+    /// campaign that carried a statement.
+    pub unestablished: std::collections::BTreeMap<UnestablishedFact, usize>,
     /// Cases the interpreter drove end-to-end.
     pub interpreter_run: usize,
     /// All active assertion-machinery cases considered.
@@ -315,9 +424,6 @@ fn unservable_provisioning(
     requirement: &str,
     consequence: &str,
 ) -> Result<Option<String>, String> {
-    let Some(statement) = statement else {
-        return Ok(None);
-    };
     let mut parsed: Vec<SmOperationRef> = Vec::with_capacity(operations.len());
     for call in operations {
         parsed.push(SmOperationRef::parse(call).map_err(|e| {
@@ -334,14 +440,20 @@ fn unservable_provisioning(
         return Ok(None);
     };
     let claiming = capabilities_claiming_family(set, &decl.family);
-    if claiming
-        .iter()
-        .any(|c| statement.claims.capabilities.contains(c))
+    if let Some(statement) = statement
+        && claiming
+            .iter()
+            .any(|c| statement.claims.capabilities.contains(c))
     {
         return Ok(None);
     }
+    let claim = if statement.is_some() {
+        "the ICS claims none of"
+    } else {
+        "no party statement was supplied, so no ICS claims"
+    };
     Ok(Some(format!(
-        "{requirement} provisions over the {} extension routes ({}): the ICS claims none of \
+        "{requirement} provisions over the {} extension routes ({}): {claim} \
          the capabilities those routes' cases gate ({}), and no openEHR specification governs \
          them, so {consequence}",
         decl.family,
@@ -682,7 +794,9 @@ fn not_applicable_record(case: &CaseCore, citation: &str) -> CaseRecord {
 /// is behaviour only a party that CLAIMS the capability answers for. Driving it
 /// at another vendor's SUT would publish failures for routes that vendor never
 /// offered to serve — the published comparison must be honest in both
-/// directions, and a spurious red row is not honesty.
+/// directions, and a spurious red row is not honesty. With no statement at all
+/// nothing claims the route, so the same ground holds
+/// ([`UnestablishedFact::ExtensionRealization`]).
 ///
 /// # Errors
 /// An interpreter defect propagated from the provisioning arms (a malformed
@@ -692,18 +806,21 @@ fn unserved_extension(
     statement: Option<&crate::party::Statement>,
     case: &CaseCore,
 ) -> Result<Option<String>, String> {
-    if let Some(stmt) = statement
-        && let Some(family) = extension_family(set, case)
-        && !case
-            .capabilities
-            .iter()
-            .any(|c| stmt.claims.capabilities.contains(c))
-    {
-        return Ok(Some(format!(
-            "extension realization ({family}): the ICS claims none of this case's \
-             capabilities, and no openEHR specification governs the route — ISO/IEC 9646 \
-             test selection"
-        )));
+    if let Some(family) = extension_family(set, case) {
+        let unclaimed = match statement {
+            None => Some("no party statement was supplied, so no ICS claims this case's"),
+            Some(stmt) => (!case
+                .capabilities
+                .iter()
+                .any(|c| stmt.claims.capabilities.contains(c)))
+            .then_some("the ICS claims none of this case's"),
+        };
+        if let Some(unclaimed) = unclaimed {
+            return Ok(Some(format!(
+                "extension realization ({family}): {unclaimed} capabilities, and no openEHR \
+                 specification governs the route — ISO/IEC 9646 test selection"
+            )));
+        }
     }
     let citation = match unservable_import(set, statement, case)? {
         Some(citation) => Some(citation),
@@ -726,8 +843,11 @@ fn unserved_extension(
 /// means.
 ///
 /// A case declaring no capability at all gates nothing and is never excused
-/// here; without a statement (the statement-blind sweep) nothing is selected
-/// away.
+/// here. Without a statement nothing is selected away either, and that is the
+/// deliberate boundary of the statement-blind sweep: a deployment claiming
+/// every capability passes these cases, so the absence of a claim widens the
+/// record instead of manufacturing a failure
+/// ([`UnestablishedFact::excuses_case`]).
 fn unclaimed_capabilities(
     statement: Option<&crate::party::Statement>,
     case: &CaseCore,
@@ -753,6 +873,57 @@ fn unclaimed_capabilities(
     ))
 }
 
+/// The register entry that declares `tag` as one arm of its `option_select`
+/// branch, for the citation on an arm nothing selected.
+fn option_branch_entry(set: &ArtifactSet, tag: &crate::ids::OptionTag) -> Option<String> {
+    set.register.as_ref().and_then(|(_, register)| {
+        register
+            .entries()
+            .iter()
+            .find(|(_, entry)| entry.options.contains(tag))
+            .map(|(id, _)| id.to_string())
+    })
+}
+
+/// The OPTION arm of [`selection_exception`]: which arm of an `option_select`
+/// register branch a deployment serves is an ICS declaration
+/// (`statement.options`), and the arms are mutually exclusive.
+///
+/// An arm the ICS does not declare is not this SUT's behaviour, so driving it
+/// records a spurious failure the verdict pipeline would excuse anyway
+/// ([`crate::verdict`] step 3); the same citation excuses it here. With no
+/// statement NO arm is selected, so driving them all guarantees a red row no
+/// conformant server could avoid, which is what
+/// [`UnestablishedFact::OptionBranch`] excuses instead.
+fn unselected_option_branch(
+    set: &ArtifactSet,
+    statement: Option<&crate::party::Statement>,
+    case: &CaseCore,
+) -> Option<Exception> {
+    let tag = case.option.as_ref()?;
+    match statement {
+        None => {
+            let branch = option_branch_entry(set, tag).map_or_else(
+                || "an option_select register branch".to_owned(),
+                |id| format!("register {id}'s option_select branch"),
+            );
+            Some(Exception::Unestablished {
+                fact: UnestablishedFact::OptionBranch,
+                citation: format!(
+                    "option {tag}: no party statement was supplied, so which arm of {branch} \
+                     this deployment serves is unestablished — the arms are mutually \
+                     exclusive, so neither may be asserted; ISO/IEC 9646 test selection"
+                ),
+            })
+        }
+        Some(stmt) if !stmt.options.contains(tag) => Some(Exception::Unrealized(format!(
+            "option {tag}: the ICS does not declare this register branch (statement.options) \
+             — ISO/IEC 9646 test selection"
+        ))),
+        Some(_) => None,
+    }
+}
+
 /// The drive-time selection law (ISO/IEC 9646 ICS-driven selection plus the
 /// ixit declaration law): the FIRST ground that excuses `case` on this
 /// party/deployment, or `None` when the case drives.
@@ -774,23 +945,19 @@ fn selection_exception(
         return Ok(Some(Exception::Unrealized(citation)));
     }
     if let Some(citation) = unserved_extension(set, statement, case)? {
-        return Ok(Some(Exception::Unrealized(citation)));
+        return Ok(Some(match statement {
+            None => Exception::Unestablished {
+                fact: UnestablishedFact::ExtensionRealization,
+                citation,
+            },
+            Some(_) => Exception::Unrealized(citation),
+        }));
     }
     if let Some(citation) = unclaimed_capabilities(statement, case) {
         return Ok(Some(Exception::Guarded(citation)));
     }
-    // An option branch the party statement does not declare is not this
-    // SUT's behaviour — driving it records a spurious failure the verdict
-    // pipeline would excuse anyway (`verdict::effective_outcome`); excuse it
-    // at drive time with the same citation.
-    if let Some(stmt) = statement
-        && let Some(tag) = &case.option
-        && !stmt.options.contains(tag)
-    {
-        return Ok(Some(Exception::Unrealized(format!(
-            "option {tag}: the ICS does not declare this register branch \
-             (statement.options) — ISO/IEC 9646 test selection"
-        ))));
+    if let Some(exception) = unselected_option_branch(set, statement, case) {
+        return Ok(Some(exception));
     }
     // Case-level spec-version floors (`CaseCore.applies`): a behaviour the
     // spec dates to a release the party does not declare is out of scope for
@@ -1011,6 +1178,10 @@ fn campaign<'a>(
             let citation = match &exception {
                 Exception::Unrealized(c) | Exception::Guarded(c) | Exception::Status(c) => {
                     c.clone()
+                }
+                Exception::Unestablished { fact, citation } => {
+                    *report.unestablished.entry(*fact).or_default() += 1;
+                    citation.clone()
                 }
             };
             report.records.push(not_applicable_record(case, &citation));
@@ -2137,12 +2308,83 @@ mod tests {
             }
             other => panic!("expected an unrealized exception, got {other:?}"),
         }
-        // The statement-blind sweep selects nothing away.
+        // With no statement NO arm is selected, and the arms are mutually
+        // exclusive, so the case is excused as an unestablished ICS fact
+        // rather than driven into the losing half of the branch.
+        let blind = selection_exception(&set, &ixit(&serde_json::json!({})), None, &case)
+            .expect("the law is decidable")
+            .expect("no ICS selects an arm of a mutually exclusive branch");
+        match &blind {
+            Exception::Unestablished { fact, citation } => {
+                assert_eq!(*fact, UnestablishedFact::OptionBranch);
+                assert!(citation.contains("terminology-fail-closed"), "{citation}");
+                assert!(
+                    citation.contains("no party statement was supplied"),
+                    "{citation}"
+                );
+            }
+            other => panic!("expected an unestablished-fact exception, got {other:?}"),
+        }
+    }
+
+    /// A statement-blind sweep excuses an EXTENSION route: no ICS claims it,
+    /// and no released openEHR text governs it, so a red row there would be a
+    /// failure against a route nobody offered to serve.
+    #[test]
+    fn a_statement_blind_sweep_excuses_an_extension_route() {
+        let (set, _) = import_world();
+        let importer = set
+            .cases
+            .first()
+            .map(|(_, case)| case.clone())
+            .expect("the import world carries its own extension case");
+        let blind = selection_exception(&set, &ixit(&serde_json::json!({})), None, &importer)
+            .expect("the law is decidable")
+            .expect("no ICS claims an extension route");
+        match &blind {
+            Exception::Unestablished { fact, citation } => {
+                assert_eq!(*fact, UnestablishedFact::ExtensionRealization);
+                assert!(citation.contains("message-extract"), "{citation}");
+                assert!(citation.contains("AMB-34"), "{citation}");
+            }
+            other => panic!("expected an unestablished-fact exception, got {other:?}"),
+        }
+    }
+
+    /// The deliberate boundary of the statement-blind sweep: a case gated only
+    /// by claimed capabilities and release floors still DRIVES.
+    ///
+    /// A deployment claiming every capability at the latest release passes it,
+    /// so the missing ICS widens the record instead of manufacturing a
+    /// failure, and the verdict pipeline re-applies both filters once a
+    /// statement is supplied ([`UnestablishedFact::excuses_case`]).
+    #[test]
+    fn a_statement_blind_sweep_still_drives_a_claim_and_floor_gated_case() {
+        let (set, _) = selection_world();
+        let case: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "I_EHR_STATUS.get_ehr_status-floored", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["EhrStatus"],
+            "applies": { "its_rest": ">=2.0.0" },
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
         assert!(
             selection_exception(&set, &ixit(&serde_json::json!({})), None, &case)
                 .expect("the law is decidable")
                 .is_none()
         );
+        // The same case IS selected away by a statement that declares neither.
+        let exception = selection_exception(
+            &set,
+            &ixit(&serde_json::json!({})),
+            Some(&statement(&["Signing"])),
+            &case,
+        )
+        .expect("the law is decidable")
+        .expect("an ICS claiming nothing this case gates excuses it");
+        assert!(matches!(exception, Exception::Guarded(_)), "{exception:?}");
     }
 
     /// A case-level spec-version floor the party does not declare puts the
