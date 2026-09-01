@@ -139,25 +139,27 @@ impl RunWarning<'_> {
 /// `statement_blind` on its document and say nothing at all.
 #[derive(Debug, Clone, Copy)]
 pub struct Selection<'a> {
-    /// What selection had to select this campaign with.
-    basis: crate::party::SelectionBasis,
+    /// The declaration the campaign was selected under, with the document text
+    /// its digest is taken over.
+    selected_under: Option<(&'a Statement, &'a str)>,
     /// Cases excused per unestablished fact, which only the advisory reads.
     excused: &'a std::collections::BTreeMap<crate::run::UnestablishedFact, usize>,
 }
 
 impl<'a> Selection<'a> {
-    /// The posture of a campaign selected with this statement, whose report
+    /// The posture of a campaign selected under this declaration, whose report
     /// excused these cases.
+    ///
+    /// The declaration arrives with the document text it was read from, so the
+    /// basis, the recorded statement identity and the technology profile's own
+    /// provenance are all read off one value and cannot disagree.
     #[must_use]
     pub fn of(
-        statement: Option<&Statement>,
+        selected_under: Option<(&'a Statement, &'a str)>,
         excused: &'a std::collections::BTreeMap<crate::run::UnestablishedFact, usize>,
     ) -> Self {
         Self {
-            basis: match statement {
-                Some(_) => crate::party::SelectionBasis::Statement,
-                None => crate::party::SelectionBasis::StatementBlind,
-            },
+            selected_under,
             excused,
         }
     }
@@ -167,14 +169,32 @@ impl<'a> Selection<'a> {
     /// access to the invocation.
     #[must_use]
     pub fn basis(self) -> crate::party::SelectionBasis {
-        self.basis
+        match self.selected_under {
+            Some(_) => crate::party::SelectionBasis::Statement,
+            None => crate::party::SelectionBasis::StatementBlind,
+        }
+    }
+
+    /// The declaration ISO/IEC 9646 test selection applied, or `None` for a
+    /// campaign nothing selected.
+    #[must_use]
+    pub fn statement(self) -> Option<&'a Statement> {
+        self.selected_under.map(|(declared, _)| declared)
+    }
+
+    /// What the emitted document stamps as its `statement_digest`: the identity
+    /// of the declaration this campaign was selected under, or `None` when
+    /// nothing selected it.
+    #[must_use]
+    pub fn digest(self) -> Option<String> {
+        self.selected_under.map(|(_, text)| statement_digest(text))
     }
 
     /// The run-level advisory, or `None` when an ICS selected the campaign
     /// and there is nothing to announce.
     #[must_use]
     pub fn advisory(self) -> Option<RunWarning<'a>> {
-        match self.basis {
+        match self.basis() {
             crate::party::SelectionBasis::Statement => None,
             crate::party::SelectionBasis::StatementBlind => {
                 Some(RunWarning::StatementBlindSelection {
@@ -336,6 +356,98 @@ pub fn statement_digest(statement_text: &str) -> String {
     leading_digest(statement_text)
 }
 
+/// Everything one campaign contributes to its own results document.
+///
+/// Both campaign seams — the live run and the re-judgement of a recording —
+/// hand their varying facts to [`RecordedCampaign::into_results`], which is the
+/// only place a `results.json` is assembled. Assembling it twice is how a
+/// member reached one seam and not the other while both documents still
+/// validated: `ambiguity_dispositions` was a hardcoded empty list in both
+/// (#461), and nothing failed.
+#[derive(Debug)]
+pub struct RecordedCampaign<'a> {
+    /// The system the campaign drove.
+    pub sut: crate::party::Sut,
+    /// The schedule release the campaign ran.
+    pub schedule_release: String,
+    /// The campaign's selection posture, which carries the declaration it was
+    /// selected under.
+    pub selection: Selection<'a>,
+    /// The ambiguity register the catalogue carries, when it has one: the
+    /// dispositions are read from its `option_select` entries.
+    pub register: Option<&'a crate::model::register::AmbiguityRegister>,
+    /// The ixit document's own bytes, which the recorded digest is taken over.
+    pub ixit_text: &'a str,
+    /// The `restapi_specs_version` the SUT's System OPTIONS manifest served,
+    /// when that exchange was driven.
+    pub restapi_specs_version: Option<String>,
+    /// The per-case×format outcomes the campaign reached.
+    pub outcomes: Vec<OutcomeRecord>,
+    /// The measurement records the document carries.
+    pub measurements: Vec<crate::perf::Measurement>,
+}
+
+impl RecordedCampaign<'_> {
+    /// Assembles the party results document.
+    #[must_use]
+    pub fn into_results(self) -> Results {
+        let statement = self.selection.statement();
+        Results {
+            sut: self.sut,
+            runner: crate::party::Runner {
+                name: "veredictum".to_owned(),
+                version: env!("CARGO_PKG_VERSION").to_owned(),
+                verification_pack_status: crate::party::VerificationPackStatus::Passed,
+            },
+            schedule_release: self.schedule_release,
+            tech_profile: tech_profile(statement),
+            ixit_digest: ixit_digest(self.ixit_text),
+            statement_digest: self.selection.digest(),
+            selection_basis: Some(self.selection.basis()),
+            restapi_specs_version: self.restapi_specs_version,
+            outcomes: self.outcomes,
+            measurements: self.measurements,
+            ambiguity_dispositions: ambiguity_dispositions(statement, self.register),
+        }
+    }
+}
+
+/// The dispositions a campaign applied: one record per `option_select` register
+/// arm the party's ICS declares, in the register's authored order.
+///
+/// An `option_select` entry is normative handling the runner must apply, and
+/// the arms of one family are mutually exclusive, so which arm a deployment
+/// serves is the ICS's answer and nothing else
+/// (`registers/ambiguities.yaml`; ISO/IEC 9646 test selection). A campaign no
+/// statement selected answers no family, so it applies no disposition and the
+/// list is empty. A family the declaration answers with several arms records
+/// each of them: the declaration is refused as an option-family gap, and
+/// silently recording one arm of it would publish an answer the party never
+/// gave.
+pub(crate) fn ambiguity_dispositions(
+    statement: Option<&Statement>,
+    register: Option<&crate::model::register::AmbiguityRegister>,
+) -> Vec<crate::party::AmbiguityDisposition> {
+    let (Some(statement), Some(register)) = (statement, register) else {
+        return Vec::new();
+    };
+    let mut applied = Vec::new();
+    for (id, entry) in register.entries() {
+        if entry.disposition != crate::vocab::Disposition::OptionSelect {
+            continue;
+        }
+        for arm in entry.options.tags() {
+            if statement.options.contains(arm) {
+                applied.push(crate::party::AmbiguityDisposition {
+                    ambiguity: id.clone(),
+                    option: Some(arm.clone()),
+                });
+            }
+        }
+    }
+    applied
+}
+
 /// Drives the catalogue against a live SUT and assembles the party results.
 ///
 /// `warn` receives everything the run reports that is not a failure, in the
@@ -376,35 +488,32 @@ pub fn execute_run(
     }
     let report = crate::run::execute(&set, &ixit, statement, request.recording, progress)
         .map_err(|e| Error::Instrument(format!("execution defect: {e}")))?;
-    let selection = Selection::of(statement, &report.unestablished);
+    let selection = Selection::of(
+        selected_under
+            .as_ref()
+            .map(|(declared, text)| (declared, text.as_str())),
+        &report.unestablished,
+    );
     if let Some(advisory) = selection.advisory() {
         warn(advisory);
     }
     let outcomes: Vec<OutcomeRecord> = report.records.iter().map(OutcomeRecord::from).collect();
     let counts = tally(&outcomes);
     let carried = carried_measurements(request, warn)?;
-    let results = Results {
+    let results = RecordedCampaign {
         sut: crate::party::Sut {
             name: request.sut_name.to_owned(),
             version: request.sut_version.to_owned(),
         },
-        runner: crate::party::Runner {
-            name: "veredictum".to_owned(),
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            verification_pack_status: crate::party::VerificationPackStatus::Passed,
-        },
         schedule_release: crate::party::SCHEDULE_RELEASE.to_owned(),
-        tech_profile: tech_profile(statement),
-        ixit_digest: ixit_digest(&ixit_text),
-        statement_digest: selected_under
-            .as_ref()
-            .map(|(_, text)| statement_digest(text)),
-        selection_basis: Some(selection.basis()),
+        selection,
+        register: set.register.as_ref().map(|(_, register)| register),
+        ixit_text: &ixit_text,
         restapi_specs_version: report.restapi_specs_version.clone(),
         outcomes,
         measurements: carried,
-        ambiguity_dispositions: Vec::new(),
-    };
+    }
+    .into_results();
     results
         .check_invariants()
         .map_err(Error::RecordedInvariants)?;
@@ -438,20 +547,25 @@ fn tally(outcomes: &[OutcomeRecord]) -> OutcomeCounts {
 // here silently deselects every other format's failed rows — the false-green
 // shape that hid four red canonical-xml rows behind a PASS badge. The profile
 // therefore comes from the party statement's its-rest claim; with no
-// statement, EVERY format is selected so nothing red can vanish.
-pub(crate) fn tech_profile(statement: Option<&Statement>) -> crate::party::TechProfile {
-    crate::party::TechProfile {
+// statement, EVERY format is selected so nothing red can vanish. The record
+// says which of the two it carries (`source`): a reader of the document alone
+// cannot otherwise tell a five-format declaration from the fallback.
+pub(crate) fn tech_profile(statement: Option<&Statement>) -> crate::party::RecordedTechProfile {
+    let declared = statement.and_then(|s| {
+        s.tech_profiles
+            .iter()
+            .find(|p| p.its == crate::vocab::ItsName::ItsRest)
+    });
+    crate::party::RecordedTechProfile {
         its: crate::vocab::ItsName::ItsRest,
-        formats: statement
-            .and_then(|s| {
-                s.tech_profiles
-                    .iter()
-                    .find(|p| p.its == crate::vocab::ItsName::ItsRest)
-            })
-            .map_or_else(
-                || crate::vocab::FormatName::ALL.to_vec(),
-                |p| p.formats.clone(),
-            ),
+        formats: declared.map_or_else(
+            || crate::vocab::FormatName::ALL.to_vec(),
+            |p| p.formats.clone(),
+        ),
+        source: Some(match declared {
+            Some(_) => crate::party::TechProfileSource::Declared,
+            None => crate::party::TechProfileSource::Defaulted,
+        }),
     }
 }
 
@@ -585,7 +699,10 @@ mod tests {
         let statement = any_statement();
         for (case, selection) in [
             ("blind", Selection::of(None, &excused)),
-            ("selected", Selection::of(Some(&statement), &excused)),
+            (
+                "selected",
+                Selection::of(Some((&statement, "{}")), &excused),
+            ),
         ] {
             let blind_stamp = selection.basis() == crate::party::SelectionBasis::StatementBlind;
             let announced = selection.advisory().is_some();
@@ -608,7 +725,7 @@ mod tests {
         let statement = any_statement();
         let reached = [
             Selection::of(None, &excused).basis(),
-            Selection::of(Some(&statement), &excused).basis(),
+            Selection::of(Some((&statement, "{}")), &excused).basis(),
         ];
         for basis in crate::party::SelectionBasis::ALL {
             assert!(
@@ -703,21 +820,18 @@ mod tests {
         let profile = tech_profile(None);
         assert_eq!(profile.its, crate::vocab::ItsName::ItsRest);
         assert_eq!(profile.formats, crate::vocab::FormatName::ALL.to_vec());
+        assert_eq!(
+            profile.source,
+            Some(crate::party::TechProfileSource::Defaulted),
+            "the record says the list is the fallback rather than a claim"
+        );
     }
 
     #[test]
     fn a_statement_records_its_own_declared_its_rest_formats() {
-        let statement: Statement = serde_json::from_value(serde_json::json!({
-            "product": {
-                "vendor": "v", "name": "n", "version": "1", "identifier": "urn:test:n"
-            },
-            "schedule_release": "cnf-2.0-w2",
-            "claims": { "profiles": [], "capabilities": [] },
-            "tech_profiles": [
-                { "its": "its-rest", "formats": ["canonical-json"] }
-            ]
-        }))
-        .expect("a minimal statement parses");
+        let statement = declaring(&serde_json::json!([
+            { "its": "its-rest", "formats": ["canonical-json"] }
+        ]));
         let profile = tech_profile(Some(&statement));
         assert_eq!(
             profile.formats,
@@ -728,6 +842,140 @@ mod tests {
             crate::vocab::FormatName::ALL.to_vec(),
             "a declared profile narrows the recorded formats"
         );
+        assert_eq!(
+            profile.source,
+            Some(crate::party::TechProfileSource::Declared),
+            "the record says the list is the party's own claim"
+        );
+    }
+
+    /// A statement that declares no technology profile at all declares nothing
+    /// about this ITS, so the fallback is recorded and SAYS it is the fallback.
+    /// Reading it as a declaration would publish every format the instrument
+    /// speaks as a claim the party never made — the unclear provenance #461
+    /// closes, observed on a run whose recorded five formats included
+    /// `canonical-xml`.
+    #[test]
+    fn a_statement_declaring_no_profile_records_the_fallback_as_defaulted() {
+        let statement = declaring(&serde_json::json!([]));
+        let profile = tech_profile(Some(&statement));
+        assert_eq!(profile.formats, crate::vocab::FormatName::ALL.to_vec());
+        assert_eq!(
+            profile.source,
+            Some(crate::party::TechProfileSource::Defaulted)
+        );
+    }
+
+    /// A minimal statement declaring `tech_profiles` and the given options.
+    fn declaring(tech_profiles: &serde_json::Value) -> Statement {
+        serde_json::from_value(serde_json::json!({
+            "product": {
+                "vendor": "v", "name": "n", "version": "1", "identifier": "urn:test:n"
+            },
+            "schedule_release": "cnf-2.0-w2",
+            "claims": { "profiles": [], "capabilities": [] },
+            "tech_profiles": tech_profiles
+        }))
+        .expect("a minimal statement parses")
+    }
+
+    /// A register with one `option_select` entry over two families, and one
+    /// entry of another disposition beside it.
+    fn register() -> crate::model::register::AmbiguityRegister {
+        serde_json::from_value(serde_json::json!({
+            "AMB-39": {
+                "ambiguity": "the deprecated types may be served or refused",
+                "source": "ITS-REST §Requirements",
+                "handling": "sibling cases carry option tags; the ICS options declaration selects",
+                "disposition": "option_select",
+                "options": {
+                    "deprecated-types": [
+                        "sf-deprecated-types-supported",
+                        "sf-deprecated-types-unsupported"
+                    ],
+                    "deprecated-media": [
+                        "sf-deprecated-media-supported",
+                        "sf-deprecated-media-unsupported"
+                    ]
+                }
+            },
+            "AMB-5": {
+                "ambiguity": "an editorial divergence",
+                "source": "ITS-REST §Requirements",
+                "handling": "carried and reported",
+                "disposition": "editorial",
+                "upstream_issue": 1
+            }
+        }))
+        .expect("the register fixture parses")
+    }
+
+    /// A statement declaring the given option arms.
+    fn declaring_options(options: &[&str]) -> Statement {
+        let mut statement = declaring(&serde_json::json!([]));
+        statement.options = options
+            .iter()
+            .map(|tag| crate::ids::OptionTag::parse(tag).expect("a well-formed option tag"))
+            .collect();
+        statement
+    }
+
+    /// The document records which arm of each option family the ICS answered,
+    /// so a reader knows which of two mutually exclusive expectations the rows
+    /// were driven against.
+    #[test]
+    fn the_declared_option_arms_are_recorded_as_dispositions() {
+        let register = register();
+        let statement = declaring_options(&[
+            "sf-deprecated-types-unsupported",
+            "sf-deprecated-media-supported",
+        ]);
+        let applied = ambiguity_dispositions(Some(&statement), Some(&register));
+        let recorded: Vec<(String, Option<String>)> = applied
+            .iter()
+            .map(|d| {
+                (
+                    d.ambiguity.to_string(),
+                    d.option.as_ref().map(ToString::to_string),
+                )
+            })
+            .collect();
+        assert_eq!(
+            recorded,
+            vec![
+                (
+                    String::from("AMB-39"),
+                    Some(String::from("sf-deprecated-types-unsupported"))
+                ),
+                (
+                    String::from("AMB-39"),
+                    Some(String::from("sf-deprecated-media-supported"))
+                ),
+            ],
+            "one record per answered family, in the register's authored order"
+        );
+    }
+
+    /// A campaign no statement selected declares no arm, so it applied no
+    /// disposition: the empty list is a statement about the run.
+    #[test]
+    fn a_blind_campaign_applies_no_disposition() {
+        assert!(ambiguity_dispositions(None, Some(&register())).is_empty());
+        let statement = declaring_options(&["sf-deprecated-types-supported"]);
+        assert!(
+            ambiguity_dispositions(Some(&statement), None).is_empty(),
+            "a catalogue with no register defines no option arm to apply"
+        );
+    }
+
+    /// An arm no `option_select` entry declares is recorded by nobody: only the
+    /// register decides which tags are option arms, and a tag it does not
+    /// declare is a catalogue defect `validate` names rather than a disposition
+    /// this document invents.
+    #[test]
+    fn an_undeclared_arm_records_no_disposition() {
+        let statement = declaring_options(&["nobody-declares-this"]);
+        assert!(ambiguity_dispositions(Some(&statement), Some(&register())).is_empty());
     }
 
     /// The digest binds the results to the exact topology bytes, so equal

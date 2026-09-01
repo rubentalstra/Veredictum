@@ -24,7 +24,7 @@ use serde_json::{Value, json};
 use crate::model::capability::Realization;
 use crate::model::vocab_files::{BODY_SELECTOR_TOKENS, HEADER_MATCHER_FORMS};
 use crate::model::wire_surface::SurfaceReason;
-use crate::party::{OutcomeStatus, SelectionBasis, VerificationPackStatus};
+use crate::party::{OutcomeStatus, SelectionBasis, TechProfileSource, VerificationPackStatus};
 use crate::registry::{
     ArtifactRole, DeploymentKind, EntryKind, READABLE_REGISTRY_SCHEMA_VERSIONS,
     READABLE_RULES_VERSIONS, Relationship, SignatureScheme, Tier as RegistryTier,
@@ -769,7 +769,8 @@ pub fn ambiguity_register_schema() -> Value {
     })
 }
 
-/// A `{ its, formats }` technology-profile object schema.
+/// A `{ its, formats }` technology-profile object schema, as a party DECLARES
+/// one.
 fn tech_profile_def() -> Value {
     json!({
         "type": "object",
@@ -778,6 +779,24 @@ fn tech_profile_def() -> Value {
         "properties": {
             "its": { "enum": tokens(ItsName::ALL) },
             "formats": { "type": "array", "items": { "enum": tokens(FormatName::ALL) } }
+        }
+    })
+}
+
+/// The technology profile a results document RECORDS: the declared shape plus
+/// the provenance of the recorded format list.
+fn recorded_tech_profile_def() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["its"],
+        "properties": {
+            "its": { "enum": tokens(ItsName::ALL) },
+            "formats": { "type": "array", "items": { "enum": tokens(FormatName::ALL) } },
+            "source": {
+                "enum": tokens(TechProfileSource::ALL),
+                "description": "Where the recorded format list came from: `declared` when the party statement's tech_profiles entry for this ITS named it, `defaulted` when no declaration named this ITS and every format the instrument speaks was recorded instead. The recorded list is what the verdict pipeline selects gating records with, so the two carry different claims: a defaulted list keeps a red row in an unlisted format from vanishing behind a pass, and it is not a party's claim about the formats it serves. Absent only in a document written before the member existed, where absence is unknown and never either source."
+            }
         }
     })
 }
@@ -943,7 +962,7 @@ pub fn results_schema() -> Value {
                 }
             },
             "schedule_release": { "type": "string", "minLength": 1 },
-            "tech_profile": tech_profile_def(),
+            "tech_profile": recorded_tech_profile_def(),
             "ixit_digest": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{16}$",
@@ -993,6 +1012,7 @@ pub fn results_schema() -> Value {
                 }
             },
             "ambiguity_dispositions": {
+                "description": "The ambiguity dispositions the campaign applied: one record per option_select register arm the party's ICS declared, in the register's authored order. The arms of one option family are mutually exclusive, so which arm a deployment serves is the ICS's answer and the record says which answer it drove under. Empty for a campaign no statement selected, which declares no arm at all.",
                 "type": "array",
                 "items": {
                     "type": "object",

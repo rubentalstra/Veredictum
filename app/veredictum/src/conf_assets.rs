@@ -1197,9 +1197,10 @@ mod tests {
                 verification_pack_status: crate::party::VerificationPackStatus::Passed,
             },
             schedule_release: "test".to_owned(),
-            tech_profile: crate::party::TechProfile {
+            tech_profile: crate::party::RecordedTechProfile {
                 its: crate::vocab::ItsName::ItsRest,
                 formats: Vec::new(),
+                source: None,
             },
             ixit_digest: "test".to_owned(),
             statement_digest: None,

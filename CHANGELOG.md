@@ -19,6 +19,33 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **Every declared fact in a results document says where it came from (#461).**
+  Two members in `results.json`, both published in
+  `schemas/results.schema.json`. `tech_profile.source` reads `declared` when
+  the party statement's its-rest entry named the recorded format list, and
+  `defaulted` when no declaration named this ITS and every format the
+  instrument speaks was recorded instead. `ambiguity_dispositions` now carries
+  what the campaign applied: one record per `option_select` register arm the
+  ICS declared, in the register's authored order.
+
+  What it closes: a run that declared no technology profile published five
+  formats, `canonical-xml` among them, and nothing in the document said whether
+  that was a claim or a fallback. The recorded list is what the verdict
+  pipeline selects gating records with, so the two carry different claims. The
+  dispositions were a hardcoded empty list on a run that drove both arms of
+  fifteen register-tracked option families, and the empty list is now the
+  honest record of a campaign that answered none.
+
+  One constructor assembles the document for both campaign seams, the live run
+  and the re-judgement of a recording, so a member added to one is a compile
+  error at the other rather than a silent difference between two records.
+
+  Absence is unknown, never a value. A document written before a member existed
+  carries none, and `scripts/checks/registry-rederive.sh` reports the absence
+  and recomputes anyway. Members that contradict each other are refused:
+  `replay --against` refuses a record reading `tech_profile.source: declared`
+  beside `selection_basis: statement_blind`, because no re-judgement
+  reconstructs a campaign that had no declaration to read a profile from.
 - **A results document names the statement that selected it (#490).** New
   `statement_digest` member in `results.json`: the leading 8 bytes of the
   SHA-256 over the party statement's bytes as they sit on disk, 16 lowercase

@@ -20,7 +20,7 @@
 use std::path::Path;
 
 use crate::party::{OutcomeRecord, OutcomeStatus, Results, SelectionBasis, Statement};
-use crate::pipeline::conformance::{OutcomeCounts, RunWarning, Selection};
+use crate::pipeline::conformance::{OutcomeCounts, RecordedCampaign, RunWarning, Selection};
 use crate::pipeline::{Error, load_clean_root, load_ixit, load_statement, read_json};
 use crate::run::RunReport;
 use crate::transcript::RunTranscript;
@@ -142,31 +142,28 @@ pub fn replay_run(
     let transcript: RunTranscript = read_json(request.transcript, "transcript")?;
     let report = crate::run::replay(&set, &ixit, statement, &transcript, progress)
         .map_err(|e| Error::Instrument(format!("replay defect: {e}")))?;
-    let selection = Selection::of(statement, &report.unestablished);
+    let selection = Selection::of(
+        selected_under
+            .as_ref()
+            .map(|(declared, text)| (declared, text.as_str())),
+        &report.unestablished,
+    );
     if let Some(advisory) = selection.advisory() {
         warn(advisory);
     }
     let outcomes: Vec<OutcomeRecord> = report.records.iter().map(OutcomeRecord::from).collect();
     let counts = tally(&outcomes);
-    let results = Results {
+    let results = RecordedCampaign {
         sut: transcript.sut.clone(),
-        runner: crate::party::Runner {
-            name: "veredictum".to_owned(),
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            verification_pack_status: crate::party::VerificationPackStatus::Passed,
-        },
         schedule_release: transcript.schedule_release.clone(),
-        tech_profile: crate::pipeline::conformance::tech_profile(statement),
-        ixit_digest: crate::pipeline::conformance::ixit_digest(&ixit_text),
-        statement_digest: selected_under
-            .as_ref()
-            .map(|(_, text)| crate::pipeline::conformance::statement_digest(text)),
-        selection_basis: Some(selection.basis()),
+        selection,
+        register: set.register.as_ref().map(|(_, register)| register),
+        ixit_text: &ixit_text,
         restapi_specs_version: report.restapi_specs_version.clone(),
         outcomes,
         measurements: Vec::new(),
-        ambiguity_dispositions: Vec::new(),
-    };
+    }
+    .into_results();
     results
         .check_invariants()
         .map_err(Error::RecordedInvariants)?;
@@ -250,6 +247,14 @@ pub enum SelectionAgreement<'a> {
     /// The record and the re-judgement were selected under the same recorded
     /// facts.
     Same,
+    /// The record's own provenance members cannot both be true, so no
+    /// re-judgement reconstructs the campaign it describes. Refused: there is
+    /// no claim to re-apply, and holding a re-derivation against it would
+    /// publish agreement with a record that contradicts itself.
+    RecordContradictsItself {
+        /// Which two members cannot both be true.
+        finding: crate::party::ProvenanceContradiction,
+    },
     /// The record carries no `selection_basis`, so it identifies nothing
     /// about what selected it. Reported and never refused: absence is
     /// unknown, and reading it as either basis invents a fact the document
@@ -304,7 +309,8 @@ impl SelectionAgreement<'_> {
     pub fn refuses(self) -> bool {
         matches!(
             self,
-            SelectionAgreement::DifferentBasis { .. }
+            SelectionAgreement::RecordContradictsItself { .. }
+                | SelectionAgreement::DifferentBasis { .. }
                 | SelectionAgreement::DifferentStatement { .. }
                 | SelectionAgreement::DifferentFormats { .. }
         )
@@ -319,6 +325,10 @@ impl std::fmt::Display for SelectionAgreement<'_> {
             ),
             SelectionAgreement::Unidentified => f.write_str(
                 "the record carries no selection_basis, so nothing in it identifies what selected it",
+            ),
+            SelectionAgreement::RecordContradictsItself { finding } => write!(
+                f,
+                "the record contradicts itself, so no re-judgement reconstructs the campaign it describes: {finding}"
             ),
             SelectionAgreement::DifferentBasis {
                 submitted,
@@ -359,7 +369,8 @@ impl std::fmt::Display for SelectionAgreement<'_> {
 
 /// Whether the re-judgement applied the record's own claim.
 ///
-/// The recorded facts are compared in order: an absent `selection_basis` on
+/// The recorded facts are compared in order: the record's own members must
+/// first be consistent with each other, then an absent `selection_basis` on
 /// either side identifies nothing, a differing basis is decisive on its own,
 /// then the named statement separates two claims outright, and the declared
 /// formats are what is left when neither side names a statement.
@@ -369,12 +380,18 @@ impl std::fmt::Display for SelectionAgreement<'_> {
 /// formats. One side alone naming a statement is reported rather than
 /// refused: a record written before the member existed carries no identity,
 /// and refusing it would refuse every honest re-derivation of an older
-/// record.
+/// record. Only the SUBMITTED record is read for self-consistency, because the
+/// re-judgement is assembled by
+/// [`crate::pipeline::conformance::RecordedCampaign`] and cannot contradict
+/// itself.
 #[must_use]
 pub fn selection_agreement<'a>(
     submitted: &'a Results,
     rederived: &'a Results,
 ) -> SelectionAgreement<'a> {
+    if let Some(finding) = submitted.provenance_contradiction() {
+        return SelectionAgreement::RecordContradictsItself { finding };
+    }
     match (submitted.selection_basis, rederived.selection_basis) {
         (None, _) | (_, None) => SelectionAgreement::Unidentified,
         (Some(recorded), Some(replayed)) if recorded != replayed => {
@@ -475,9 +492,10 @@ mod tests {
                 verification_pack_status: crate::party::VerificationPackStatus::Passed,
             },
             schedule_release: String::from("cnf-2.0-w2"),
-            tech_profile: crate::party::TechProfile {
+            tech_profile: crate::party::RecordedTechProfile {
                 its: crate::vocab::ItsName::ItsRest,
                 formats: formats.to_vec(),
+                source: None,
             },
             ixit_digest: String::from("0"),
             statement_digest: None,
@@ -658,6 +676,55 @@ mod tests {
             selection_agreement(&submitted, &rederived),
             SelectionAgreement::Same
         );
+    }
+
+    /// A record whose own provenance members cannot both be true is refused
+    /// before anything is compared: a campaign nothing selected had no
+    /// declaration to read a technology profile from, so no re-judgement
+    /// reconstructs the campaign the document describes.
+    #[test]
+    fn a_record_contradicting_its_own_provenance_is_refused() {
+        let submitted = Results {
+            tech_profile: crate::party::RecordedTechProfile {
+                source: Some(crate::party::TechProfileSource::Declared),
+                ..record(Some(SelectionBasis::StatementBlind), FormatName::ALL).tech_profile
+            },
+            ..record(Some(SelectionBasis::StatementBlind), FormatName::ALL)
+        };
+        let rederived = record(Some(SelectionBasis::StatementBlind), FormatName::ALL);
+        let agreement = selection_agreement(&submitted, &rederived);
+        assert_eq!(
+            agreement,
+            SelectionAgreement::RecordContradictsItself {
+                finding: crate::party::ProvenanceContradiction::DeclaredProfileWithoutSelection,
+            }
+        );
+        assert!(agreement.refuses());
+        let rendered = agreement.to_string();
+        assert!(rendered.contains("tech_profile.source"), "{rendered}");
+        assert!(rendered.contains("selection_basis"), "{rendered}");
+    }
+
+    /// A record written before `tech_profile.source` existed carries nothing to
+    /// contradict, so it is judged on the members it does carry and re-derives
+    /// as it always did.
+    #[test]
+    fn a_record_predating_the_profile_source_still_re_derives() {
+        let submitted = record(
+            Some(SelectionBasis::Statement),
+            &[FormatName::CanonicalJson],
+        );
+        assert_eq!(
+            submitted.tech_profile.source, None,
+            "the fixture is the pre-member shape"
+        );
+        let rederived = record(
+            Some(SelectionBasis::Statement),
+            &[FormatName::CanonicalJson],
+        );
+        let agreement = selection_agreement(&submitted, &rederived);
+        assert_eq!(agreement, SelectionAgreement::Same);
+        assert!(!agreement.refuses());
     }
 
     /// A record written before `selection_basis` existed identifies nothing,

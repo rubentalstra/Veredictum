@@ -13,7 +13,8 @@
     "its": "its-rest",
     "formats": [
       "canonical-json"
-    ]
+    ],
+    "source": "declared"
   },
   "ixit_digest": "bba2d36669004a3e",
   "statement_digest": "60cdea1af827106c",
@@ -86,5 +87,10 @@
       ]
     }
   ],
-  "ambiguity_dispositions": []
+  "ambiguity_dispositions": [
+    {
+      "ambiguity": "AMB-39",
+      "option": "sf-deprecated-types-supported"
+    }
+  ]
 }

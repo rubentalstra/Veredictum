@@ -22,8 +22,8 @@ use hdrhistogram::Histogram;
 use veredictum::ids::CaseId;
 use veredictum::ixit::Environment;
 use veredictum::party::{
-    OutcomeRecord, OutcomeStatus, Results, Runner, SelectionBasis, Sut, TechProfile,
-    VerificationPackStatus,
+    AmbiguityDisposition, OutcomeRecord, OutcomeStatus, RecordedTechProfile, Results, Runner,
+    SelectionBasis, Sut, TechProfileSource, VerificationPackStatus,
 };
 use veredictum::perf::{Measurement, OperationMeasurement, PerfClass, class_verdict};
 use veredictum::pipeline::conformance::{ixit_digest, statement_digest};
@@ -91,9 +91,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             verification_pack_status: VerificationPackStatus::NotRun,
         },
         schedule_release: "cnf-2.0-w2".to_owned(),
-        tech_profile: TechProfile {
+        tech_profile: RecordedTechProfile {
             its: ItsName::ItsRest,
             formats: vec![FormatName::CanonicalJson],
+            source: Some(TechProfileSource::Declared),
         },
         ixit_digest: ixit_digest("{\"example\":true}"),
         statement_digest: Some(statement_digest("{\"example\":\"statement\"}")),
@@ -140,7 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             violations,
             resources: None,
         }],
-        ambiguity_dispositions: Vec::new(),
+        ambiguity_dispositions: first_option_disposition(&loaded)?,
     };
 
     results
@@ -159,4 +160,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn poc_case_id(case: &veredictum::perf::PerformanceCase) -> CaseId {
     case.id.clone()
+}
+
+// One disposition, read from the catalogue's own register rather than invented:
+// the first arm of the first `option_select` entry, which is the shape a run
+// under a declaration that answers that family records.
+fn first_option_disposition(
+    loaded: &veredictum::artifacts::Loaded,
+) -> Result<Vec<AmbiguityDisposition>, Box<dyn std::error::Error>> {
+    let (_, register) = loaded
+        .set
+        .register
+        .as_ref()
+        .ok_or("the catalogue carries an ambiguity register")?;
+    let (id, entry) = register
+        .entries()
+        .iter()
+        .find(|(_, entry)| entry.disposition == veredictum::vocab::Disposition::OptionSelect)
+        .ok_or("the register carries an option_select entry")?;
+    let arm = entry
+        .options
+        .tags()
+        .next()
+        .ok_or("an option_select entry enumerates at least one arm")?;
+    Ok(vec![AmbiguityDisposition {
+        ambiguity: id.clone(),
+        option: Some(arm.clone()),
+    }])
 }
