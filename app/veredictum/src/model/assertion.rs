@@ -468,21 +468,15 @@ impl Assertion {
                 // The evaluator compares the FULL coded term (RM common
                 // original_version.adoc §Attributes: a DV_CODED_TEXT), so a
                 // bare code parses and can never match a conformant server.
-                if let Some(state) = lifecycle_state {
-                    let well_formed = state.split_once("::").is_some_and(|(terminology, rest)| {
-                        !terminology.is_empty()
-                            && rest.split_once('|').is_some_and(|(code, rubric_tail)| {
-                                !code.is_empty() && rubric_tail.ends_with('|')
-                            })
-                    });
-                    if !well_formed {
-                        return Err(format!(
-                            "version assertion: lifecycle_state {state:?} is not the \
-                             `terminology::code|rubric|` term the evaluator compares against \
-                             (RM common original_version.adoc §Attributes types it \
-                             DV_CODED_TEXT, so a bare code can never match)"
-                        ));
-                    }
+                if let Some(state) = lifecycle_state
+                    && !is_full_coded_term(state)
+                {
+                    return Err(format!(
+                        "version assertion: lifecycle_state {state:?} is not the \
+                         `terminology::code|rubric|` term the evaluator compares against \
+                         (RM common original_version.adoc §Attributes types it \
+                         DV_CODED_TEXT, so a bare code can never match)"
+                    ));
                 }
                 Ok(())
             }
@@ -659,6 +653,18 @@ pub enum PostconditionRole {
     Aggregate,
     /// Recorded for readers of the schedule; never a pass/fail criterion.
     Informative,
+}
+
+/// Whether a term is spelled `terminology::code|rubric|`, the full form of a
+/// `DV_CODED_TEXT` (RM common `original_version.adoc` §Attributes).
+fn is_full_coded_term(term: &str) -> bool {
+    let Some((terminology, rest)) = term.split_once("::") else {
+        return false;
+    };
+    let Some((code, rubric_tail)) = rest.split_once('|') else {
+        return false;
+    };
+    !terminology.is_empty() && !code.is_empty() && rubric_tail.ends_with('|')
 }
 
 /// The structural invariants of an `xml_root` assertion: both names it carries

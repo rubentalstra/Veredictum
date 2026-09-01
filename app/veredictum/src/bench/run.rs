@@ -1248,6 +1248,51 @@ fn aggregate(
     Ok(operations)
 }
 
+/// One sweep worker's walk: it claims composition slots off the shared cursor
+/// until the population is exhausted, offering the phase's requests against
+/// every slot it claims and returning what each one cost.
+fn sweep_worker(
+    client: &BenchClient,
+    phase: &SweepPhase,
+    corpus: &BenchCorpus,
+    at_time: &str,
+    cursor: &AtomicUsize,
+) -> Vec<(BenchOp, u64, Option<ErrorClass>)> {
+    let mut local = Vec::new();
+    loop {
+        let slot = cursor.fetch_add(1, Ordering::Relaxed);
+        let Some(seeded) = corpus.compositions.get(slot) else {
+            break;
+        };
+        let ehr_id = corpus
+            .ehr_ids
+            .get(seeded.ehr_index)
+            .map_or("", String::as_str);
+        for op in &phase.per_composition {
+            let issued = Instant::now();
+            // A sweep walks the population in creation order, so its targets
+            // are the walk's own cursor and no parameter is drawn.
+            let (ok, class) = offer(
+                client,
+                *op,
+                ArrivalTarget {
+                    ehr_id,
+                    object_uid: seeded.object_uid.as_str(),
+                    version_uid: seeded.version_uid.as_str(),
+                    version_at_time: at_time,
+                    payload: &[],
+                    query_draw: u64::try_from(slot).unwrap_or(0),
+                },
+            );
+            let latency_us =
+                u64::try_from(issued.elapsed().as_micros().min(u128::from(HDR_MAX_US)))
+                    .unwrap_or(HDR_MAX_US);
+            local.push((*op, latency_us, if ok { None } else { class }));
+        }
+    }
+    local
+}
+
 /// Executes one closed-loop sweep: every seeded composition, in creation
 /// order, offered the phase's requests one after another.
 ///
@@ -1290,40 +1335,7 @@ fn sweep_phase(
         std::thread::scope(|scope| {
             for _ in 0..workers {
                 let _handle = scope.spawn(move || {
-                    let mut local = Vec::new();
-                    loop {
-                        let slot = cursor.fetch_add(1, Ordering::Relaxed);
-                        let Some(seeded) = corpus.compositions.get(slot) else {
-                            break;
-                        };
-                        let ehr_id = corpus
-                            .ehr_ids
-                            .get(seeded.ehr_index)
-                            .map_or("", String::as_str);
-                        for op in &phase.per_composition {
-                            let issued = Instant::now();
-                            // A sweep walks the population in creation order,
-                            // so its targets are the walk's own cursor and no
-                            // parameter is drawn.
-                            let (ok, class) = offer(
-                                client,
-                                *op,
-                                ArrivalTarget {
-                                    ehr_id,
-                                    object_uid: seeded.object_uid.as_str(),
-                                    version_uid: seeded.version_uid.as_str(),
-                                    version_at_time: at_time,
-                                    payload: &[],
-                                    query_draw: u64::try_from(slot).unwrap_or(0),
-                                },
-                            );
-                            let latency_us = u64::try_from(
-                                issued.elapsed().as_micros().min(u128::from(HDR_MAX_US)),
-                            )
-                            .unwrap_or(HDR_MAX_US);
-                            local.push((*op, latency_us, if ok { None } else { class }));
-                        }
-                    }
+                    let mut local = sweep_worker(client, phase, corpus, at_time, cursor);
                     if let Ok(mut all) = sink.lock() {
                         all.append(&mut local);
                     }

@@ -1731,7 +1731,6 @@ fn check_version_read_bindability(
     set: &ArtifactSet,
     findings: &mut Vec<Finding>,
 ) {
-    use crate::exec::driver::VersionedFamily;
     let mut needs_history = false;
     let mut needs_envelope = false;
     for assertion in case
@@ -1754,29 +1753,53 @@ fn check_version_read_bindability(
     if !needs_history && !needs_envelope {
         return;
     }
-    let anchor = case.sm_operation.as_ref();
-    let family = anchor.and_then(VersionedFamily::of_operation).or_else(|| {
-        let called: BTreeSet<VersionedFamily> = case
-            .flow
-            .iter()
-            .filter_map(|step| {
-                if step.call.contains('.') {
-                    SmOperationRef::parse(&step.call).ok()
-                } else {
-                    anchor.map(|a| a.sibling(&step.call))
-                }
-            })
-            .filter_map(|op| VersionedFamily::of_operation(&op))
-            .collect();
-        if called.len() == 1 {
-            called.into_iter().next()
-        } else {
-            None
-        }
-    });
-    let Some(family) = family else {
+    let Some(family) = versioned_family_of(case) else {
         return;
     };
+    let bindable = bindable_handles(case);
+    let mut reads: Vec<(&str, Option<&str>)> = Vec::new();
+    if needs_history && let Some(op) = family.revision_history_read() {
+        reads.push((op, None));
+    }
+    if needs_envelope && let Some((op, variant)) = family.envelope_read() {
+        reads.push((op, Some(variant)));
+    }
+    for read in reads {
+        check_read_addressability(read, family, set, &bindable, who, findings);
+    }
+}
+
+/// The versioned family a case's version assertions read against: the SM
+/// anchor's own family, else the single family the flow's calls reach.
+fn versioned_family_of(case: &CaseCore) -> Option<crate::exec::driver::VersionedFamily> {
+    use crate::exec::driver::VersionedFamily;
+    let anchor = case.sm_operation.as_ref();
+    if let Some(family) = anchor.and_then(VersionedFamily::of_operation) {
+        return Some(family);
+    }
+    let called: BTreeSet<VersionedFamily> = case
+        .flow
+        .iter()
+        .filter_map(|step| {
+            if step.call.contains('.') {
+                SmOperationRef::parse(&step.call).ok()
+            } else {
+                anchor.map(|a| a.sibling(&step.call))
+            }
+        })
+        .filter_map(|op| VersionedFamily::of_operation(&op))
+        .collect();
+    if called.len() == 1 {
+        called.into_iter().next()
+    } else {
+        None
+    }
+}
+
+/// Every path-parameter name a case's own flow can bind: the handles its
+/// `requires` mints, the names its steps capture, and `version_uid`, which the
+/// driver supplies from the assertion's own resolved target.
+fn bindable_handles(case: &CaseCore) -> BTreeSet<String> {
     let mut bindable: BTreeSet<String> = case
         .requires
         .minted_handles()
@@ -1789,44 +1812,49 @@ fn check_version_read_bindability(
         }
     }
     bindable.insert("version_uid".to_owned());
-    let mut reads: Vec<(&str, Option<&str>)> = Vec::new();
-    if needs_history && let Some(op) = family.revision_history_read() {
-        reads.push((op, None));
-    }
-    if needs_envelope && let Some((op, variant)) = family.envelope_read() {
-        reads.push((op, Some(variant)));
-    }
-    for (op, variant) in reads {
-        let Ok(op_ref) = SmOperationRef::parse(op) else {
-            continue;
-        };
-        let binding = set
-            .bindings
-            .iter()
-            .map(|(_, b)| b)
-            .find(|b| b.sm_operation == op_ref && b.variant.as_deref() == variant)
-            .or_else(|| {
-                set.bindings
-                    .iter()
-                    .map(|(_, b)| b)
-                    .find(|b| b.sm_operation == op_ref && b.variant.is_none())
-            });
-        let Some(request) = binding.and_then(|b| b.request.as_ref()) else {
-            continue;
-        };
-        for param in request.path.params() {
-            if !bindable.contains(param.as_str()) {
-                push(
-                    findings,
-                    CheckId::BindingCompleteness,
-                    who,
-                    format!(
-                        "version assertion: the {family:?} family's read ({op}) is addressed \
-                         by `{{{param}}}`, which no flow step captures and no requires mints \
-                         — the row would error at drive time on an unresolved path parameter"
-                    ),
-                );
-            }
+    bindable
+}
+
+/// Whether one version read's own binding is addressed by names the case's
+/// flow binds, reporting each path parameter that nothing produces.
+fn check_read_addressability(
+    read: (&str, Option<&str>),
+    family: crate::exec::driver::VersionedFamily,
+    set: &ArtifactSet,
+    bindable: &BTreeSet<String>,
+    who: &str,
+    findings: &mut Vec<Finding>,
+) {
+    let (op, variant) = read;
+    let Ok(op_ref) = SmOperationRef::parse(op) else {
+        return;
+    };
+    let binding = set
+        .bindings
+        .iter()
+        .map(|(_, b)| b)
+        .find(|b| b.sm_operation == op_ref && b.variant.as_deref() == variant)
+        .or_else(|| {
+            set.bindings
+                .iter()
+                .map(|(_, b)| b)
+                .find(|b| b.sm_operation == op_ref && b.variant.is_none())
+        });
+    let Some(request) = binding.and_then(|b| b.request.as_ref()) else {
+        return;
+    };
+    for param in request.path.params() {
+        if !bindable.contains(param.as_str()) {
+            push(
+                findings,
+                CheckId::BindingCompleteness,
+                who,
+                format!(
+                    "version assertion: the {family:?} family's read ({op}) is addressed \
+                     by `{{{param}}}`, which no flow step captures and no requires mints \
+                     — the row would error at drive time on an unresolved path parameter"
+                ),
+            );
         }
     }
 }
