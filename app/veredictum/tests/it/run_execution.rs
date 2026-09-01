@@ -62,11 +62,17 @@ fn unrealized_binding() -> Value {
     })
 }
 
+/// The case every campaign below drives. It gates `EhrOperations`, the
+/// capability the statement in
+/// [`a_statement_takes_the_cases_it_claims_nothing_for_out_of_the_campaign`]
+/// claims: a case declaring no capability is illegal, and the runner excuses
+/// one under a statement rather than driving it.
 fn driven_case() -> Value {
     json!({
         "id": "RUN-create_ehr", "kind": "functional", "component": "EHR",
         "sm_operation": "I_EHR_SERVICE.create_ehr",
         "test_purpose": "t", "description": "d", "spec_refs": [],
+        "capabilities": ["EhrOperations"],
         "flow": [{ "step": 1, "call": "create_ehr", "expect": "created" }]
     })
 }

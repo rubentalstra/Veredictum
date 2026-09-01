@@ -90,6 +90,15 @@ fn string_array(item_pattern: Option<&str>) -> Value {
     }
 }
 
+/// [`string_array`] with a `minItems: 1` floor, for a required list whose
+/// empty form asserts nothing any reader can act on.
+fn nonempty_string_array(item_pattern: &str) -> Value {
+    json!({
+        "type": "array", "minItems": 1,
+        "items": { "type": "string", "pattern": item_pattern }
+    })
+}
+
 /// The `applies` spec-version filter — ONE shape wherever a version floor is
 /// declared: on a case core (the whole behaviour is release-dated), on an
 /// operation binding (the wire itself is), and on a header expectation (one
@@ -324,7 +333,7 @@ pub fn case_core_schema() -> Value {
                 "type": "array",
                 "items": { "type": "string", "minLength": 1 }
             },
-            "capabilities": string_array(Some(IDENT_PATTERN)),
+            "capabilities": nonempty_string_array(IDENT_PATTERN),
             "exercises": string_array(Some(IDENT_PATTERN)),
             "profiles": { "type": "array", "items": { "enum": tokens(Tier::ALL) } },
             "option": { "type": "string", "pattern": OPTION_TAG_PATTERN },

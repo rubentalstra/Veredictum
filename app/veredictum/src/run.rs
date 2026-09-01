@@ -939,24 +939,35 @@ fn unserved_extension(
 /// serve, and the record and the verdict then disagree about what a red row
 /// means.
 ///
-/// A case declaring no capability at all gates nothing and is never excused
-/// here. Without a statement nothing is selected away either, and that is the
-/// deliberate boundary of the statement-blind sweep: a deployment claiming
-/// every capability passes these cases, so the absence of a claim widens the
-/// record instead of manufacturing a failure
-/// ([`UnestablishedFact::excuses_case`]).
+/// A case declaring no capability at all is excused here on the same
+/// predicate, because no claim can ever select it and `select` already drops
+/// it. The case-core schema refuses the empty list (`capabilities`,
+/// `minItems: 1`), so this arm is the second reader agreeing with the first.
+/// No openEHR spec governs the empty list — our own design.
+///
+/// Without a statement nothing is selected away, and that is the deliberate
+/// boundary of the statement-blind sweep: a deployment claiming every
+/// capability passes these cases, so the absence of a claim widens the record
+/// instead of manufacturing a failure ([`UnestablishedFact::excuses_case`]).
 fn unclaimed_capabilities(
     statement: Option<&crate::party::Statement>,
     case: &CaseCore,
 ) -> Option<String> {
     let statement = statement?;
-    if case.capabilities.is_empty()
-        || case
-            .capabilities
-            .iter()
-            .any(|c| statement.claims.capabilities.contains(c))
+    if case
+        .capabilities
+        .iter()
+        .any(|c| statement.claims.capabilities.contains(c))
     {
         return None;
+    }
+    if case.capabilities.is_empty() {
+        return Some(
+            "the case declares no capability, so no claim can select it — the case-core schema \
+             refuses an empty list (capabilities, minItems 1) and this excuse is the drive-time \
+             backstop; ISO/IEC 9646 test selection"
+                .to_owned(),
+        );
     }
     Some(format!(
         "the ICS claims none of the capabilities this case gates ({}) — CNF profiles \
@@ -2354,12 +2365,12 @@ mod tests {
         .unwrap()
     }
 
-    /// Capability scoping is a DRIVE-TIME selection law, not a verdict-layer
-    /// afterthought: a case gating only capabilities the ICS does not claim is
+    /// Capability scoping is a DRIVE-TIME selection law that the verdict layer
+    /// then repeats: a case gating only capabilities the ICS does not claim is
     /// recorded not-applicable with its citation, so the record and the
     /// verdict agree about what a red row means. A case sharing ONE claimed
-    /// capability still drives, a capability-less case is never excused this
-    /// way, and the statement-blind sweep selects nothing away.
+    /// capability still drives, and the statement-blind sweep selects nothing
+    /// away.
     #[test]
     fn a_case_gating_only_unclaimed_capabilities_is_selected_away() {
         let signing: CaseCore = serde_json::from_value(serde_json::json!({
@@ -2386,10 +2397,31 @@ mod tests {
             CapabilityName::parse("EhrOperations").unwrap(),
         ];
         assert!(unclaimed_capabilities(Some(&unclaimed), &partly).is_none());
+    }
 
-        let mut capability_less = signing;
+    /// A case declaring no capability is excused under a statement rather than
+    /// driven: no claim can select it, so driving it burns a server's time for
+    /// a row the verdict pipeline drops. The schema refuses the empty list at
+    /// authoring time and this arm is the drive-time backstop; the
+    /// statement-blind sweep still selects nothing away.
+    #[test]
+    fn a_capability_less_case_is_excused_rather_than_driven() {
+        let mut capability_less: CaseCore = serde_json::from_value(serde_json::json!({
+            "id": "SIG-VERSION-ehr_status_signature", "kind": "functional", "component": "EHR",
+            "sm_operation": "I_EHR_STATUS.get_ehr_status",
+            "test_purpose": "t", "description": "d", "spec_refs": [],
+            "capabilities": ["Signing"],
+            "flow": [{ "step": 1, "call": "get_ehr_status", "expect": "ok" }]
+        }))
+        .unwrap();
         capability_less.capabilities.clear();
-        assert!(unclaimed_capabilities(Some(&unclaimed), &capability_less).is_none());
+
+        let citation =
+            unclaimed_capabilities(Some(&statement(&["EhrOperations"])), &capability_less)
+                .expect("a case declaring no capability is out of scope under any statement");
+        assert!(citation.contains("declares no capability"), "{citation}");
+        assert!(citation.contains("minItems 1"), "{citation}");
+        assert_eq!(unclaimed_capabilities(None, &capability_less), None);
     }
 
     /// One realized binding plus one case that drives it — the smallest world

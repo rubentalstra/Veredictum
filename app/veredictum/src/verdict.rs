@@ -1077,6 +1077,27 @@ mod tests {
         );
     }
 
+    /// Selection intersects the case's capabilities with the claim, so a case
+    /// declaring none is deselected against every statement and bears no
+    /// verdict. The runner excuses the same case rather than driving it
+    /// ([`crate::run`]), and the case-core schema refuses the empty list at
+    /// authoring time.
+    #[test]
+    fn a_capability_less_case_is_deselected() {
+        let cases = vec![
+            functional_case(
+                "I_EHR_SERVICE.create_ehr-main",
+                &["EhrOperations"],
+                &["CORE"],
+            ),
+            functional_case("I_EHR_SERVICE.create_ehr-nocaps", &[], &["CORE"]),
+        ];
+        let st = statement(&["EhrOperations"], &["CORE"], &[]);
+        let selected = select(&st, &results(serde_json::json!([])), &cases, &register());
+        let ids: Vec<String> = selected.iter().map(|s| s.case.id.to_string()).collect();
+        assert_eq!(ids, vec!["I_EHR_SERVICE.create_ehr-main".to_owned()]);
+    }
+
     #[test]
     fn passing_core_claim_passes() {
         let cases = vec![functional_case(
