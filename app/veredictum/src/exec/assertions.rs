@@ -613,52 +613,72 @@ pub fn equivalence_mismatch(body: &Value, expected: &Value) -> AssertionFailure 
     ))
 }
 
+/// A value rendered for a diagnostic, clipped to its first 60 characters.
+fn brief(value: &Value) -> String {
+    let rendered = value.to_string();
+    if rendered.chars().count() > 60 {
+        let head: String = rendered.chars().take(60).collect();
+        format!("{head}…")
+    } else {
+        rendered
+    }
+}
+
 /// Every path at which two RM values differ, deepest-first, as
 /// `path: got … want …` phrases.
 fn diff_paths(got: &Value, want: &Value, path: &str, out: &mut Vec<String>) {
-    let brief = |v: &Value| {
-        let s = v.to_string();
-        if s.chars().count() > 60 {
-            let head: String = s.chars().take(60).collect();
-            format!("{head}…")
-        } else {
-            s
-        }
-    };
     match (got, want) {
-        (Value::Object(x), Value::Object(y)) => {
-            // `_type` presence on one side only is tolerated by the
-            // comparator (rm_cells_equal) — keep the diagnostic aligned so a
-            // red row never lists only tolerated diffs.
-            for (k, vw) in y {
-                match x.get(k) {
-                    Some(vg) => diff_paths(vg, vw, &format!("{path}/{k}"), out),
-                    None if k == "_type" => {}
-                    None => out.push(format!(
-                        "{path}/{k}: absent in retrieved (want {})",
-                        brief(vw)
-                    )),
-                }
-            }
-            for (k, vg) in x {
-                if !y.contains_key(k) && k != "_type" {
-                    out.push(format!("{path}/{k}: surplus in retrieved ({})", brief(vg)));
-                }
-            }
-        }
-        (Value::Array(x), Value::Array(y)) => {
-            if x.len() != y.len() {
-                out.push(format!("{path}: array length {} vs {}", x.len(), y.len()));
-            }
-            for (i, (vg, vw)) in x.iter().zip(y).enumerate() {
-                diff_paths(vg, vw, &format!("{path}[{i}]"), out);
-            }
-        }
+        (Value::Object(x), Value::Object(y)) => diff_object_paths(x, y, path, out),
+        (Value::Array(x), Value::Array(y)) => diff_array_paths(x, y, path, out),
         _ => {
             if !resultset::cells_equal(got, want) {
                 out.push(format!("{path}: got {} want {}", brief(got), brief(want)));
             }
         }
+    }
+}
+
+/// The differing paths of two RM objects: the wanted members first, then the
+/// members the retrieved document carries in surplus.
+///
+/// `_type` presence on one side only is tolerated by the comparator
+/// (`rm_cells_equal`), so the diagnostic stays aligned with it and a red row
+/// never lists only tolerated diffs.
+fn diff_object_paths(
+    got: &serde_json::Map<String, Value>,
+    want: &serde_json::Map<String, Value>,
+    path: &str,
+    out: &mut Vec<String>,
+) {
+    for (k, vw) in want {
+        match got.get(k) {
+            Some(vg) => diff_paths(vg, vw, &format!("{path}/{k}"), out),
+            None if k == "_type" => {}
+            None => out.push(format!(
+                "{path}/{k}: absent in retrieved (want {})",
+                brief(vw)
+            )),
+        }
+    }
+    for (k, vg) in got {
+        if !want.contains_key(k) && k != "_type" {
+            out.push(format!("{path}/{k}: surplus in retrieved ({})", brief(vg)));
+        }
+    }
+}
+
+/// The differing paths of two RM arrays: the length when it diverges, then
+/// each index the two sides both carry.
+fn diff_array_paths(got: &[Value], want: &[Value], path: &str, out: &mut Vec<String>) {
+    if got.len() != want.len() {
+        out.push(format!(
+            "{path}: array length {} vs {}",
+            got.len(),
+            want.len()
+        ));
+    }
+    for (i, (vg, vw)) in got.iter().zip(want).enumerate() {
+        diff_paths(vg, vw, &format!("{path}[{i}]"), out);
     }
 }
 

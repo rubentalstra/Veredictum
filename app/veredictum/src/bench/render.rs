@@ -329,49 +329,57 @@ fn relative_section(result: &BenchResult) -> String {
     let _written = writeln!(out);
     let _written = writeln!(out, "{RELATIVE_DERIVATION}");
     for index in &result.relative {
-        let _written = writeln!(out);
-        let _written = writeln!(out, "### vs {}", index.display_name);
-        let _written = writeln!(out);
-        let _written = writeln!(
-            out,
-            "| Phase | Operation | Metric | Target | Baseline | Index |"
-        );
-        let _written = writeln!(out, "|---|---|---|---:|---:|---:|");
-        for (phase, block) in &index.phases {
-            for (operation, ratios) in &block.operations {
-                for metric in Metric::ALL {
-                    let Some(ratio) = ratios.metrics.get(metric.as_str()) else {
-                        continue;
-                    };
-                    let _written = writeln!(
-                        out,
-                        "| `{phase}` | `{operation}` | {} | {:.1} | {:.1} | {:.3} |",
-                        metric.as_str(),
-                        ratio.target_median,
-                        ratio.baseline_median,
-                        ratio.index
-                    );
-                }
-            }
-        }
-        if !index.gaps.is_empty() {
-            let _written = writeln!(out);
-            let _written = writeln!(out, "No index exists for:");
-            let _written = writeln!(out);
-            for gap in &index.gaps {
-                let metric = gap
-                    .metric
-                    .as_deref()
-                    .map_or_else(|| "every metric".to_owned(), |metric| format!("`{metric}`"));
+        out.push_str(&index_table(index));
+    }
+    let _written = writeln!(out);
+    out
+}
+
+/// One baseline's index table, with the pairs no index exists for named under
+/// it rather than dropped.
+fn index_table(index: &crate::bench::relative::RelativeIndex) -> String {
+    let mut out = String::new();
+    let _written = writeln!(out);
+    let _written = writeln!(out, "### vs {}", index.display_name);
+    let _written = writeln!(out);
+    let _written = writeln!(
+        out,
+        "| Phase | Operation | Metric | Target | Baseline | Index |"
+    );
+    let _written = writeln!(out, "|---|---|---|---:|---:|---:|");
+    for (phase, block) in &index.phases {
+        for (operation, ratios) in &block.operations {
+            for metric in Metric::ALL {
+                let Some(ratio) = ratios.metrics.get(metric.as_str()) else {
+                    continue;
+                };
                 let _written = writeln!(
                     out,
-                    "- phase `{}` operation `{}`, {metric}: {}",
-                    gap.phase, gap.operation, gap.reason
+                    "| `{phase}` | `{operation}` | {} | {:.1} | {:.1} | {:.3} |",
+                    metric.as_str(),
+                    ratio.target_median,
+                    ratio.baseline_median,
+                    ratio.index
                 );
             }
         }
     }
-    let _written = writeln!(out);
+    if !index.gaps.is_empty() {
+        let _written = writeln!(out);
+        let _written = writeln!(out, "No index exists for:");
+        let _written = writeln!(out);
+        for gap in &index.gaps {
+            let metric = gap
+                .metric
+                .as_deref()
+                .map_or_else(|| "every metric".to_owned(), |metric| format!("`{metric}`"));
+            let _written = writeln!(
+                out,
+                "- phase `{}` operation `{}`, {metric}: {}",
+                gap.phase, gap.operation, gap.reason
+            );
+        }
+    }
     out
 }
 
@@ -386,39 +394,51 @@ fn error_lines(result: &BenchResult) -> Vec<String> {
                     repetition.repetition
                 ));
             }
-            for (operation, stats) in &record.operations {
-                if stats.errors == 0 {
-                    continue;
-                }
-                let classes = stats
-                    .errors_by_class
-                    .iter()
-                    .map(|(class, count)| format!("{class}={count}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                lines.push(format!(
-                    "repetition {} phase `{phase}` ({}) operation `{operation}`: {} error(s) [{classes}]",
-                    repetition.repetition, record.regime, stats.errors
-                ));
-            }
+            lines.extend(operation_error_lines(
+                repetition.repetition,
+                "phase",
+                phase,
+                record.regime,
+                &record.operations,
+            ));
         }
         for (phase, sweep) in &repetition.sweeps {
-            for (operation, stats) in &sweep.operations {
-                if stats.errors == 0 {
-                    continue;
-                }
-                let classes = stats
-                    .errors_by_class
-                    .iter()
-                    .map(|(class, count)| format!("{class}={count}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                lines.push(format!(
-                    "repetition {} sweep `{phase}` ({}) operation `{operation}`: {} error(s) [{classes}]",
-                    repetition.repetition, sweep.regime, stats.errors
-                ));
-            }
+            lines.extend(operation_error_lines(
+                repetition.repetition,
+                "sweep",
+                phase,
+                sweep.regime,
+                &sweep.operations,
+            ));
         }
+    }
+    lines
+}
+
+/// The error line of every operation in one phase record that saw an error,
+/// with the per-class breakdown the record carries.
+fn operation_error_lines(
+    repetition: u32,
+    kind: &str,
+    phase: &str,
+    regime: crate::bench::result::LoopRegime,
+    operations: &BTreeMap<String, crate::bench::result::OperationStats>,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    for (operation, stats) in operations {
+        if stats.errors == 0 {
+            continue;
+        }
+        let classes = stats
+            .errors_by_class
+            .iter()
+            .map(|(class, count)| format!("{class}={count}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        lines.push(format!(
+            "repetition {repetition} {kind} `{phase}` ({regime}) operation `{operation}`: {} error(s) [{classes}]",
+            stats.errors
+        ));
     }
     lines
 }
@@ -463,27 +483,38 @@ fn comparison_relative(comparison: &Comparison) -> String {
     let _written = writeln!(out, "|---|---|---|---|---|---|---:|");
     for column in &comparison.columns {
         for index in &column.relative {
-            for (phase, block) in &index.phases {
-                for (operation, ratios) in &block.operations {
-                    for metric in [Metric::P50Us, Metric::P99Us] {
-                        let Some(ratio) = ratios.metrics.get(metric.as_str()) else {
-                            continue;
-                        };
-                        let _written = writeln!(
-                            out,
-                            "| {} | {} | {} | `{phase}` | `{operation}` | {} | {:.3} |",
-                            column.label,
-                            label_line(&column.environment),
-                            index.display_name,
-                            metric.as_str(),
-                            ratio.index
-                        );
-                    }
-                }
-            }
+            out.push_str(&column_index_rows(column, index));
         }
     }
     let _written = writeln!(out);
+    out
+}
+
+/// One column's index rows against one baseline, at the two percentiles the
+/// cross-machine table carries.
+fn column_index_rows(
+    column: &crate::bench::compare::ComparisonColumn,
+    index: &crate::bench::relative::RelativeIndex,
+) -> String {
+    let mut out = String::new();
+    for (phase, block) in &index.phases {
+        for (operation, ratios) in &block.operations {
+            for metric in [Metric::P50Us, Metric::P99Us] {
+                let Some(ratio) = ratios.metrics.get(metric.as_str()) else {
+                    continue;
+                };
+                let _written = writeln!(
+                    out,
+                    "| {} | {} | {} | `{phase}` | `{operation}` | {} | {:.3} |",
+                    column.label,
+                    label_line(&column.environment),
+                    index.display_name,
+                    metric.as_str(),
+                    ratio.index
+                );
+            }
+        }
+    }
     out
 }
 
