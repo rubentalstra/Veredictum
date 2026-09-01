@@ -85,15 +85,15 @@ async fn main() -> anyhow::Result<()> {
             veredictum_console::bench_api::UPLOAD_PATH,
             axum::routing::post(veredictum_console::bench_api::route::upload),
         )
-        // axum defaults to a 2 MiB body. The layer is one value for the whole
-        // router, so it takes the larger cap and each page refuses anything
+        // axum defaults to a 2 MiB body. This layer covers the routes added
+        // above it — the two upload routes among them (#496 tracks its exact
+        // reach) — with the larger upload cap, and each page refuses anything
         // past its own number itself, giving the reader a sentence not a 413.
+        // A cap that does not fit this host's usize stops startup: the one
+        // value a body limit must never fall back to is "unlimited" (#492).
         .layer(axum::extract::DefaultBodyLimit::max(
-            usize::try_from(
-                veredictum_console::verify_api::unpack::MAX_UPLOAD_BYTES
-                    .max(veredictum_console::bench_api::upload::MAX_BATCH_BYTES),
-            )
-            .unwrap_or(usize::MAX),
+            veredictum_console::upload_body_cap()
+                .map_err(|e| anyhow::anyhow!("the upload body cap does not fit usize: {e}"))?,
         ))
         // These three handlers are outside the reactive route tree, so they
         // take the state as an extension rather than through `expect_context`.
