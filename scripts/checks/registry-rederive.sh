@@ -23,6 +23,17 @@
 # sent and received, which is why `registry/RULES.md` states plainly that the
 # console tier cannot attest the environment.
 #
+# The record's own provenance decides how far step 1 can go, and the two ways
+# it falls short are treated differently. A member the record does not carry
+# (`selection_basis`, `statement_digest`, `tech_profile.source`) means the
+# document was written before that member existed: `replay --against` reports
+# the absence, says which member is missing, and recomputes anyway, because
+# reading absence as a value would refuse every published record a member
+# predates. Members that CONTRADICT each other are refused, because no
+# re-judgement reconstructs a campaign the document describes two ways at once
+# — a profile read from a declaration on a campaign no declaration selected is
+# the case that exists today.
+#
 # NOTHING a submitter wrote is executed here. The engine is the one this
 # repository builds from its own checked-out source; the submission is read as
 # data, and no path from it reaches a shell.

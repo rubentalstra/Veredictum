@@ -84,6 +84,13 @@
               "wt"
             ]
           }
+        },
+        "source": {
+          "enum": [
+            "declared",
+            "defaulted"
+          ],
+          "description": "Where the recorded format list came from: `declared` when the party statement's tech_profiles entry for this ITS named it, `defaulted` when no declaration named this ITS and every format the instrument speaks was recorded instead. The recorded list is what the verdict pipeline selects gating records with, so the two carry different claims: a defaulted list keeps a red row in an unlisted format from vanishing behind a pass, and it is not a party's claim about the formats it serves. Absent only in a document written before the member existed, where absence is unknown and never either source."
         }
       }
     },
@@ -480,6 +487,7 @@
       }
     },
     "ambiguity_dispositions": {
+      "description": "The ambiguity dispositions the campaign applied: one record per option_select register arm the party's ICS declared, in the register's authored order. The arms of one option family are mutually exclusive, so which arm a deployment serves is the ICS's answer and the record says which answer it drove under. Empty for a campaign no statement selected, which declares no arm at all.",
       "type": "array",
       "items": {
         "type": "object",

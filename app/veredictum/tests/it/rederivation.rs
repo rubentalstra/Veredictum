@@ -62,9 +62,10 @@ fn results_of(report: &RunReport) -> Results {
             verification_pack_status: veredictum::party::VerificationPackStatus::Passed,
         },
         schedule_release: String::from("cnf-2.0-w2"),
-        tech_profile: veredictum::party::TechProfile {
+        tech_profile: veredictum::party::RecordedTechProfile {
             its: veredictum::vocab::ItsName::ItsRest,
             formats: veredictum::vocab::FormatName::ALL.to_vec(),
+            source: Some(veredictum::party::TechProfileSource::Defaulted),
         },
         ixit_digest: String::from("0"),
         statement_digest: None,

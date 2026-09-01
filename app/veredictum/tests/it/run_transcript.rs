@@ -85,6 +85,16 @@ fn drive(
     ixit: &Path,
     recording: Recording,
 ) -> Result<RunOutcome, Box<dyn std::error::Error>> {
+    drive_under(out_dir, ixit, recording, None)
+}
+
+/// The same run, selected under `statement` when one is supplied.
+fn drive_under(
+    out_dir: &Path,
+    ixit: &Path,
+    recording: Recording,
+    statement: Option<&Path>,
+) -> Result<RunOutcome, Box<dyn std::error::Error>> {
     let root = repo_root().join("artifacts");
     let request = RunRequest {
         root: &root,
@@ -93,7 +103,7 @@ fn drive(
         sut_name: "transcript-gate",
         sut_version: "0.0.0-gate",
         filter: Some(FILTER),
-        statement: None,
+        statement,
         recording,
     };
     let outcome = execute_run(&request, &|_| {}, &mut |_| {})?;
@@ -174,6 +184,108 @@ fn a_recorded_run_emits_a_schema_valid_ordered_transcript() -> Fallible {
     // Rendering the same outcome twice is byte-identical: the ordering is a
     // property of the document, not of the moment it was written.
     assert_eq!(outcome.transcript_document()?, Some(document));
+    Ok(())
+}
+
+/// The run and the re-judgement of its own recording record the same
+/// provenance (#461), because one constructor assembles both documents.
+///
+/// The two seams used to build `results.json` by hand, twice, and a member
+/// added to one and missed in the other was invisible: `ambiguity_dispositions`
+/// was a hardcoded empty list on both sides while the ICS answered fifteen
+/// option families. Every provenance member is compared here, so adding a
+/// member to one seam alone fails this test rather than shipping.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn a_run_and_a_replay_of_its_recording_record_the_same_provenance() -> Fallible {
+    let scratch = assert_fs::TempDir::new()?;
+    let port = fixture_sut()?;
+    let ixit = write_ixit(scratch.path(), port, false)?;
+    let statement = repo_root().join("fixtures/declaration/statement.json");
+    let driven = drive_under(scratch.path(), &ixit, Recording::On, Some(&statement))?;
+    let transcript = scratch.path().join(TRANSCRIPT_FILE);
+    std::fs::write(
+        &transcript,
+        driven
+            .transcript_document()?
+            .ok_or("a recorded run against a live fixture produces a transcript")?,
+    )?;
+
+    let root = repo_root().join("artifacts");
+    let rejudged = veredictum::pipeline::replay::replay_run(
+        &veredictum::pipeline::replay::ReplayRequest {
+            root: &root,
+            ixit: &ixit,
+            transcript: &transcript,
+            statement: Some(&statement),
+            filter: Some(FILTER),
+            only: None,
+        },
+        &|_| {},
+        &mut |_| {},
+    )?;
+
+    let run = &driven.results;
+    let replay = &rejudged.results;
+    assert_eq!(run.tech_profile.its, replay.tech_profile.its);
+    assert_eq!(run.tech_profile.formats, replay.tech_profile.formats);
+    assert_eq!(
+        run.tech_profile.source,
+        Some(veredictum::party::TechProfileSource::Declared),
+        "the fixture declares its-rest formats, so the run read them"
+    );
+    assert_eq!(run.tech_profile.source, replay.tech_profile.source);
+    assert_eq!(run.selection_basis, replay.selection_basis);
+    assert_eq!(run.statement_digest, replay.statement_digest);
+    assert!(
+        !run.ambiguity_dispositions.is_empty(),
+        "the fixture declaration answers option families, so the run applied dispositions"
+    );
+    assert_eq!(
+        serde_json::to_value(&run.ambiguity_dispositions)?,
+        serde_json::to_value(&replay.ambiguity_dispositions)?
+    );
+    assert_eq!(run.provenance_contradiction(), None);
+    assert_eq!(replay.provenance_contradiction(), None);
+    Ok(())
+}
+
+/// A run nothing selected records the fallback profile, says it is the
+/// fallback, and applies no disposition: the empty list is the honest record of
+/// a campaign that answered no option family.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book ch11 Result-returning test shape: assertions panic, plumbing propagates with ? (https://doc.rust-lang.org/book/ch11-01-writing-tests.html)"
+)]
+#[test]
+fn a_blind_run_records_a_defaulted_profile_and_no_disposition() -> Fallible {
+    let scratch = assert_fs::TempDir::new()?;
+    let port = fixture_sut()?;
+    let ixit = write_ixit(scratch.path(), port, false)?;
+    let driven = drive(scratch.path(), &ixit, Recording::Off)?;
+
+    let results = &driven.results;
+    assert_eq!(
+        results.selection_basis,
+        Some(veredictum::party::SelectionBasis::StatementBlind)
+    );
+    assert_eq!(
+        results.tech_profile.source,
+        Some(veredictum::party::TechProfileSource::Defaulted),
+        "no declaration named this ITS, and the record says so"
+    );
+    assert_eq!(
+        results.tech_profile.formats,
+        veredictum::vocab::FormatName::ALL.to_vec()
+    );
+    assert!(
+        results.ambiguity_dispositions.is_empty(),
+        "a campaign nothing selected declares no option arm"
+    );
+    assert_eq!(results.provenance_contradiction(), None);
     Ok(())
 }
 

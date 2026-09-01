@@ -126,6 +126,60 @@ pub struct TechProfile {
     pub formats: Vec<FormatName>,
 }
 
+/// Where the technology profile a results document records came from.
+///
+/// The recorded profile is what the verdict pipeline selects gating records
+/// with, so a reader who cannot tell a declaration from a fallback cannot tell
+/// how wide the record's claim is. A declared profile is the party's own
+/// its-rest format claim; a defaulted one is every format the instrument
+/// speaks, which is what a campaign nothing selected has to record so no red
+/// row vanishes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TechProfileSource {
+    /// Read from the party statement's `tech_profiles` entry for this ITS.
+    Declared,
+    /// No declaration named this ITS, so every format the instrument speaks
+    /// was recorded.
+    Defaulted,
+}
+
+impl TechProfileSource {
+    /// All variants, in vocabulary order (schema emission derives from this).
+    pub const ALL: &[TechProfileSource] =
+        &[TechProfileSource::Declared, TechProfileSource::Defaulted];
+
+    /// The source token.
+    #[must_use]
+    pub fn token(self) -> &'static str {
+        match self {
+            TechProfileSource::Declared => "declared",
+            TechProfileSource::Defaulted => "defaulted",
+        }
+    }
+}
+
+/// The technology profile a results document covers, and where it came from.
+///
+/// The same two members a party declares ([`TechProfile`]), plus the
+/// provenance a reader of the record alone cannot otherwise recover.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordedTechProfile {
+    /// The ITS the campaign realized.
+    pub its: ItsName,
+    /// The wire formats the campaign recorded outcomes for.
+    #[serde(default)]
+    pub formats: Vec<FormatName>,
+    /// Whether the formats were declared or defaulted.
+    ///
+    /// Absent only in a document written before the member existed (v0.1.4 and
+    /// earlier), where absence is UNKNOWN and never either source — a reader
+    /// that defaults it to `declared` presents a fallback as a party's claim,
+    /// which is the misreading the member exists to prevent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<TechProfileSource>,
+}
+
 /// A performance claim — a performance class plus a reference to the ixit
 /// environment block the run was measured in (mandatory for a performance
 /// claim).
@@ -499,6 +553,31 @@ impl SelectionBasis {
     }
 }
 
+/// Two provenance members of one results document that cannot both be true, so
+/// the conditions of the run cannot be reconstructed from the document at all.
+///
+/// A record with no provenance members is not this: absence is unknown, and a
+/// document written before a member existed carries nothing to contradict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProvenanceContradiction {
+    /// `tech_profile.source` reads `declared` while `selection_basis` reads
+    /// `statement_blind`: a campaign nothing selected had no declaration to
+    /// read a technology profile from.
+    DeclaredProfileWithoutSelection,
+}
+
+impl std::fmt::Display for ProvenanceContradiction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            ProvenanceContradiction::DeclaredProfileWithoutSelection => f.write_str(
+                "tech_profile.source reads declared and selection_basis reads statement_blind, \
+                 and a campaign no statement selected has no declaration to read a technology \
+                 profile from",
+            ),
+        }
+    }
+}
+
 /// One ambiguity disposition record: which register entry the run was subject
 /// to, and (for `option_select`) which option branch the ICS selected.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -519,8 +598,9 @@ pub struct Results {
     pub runner: Runner,
     /// The schedule release the campaign ran.
     pub schedule_release: String,
-    /// The technology profile this results document covers.
-    pub tech_profile: TechProfile,
+    /// The technology profile this results document covers, and whether it was
+    /// declared or defaulted.
+    pub tech_profile: RecordedTechProfile,
     /// The digest of the ixit topology the run drove (provenance).
     pub ixit_digest: String,
     /// The digest of the party statement that selected this campaign
@@ -561,7 +641,13 @@ pub struct Results {
     /// environment block it was taken in.
     #[serde(default)]
     pub measurements: Vec<crate::perf::Measurement>,
-    /// The ambiguity dispositions the run applied.
+    /// The ambiguity dispositions the run applied: one record per
+    /// `option_select` register entry arm the party's ICS declared, in the
+    /// register's authored order.
+    ///
+    /// A campaign no statement selected declares no arm, so the list is
+    /// legitimately empty there, which is a statement about the run rather
+    /// than a member nothing writes.
     #[serde(default)]
     pub ambiguity_dispositions: Vec<AmbiguityDisposition>,
 }
@@ -582,6 +668,22 @@ impl Results {
             Ok(())
         } else {
             Err(errors)
+        }
+    }
+
+    /// The provenance members that cannot both be true of one campaign, or
+    /// `None` when the document reads consistently.
+    ///
+    /// A member the document does not carry is unknown and contradicts
+    /// nothing, so a record written before these members existed reads
+    /// consistently here and is judged on the members it does carry.
+    #[must_use]
+    pub fn provenance_contradiction(&self) -> Option<ProvenanceContradiction> {
+        match (self.tech_profile.source, self.selection_basis) {
+            (Some(TechProfileSource::Declared), Some(SelectionBasis::StatementBlind)) => {
+                Some(ProvenanceContradiction::DeclaredProfileWithoutSelection)
+            }
+            _ => None,
         }
     }
 }
@@ -791,6 +893,101 @@ mod tests {
         assert!(
             !blind.contains("statement_digest"),
             "an unnamed statement writes no member at all: {blind}"
+        );
+    }
+
+    /// A document carrying `tech_profile` as `{ its, formats }` and nothing
+    /// else, plus whatever `extra` adds to the block.
+    fn profile_document(extra: &str) -> Results {
+        serde_json::from_str(&format!(
+            r#"{{
+                "sut": {{ "name": "s", "version": "1" }},
+                "runner": {{ "name": "veredictum", "version": "0",
+                             "verification_pack_status": "passed" }},
+                "schedule_release": "CNF-2.0",
+                "tech_profile": {{
+                    "its": "its-rest", "formats": ["canonical-json"]{extra}
+                }},
+                "ixit_digest": "d"
+            }}"#
+        ))
+        .unwrap()
+    }
+
+    /// A reader of the results document ALONE tells a party's declared format
+    /// list from the fallback every format, and a document written before the
+    /// member existed reads as unknown rather than as either source.
+    #[test]
+    fn the_recorded_profile_source_survives_the_document() {
+        assert_eq!(
+            profile_document(r#", "source": "declared""#)
+                .tech_profile
+                .source,
+            Some(TechProfileSource::Declared)
+        );
+        assert_eq!(
+            profile_document(r#", "source": "defaulted""#)
+                .tech_profile
+                .source,
+            Some(TechProfileSource::Defaulted)
+        );
+        assert_eq!(
+            profile_document("").tech_profile.source,
+            None,
+            "absence is unknown, never either source"
+        );
+
+        let declared =
+            serde_json::to_string(&profile_document(r#", "source": "declared""#)).unwrap();
+        assert!(declared.contains(r#""source":"declared""#), "{declared}");
+        let unknown = serde_json::to_string(&profile_document("")).unwrap();
+        assert!(
+            !unknown.contains("source"),
+            "an unknown source writes no member at all: {unknown}"
+        );
+        for source in TechProfileSource::ALL {
+            assert_eq!(
+                serde_json::to_value(source).unwrap(),
+                serde_json::Value::String(source.token().to_owned())
+            );
+        }
+    }
+
+    /// A campaign no statement selected had no declaration to read a profile
+    /// from, so `declared` and `statement_blind` cannot both be true of one
+    /// document.
+    #[test]
+    fn a_declared_profile_on_a_blind_campaign_contradicts_itself() {
+        let with = |source: TechProfileSource, basis: SelectionBasis| -> Results {
+            Results {
+                selection_basis: Some(basis),
+                ..profile_document(&format!(r#", "source": "{}""#, source.token()))
+            }
+        };
+        assert_eq!(
+            with(TechProfileSource::Declared, SelectionBasis::StatementBlind)
+                .provenance_contradiction(),
+            Some(ProvenanceContradiction::DeclaredProfileWithoutSelection)
+        );
+        // A statement that names no its-rest profile still selected the
+        // campaign, so `defaulted` under either basis reads consistently.
+        for (source, basis) in [
+            (TechProfileSource::Declared, SelectionBasis::Statement),
+            (TechProfileSource::Defaulted, SelectionBasis::Statement),
+            (TechProfileSource::Defaulted, SelectionBasis::StatementBlind),
+        ] {
+            assert_eq!(
+                with(source, basis).provenance_contradiction(),
+                None,
+                "{} under {} is a campaign that can happen",
+                source.token(),
+                basis.token()
+            );
+        }
+        assert_eq!(
+            profile_document("").provenance_contradiction(),
+            None,
+            "a document carrying neither member contradicts nothing"
         );
     }
 

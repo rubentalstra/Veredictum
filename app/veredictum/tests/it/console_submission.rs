@@ -344,6 +344,119 @@ fn a_record_naming_no_statement_still_re_derives(
     Ok(())
 }
 
+/// Runs the re-derivation gate over the fixture entry, returning its output.
+fn rederive(root: &Path, tree: &Path) -> Result<std::process::Output, std::io::Error> {
+    Command::new("bash")
+        .arg(root.join("scripts/checks/registry-rederive.sh"))
+        .arg(format!(
+            "registry/entries/conformance/{SYSTEM}/{ENTRY_ID}.json"
+        ))
+        .env("REGISTRY_TREE", tree)
+        .env("VEREDICTUM_BIN", env!("CARGO_BIN_EXE_veredictum"))
+        .env("VEREDICTUM_REQUIRE_REDERIVATION", "1")
+        .output()
+}
+
+/// Rewrites the record's `results.json` through `edit`, runs the gate, and puts
+/// the honest document back.
+fn gate_over_edited_record(
+    root: &Path,
+    tree: &Path,
+    record: &Path,
+    edit: &dyn Fn(&mut serde_json::Map<String, serde_json::Value>) -> Fallible,
+) -> Result<std::process::Output, Box<dyn std::error::Error>> {
+    let results = record.join("results.json");
+    let honest = std::fs::read_to_string(&results)?;
+    let mut document: serde_json::Value = serde_json::from_str(&honest)?;
+    edit(
+        document
+            .as_object_mut()
+            .ok_or("a results document is an object")?,
+    )?;
+    std::fs::write(
+        &results,
+        format!("{}\n", serde_json::to_string_pretty(&document)?),
+    )?;
+    let output = rederive(root, tree)?;
+    std::fs::write(&results, &honest)?;
+    Ok(output)
+}
+
+/// A record written before `tech_profile.source` existed re-derives as it
+/// always did (#461): absence means written before the member, and refusing it
+/// would refuse every published record the member predates.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_record_predating_the_profile_source_still_re_derives(
+    root: &Path,
+    tree: &Path,
+    record: &Path,
+) -> Fallible {
+    let rederived = gate_over_edited_record(root, tree, record, &|document| {
+        let profile = document
+            .get_mut("tech_profile")
+            .and_then(serde_json::Value::as_object_mut)
+            .ok_or("the record carries a tech_profile block")?;
+        let removed = profile.remove("source");
+        assert!(removed.is_some(), "the run recorded a profile source");
+        Ok(())
+    })?;
+    assert!(
+        rederived.status.success(),
+        "a record predating the member is unknown, never refused:\n{}\n{}",
+        String::from_utf8_lossy(&rederived.stdout),
+        String::from_utf8_lossy(&rederived.stderr)
+    );
+    Ok(())
+}
+
+/// A record whose own provenance members cannot both be true is refused
+/// (#461): a campaign nothing selected had no declaration to read a technology
+/// profile from, so nothing reconstructs the campaign the document describes.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_record_contradicting_its_own_provenance_is_refused_by_the_gate(
+    root: &Path,
+    tree: &Path,
+    record: &Path,
+) -> Fallible {
+    let refused = gate_over_edited_record(root, tree, record, &|document| {
+        let profile = document
+            .get_mut("tech_profile")
+            .and_then(serde_json::Value::as_object_mut)
+            .ok_or("the record carries a tech_profile block")?;
+        assert_eq!(
+            profile.get("source").and_then(serde_json::Value::as_str),
+            Some(veredictum::party::TechProfileSource::Declared.token()),
+            "the run read the fixture declaration's own formats"
+        );
+        let _replaced = document.insert(
+            "selection_basis".to_owned(),
+            serde_json::Value::String(
+                veredictum::party::SelectionBasis::StatementBlind
+                    .token()
+                    .to_owned(),
+            ),
+        );
+        Ok(())
+    })?;
+    assert!(
+        !refused.status.success(),
+        "a record that contradicts itself describes no campaign:\n{}",
+        String::from_utf8_lossy(&refused.stdout)
+    );
+    let said = String::from_utf8_lossy(&refused.stderr).into_owned();
+    assert!(
+        said.contains("tech_profile.source") && said.contains("selection_basis"),
+        "the refusal names both members that cannot both be true:\n{said}"
+    );
+    Ok(())
+}
+
 /// The verdicts the instrument computes before it submits.
 ///
 /// Exit 1 is an unclean JUDGEMENT — this fixture refuses every request, so the
@@ -433,6 +546,8 @@ fn a_console_submission_is_completed_and_sealed_by_the_lane() -> Fallible {
     tampering_is_refused_by_the_gate(&root, tree.path(), &record)?;
     a_substituted_statement_is_refused_by_the_gate(&root, tree.path(), &statement)?;
     a_record_naming_no_statement_still_re_derives(&root, tree.path(), &record)?;
+    a_record_predating_the_profile_source_still_re_derives(&root, tree.path(), &record)?;
+    a_record_contradicting_its_own_provenance_is_refused_by_the_gate(&root, tree.path(), &record)?;
 
     // The completion: seal the record, write the provenance the lane observed.
     let completed = Command::new("bash")
