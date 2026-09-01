@@ -296,13 +296,97 @@ fn confirm_track_planning(db_container: &str) -> Result<(), String> {
     Err("the reload never surfaced track_planning = on".to_owned())
 }
 
+/// Fire one probe `requests` times and record what the burst cost.
+///
+/// The counters carry every earlier probe until they are reset, so a failed
+/// reset makes this probe's attribution the whole run's. The failure is named
+/// and the statements are withheld: an unreset read would charge one probe
+/// with another's cost.
+fn drive_probe(
+    client: &PerfClient,
+    spec: ProbeSpec,
+    requests: u32,
+    attribution_db: Option<&str>,
+    progress: &(dyn Fn(String) + Sync),
+) -> ProbeResult {
+    let (name, aql, method, path, body) = spec;
+    let attributable = match attribution_db {
+        Some(db) => match db_sql(db, "SELECT pg_stat_statements_reset();") {
+            Ok(_) => true,
+            Err(e) => {
+                progress(format!(
+                    "probe {name}: attribution reset failed, statements withheld: {e}"
+                ));
+                false
+            }
+        },
+        None => false,
+    };
+    let mut samples_ms: Vec<f64> = Vec::new();
+    let mut failures: u32 = 0;
+    for _ in 0..requests {
+        let started = Instant::now();
+        let reply = client.request(
+            method.clone(),
+            &path,
+            body.as_ref()
+                .map(|bytes| ("application/json", bytes.clone())),
+            false,
+            None,
+        );
+        let elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
+        match reply {
+            Ok(reply) if reply.status == StatusCode::OK => samples_ms.push(elapsed_ms),
+            Ok(_) | Err(_) => {
+                failures = failures.saturating_add(1);
+                samples_ms.push(elapsed_ms);
+            }
+        }
+    }
+    samples_ms.sort_by(f64::total_cmp);
+    let wire_ms = WireStats {
+        min_ms: samples_ms.first().copied().unwrap_or(0.0),
+        p50_ms: percentile(&samples_ms, 0.50),
+        p95_ms: percentile(&samples_ms, 0.95),
+        max_ms: samples_ms.last().copied().unwrap_or(0.0),
+    };
+    let statements = attribution_db
+        .filter(|_| attributable)
+        .and_then(|db| match read_statements(db) {
+            Ok(rows) => Some(rows),
+            Err(e) => {
+                progress(format!("probe {name}: attribution read failed: {e}"));
+                None
+            }
+        })
+        .unwrap_or_default();
+    progress(format!(
+        "probe {name}: p50 {:.1} ms · p95 {:.1} ms · max {:.1} ms ({requests} requests, {failures} failures{})",
+        wire_ms.p50_ms,
+        wire_ms.p95_ms,
+        wire_ms.max_ms,
+        statements.first().map_or(String::new(), |top| {
+            format!(
+                "; top statement {:.1} ms mean × {} calls",
+                top.mean_ms, top.calls
+            )
+        }),
+    ));
+    ProbeResult {
+        name: name.to_owned(),
+        aql,
+        failures,
+        wire_ms,
+        statements,
+    }
+}
+
 /// Execute the probe set against a live, seeded SUT.
 ///
 /// # Errors
 /// A message on a probe-construction failure (an empty corpus); a failing
 /// REQUEST is a recorded finding, and absent attribution/settling degrade
 /// to honest report fields — never errors.
-#[expect(clippy::too_many_lines, reason = "one linear probe procedure")]
 pub fn run_probe(
     client: &PerfClient,
     corpus: &SeededCorpus,
@@ -372,81 +456,14 @@ pub fn run_probe(
     ];
 
     let mut probes = Vec::new();
-    for (name, aql, method, path, body) in probe_set {
-        // The counters carry every earlier probe until they are reset, so a
-        // failed reset makes this probe's attribution the whole run's. The
-        // failure is named and the statements are withheld: an unreset read
-        // would charge one probe with another's cost.
-        let attributable = match &attribution_db {
-            Some(db) => match db_sql(db, "SELECT pg_stat_statements_reset();") {
-                Ok(_) => true,
-                Err(e) => {
-                    progress(format!(
-                        "probe {name}: attribution reset failed, statements withheld: {e}"
-                    ));
-                    false
-                }
-            },
-            None => false,
-        };
-        let mut samples_ms: Vec<f64> = Vec::new();
-        let mut failures: u32 = 0;
-        for _ in 0..requests {
-            let started = Instant::now();
-            let reply = client.request(
-                method.clone(),
-                &path,
-                body.as_ref()
-                    .map(|bytes| ("application/json", bytes.clone())),
-                false,
-                None,
-            );
-            let elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
-            match reply {
-                Ok(reply) if reply.status == StatusCode::OK => samples_ms.push(elapsed_ms),
-                Ok(_) | Err(_) => {
-                    failures = failures.saturating_add(1);
-                    samples_ms.push(elapsed_ms);
-                }
-            }
-        }
-        samples_ms.sort_by(f64::total_cmp);
-        let wire_ms = WireStats {
-            min_ms: samples_ms.first().copied().unwrap_or(0.0),
-            p50_ms: percentile(&samples_ms, 0.50),
-            p95_ms: percentile(&samples_ms, 0.95),
-            max_ms: samples_ms.last().copied().unwrap_or(0.0),
-        };
-        let statements = attribution_db
-            .as_ref()
-            .filter(|_| attributable)
-            .and_then(|db| match read_statements(db) {
-                Ok(rows) => Some(rows),
-                Err(e) => {
-                    progress(format!("probe {name}: attribution read failed: {e}"));
-                    None
-                }
-            })
-            .unwrap_or_default();
-        progress(format!(
-            "probe {name}: p50 {:.1} ms · p95 {:.1} ms · max {:.1} ms ({requests} requests, {failures} failures{})",
-            wire_ms.p50_ms,
-            wire_ms.p95_ms,
-            wire_ms.max_ms,
-            statements.first().map_or(String::new(), |top| {
-                format!(
-                    "; top statement {:.1} ms mean × {} calls",
-                    top.mean_ms, top.calls
-                )
-            }),
+    for spec in probe_set {
+        probes.push(drive_probe(
+            client,
+            spec,
+            requests,
+            attribution_db.as_deref(),
+            progress,
         ));
-        probes.push(ProbeResult {
-            name: name.to_owned(),
-            aql,
-            failures,
-            wire_ms,
-            statements,
-        });
     }
 
     let remark = format!(

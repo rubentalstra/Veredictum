@@ -110,34 +110,44 @@ impl CellComparator {
             // void equals only void (\[legislated\])
             (Value::Null, Value::Null) => true,
             // structural equality, numeric leaves by value, recursively
-            (Value::Array(x), Value::Array(y)) => {
-                if x.len() != y.len() {
-                    return false;
-                }
-                for (a, b) in x.iter().zip(y) {
-                    if !self.equal(a, b) {
-                        return false;
-                    }
-                }
-                true
-            }
-            (Value::Object(x), Value::Object(y)) => {
-                if x.len() != y.len() {
-                    return false;
-                }
-                for (k, va) in x {
-                    let Some(vb) = y.get(k) else {
-                        return false;
-                    };
-                    if !self.equal(va, vb) {
-                        return false;
-                    }
-                }
-                true
-            }
+            (Value::Array(x), Value::Array(y)) => self.arrays_equal(x, y),
+            (Value::Object(x), Value::Object(y)) => self.objects_equal(x, y),
             (Value::String(x), Value::String(y)) if x != y => self.same_instant(x, y),
             _ => a == b,
         }
+    }
+
+    /// Whether two arrays hold the same cells in the same order.
+    fn arrays_equal(&mut self, a: &[Value], b: &[Value]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        for (x, y) in a.iter().zip(b) {
+            if !self.equal(x, y) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Whether two objects carry the same members under the same keys.
+    fn objects_equal(
+        &mut self,
+        a: &serde_json::Map<String, Value>,
+        b: &serde_json::Map<String, Value>,
+    ) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        for (key, x) in a {
+            let Some(y) = b.get(key) else {
+                return false;
+            };
+            if !self.equal(x, y) {
+                return false;
+            }
+        }
+        true
     }
 
     /// Whether two differing date/time lexemes denote the same instant under

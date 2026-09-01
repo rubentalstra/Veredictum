@@ -701,6 +701,88 @@ impl<'a> HttpDriver<'a> {
         )
     }
 
+    /// The document form an `equivalent` assertion compares in, for a step
+    /// whose body arrived unparsed.
+    ///
+    /// The `equivalent` family addresses no member: it compares a served
+    /// DOCUMENT against a corpus fixture, so an unparsed body is judgeable
+    /// exactly when both sides are in the same form. Every other assertion,
+    /// and every parsed body, answers `None`.
+    ///
+    /// # Errors
+    /// The refusal a disagreeing pair of forms earns, which the caller records
+    /// as unjudgeable.
+    fn document_form_for(
+        &self,
+        assertion: &Assertion,
+        body_form: &BodyForm,
+    ) -> Result<Option<crate::exec::documents::DocumentForm>, String> {
+        let (Assertion::Equivalent { to, ignoring }, BodyForm::Unparsed { media_type }) =
+            (assertion, body_form)
+        else {
+            return Ok(None);
+        };
+        let resolver = &self.resolver;
+        assertions::agreed_document_form(to, ignoring, media_type.as_deref(), |key| {
+            resolver.corpus_format(key)
+        })
+        .map(Some)
+    }
+
+    /// The document one `equivalent` assertion compares against.
+    ///
+    /// An unresolvable REFERENCE is a defect of the case, and a missing commit
+    /// is a different one, so they report apart.
+    ///
+    /// # Errors
+    /// [`AssertionOutcome::Mismatch`] for an unresolvable target reference and
+    /// for a `committed` target no step has committed to.
+    fn equivalent_expected(
+        &mut self,
+        to: &EquivalentTarget,
+        vars: &VarStore,
+    ) -> Result<Value, AssertionOutcome> {
+        match to {
+            EquivalentTarget::Committed => self.committed.last().cloned().ok_or_else(|| {
+                AssertionOutcome::from(AssertionFailure("equivalent: no committed payload".into()))
+            }),
+            EquivalentTarget::Ref(r) => self.resolver.resolve_ref(r, vars).map_err(|e| {
+                AssertionOutcome::from(AssertionFailure(format!(
+                    "equivalent: target reference unresolvable ({e})"
+                )))
+            }),
+        }
+    }
+
+    /// One `equivalent` comparison: as documents where both sides agreed on a
+    /// document form, else as RM values modulo the resolved ignore-set.
+    ///
+    /// # Errors
+    /// [`AssertionOutcome::Mismatch`] for a divergent body, and
+    /// [`AssertionOutcome::Unjudgeable`] for a document pair the comparator
+    /// cannot read.
+    fn compare_equivalent(
+        body: &Value,
+        expected: &Value,
+        document_form: Option<crate::exec::documents::DocumentForm>,
+        ignoring: &crate::model::assertion::IgnoreList,
+        binding: &OperationBinding,
+        ctx_defaults: &[String],
+    ) -> Result<(), AssertionOutcome> {
+        if let Some(form) = document_form {
+            return assertions::equivalent_documents(form, body, expected);
+        }
+        let ignored =
+            assertions::resolve_ignore_sets(&ignoring.0, &binding.server_assigned, ctx_defaults);
+        if assertions::equivalent(body, expected, &ignored) {
+            Ok(())
+        } else {
+            Err(AssertionOutcome::from(assertions::equivalence_mismatch(
+                body, expected,
+            )))
+        }
+    }
+
     /// Evaluate the pure-side assertions against one exchange.
     ///
     /// The single dispatch both assertion seams run: a step's own `assert:`
@@ -733,26 +815,12 @@ impl<'a> HttpDriver<'a> {
         let mut failures = Vec::new();
         let mut advisories = Vec::new();
         for assertion in assertions_list {
-            // The `equivalent` family addresses no member: it compares a
-            // served DOCUMENT against a corpus fixture, so an unparsed body is
-            // judgeable exactly when both sides are in the same form.
-            let document_form = match (assertion, &exchange.body_form) {
-                (Assertion::Equivalent { to, ignoring }, BodyForm::Unparsed { media_type }) => {
-                    let resolver = &self.resolver;
-                    match assertions::agreed_document_form(
-                        to,
-                        ignoring,
-                        media_type.as_deref(),
-                        |key| resolver.corpus_format(key),
-                    ) {
-                        Ok(form) => Some(form),
-                        Err(refusal) => {
-                            failures.push(AssertionOutcome::Unjudgeable(refusal));
-                            continue;
-                        }
-                    }
+            let document_form = match self.document_form_for(assertion, &exchange.body_form) {
+                Ok(form) => form,
+                Err(refusal) => {
+                    failures.push(AssertionOutcome::Unjudgeable(refusal));
+                    continue;
                 }
-                _ => None,
             };
             let standing_refusal = if document_form.is_some() {
                 None
@@ -787,42 +855,16 @@ impl<'a> HttpDriver<'a> {
                     )
                     .map_err(AssertionOutcome::from),
                 Assertion::Equivalent { to, ignoring } => {
-                    // An unresolvable REFERENCE is a defect of the case, and a
-                    // missing commit is a different one, so they report apart.
-                    let expected = match to {
-                        EquivalentTarget::Committed => Ok(self.committed.last().cloned()),
-                        EquivalentTarget::Ref(r) => {
-                            self.resolver.resolve_ref(r, vars).map(Some).map_err(|e| {
-                                AssertionFailure(format!(
-                                    "equivalent: target reference unresolvable ({e})"
-                                ))
-                            })
-                        }
-                    };
-                    match expected {
-                        Err(failure) => Err(AssertionOutcome::from(failure)),
-                        Ok(None) => Err(AssertionOutcome::from(AssertionFailure(
-                            "equivalent: no committed payload".into(),
-                        ))),
-                        Ok(Some(expected)) => {
-                            if let Some(form) = document_form {
-                                assertions::equivalent_documents(form, body, &expected)
-                            } else {
-                                let ignored = assertions::resolve_ignore_sets(
-                                    &ignoring.0,
-                                    &binding.server_assigned,
-                                    &ctx_defaults,
-                                );
-                                if assertions::equivalent(body, &expected, &ignored) {
-                                    Ok(())
-                                } else {
-                                    Err(AssertionOutcome::from(assertions::equivalence_mismatch(
-                                        body, &expected,
-                                    )))
-                                }
-                            }
-                        }
-                    }
+                    self.equivalent_expected(to, vars).and_then(|expected| {
+                        Self::compare_equivalent(
+                            body,
+                            &expected,
+                            document_form,
+                            ignoring,
+                            binding,
+                            &ctx_defaults,
+                        )
+                    })
                 }
                 Assertion::Returns {
                     equals,
@@ -3763,6 +3805,17 @@ struct VersionFacts<'a> {
     uid_pattern: Option<&'a Template>,
 }
 
+/// The declared facts that live on one `ORIGINAL_VERSION` envelope.
+fn eval_envelope_facts(envelope: &Value, facts: &VersionFacts<'_>) -> Result<(), AssertionFailure> {
+    if let Some(want) = facts.change_type {
+        crate::exec::versioned::eval_change_type(envelope, want)?;
+    }
+    if let Some(want) = facts.lifecycle_state {
+        crate::exec::versioned::eval_lifecycle_state(envelope, want)?;
+    }
+    Ok(())
+}
+
 impl HttpDriver<'_> {
     /// The versioned family a `version` assertion is judged against: the
     /// case's own SM anchor first, then the single family its flow calls
@@ -3958,14 +4011,7 @@ impl HttpDriver<'_> {
         vars: &VarStore,
     ) -> Result<(), AssertionOutcome> {
         if let Some(want) = facts.count {
-            let family = self.version_family(case)?;
-            let call = family.revision_history_read().ok_or_else(|| {
-                AssertionOutcome::Unjudgeable(format!(
-                    "version count: the released ITS-REST realizes no REVISION_HISTORY read for the {family:?} family, so the version count is unjudgeable here"
-                ))
-            })?;
-            let history = self.versioned_read(case, call, None, &BTreeMap::new(), vars)?;
-            crate::exec::versioned::eval_count(&history, want)?;
+            self.eval_version_count(case, want, vars)?;
         }
         let targets = self.version_targets(&facts, vars)?;
         let pattern = match facts.uid_pattern {
@@ -3984,14 +4030,33 @@ impl HttpDriver<'_> {
             }
             if let Some(family) = family {
                 let envelope = self.version_envelope(case, family, in_hand, &version_uid, vars)?;
-                if let Some(want) = facts.change_type {
-                    crate::exec::versioned::eval_change_type(&envelope, want)?;
-                }
-                if let Some(want) = facts.lifecycle_state {
-                    crate::exec::versioned::eval_lifecycle_state(&envelope, want)?;
-                }
+                eval_envelope_facts(&envelope, &facts)?;
             }
         }
+        Ok(())
+    }
+
+    /// Judge the `count` fact, which lives on the family's `REVISION_HISTORY`
+    /// rather than on the step's own body.
+    ///
+    /// # Errors
+    /// [`AssertionOutcome::Unjudgeable`] when the released ITS-REST realizes no
+    /// revision-history read for the family, and the read's own outcome
+    /// otherwise.
+    fn eval_version_count(
+        &mut self,
+        case: &CaseCore,
+        want: u64,
+        vars: &VarStore,
+    ) -> Result<(), AssertionOutcome> {
+        let family = self.version_family(case)?;
+        let call = family.revision_history_read().ok_or_else(|| {
+            AssertionOutcome::Unjudgeable(format!(
+                "version count: the released ITS-REST realizes no REVISION_HISTORY read for the {family:?} family, so the version count is unjudgeable here"
+            ))
+        })?;
+        let history = self.versioned_read(case, call, None, &BTreeMap::new(), vars)?;
+        crate::exec::versioned::eval_count(&history, want)?;
         Ok(())
     }
 
