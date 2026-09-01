@@ -11,6 +11,13 @@
 # cases/bindings/capability rows, the outcome vocabulary for the kinds — and
 # fails on any count-bearing phrase whose number disagrees.
 #
+# Adjudicated 2026-09-01 (#466): these figures stay hand-written, and this
+# guard stays. Every one of them sits inside a sentence a human wrote — a
+# landing-page claim, a book paragraph, an argument in `ARCHITECTURE.md` — so
+# substituting the number would mean templating the prose around it, which is
+# the one thing #466 rules out. The number is derived from the artifacts on
+# every run instead, and a disagreement fails the build.
+#
 # Usage: scripts/checks/site-counts.sh [<validate summary line>]
 #   With no argument it runs `cargo run -- validate` itself (the CI test job
 #   passes the line it already produced, so the binary runs once).

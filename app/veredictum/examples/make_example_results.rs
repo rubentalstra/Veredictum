@@ -16,7 +16,10 @@
 //! `hdr_v2` targets start from a real record instead of mutations.
 //!
 //! Regenerate with `cargo run --example make_example_results` from the
-//! repository root; the output is deterministic.
+//! repository root; the output is deterministic, and
+//! `scripts/checks/example-results-drift.sh` fails when the committed copy is
+//! not what this run writes. One optional argument names another output path,
+//! which is how that gate renders the document without touching the tree.
 
 use hdrhistogram::Histogram;
 use veredictum::ids::CaseId;
@@ -151,9 +154,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let json = serde_json::to_string_pretty(&results)?;
     // The catalogue is read from the working directory and the document is
     // written beside this file, so the one documented invocation reaches both.
-    let out = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("examples")
-        .join("results.example.json");
+    // One optional argument names another target, which is how the drift gate
+    // renders the document without writing into the tree.
+    let out = match std::env::args().nth(1) {
+        Some(path) => std::path::PathBuf::from(path),
+        None => std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples")
+            .join("results.example.json"),
+    };
     std::fs::write(out, json + "\n")?;
     Ok(())
 }

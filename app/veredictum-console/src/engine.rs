@@ -17,9 +17,10 @@ use std::path::{Path, PathBuf};
 /// The exact engine version this console is built against.
 ///
 /// One fact with the manifest's crates.io pin and the lib-level
-/// [`crate::ENGINE_PIN`] the chrome displays: the unit test below locks the
-/// constant to the manifest, and [`Engine::verified`] refuses a binary that
-/// reports anything else.
+/// [`crate::ENGINE_PIN`] the chrome displays: `build.rs` emits the constant
+/// from that manifest line, the unit test below re-reads the line
+/// independently, and [`Engine::verified`] refuses a binary that reports
+/// anything else.
 pub const ENGINE_VERSION: &str = crate::ENGINE_PIN;
 
 /// The environment variable that names the engine binary explicitly. Without
@@ -666,8 +667,8 @@ mod tests {
         }
     }
 
-    /// The manifest's crates.io pin and [`ENGINE_VERSION`] are one fact in
-    /// two places; this is the lock between them.
+    /// The manifest line `build.rs` reads, re-read here by hand: the lock on
+    /// what the build script substituted into [`ENGINE_VERSION`].
     #[test]
     fn the_pin_and_the_constant_agree() {
         let manifest = include_str!("../Cargo.toml");

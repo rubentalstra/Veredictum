@@ -111,6 +111,24 @@ version on.
   like every other emitted schema.
 
 ### Changed
+- **The command reference and the engine pin are generated (#466).** The CLI
+  surface is what clap declares, and three documents used to restate it by hand
+  under a guard that compared subcommand names. Now
+  [the command reference](https://veredictum.eu/docs/commands.html) is rendered
+  from `veredictum <command> --help` by `scripts/render/commands-md.sh`, the
+  hand-written notes per command sit beside it in `website/book/commands/`, and
+  `scripts/checks/cli-surface.sh` refuses a committed page the generator does
+  not reproduce. So a flag's help text reaches the published page in the change
+  that edits it. The binary's own header listing and the root `CLAUDE.md` table
+  are gone; both point at `--help` and at that page.
+
+  The console's `ENGINE_PIN` is emitted by a new
+  `app/veredictum-console/build.rs` out of the manifest's exact crates.io pin,
+  so the version the chrome displays cannot disagree with the version the
+  console links, and a release cut moves one line instead of two.
+  `results.example.json` gains the drift gate it never had: it carried a
+  version two releases old, and `scripts/checks/example-results-drift.sh` now
+  holds the committed copy to its generator's output.
 - **The proforma stays, the answers leave (#465).** ISO/IEC 9646-7 splits an ICS
   in one place: every cell of the proforma belongs to its specifier except the
   support and supported-values columns, which belong to the supplier of the

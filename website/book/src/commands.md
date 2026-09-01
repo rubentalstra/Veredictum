@@ -2,9 +2,11 @@
 
 <!-- toc -->
 
-Every flag below is the one the binary declares. `veredictum <command> --help`
-prints the same list from the build you have installed, and that output is the
-authority if the two ever disagree.
+Every code block below is `veredictum <command> --help` from the binary itself:
+this page is rendered by `scripts/render/commands-md.sh` out of clap's own
+output, so a flag cannot land in the binary and go missing here. The sections
+follow the order `veredictum --help` lists them in, and the prose under each
+one is written by hand and lives in `website/book/commands/`.
 
 Three commands make the conformance record (`validate`, `run`, `verdicts`),
 three measure (`perf`, `stress`, `bench`), `replay` re-judges a recorded run
@@ -12,21 +14,106 @@ out of its own transcript, `evidence` carves the exchanges behind a red run's
 rows out of that transcript, `verify-record` checks a sealed bundle, and the
 rest render or explore.
 
-## validate
+## emit-schemas
 
-Validate one artifact tree through every machine gate.
+```text
+Write the published JSON-Schema set (byte-deterministic)
 
-```bash
-veredictum validate --root <ROOT> [--specs <SPECS>] [--write-report] \
-    [--statement <STATEMENT>]
+Usage: veredictum emit-schemas --out <OUT>
+
+Options:
+      --out <OUT>  Output directory (created if missing)
+  -h, --help       Print help
 ```
 
-| Flag | Meaning |
-|---|---|
-| `--root <ROOT>` | The artifact root holding `schedule/`, `bindings/`, `vocab/`, `corpus/` and `registers/`. Required |
-| `--specs <SPECS>` | The vendored openEHR specification tree. Supplying it enables Service-Model operation resolution and citation resolution |
-| `--write-report` | Also refresh the wire-surface coverage report, at `<ROOT>/coverage-report.md`, from `--specs` |
-| `--statement <STATEMENT>` | A declaration to hold to the static conformance review, with the `ixit.json` beside it. No declaration is committed here and none is swept from the tree: ISO/IEC 9646-7 assigns an ICS proforma's support and supported-values columns to the supplier of the implementation |
+Byte-deterministic. The schemas in the repository's `schemas/` directory are
+this command's output, drift-tested against it, which is how the published
+format and the code that reads it stay one thing. Author against these if you
+are writing your own catalogue or your own harness.
+
+## run
+
+```text
+Execute the catalogue against a live SUT (from its ixit topology) and emit results.json + the run report
+
+Usage: veredictum run [OPTIONS] --root <ROOT> --ixit <IXIT> --out <OUT>
+
+Options:
+      --root <ROOT>
+          The artifact root
+
+      --ixit <IXIT>
+          The ixit topology file (JSON)
+
+      --out <OUT>
+          Output directory for results.json + the run summary
+
+      --sut-name <SUT_NAME>
+          SUT display name
+          
+          [default: ferroehr]
+
+      --sut-version <SUT_VERSION>
+          SUT version label
+          
+          [default: dev]
+
+      --filter <FILTER>
+          Only run cases whose id contains this substring
+
+      --statement <STATEMENT>
+          The party statement (ICS) — the list ISO/IEC 9646 test selection selects from. Supplied, an option-gated case whose arm the ICS does not declare is recorded N/A at drive time; absent, NO arm of a mutually exclusive branch is selected, so every such case and every extension route is recorded N/A with its citation and the run says so once
+
+      --sign-key <SIGN_KEY>
+          An armored OpenPGP secret key — when supplied, the emitted documents are sealed with `record-manifest.json` and its detached signature, which `verify-record` and `gpg --verify` both check
+
+      --sign-passphrase <SIGN_PASSPHRASE>
+          The passphrase unlocking `--sign-key`. Supply it through the environment: a passphrase on the command line is visible to every process on the host
+          
+          [env: VEREDICTUM_SIGN_PASSPHRASE]
+
+      --record-exchanges
+          Persist the wire exchanges beside results.json as transcript.json.
+          
+          OFF by default. The artifact can carry real patient data — a SUT's response body is recorded verbatim — so it is operator-controlled output, never a log: store it where the record itself is stored. The `authorization` request header's value is withheld; everything else lands exactly as it went out and came back.
+
+      --progress
+          Print one machine-parseable line per processed case: `progress: <k>/<n> <case-id>` after `progress: 0/<n>` — a stable grammar a driver may parse. Off by default, so existing output is byte-identical without it
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
+
+Drives every applicable case and records the exchange. Exits `1` if any case
+failed or errored.
+
+## validate
+
+```text
+Validate one artifact tree through every machine gate
+
+Usage: veredictum validate [OPTIONS] --root <ROOT>
+
+Options:
+      --root <ROOT>
+          The artifact root (schedule/, bindings/, vocab/, corpus/, registers/)
+
+      --specs <SPECS>
+          The vendored openEHR spec tree; enables SM-operation and spec-ref resolution
+
+      --write-report
+          Also refresh `<ROOT>/coverage-report.md` from `--specs`.
+          
+          OFF by default: `validate` is a check verb, and a check that mutates the working tree is a trap for read-only and fenced invocations. The pipeline scripts that publish the report pass this explicitly.
+
+      --statement <STATEMENT>
+          A submitted declaration (`statement.json`) to hold to the static conformance review, with the `ixit.json` beside it.
+          
+          ISO/IEC 9646-7 assigns an ICS proforma's support and supported-values columns to the supplier of the implementation, so no declaration is committed here and none is swept from the tree.
+
+  -h, --help
+          Print help (see a summary with '-h')
+```
 
 Every machine check over the catalogue: identifier uniqueness, citation
 resolution, binding completeness, coverage of the enumerated wire surface, and
@@ -44,203 +131,22 @@ on every run is a trap for read-only invocations, so the pipelines that publish
 the coverage report ask for it explicitly. The report lands at
 `<ROOT>/coverage-report.md`, beside the artifact families it measures.
 
-## run
-
-Execute the catalogue against a live SUT and emit `results.json` plus the run
-report.
-
-```bash
-veredictum run --root <ROOT> --ixit <IXIT> --out <OUT> \
-    [--sut-name <NAME>] [--sut-version <VERSION>] \
-    [--filter <SUBSTRING>] [--statement <STATEMENT>] \
-    [--record-exchanges] [--sign-key <KEY>]
-```
-
-| Flag | Meaning |
-|---|---|
-| `--root <ROOT>` | The artifact root. Required |
-| `--ixit <IXIT>` | The IXIT topology file describing the deployment under test. Required |
-| `--out <OUT>` | Output directory for `results.json` and the run summary. Required |
-| `--sut-name <NAME>` | Display name for the system under test. Default `ferroehr` |
-| `--sut-version <VERSION>` | Version label for the system under test. Default `dev` |
-| `--filter <SUBSTRING>` | Only run cases whose identifier contains this substring |
-| `--statement <STATEMENT>` | The party statement (ICS), the list ISO/IEC 9646 test selection selects from. Supplied, an option-gated case whose arm the statement does not declare is recorded not-applicable at drive time instead of driven, and `results.json` names the declaration itself as `statement_digest`, the leading 8 bytes of the SHA-256 over its bytes (`sha256sum statement.json \| cut -c1-16`). Absent, no arm of a mutually exclusive branch is selected at all, so every option-gated case and every extension route is recorded not-applicable with its citation, `results.json` records `selection_basis: statement_blind` and no digest, and the run prints one advisory naming what it could not select |
-| `--sign-key <KEY>` | An armored OpenPGP secret key. Seals the emitted documents with `record-manifest.json` and its detached signature |
-| `--sign-passphrase <PASSPHRASE>` | The passphrase unlocking `--sign-key`, read from `VEREDICTUM_SIGN_PASSPHRASE` |
-| `--record-exchanges` | Persist the wire exchanges beside `results.json` as `transcript.json`. Off by default. The artifact records a SUT's response bodies verbatim, so it can carry real patient data: it is operator-controlled output, never a log, and belongs wherever the record itself is stored. The `authorization` request header's value is withheld. With `--sign-key` the sealed manifest covers the transcript too |
-| `--progress` | Print one machine-parseable line per processed case: `progress: 0/<n>` once the selection is final, then `progress: <k>/<n> <case-id>` as each case is processed. Off by default, so existing output is byte-identical without it |
-
-Drives every applicable case and records the exchange. Exits `1` if any case
-failed or errored.
-
-## verdicts
-
-Compute the verdicts from a statement and a results record against an artifact
-tree, and write the rendered submission documents.
-
-```bash
-veredictum verdicts --statement <STATEMENT> --results <RESULTS> \
-    --root <ROOT> --out <OUT> [--sign-key <KEY>]
-```
-
-| Flag | Meaning |
-|---|---|
-| `--statement <STATEMENT>` | The party statement, `statement.json`. Required |
-| `--results <RESULTS>` | The recorded results, `results.json`. Required |
-| `--root <ROOT>` | The artifact root. Required |
-| `--out <OUT>` | Output directory for the rendered documents and `verdicts.json`. Required |
-| `--sign-key <KEY>` | An armored OpenPGP secret key. Seals the rendered documents with `record-manifest.json` and its detached signature |
-| `--sign-passphrase <PASSPHRASE>` | The passphrase unlocking `--sign-key`, read from `VEREDICTUM_SIGN_PASSPHRASE` |
-
-The pure step. It reaches no network and reads nothing but its inputs, which is
-what makes a published verdict re-derivable by anyone who has the same four
-files.
-
-## replay
-
-Re-judge a recorded run from its transcript, answering every composed request
-out of the recording instead of a server.
-
-```bash
-veredictum replay --root <ROOT> --ixit <IXIT> --transcript <TRANSCRIPT> \
-    [--statement <STATEMENT>] [--filter <SUBSTRING>] \
-    [--out <RESULTS>] [--against <RESULTS>] [--progress]
-```
-
-| Flag | Meaning |
-|---|---|
-| `--root <ROOT>` | The artifact root. Required |
-| `--ixit <IXIT>` | The ixit topology the recorded run was driven under. Required |
-| `--transcript <TRANSCRIPT>` | That run's `transcript.json`. Required |
-| `--statement <STATEMENT>` | The party statement ISO/IEC 9646 test selection re-applies: it decides which option arm, extension route, claimed capability and release floor the re-judgement selects |
-| `--filter <SUBSTRING>` | Re-judge only cases whose id contains this substring |
-| `--out <RESULTS>` | Where the re-judged `results.json` is written |
-| `--against <RESULTS>` | The submitted `results.json` the re-judgement is held against |
-| `--progress` | Print `progress: <k>/<n> <case>` lines while re-judging |
-
-Only the transport changes. The catalogue is driven again through the same
-request composition, the same response classification and the same assertion
-evaluators the live run used, with the recorded response standing in for the
-server's. A case whose recording runs out, or whose replay composes a request
-the recording does not carry, records a transport failure: a verdict is never
-reproduced over evidence nobody has.
-
-With `--against`, every row is compared on its status and its two row counts,
-and any disagreement exits `1` naming the case. The reason text is not
-compared, because a replay reaches a recording rather than a server and
-identical judgements can carry different words.
-
-Omitting `--statement` re-derives a sweep of the whole catalogue. The replay
-says so on stderr, in the words a live run uses, and stamps
-`selection_basis: statement_blind` on the document it writes. With `--against`
-the selection facts a `results.json` records are compared before any row is: a
-record an ICS selected, re-judged blind, under a statement the record does not
-name, or under one declaring different its-rest formats, exits `2` rather than
-reporting agreement, because a re-derivation under another claim re-derives
-another campaign. The statement is named by `statement_digest`, the leading 8
-bytes of the SHA-256 over the declaration's own bytes, so the refusal prints
-the recorded value and the applied one and a reader checks either with
-`sha256sum statement.json | cut -c1-16`. A record written before
-`selection_basis` or `statement_digest` existed identifies nothing about what
-selected it, and the replay reports that instead of refusing.
-
-What this establishes is that the judgement follows from the evidence. It does
-not establish the evidence: a transcript is what the instrument says it sent
-and received.
-
-## evidence
-
-Export a finished run's recorded exchanges for a named set of cases: the
-triage input, carved out of the run's own `transcript.json`.
-
-```bash
-veredictum evidence --transcript <TRANSCRIPT> --out <BUNDLE> \
-    [--results <RESULTS>] [--failing] [--only <CASE>]... [--filter <SUBSTRING>]
-```
-
-| Flag | Meaning |
-|---|---|
-| `--transcript <TRANSCRIPT>` | The run's `transcript.json`, written by `run --record-exchanges`. Required |
-| `--out <BUNDLE>` | Where the bundle is written. Required |
-| `--results <RESULTS>` | The run's `results.json`. Required by `--failing`, and otherwise optional: supplying it puts each exported case's outcome row beside its exchanges |
-| `--failing` | Export the red rows the results record names — every `failed` and every `errored` case |
-| `--only <CASE>` | Export this case, by id. Repeat the flag once per case |
-| `--filter <SUBSTRING>` | Export cases whose id contains this substring |
-
-At least one of `--failing`, `--only` and `--filter` is required, and the three
-union: a case is exported when any of them names it. The unfiltered document is
-the transcript itself.
-
-The red rows of a run become a triage input in one command:
-
-```bash
-veredictum evidence --transcript run/transcript.json \
-    --results run/results.json --failing --out run/evidence.json
-```
-
-**No statement is read.** Sealing a record needs a claim; reading the exchanges
-a run recorded does not, and a run that went red is exactly when they are
-needed.
-
-**An export that would carry nothing is refused**, exit `2`, with no file
-written. A selection matching no recorded case names what was asked for and
-what the transcript actually carries; a selection whose every case recorded no
-exchange names those cases and says that recording is opt-in. A selection that
-half-matched still exports, and the bundle's `without_exchanges` names every
-case it could not carry, so a partial answer never reads as a complete one.
-
-The `authorization` request header's value is withheld by the export itself,
-whatever the transcript held. Response bodies are the wire's own bytes and can
-carry real patient data, so the bundle is operator-controlled output like the
-transcript it comes from.
-
-## verify-record
-
-Verify a sealed bundle: recompute every digest its record manifest names, and
-check the detached signature over that manifest.
-
-```bash
-veredictum verify-record --record <DIR> --key <KEY>
-```
-
-| Flag | Meaning |
-|---|---|
-| `--record <DIR>` | The bundle directory holding the emitted documents, `record-manifest.json` and `record-manifest.json.asc`. Required |
-| `--key <KEY>` | The armored OpenPGP public key the signature is checked against. Required |
-
-Prints the signer fingerprint, the signing time, and one line per file with its
-digest verdict. Zero findings is the only passing result: a digest mismatch, a
-file the manifest names but the bundle does not carry, or a signature no
-component of the supplied key verifies, each exits `1` naming what failed.
-
-The bundle is ordinary files, so the check does not depend on this tool.
-`gpg --verify record-manifest.json.asc record-manifest.json` establishes the
-same signature, and `sha256sum` re-derives the same digests.
-
-A verified bundle is one link in the chain and not the whole of it. A valid
-signature proves integrity and origin since signing, and says nothing about the
-conditions the run executed under. The published instrument, the verification
-pack and the citation-carrying record are the rest, which is why that sentence
-prints on every verification.
-
 ## perf
 
-Execute the performance schedule's open-loop measured run against a live SUT and
-merge the measurement records into an existing `results.json`.
+```text
+Execute the performance schedule's open-loop measured run(s) against a live SUT and merge the §8.10 measurement records into an existing results.json (conformance-by-measurement)
 
-```bash
-veredictum perf --root <ROOT> --ixit <IXIT> --results <RESULTS> --class <CLASS> \
-    [--seed-workers <N>] [--hours <H>]
+Usage: veredictum perf [OPTIONS] --root <ROOT> --ixit <IXIT> --results <RESULTS> --class <CLASS>
+
+Options:
+      --root <ROOT>                  The artifact root
+      --ixit <IXIT>                  The ixit topology file (JSON) — its environment block is mandatory for a measured run
+      --results <RESULTS>            The results.json to merge the measurement records into (written by a prior `run`)
+      --class <CLASS>                Select the performance case(s) of this class (POC | S | L | R)
+      --seed-workers <SEED_WORKERS>  Parallel seeding workers [default: 16]
+      --hours <HOURS>                The sustained-window ladder: hours to hold the offered load — 1 (default, the case's normative window) | 2 | 4 | 6 | 8 | 12. A longer window is a STRICTER demonstration and persists like any measured run; nothing shorter than the case exists [default: 1]
+  -h, --help                         Print help
 ```
-
-| Flag | Meaning |
-|---|---|
-| `--root <ROOT>` | The artifact root. Required |
-| `--ixit <IXIT>` | The IXIT topology file. Its `environment` block is mandatory for a measured run. Required |
-| `--results <RESULTS>` | The `results.json` written by a prior `run`, to merge the measurement records into. Required |
-| `--class <CLASS>` | Which performance case to select: `POC`, `S`, `L` or `R`. Required |
-| `--seed-workers <N>` | Parallel seeding workers. Default `16` |
-| `--hours <H>` | The sustained window: `1` (the case's normative window, the default), `2`, `4`, `6`, `8` or `12` |
 
 Conformance by measurement. Latency is measured from the planned arrival instant
 under open-loop offered load, so a stall shows up as latency instead of
@@ -254,77 +160,83 @@ cannot be checked or reproduced.
 
 ## stress
 
-Run the step-load stress instrument: geometric load steps up to the maximum
-sustainable throughput.
+```text
+Run the step-load STRESS instrument: geometric load steps to the maximum sustainable throughput — where the system breaks (exploration only; never a conformance record, and class-free by design)
 
-```bash
-veredictum stress --root <ROOT> --ixit <IXIT> --out <OUT> \
-    [--corpus-class <CLASS>] [--seed-workers <N>] \
-    [--step-secs <S>] [--bisections <N>] [--max-rate <R>]
+Usage: veredictum stress [OPTIONS] --root <ROOT> --ixit <IXIT> --out <OUT>
+
+Options:
+      --root <ROOT>                  The artifact root
+      --ixit <IXIT>                  The ixit topology file (JSON) — its environment block is mandatory (a throughput number without the deployment described is meaningless)
+      --out <OUT>                    Where to write the stress report (stress.json)
+      --corpus-class <CORPUS_CLASS>  The class-scale corpus the stress runs on (POC | S | L | R — the standardized corpus selector): data volume + workload mix only; no class floor enters the stress report or chart [default: POC]
+      --seed-workers <SEED_WORKERS>  Parallel seeding workers [default: 16]
+      --step-secs <STEP_SECS>        Each load step's recorded hold, seconds (short + intense by design) [default: 120]
+      --bisections <BISECTIONS>      Post-breach bisection refinements [default: 3]
+      --max-rate <MAX_RATE>          The climb cap (arrivals/s) [default: 4096]
+  -h, --help                         Print help
 ```
-
-| Flag | Meaning |
-|---|---|
-| `--root <ROOT>` | The artifact root. Required |
-| `--ixit <IXIT>` | The IXIT topology file. Its `environment` block is mandatory. Required |
-| `--out <OUT>` | Where to write the stress report, `stress.json`. Required |
-| `--corpus-class <CLASS>` | The class-scale corpus the stress runs on: `POC`, `S`, `L` or `R`. Data volume and workload mix only. Default `POC` |
-| `--seed-workers <N>` | Parallel seeding workers. Default `16` |
-| `--step-secs <S>` | Each load step's recorded hold, in seconds. Default `120` |
-| `--bisections <N>` | Post-breach bisection refinements. Default `3` |
-| `--max-rate <R>` | The climb cap, in arrivals per second. Default `4096` |
 
 Exploration only, and class-free by design: no class floor enters the stress
 report or its chart. A `stress.json` is never a conformance record, and quoting
 one as if it were is a misuse of the tool.
 
-## aql-probe
-
-Run the AQL optimization probe against a live, freshly seeded SUT.
-
-```bash
-veredictum aql-probe --root <ROOT> --ixit <IXIT> --out <OUT> \
-    [--corpus-class <CLASS>] [--seed-workers <N>] [--requests <N>]
-```
-
-| Flag | Meaning |
-|---|---|
-| `--root <ROOT>` | The artifact root. Required |
-| `--ixit <IXIT>` | The IXIT topology file. Its `containers` block enables database-side attribution and maintenance settling. Required |
-| `--out <OUT>` | Where to write the probe report, `aql-probe.json`. Required |
-| `--corpus-class <CLASS>` | The class-scale corpus the probes run against: `POC`, `S`, `L` or `R`. Default `POC` |
-| `--seed-workers <N>` | Parallel seeding workers. Default `16` |
-| `--requests <N>` | Requests fired per probe. Default `20` |
-
-Fires the measurement machinery's AQL vocabulary, records wire percentiles per
-probe, and attributes the database-side cost through `pg_stat_statements`. This
-is evidence for someone optimizing a server, and it is never a conformance
-record.
-
 ## bench
 
-Run the universal speed benchmark against any reachable CDR.
+```text
+Run the universal SPEED benchmark: an embedded pack against any reachable CDR over its base URL, seeded once and measured N times open-loop (comparative speed only; never a conformance record, a certificate, or a performance-class rating)
 
-```bash
-veredictum bench --base-url <URL> --out <OUT> \
-    [--auth none|basic|bearer] [--user <USER>] [--pack <PACK>] \
-    [--posture <NAME>] [--repetitions <N>] [--scale <F>] \
-    [--seed-workers <N>] [--with-baselines] [--label <LABEL>]
+Usage: veredictum bench [OPTIONS] --base-url <BASE_URL> --out <OUT>
+
+Options:
+      --base-url <BASE_URL>
+          The system's base URL, up to and including the openEHR REST base (for example `https://cdr.example/openehr/v1`)
+
+      --auth <AUTH>
+          How the client presents itself: `none`, `basic` or `bearer`.
+          
+          The secret never rides argv: `basic` reads `VEREDICTUM_BENCH_PASSWORD` and `bearer` reads `VEREDICTUM_BENCH_TOKEN`.
+          
+          [default: none]
+
+      --user <USER>
+          The user `--auth basic` presents
+
+      --pack <PACK>
+          The embedded pack to drive
+          
+          [default: smoke]
+
+      --posture <POSTURE>
+          The posture profile to declare, out of the set the pack defines. Omit to take the pack's first, which is always `minimal`.
+          
+          The run's canaries check the declaration against the running system before and after the measured window, and a contradiction refuses the run.
+
+      --repetitions <REPETITIONS>
+          How many times to repeat the measured phases. A result with fewer than three is recorded as not submittable, and names that as one of its unmet requirements
+          
+          [default: 3]
+
+      --scale <SCALE>
+          Multiply the pack's EHR count by this factor, for a shorter run. Anything but `1.0` takes the run off the pack's pinned configuration, and the record says so
+          
+          [default: 1]
+
+      --seed-workers <SEED_WORKERS>
+          Override the worker count every seed phase declares. Omit to run the pack's own value, which is what its reference figures describe
+
+      --with-baselines
+          After the target's run, compose each pinned reference CDR on this host from its own digest-pinned images, drive the same pack at the same seed against it, and record the relative index. Needs the docker CLI; a record without a baseline is not submittable
+
+      --out <OUT>
+          Output directory for the result document and its summary
+
+      --label <LABEL>
+          A label for this run, which names its column in a comparison and distinguishes its file name in a shared output directory
+
+  -h, --help
+          Print help (see a summary with '-h')
 ```
-
-| Flag | Meaning |
-|---|---|
-| `--base-url <URL>` | The system's base URL, up to and including the openEHR REST base. Required |
-| `--out <OUT>` | Output directory for the result document and its summary. Required |
-| `--auth <MODE>` | How the client presents itself: `none`, `basic` or `bearer`. Default `none` |
-| `--user <USER>` | The user `--auth basic` presents |
-| `--pack <PACK>` | The embedded pack to drive: `smoke`, `community-vitals` or `aql-mix`. Default `smoke` |
-| `--posture <NAME>` | The posture profile to declare, out of the set the pack defines. Default: the pack's first, always `minimal` |
-| `--repetitions <N>` | How many times to repeat the measured phases. Default `3` |
-| `--scale <F>` | Multiply the pack's EHR count by this factor, for a shorter run. Default `1.0` |
-| `--seed-workers <N>` | Override the worker count every seed phase declares. Omit to run the pack's own value |
-| `--with-baselines` | Also measure the pinned reference CDRs on this host, and record the relative index |
-| `--label <LABEL>` | A label for this run, which names its column in a comparison |
 
 A bench run needs no artifact root, no IXIT and no party statement. The pack is
 compiled into the binary with a sha256 pin on every fixture, and the pins are
@@ -511,17 +423,16 @@ bench result may motivate a class run, never substitute for one.
 
 ## bench-compare
 
-Align two or more committed bench results into one table.
+```text
+Align two or more committed bench results into one table, one column per file, with every pack or host mismatch stated in the header
 
-```bash
-veredictum bench-compare --result <FILE> --result <FILE> [--result <FILE>] \
-    --out <OUT>
+Usage: veredictum bench-compare --result <RESULTS> --out <OUT>
+
+Options:
+      --result <RESULTS>  A committed bench result. Repeat the flag once per file; at least two are needed
+      --out <OUT>         Output directory for the rendered comparison
+  -h, --help              Print help
 ```
-
-| Flag | Meaning |
-|---|---|
-| `--result <FILE>` | A committed bench result. Repeat the flag once per file; at least two are needed. Required |
-| `--out <OUT>` | Output directory for the rendered comparison. Required |
 
 One column per file, one row per phase, operation and metric. Each cell carries
 the cross-repetition median with the inter-quartile range beside it, so a reader
@@ -545,15 +456,15 @@ from.
 
 ## bench-packs
 
-Write the embedded benchmark pack manifest.
+```text
+Write the embedded benchmark pack manifest: every pack's phases with their load discipline, its operation mix with what each entry probes, its posture profiles, its fixture pins with their provenance, its seed, and the submission requirements (byte-deterministic)
 
-```bash
-veredictum bench-packs --out <OUT>
+Usage: veredictum bench-packs --out <OUT>
+
+Options:
+      --out <OUT>  Output directory (created if missing)
+  -h, --help       Print help
 ```
-
-| Flag | Meaning |
-|---|---|
-| `--out <OUT>` | Output directory for `bench-packs.json`, created if missing. Required |
 
 A pack is versioned data compiled into the binary, so the binary is the only
 honest source for a description of one. This command writes that description:
@@ -573,22 +484,43 @@ the file and diffing it is a build gate. The public page at
 is generated from the committed copy of this document, and CI refuses a pack
 change that leaves either of them stale.
 
-## stress-compare
+## aql-probe
 
-Render the cross-SUT stress overlay from two committed stress reports.
+```text
+Run the AQL optimization probe: fire the measurement machinery's AQL vocabulary against a live, freshly seeded SUT, record wire percentiles, and attribute the DB-side cost per probe via `pg_stat_statements` (exploration evidence for the optimization loop — never a conformance record)
 
-```bash
-veredictum stress-compare --left <LEFT> --left-label <LABEL> \
-    --right <RIGHT> --right-label <LABEL> --out <OUT>
+Usage: veredictum aql-probe [OPTIONS] --root <ROOT> --ixit <IXIT> --out <OUT>
+
+Options:
+      --root <ROOT>                  The artifact root
+      --ixit <IXIT>                  The ixit topology file (JSON) — the `containers` block enables DB-side attribution and maintenance settling
+      --out <OUT>                    Where to write the probe report (aql-probe.json)
+      --corpus-class <CORPUS_CLASS>  The class-scale corpus the probes run against (POC | S | L | R) [default: POC]
+      --seed-workers <SEED_WORKERS>  Parallel seeding workers [default: 16]
+      --requests <REQUESTS>          Requests fired per probe [default: 20]
+  -h, --help                         Print help
 ```
 
-| Flag | Meaning |
-|---|---|
-| `--left <LEFT>` | The primary SUT's committed `stress.json`. Required |
-| `--left-label <LABEL>` | The primary SUT's display label. Required |
-| `--right <RIGHT>` | The comparison SUT's committed `stress.json`. Required |
-| `--right-label <LABEL>` | The comparison SUT's display label. Required |
-| `--out <OUT>` | Where to write the overlay SVG. Required |
+Fires the measurement machinery's AQL vocabulary, records wire percentiles per
+probe, and attributes the database-side cost through `pg_stat_statements`. This
+is evidence for someone optimizing a server, and it is never a conformance
+record.
+
+## stress-compare
+
+```text
+Render the cross-SUT stress overlay (both systems' latency-throughput curves on one canvas) FROM two committed stress reports — deterministic, both directions on equal footing
+
+Usage: veredictum stress-compare --left <LEFT> --left-label <LEFT_LABEL> --right <RIGHT> --right-label <RIGHT_LABEL> --out <OUT>
+
+Options:
+      --left <LEFT>                The primary SUT's committed stress.json
+      --left-label <LEFT_LABEL>    The primary SUT's display label
+      --right <RIGHT>              The comparison SUT's committed stress.json
+      --right-label <RIGHT_LABEL>  The comparison SUT's display label
+      --out <OUT>                  Where to write the overlay SVG
+  -h, --help                       Print help
+```
 
 Deterministic, and both directions on equal footing: the two curves are drawn by
 the same code from the same kind of file, so neither side gets a rendering
@@ -596,56 +528,185 @@ advantage.
 
 ## perf-assets
 
-Render the published performance SVG assets from a committed `results.json`.
+```text
+Render the published performance SVG assets FROM a committed results.json (deterministic; CI regenerates and diffs — hand-drawn numbers are a build failure)
 
-```bash
-veredictum perf-assets --root <ROOT> --results <RESULTS> --out <OUT> \
-    [--summary <PATH>] [--stress <STRESS>]
+Usage: veredictum perf-assets [OPTIONS] --root <ROOT> --results <RESULTS> --out <OUT>
+
+Options:
+      --root <ROOT>        The artifact root (for the class-ladder floors)
+      --results <RESULTS>  The committed results.json carrying the measurement records
+      --out <OUT>          Output directory for the SVG files
+      --summary <SUMMARY>  Also write the generated Markdown summary (class ladder + measured detail) to this path — the book's build-time include
+      --stress <STRESS>    A committed stress report (stress.json) to render the latency-throughput curve from, when one exists
+  -h, --help               Print help
 ```
-
-| Flag | Meaning |
-|---|---|
-| `--root <ROOT>` | The artifact root, for the class-ladder floors. Required |
-| `--results <RESULTS>` | The committed `results.json` carrying the measurement records. Required |
-| `--out <OUT>` | Output directory for the SVG files. Required |
-| `--summary <PATH>` | Also write the generated Markdown summary, the class ladder plus the measured detail, to this path |
-| `--stress <STRESS>` | A committed `stress.json` to render the latency-throughput curve from, when one exists |
 
 ## conformance-assets
 
-Render the capability heat grid and the per-chapter outcome bars from a run's
-own artifacts.
+```text
+Render the conformance visuals (the capability heat grid + the per-chapter outcome bars) deterministically FROM the committed party artifacts — the perf-assets pattern for functional conformance
 
-```bash
-veredictum conformance-assets --root <ROOT> --results <RESULTS> \
-    --verdicts <VERDICTS> --out <OUT> [--suffix <SUFFIX>]
+Usage: veredictum conformance-assets [OPTIONS] --root <ROOT> --results <RESULTS> --verdicts <VERDICTS> --out <OUT>
+
+Options:
+      --root <ROOT>          The artifact root (for the capability matrix)
+      --results <RESULTS>    The committed results.json
+      --verdicts <VERDICTS>  The committed verdicts.json
+      --out <OUT>            Output directory for the SVG files
+      --suffix <SUFFIX>      A suffix appended to the SVG file stems (`-ehrbase` for the comparison SUT's copies) [default: ""]
+  -h, --help                 Print help
 ```
-
-| Flag | Meaning |
-|---|---|
-| `--root <ROOT>` | The artifact root, for the capability matrix. Required |
-| `--results <RESULTS>` | The committed `results.json`. Required |
-| `--verdicts <VERDICTS>` | The committed `verdicts.json`. Required |
-| `--out <OUT>` | Output directory for the SVG files. Required |
-| `--suffix <SUFFIX>` | A suffix appended to the SVG file stems, so a comparison SUT's copies sit beside the primary set. Default empty |
 
 Both renderers are deterministic over files already committed, so a build job
 can regenerate them and diff the result. A hand-drawn number in a published
 chart is a build failure rather than a review comment.
 
-## emit-schemas
+## verdicts
 
-Write the published JSON-Schema set.
+```text
+Compute the verdicts from a statement + results against an artifact tree (the pure pipeline) and write the rendered submission documents
 
-```bash
-veredictum emit-schemas --out <OUT>
+Usage: veredictum verdicts [OPTIONS] --statement <STATEMENT> --results <RESULTS> --root <ROOT> --out <OUT>
+
+Options:
+      --statement <STATEMENT>
+          The party statement (`statement.json`)
+      --results <RESULTS>
+          The party results (`results.json`)
+      --root <ROOT>
+          The artifact root (schedule/, vocab/, registers/)
+      --out <OUT>
+          Output directory for the rendered documents + verdicts.json
+      --sign-key <SIGN_KEY>
+          An armored OpenPGP secret key — when supplied, the rendered documents are sealed with `record-manifest.json` and its detached signature, which `verify-record` and `gpg --verify` both check
+      --sign-passphrase <SIGN_PASSPHRASE>
+          The passphrase unlocking `--sign-key`. Supply it through the environment: a passphrase on the command line is visible to every process on the host [env: VEREDICTUM_SIGN_PASSPHRASE]
+  -h, --help
+          Print help
 ```
 
-| Flag | Meaning |
-|---|---|
-| `--out <OUT>` | Output directory, created if missing. Required |
+The pure step. It reaches no network and reads nothing but its inputs, which is
+what makes a published verdict re-derivable by anyone who has the same four
+files.
 
-Byte-deterministic. The schemas in the repository's `schemas/` directory are
-this command's output, drift-tested against it, which is how the published
-format and the code that reads it stay one thing. Author against these if you
-are writing your own catalogue or your own harness.
+## replay
+
+```text
+Re-judge a recorded run from its transcript, answering every composed request out of the recording instead of a server, and optionally refuse a results document the recorded exchanges do not support
+
+Usage: veredictum replay [OPTIONS] --root <ROOT> --ixit <IXIT> --transcript <TRANSCRIPT>
+
+Options:
+      --root <ROOT>              The artifact root (schedule/, bindings/, corpus/, vocab/)
+      --ixit <IXIT>              The ixit topology the recorded run was driven under
+      --transcript <TRANSCRIPT>  The transcript of that run (`transcript.json`)
+      --statement <STATEMENT>    The party statement ISO/IEC 9646 test selection re-applies: it decides which option arm, extension route, claimed capability and release floor the re-judgement selects. Omitting it re-derives a whole-catalogue sweep stamped `selection_basis: statement_blind`, which `--against` refuses to hold against a record an ICS selected
+      --filter <FILTER>          Re-judge only cases whose id contains this substring
+      --out <OUT>                Where the re-judged `results.json` is written
+      --against <AGAINST>        The submitted `results.json` the re-judgement is held against: any row whose status or row counts differ fails the command
+      --progress                 Print `progress: <k>/<n> <case>` lines while re-judging
+  -h, --help                     Print help
+```
+
+Only the transport changes. The catalogue is driven again through the same
+request composition, the same response classification and the same assertion
+evaluators the live run used, with the recorded response standing in for the
+server's. A case whose recording runs out, or whose replay composes a request
+the recording does not carry, records a transport failure: a verdict is never
+reproduced over evidence nobody has.
+
+With `--against`, every row is compared on its status and its two row counts,
+and any disagreement exits `1` naming the case. The reason text is not
+compared, because a replay reaches a recording rather than a server and
+identical judgements can carry different words.
+
+Omitting `--statement` re-derives a sweep of the whole catalogue. The replay
+says so on stderr, in the words a live run uses, and stamps
+`selection_basis: statement_blind` on the document it writes. With `--against`
+the selection facts a `results.json` records are compared before any row is: a
+record an ICS selected, re-judged blind, under a statement the record does not
+name, or under one declaring different its-rest formats, exits `2` rather than
+reporting agreement, because a re-derivation under another claim re-derives
+another campaign. The statement is named by `statement_digest`, the leading 8
+bytes of the SHA-256 over the declaration's own bytes, so the refusal prints
+the recorded value and the applied one and a reader checks either with
+`sha256sum statement.json | cut -c1-16`. A record written before
+`selection_basis` or `statement_digest` existed identifies nothing about what
+selected it, and the replay reports that instead of refusing.
+
+What this establishes is that the judgement follows from the evidence. It does
+not establish the evidence: a transcript is what the instrument says it sent
+and received.
+
+## evidence
+
+```text
+Export a finished run's recorded exchanges for a named set of cases: the triage input, carved out of the run's own transcript. No statement is read, and a bundle that would carry nothing is refused
+
+Usage: veredictum evidence [OPTIONS] --transcript <TRANSCRIPT> --out <OUT> <--failing|--only <ONLY>|--filter <FILTER>>
+
+Options:
+      --transcript <TRANSCRIPT>  The run's `transcript.json` (written by `run --record-exchanges`)
+      --results <RESULTS>        The run's `results.json`. Required by `--failing`, and otherwise optional: supplying it puts each exported case's outcome row beside its exchanges
+      --failing                  Export the red rows the results record names — every `failed` and every `errored` case. The one-command triage input
+      --only <ONLY>              Export this case, by id. Repeat the flag once per case
+      --filter <FILTER>          Export cases whose id contains this substring
+      --out <OUT>                Where the bundle is written
+  -h, --help                     Print help
+```
+
+At least one of `--failing`, `--only` and `--filter` is required, and the three
+union: a case is exported when any of them names it. The unfiltered document is
+the transcript itself.
+
+The red rows of a run become a triage input in one command:
+
+```bash
+veredictum evidence --transcript run/transcript.json \
+    --results run/results.json --failing --out run/evidence.json
+```
+
+**No statement is read.** Sealing a record needs a claim; reading the exchanges
+a run recorded does not, and a run that went red is exactly when they are
+needed.
+
+**An export that would carry nothing is refused**, exit `2`, with no file
+written. A selection matching no recorded case names what was asked for and
+what the transcript actually carries; a selection whose every case recorded no
+exchange names those cases and says that recording is opt-in. A selection that
+half-matched still exports, and the bundle's `without_exchanges` names every
+case it could not carry, so a partial answer never reads as a complete one.
+
+The `authorization` request header's value is withheld by the export itself,
+whatever the transcript held. Response bodies are the wire's own bytes and can
+carry real patient data, so the bundle is operator-controlled output like the
+transcript it comes from.
+
+## verify-record
+
+```text
+Verify a sealed bundle: recompute every digest its record manifest names, and check the detached signature over that manifest
+
+Usage: veredictum verify-record --record <RECORD> --key <KEY>
+
+Options:
+      --record <RECORD>  The bundle directory holding the emitted documents, the record manifest and its detached signature
+      --key <KEY>        The armored OpenPGP public key the signature is checked against
+  -h, --help             Print help
+```
+
+Prints the signer fingerprint, the signing time, and one line per file with its
+digest verdict. Zero findings is the only passing result: a digest mismatch, a
+file the manifest names but the bundle does not carry, or a signature no
+component of the supplied key verifies, each exits `1` naming what failed.
+
+The bundle is ordinary files, so the check does not depend on this tool.
+`gpg --verify record-manifest.json.asc record-manifest.json` establishes the
+same signature, and `sha256sum` re-derives the same digests.
+
+A verified bundle is one link in the chain and not the whole of it. A valid
+signature proves integrity and origin since signing, and says nothing about the
+conditions the run executed under. The published instrument, the verification
+pack and the citation-carrying record are the rest, which is why that sentence
+prints on every verification.

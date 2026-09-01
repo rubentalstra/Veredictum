@@ -13,10 +13,10 @@ difference between an answer and a thread nobody is paged for.
 - [`.claude/rules/cnf-triage.md`](.claude/rules/cnf-triage.md): how a failing
   row is attributed, and what each attribution obliges.
 
-A documentation site with the CLI reference, the catalogue-authoring guide and
-the conformance-methodology chapter is not written yet. Until it is, the
-canonical CLI table in [`CLAUDE.md`](CLAUDE.md) is the authority on how to
-invoke the instrument, and `cargo run -- --help` lists every subcommand.
+The [command reference](https://veredictum.eu/docs/commands.html) documents
+every subcommand. It is rendered from the binary's own `--help`, so
+`veredictum <command> --help` from the build you have installed says the same
+thing and is the authority if the two ever disagree.
 
 ## I have a question
 

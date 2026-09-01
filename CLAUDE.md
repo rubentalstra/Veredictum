@@ -348,14 +348,14 @@ resolution against the vendored specs, binding completeness, coverage of the
 enumerated wire surface, per-capability case-count floors — and **zero findings
 is the only passing result.** `--statement <file>` adds the static conformance
 review of one SUPPLIED declaration, which is the only way a claim enters:
-nothing is swept from the tree. The instrument's
-own canonical CLI table (`validate`, `run`, `verdicts`, `replay`, `evidence`,
-`verify-record`,
-`perf`, `stress`, `stress-compare`, `aql-probe`, `bench`, `bench-compare`,
-`bench-packs`, `perf-assets`, `conformance-assets`, `emit-schemas`) is the authority on how to invoke
-everything else; never improvise a flag. `scripts/checks/cli-surface.sh` holds
-this list, the binary's own header table and the book's command reference to
-clap's `--help`, so a subcommand cannot land in one copy and rot in another.
+nothing is swept from the tree. `veredictum --help` is the authority on how to
+invoke everything else, and `veredictum <subcommand> --help` on one subcommand;
+never improvise a flag. No document here restates that surface:
+`website/book/src/commands.md` is GENERATED from the same help output by
+`scripts/render/commands-md.sh`, with the hand-written notes per command living
+beside it in `website/book/commands/`, and
+`scripts/checks/cli-surface.sh` refuses a committed page the generator does not
+reproduce.
 
 ## Releasing
 
@@ -375,7 +375,9 @@ pipeline is a `needs` edge, so no leg guesses whether an earlier one finished.
    release exists to ship (the way #36 moved alpha.3 → alpha.4 for the lib
    API); the cut then verifies the version rather than moving it. Whichever
    PR moves it, the version in the tree at tag time is what publishes, and the
-   console's `veredictum = "=X"` plus `ENGINE_PIN` move in the same commit.
+   console's `veredictum = "=X"` moves in the same commit. The console's
+   `ENGINE_PIN` follows on its own: `app/veredictum-console/build.rs` reads
+   that dependency line and substitutes the value.
 3. `CITATION.cff`: `version` and `date-released`.
 4. `bash scripts/render/zenodo-json.sh` — `.zenodo.json` is GENERATED, because
    Zenodo ignores `CITATION.cff` completely whenever a `.zenodo.json` exists
@@ -398,8 +400,9 @@ and the workspace root's `[patch.crates-io]` redirects that name to
 name the version being cut before crates.io carries it, every pull request in
 the window still compiles the console on both targets, and the engine every
 gate spawns is the engine the console links.
-`scripts/release/check-console-pin.sh` holds the manifest pin, `ENGINE_PIN`,
-`app/veredictum`'s version and the tag to that one value, and it also refuses a
+`scripts/release/check-console-pin.sh` holds the manifest pin,
+`app/veredictum`'s version, the operator compose tag and the tag being
+published to that one value, and it also refuses a
 `Cargo.lock` carrying a registry-sourced `veredictum` — cargo drops an
 unmatchable patch and resolves the registry copy with no warning at all, which
 is the silent fallback the check exists to catch. It runs on every pull request

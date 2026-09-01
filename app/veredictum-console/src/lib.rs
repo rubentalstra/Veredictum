@@ -28,11 +28,11 @@ compile_error!("features \"hydrate\" and \"ssr\" cannot be enabled at the same t
 
 /// The exact engine version this console is built against.
 ///
-/// One fact, in lock-step with the manifest's crates.io pin
-/// (`veredictum = "=…"`; the engine module's unit test holds the two
-/// together). The shell footer shows it, and the ssr-side engine seam
-/// refuses a binary reporting anything else.
-pub const ENGINE_PIN: &str = "0.1.4";
+/// One fact, read out of the manifest's crates.io pin (`veredictum = "=…"`)
+/// by `build.rs` and substituted here, so there is no second copy to drift.
+/// The shell footer shows it, and the ssr-side engine seam refuses a binary
+/// reporting anything else.
+pub const ENGINE_PIN: &str = env!("VEREDICTUM_ENGINE_PIN");
 
 pub mod app;
 pub mod arg_refusal;

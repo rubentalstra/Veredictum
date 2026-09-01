@@ -51,7 +51,7 @@ gate guard "hosted deploy script"     "bash scripts/checks/hosted-deploy-script.
 gate guard "hosted deploy self-test"  "bash scripts/checks/hosted-deploy-script.sh --self-test"
 gate guard "CI jobs gate the merge"   "bash scripts/checks/ci-conclusion-complete.sh"
 gate guard "gates cover CI"           "bash scripts/checks/gates-cover-ci.sh"
-gate guard "CLI surface copies"       "bash scripts/checks/cli-surface.sh"
+gate guard "the command reference"    "bash scripts/checks/cli-surface.sh"
 gate guard "registry submissions"     "bash scripts/checks/registry-submission.sh"
 gate guard "benchmark submissions"    "bash scripts/checks/bench-submission.sh"
 gate guard "the console's engine pin" "bash scripts/release/check-console-pin.sh"
@@ -80,6 +80,7 @@ gate rust  "rustdoc (workspace)"      "RUSTFLAGS='-D warnings' RUSTDOCFLAGS='-D 
 gate rust  "rustdoc (console ssr)"    "RUSTFLAGS='-D warnings' RUSTDOCFLAGS='-D warnings' cargo doc --locked -p veredictum-console --no-deps --document-private-items --features ssr"
 gate rust  "validate the catalogue"   "cargo run --quiet -- validate --root artifacts --specs specs/openehr"
 gate rust  "the site's counts"        "bash scripts/checks/site-counts.sh"
+gate rust  "the example results"      "bash scripts/checks/example-results-drift.sh"
 
 gate console "clippy (ssr)"           "cargo clippy -p veredictum-console --all-targets --features ssr -- -D warnings"
 gate console "clippy (wasm32 hydrate)" "cargo clippy -p veredictum-console --lib --target wasm32-unknown-unknown --no-default-features --features hydrate -- -D warnings"
