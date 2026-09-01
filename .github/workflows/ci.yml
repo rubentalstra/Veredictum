@@ -741,13 +741,19 @@ jobs:
       # holds every count-bearing phrase on both site surfaces to it.
       - name: The site's counts match the catalogue
         run: bash scripts/checks/site-counts.sh
-      # The CLI surface has one truth (clap's `--help`) and three hand-written
-      # copies (#76): the binary's header table, the root CLAUDE.md
-      # parenthetical, and the book's command reference. The guard needs the
-      # built binary, which is why it rides this job rather than the cargo-free
-      # guards tier.
+      # The CLI surface has one truth (clap's `--help`), and the book's command
+      # reference is now rendered from it rather than written beside it (#466).
+      # This step re-renders the page and byte-compares the committed copy. It
+      # needs the built binary, which is why it rides this job rather than the
+      # cargo-free guards tier.
       - name: The documented CLI surface matches the binary
         run: bash scripts/checks/cli-surface.sh
+      # The committed example results document is generated too (#466), and
+      # carried a version two releases old before this step existed. A cargo
+      # example is a binary no integration test can import, so the drift gate
+      # the schema set has as a Rust test is a script here.
+      - name: The example results document matches its generator
+        run: bash scripts/checks/example-results-drift.sh
       # The benchmark legend is generated from the pack manifest the binary
       # emits, and the manifest is held byte-identical to the embedded packs by
       # `bench_manifest` in the suite above. This step closes the second half:
