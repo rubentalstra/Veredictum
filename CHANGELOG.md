@@ -106,6 +106,16 @@ version on.
   contents and warnings untouched.
 
 ### Fixed
+- **A case declaring no capability is refused at authoring time (#500).** The
+  two readers of a case's `capabilities` list disagreed about the empty one:
+  the runner drove such a case against a server, and the verdict pipeline
+  deselected it because no claim intersects an empty list. The row burned a
+  server's time and bore no verdict. An empty list is now illegal: the
+  published `case-core` schema carries `minItems: 1` on `capabilities`, so
+  `validate` reports the file that declares one, and the runner excuses the
+  case under a statement as the drive-time backstop. Every one of the 1146
+  committed case cores already carries a non-empty list, so no catalogue
+  artifact changed.
 - **A malformed call to a console endpoint answers 400 with a sentence, not
   500 with a serializer's phrasing (#484).** Every `#[server]` function is a
   publicly reachable HTTP endpoint, and a call whose arguments will not decode

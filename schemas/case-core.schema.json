@@ -110,6 +110,7 @@
     },
     "capabilities": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "string",
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"

@@ -509,6 +509,64 @@ mod tests {
         Ok(())
     }
 
+    /// A case core declaring an empty `capabilities` list is refused at load
+    /// and reported by `validate` against its own file. No claim can select
+    /// such a case, so the runner would drive it against a server while the
+    /// verdict pipeline drops it. Its sound sibling still lands.
+    #[test]
+    fn an_empty_capabilities_list_is_refused() -> Result<(), Box<dyn std::error::Error>> {
+        let tmp = assert_fs::TempDir::new()?;
+        let root = tmp.path().join("artifacts");
+        std::fs::create_dir_all(&root)?;
+        let case = |id: &str, caps: &str| {
+            format!(
+                "id: {id}\n\
+                 kind: functional\n\
+                 component: EHR\n\
+                 sm_operation: I_EHR_SERVICE.create_ehr\n\
+                 test_purpose: t\n\
+                 description: d\n\
+                 spec_refs: [\"ITS-REST master02 §EHR\"]\n\
+                 capabilities: {caps}\n\
+                 flow:\n  - {{ step: 1, call: create_ehr, expect: created }}\n"
+            )
+        };
+        put(
+            &root,
+            "schedule/ehr/sound.yaml",
+            &case("I_EHR_SERVICE.create_ehr-main", "[EhrOperations]"),
+        )?;
+        put(
+            &root,
+            "schedule/ehr/empty.yaml",
+            &case("I_EHR_SERVICE.create_ehr-empty", "[]"),
+        )?;
+
+        let loaded = load_root(&root)?;
+        let refused: Vec<String> = loaded
+            .errors
+            .iter()
+            .map(|e| e.path().display().to_string())
+            .collect();
+        assert_eq!(refused.len(), 1, "{refused:?}");
+        assert!(
+            refused.iter().any(|p| p.ends_with("empty.yaml")),
+            "{refused:?}"
+        );
+        assert_eq!(loaded.set.cases.len(), 1, "{:?}", loaded.errors);
+
+        let findings = crate::validate::validate(&crate::validate::Context {
+            set: &loaded.set,
+            load_errors: &loaded.errors,
+            spec_root: None,
+        });
+        assert!(
+            findings.iter().any(|f| f.artifact.ends_with("empty.yaml")),
+            "{findings:?}"
+        );
+        Ok(())
+    }
+
     /// A tree with no declaration supplied carries none: nothing is swept from
     /// a sibling directory, so no gate can read a claim nobody submitted.
     #[test]
