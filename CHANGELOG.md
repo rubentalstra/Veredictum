@@ -18,6 +18,8 @@ version on.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-09-01
+
 ### Added
 - **Every declared fact in a results document says where it came from (#461).**
   Two members in `results.json`, both published in
@@ -2247,7 +2249,8 @@ tag stands; 0.1.0-alpha.6 ships the same tree plus the pipeline fix.
   attribution-stripping `commit-msg` hook with `scripts/install-hooks.sh`, and
   the Rust `.gitignore` set.
 
-[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.4...HEAD
+[unreleased]: https://github.com/rubentalstra/Veredictum/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/rubentalstra/Veredictum/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/rubentalstra/Veredictum/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/rubentalstra/Veredictum/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/rubentalstra/Veredictum/compare/v0.1.1...v0.1.2
