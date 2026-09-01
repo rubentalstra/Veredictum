@@ -1125,3 +1125,70 @@ fn a_blind_replay_is_refused_against_a_record_a_statement_selected() -> Fallible
     assert_eq!(agreed, replay::SelectionAgreement::Same);
     Ok(())
 }
+
+/// A replay names the statement it applied, by the digest of the declaration
+/// file it was handed, and a blind replay names none (#490).
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_replay_records_the_digest_of_the_statement_it_applied() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let transcript = empty_transcript(dir.path())?;
+    let statement = statement_path();
+    let (_, results) = replay_posture(Some(&statement), &ixit_path(), &transcript)?;
+    assert_eq!(
+        results.statement_digest,
+        Some(veredictum::pipeline::conformance::statement_digest(
+            &std::fs::read_to_string(&statement)?
+        )),
+        "the recorded digest is the one `sha256sum statement.json | cut -c1-16` prints"
+    );
+
+    let (_, blind) = replay_posture(None, &ixit_path(), &transcript)?;
+    assert_eq!(
+        blind.statement_digest, None,
+        "a campaign nothing selected names no statement"
+    );
+    Ok(())
+}
+
+/// The defect #490 closes, over documents the replay seam itself emitted: two
+/// statements declaring the same its-rest formats agree on every other
+/// recorded fact, and the recorded statement identity refuses the second one.
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_replay_under_another_statement_declaring_the_same_formats_is_refused() -> Fallible {
+    let dir = assert_fs::TempDir::new()?;
+    let transcript = empty_transcript(dir.path())?;
+    let ixit = ixit_path();
+    let statement = statement_path();
+    let declared = std::fs::read_to_string(&statement)?;
+    let other = dir.path().join("other-statement.json");
+    std::fs::write(
+        &other,
+        declared.replace("\"Fixture CDR\"", "\"Another CDR\""),
+    )?;
+
+    let (_, submitted) = replay_posture(Some(&statement), &ixit, &transcript)?;
+    let (_, elsewhere) = replay_posture(Some(&other), &ixit, &transcript)?;
+    assert_eq!(
+        submitted.tech_profile.formats, elsewhere.tech_profile.formats,
+        "the two claims are one value to every recorded fact but the digest"
+    );
+    let refused = replay::selection_agreement(&submitted, &elsewhere);
+    assert!(refused.refuses(), "{refused}");
+    let rendered = refused.to_string();
+    for named in [&submitted, &elsewhere] {
+        let digest = named
+            .statement_digest
+            .as_deref()
+            .ok_or("both re-judgements name their statement")?;
+        assert!(rendered.contains(digest), "{rendered}");
+    }
+    Ok(())
+}

@@ -19,7 +19,7 @@ use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use veredictum::pipeline::conformance::{RunRequest, execute_run};
+use veredictum::pipeline::conformance::{RunRequest, execute_run, statement_digest};
 use veredictum::registry::{
     Provenance, REGISTRY_SCHEMA_VERSION, RULES_VERSION, RegistryEntry, Tier, entry_defects,
 };
@@ -248,6 +248,102 @@ fn tampering_is_refused_by_the_gate(root: &Path, tree: &Path, record: &Path) -> 
     Ok(())
 }
 
+/// A re-derivation handed somebody else's claim is refused, and the refusal
+/// names both statements (#490).
+///
+/// The substituted declaration is the record's own with one product field
+/// changed, so it declares exactly the same its-rest formats: every other
+/// recorded fact reads as agreeing, and only the recorded statement identity
+/// separates the two claims.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_substituted_statement_is_refused_by_the_gate(
+    root: &Path,
+    tree: &Path,
+    statement: &Path,
+) -> Fallible {
+    let honest = std::fs::read_to_string(statement)?;
+    let substituted = honest.replace("\"Fixture CDR\"", "\"Another CDR\"");
+    assert_ne!(substituted, honest, "the fixture names a product to change");
+    std::fs::write(statement, &substituted)?;
+
+    let refused = Command::new("bash")
+        .arg(root.join("scripts/checks/registry-rederive.sh"))
+        .arg(format!(
+            "registry/entries/conformance/{SYSTEM}/{ENTRY_ID}.json"
+        ))
+        .env("REGISTRY_TREE", tree)
+        .env("VEREDICTUM_BIN", env!("CARGO_BIN_EXE_veredictum"))
+        .env("VEREDICTUM_REQUIRE_REDERIVATION", "1")
+        .output()?;
+    let said = String::from_utf8_lossy(&refused.stderr).into_owned();
+    assert!(
+        !refused.status.success(),
+        "a re-derivation under another claim is not a re-derivation of this record:\n{}",
+        String::from_utf8_lossy(&refused.stdout)
+    );
+    assert!(
+        said.contains(&statement_digest(&honest)) && said.contains(&statement_digest(&substituted)),
+        "the refusal names the recorded statement and the applied one:\n{said}"
+    );
+
+    std::fs::write(statement, &honest)?;
+    Ok(())
+}
+
+/// A record written before `statement_digest` existed re-derives as it always
+/// did: the gate says the identity is unknown and recomputes anyway (#490).
+///
+/// Refusing there would refuse every published record the member predates,
+/// which is a re-derivation gate breaking the records it exists to check.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "the Book's Result-test shape: assertions panic, plumbing propagates with `?`"
+)]
+fn a_record_naming_no_statement_still_re_derives(
+    root: &Path,
+    tree: &Path,
+    record: &Path,
+) -> Fallible {
+    let results = record.join("results.json");
+    let named = std::fs::read_to_string(&results)?;
+    let mut document: serde_json::Value = serde_json::from_str(&named)?;
+    let removed = document
+        .as_object_mut()
+        .ok_or("a results document is an object")?
+        .remove("statement_digest");
+    assert!(removed.is_some(), "the run recorded a statement identity");
+    std::fs::write(
+        &results,
+        format!("{}\n", serde_json::to_string_pretty(&document)?),
+    )?;
+
+    let rederived = Command::new("bash")
+        .arg(root.join("scripts/checks/registry-rederive.sh"))
+        .arg(format!(
+            "registry/entries/conformance/{SYSTEM}/{ENTRY_ID}.json"
+        ))
+        .env("REGISTRY_TREE", tree)
+        .env("VEREDICTUM_BIN", env!("CARGO_BIN_EXE_veredictum"))
+        .env("VEREDICTUM_REQUIRE_REDERIVATION", "1")
+        .output()?;
+    assert!(
+        rederived.status.success(),
+        "a record predating the member is unknown, never refused:\n{}\n{}",
+        String::from_utf8_lossy(&rederived.stdout),
+        String::from_utf8_lossy(&rederived.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&rederived.stderr).contains("statement_digest"),
+        "the gate says out loud that the record identifies no statement"
+    );
+
+    std::fs::write(&results, &named)?;
+    Ok(())
+}
+
 /// The verdicts the instrument computes before it submits.
 ///
 /// Exit 1 is an unclean JUDGEMENT — this fixture refuses every request, so the
@@ -295,6 +391,15 @@ fn a_console_submission_is_completed_and_sealed_by_the_lane() -> Fallible {
     }
     let root = repo_root();
     let (tree, record, statement, port) = prepare_submission(&root)?;
+    // #490: the record names the statement that selected it, by the digest a
+    // reader recomputes from the declaration the submission carries.
+    let recorded: veredictum::party::Results =
+        serde_json::from_str(&std::fs::read_to_string(record.join("results.json"))?)?;
+    assert_eq!(
+        recorded.statement_digest,
+        Some(statement_digest(&std::fs::read_to_string(&statement)?)),
+        "a run records the digest of the statement file it was handed"
+    );
     judge_as_the_console_does(&root, &record, &statement)?;
     let entry_path = write_submitted_entry(tree.path(), port)?;
 
@@ -326,6 +431,8 @@ fn a_console_submission_is_completed_and_sealed_by_the_lane() -> Fallible {
     );
 
     tampering_is_refused_by_the_gate(&root, tree.path(), &record)?;
+    a_substituted_statement_is_refused_by_the_gate(&root, tree.path(), &statement)?;
+    a_record_naming_no_statement_still_re_derives(&root, tree.path(), &record)?;
 
     // The completion: seal the record, write the provenance the lane observed.
     let completed = Command::new("bash")

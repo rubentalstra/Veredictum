@@ -19,6 +19,28 @@ version on.
 ## [Unreleased]
 
 ### Added
+- **A results document names the statement that selected it (#490).** New
+  `statement_digest` member in `results.json`: the leading 8 bytes of the
+  SHA-256 over the party statement's bytes as they sit on disk, 16 lowercase
+  hex characters, the same shape `ixit_digest` already published. A reader
+  holding the declaration a record was driven under recomputes it with
+  `sha256sum statement.json | cut -c1-16`. `run` and `replay` both write it,
+  and `schemas/results.schema.json` publishes it.
+
+  What it closes: a record identified the claim it was selected under by
+  `selection_basis` and the declared its-rest format list, so two different
+  statements declaring the same formats were one value. `replay --against` now
+  refuses a re-judgement handed a statement the record does not name, and the
+  refusal prints both digests. The console tier's whole claim is that CI
+  re-derives the verdicts from the recorded exchanges, and a re-derivation
+  under somebody else's claim is not a re-derivation of that record.
+
+  Absence is unknown, never a match. A campaign no statement selected writes no
+  digest, which `selection_basis: statement_blind` already says out loud, and a
+  document written before the member existed carries none either. A
+  re-derivation of such a record is reported and recomputed rather than
+  refused, so `scripts/checks/registry-rederive.sh` keeps re-deriving every
+  record published before this release.
 - **A red run exports the evidence behind its own rows (#463).** New subcommand
   `veredictum evidence`, which carves a named set of a finished run's recorded
   exchanges out of its `transcript.json` and writes them as one bundle. It reads

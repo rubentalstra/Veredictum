@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::party::{OutcomeRecord, OutcomeStatus, Results, Statement};
-use crate::pipeline::{Error, load_clean_root, load_ixit, read_json, to_json_document};
+use crate::pipeline::{Error, load_clean_root, load_ixit, load_statement, to_json_document};
 use crate::run::RunReport;
 use crate::transcript::{Recording, RunTranscript, TRANSCRIPT_FILE};
 
@@ -270,18 +270,39 @@ impl RunOutcome {
     }
 }
 
-/// The digest's width in bytes, which renders as twice that many hex
+/// A provenance digest's width in bytes, which renders as twice that many hex
 /// characters.
-const IXIT_DIGEST_BYTES: usize = 8;
+const DIGEST_BYTES: usize = 8;
+
+/// The leading 8 bytes of the SHA-256 over a document's bytes, lowercase hex.
+///
+/// Nothing is canonicalized, reordered or reformatted first, so every recorded
+/// digest is the one `sha256sum <file> | cut -c1-16` prints over the file the
+/// campaign was handed.
+fn leading_digest(text: &str) -> String {
+    use std::fmt::Write as _;
+
+    use sha2::{Digest as _, Sha256};
+
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .take(DIGEST_BYTES)
+        .fold(
+            String::with_capacity(DIGEST_BYTES.saturating_mul(2)),
+            |mut out, byte| {
+                let _ = write!(out, "{byte:02x}");
+                out
+            },
+        )
+}
 
 /// Returns the ixit digest recorded with a campaign, which binds the results
 /// to the exact declaration they were driven under.
 ///
-/// The digest is the leading `IXIT_DIGEST_BYTES` (8) bytes of the SHA-256
-/// over the ixit document's bytes exactly as they sit on disk, lowercase hex.
-/// Nothing is canonicalized, reordered or reformatted first, so anyone
-/// holding the declaration a published record was driven under re-derives the
-/// recorded value with `sha256sum ixit.json | cut -c1-16`.
+/// The digest is the leading 8 bytes of the SHA-256 over the ixit document's
+/// bytes exactly as they sit on disk, lowercase hex, so anyone holding the
+/// declaration a published record was driven under re-derives the recorded
+/// value with `sha256sum ixit.json | cut -c1-16`.
 ///
 /// ```
 /// use veredictum::pipeline::conformance::ixit_digest;
@@ -291,20 +312,28 @@ const IXIT_DIGEST_BYTES: usize = 8;
 /// ```
 #[must_use]
 pub fn ixit_digest(ixit_text: &str) -> String {
-    use std::fmt::Write as _;
+    leading_digest(ixit_text)
+}
 
-    use sha2::{Digest as _, Sha256};
-
-    Sha256::digest(ixit_text.as_bytes())
-        .iter()
-        .take(IXIT_DIGEST_BYTES)
-        .fold(
-            String::with_capacity(IXIT_DIGEST_BYTES.saturating_mul(2)),
-            |mut out, byte| {
-                let _ = write!(out, "{byte:02x}");
-                out
-            },
-        )
+/// Returns the statement digest recorded with a campaign, which names the
+/// exact claim ISO/IEC 9646 test selection selected it under.
+///
+/// Same shape as [`ixit_digest`], over the statement document's own bytes:
+/// the leading 8 bytes of the SHA-256, lowercase hex, so a reader holding the
+/// statement a published record was selected under re-derives the recorded
+/// value with `sha256sum statement.json | cut -c1-16`. Two statements
+/// declaring the same its-rest formats are one value to every other recorded
+/// fact, and different values here.
+///
+/// ```
+/// use veredictum::pipeline::conformance::statement_digest;
+///
+/// // `printf '{}' | sha256sum` prints 44136fa355b3678a…
+/// assert_eq!(statement_digest("{}"), "44136fa355b3678a");
+/// ```
+#[must_use]
+pub fn statement_digest(statement_text: &str) -> String {
+    leading_digest(statement_text)
 }
 
 /// Drives the catalogue against a live SUT and assembles the party results.
@@ -330,11 +359,12 @@ pub fn execute_run(
     if let Some(needle) = request.filter {
         set.cases.retain(|(_, c)| c.id.as_str().contains(needle));
     }
-    let statement: Option<Statement> = match request.statement {
+    let selected_under: Option<(Statement, String)> = match request.statement {
         None => None,
-        Some(path) => Some(read_json(path, "statement")?),
+        Some(path) => Some(load_statement(path)?),
     };
-    if let (Some(declared), Some((_, register))) = (statement.as_ref(), &set.register) {
+    let statement = selected_under.as_ref().map(|(declared, _)| declared);
+    if let (Some(declared), Some((_, register))) = (statement, &set.register) {
         let gaps = crate::verdict::option_family_gaps(
             declared,
             set.cases.iter().map(|(_, case)| case),
@@ -344,9 +374,9 @@ pub fn execute_run(
             warn(RunWarning::OptionFamilySelection { gaps: &gaps });
         }
     }
-    let report = crate::run::execute(&set, &ixit, statement.as_ref(), request.recording, progress)
+    let report = crate::run::execute(&set, &ixit, statement, request.recording, progress)
         .map_err(|e| Error::Instrument(format!("execution defect: {e}")))?;
-    let selection = Selection::of(statement.as_ref(), &report.unestablished);
+    let selection = Selection::of(statement, &report.unestablished);
     if let Some(advisory) = selection.advisory() {
         warn(advisory);
     }
@@ -364,8 +394,11 @@ pub fn execute_run(
             verification_pack_status: crate::party::VerificationPackStatus::Passed,
         },
         schedule_release: crate::party::SCHEDULE_RELEASE.to_owned(),
-        tech_profile: tech_profile(statement.as_ref()),
+        tech_profile: tech_profile(statement),
         ixit_digest: ixit_digest(&ixit_text),
+        statement_digest: selected_under
+            .as_ref()
+            .map(|(_, text)| statement_digest(text)),
         selection_basis: Some(selection.basis()),
         restapi_specs_version: report.restapi_specs_version.clone(),
         outcomes,
@@ -733,6 +766,50 @@ mod tests {
             .expect("the pinned fixture is a real declaration, not just bytes");
         assert_eq!(ixit_digest(r#"{"instances":{}}"#), "b6d92d2643a85d0c");
         assert_eq!(ixit_digest(FIXTURE_IXIT), "bfbf6ece2dea6ef0");
+    }
+
+    /// A declaration in the shape a party submits one, small enough to pin.
+    const FIXTURE_STATEMENT: &str = r#"{
+  "product": {
+    "name": "example-cdr",
+    "version": "0.0.0-example",
+    "vendor": "nobody",
+    "identifier": "urn:example:cdr"
+  },
+  "schedule_release": "cnf-2.0-w2",
+  "spec_versions": { "its_rest": "1.1.0" },
+  "claims": { "capabilities": ["EhrOperations"], "profiles": ["CORE"] },
+  "tech_profiles": [ { "its": "its-rest", "formats": ["canonical-json"] } ]
+}
+"#;
+
+    /// The statement digest is the same recipe over the statement's bytes, and
+    /// it is worth something only if a reader holding the declaration
+    /// re-derives it, so it is pinned against a value an outside tool produced:
+    /// `sha256sum <fixture> | cut -c1-16`.
+    #[test]
+    fn the_statement_digest_is_the_leading_sha256_bytes_of_the_declaration() {
+        serde_json::from_str::<Statement>(FIXTURE_STATEMENT)
+            .expect("the pinned fixture is a real declaration, not just bytes");
+        assert_eq!(statement_digest(FIXTURE_STATEMENT), "21307080d1024bff");
+        assert_eq!(statement_digest(r#"{"instances":{}}"#), "b6d92d2643a85d0c");
+    }
+
+    /// One changed character is a different claim, and nothing about the
+    /// document's shape is normalized before the digest is taken.
+    #[test]
+    fn the_statement_digest_is_a_function_of_the_declaration_bytes() {
+        let altered = FIXTURE_STATEMENT.replace("\"nobody\"", "\"nobody \"");
+        assert_ne!(
+            statement_digest(FIXTURE_STATEMENT),
+            statement_digest(&altered)
+        );
+        assert_eq!(statement_digest(FIXTURE_STATEMENT).len(), 16);
+        assert!(
+            statement_digest(FIXTURE_STATEMENT)
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+        );
     }
 
     #[test]
