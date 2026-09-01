@@ -138,6 +138,20 @@ version on.
   case under a statement as the drive-time backstop. Every one of the 1146
   committed case cores already carries a non-empty list, so no catalogue
   artifact changed.
+- **The console's documentation capture mode pins every fact a re-render moves
+  (#480).** A capture pass over an unchanged console rewrote most of the
+  committed screenshots, so the `ui-screenshot-guard` job could not tell a real
+  visual change from a re-run. Two facts were reaching a browser unpinned: the
+  connect probe's measured round trip, and the run directory named by the id a
+  run mints, which the live screen prints inside the engine's output tail and
+  the results path beside it. Both are stand-ins in capture mode now, beside
+  the address the harness's fixture server bound, which the scope screen shows
+  verbatim. What a run RECORDED is still never pinned: the case counter, the
+  case driving, the engine's own words and the finished tally stay the run's
+  own. The browser is pinned to one architecture as well — the image digest
+  names a multi-architecture manifest list, so an arm64 workstation and an
+  amd64 CI runner were rendering the same pages with two different Chromium
+  builds.
 - **A malformed call to a console endpoint answers 400 with a sentence, not
   500 with a serializer's phrasing (#484).** Every `#[server]` function is a
   publicly reachable HTTP endpoint, and a call whose arguments will not decode

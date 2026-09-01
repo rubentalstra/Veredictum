@@ -1528,7 +1528,7 @@ pub mod fns {
             },
         )
         .map_err(ServerFnError::new)?;
-        Ok(answer)
+        Ok(crate::capture::probe_answer(&state, answer))
     }
 
     /// The client-safe draft this submitter has, when they have one.
@@ -1539,7 +1539,8 @@ pub mod fns {
     pub async fn fetch_draft() -> Result<Option<DraftView>, ServerFnError> {
         let state: crate::state::ConsoleState = leptos::prelude::expect_context();
         let who = crate::submitter::current(&state);
-        Ok(super::read::draft_view(&state, who))
+        let view = super::read::draft_view(&state, who);
+        Ok(crate::capture::draft(&state, view))
     }
 
     /// The scope preview for a filter.
