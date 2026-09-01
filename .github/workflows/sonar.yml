@@ -53,6 +53,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read # pull-request decoration reads the PR metadata
+      security-events: write # the push-only SARIF upload below (#543)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -162,3 +163,21 @@ jobs:
       - uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # Sonar's own GitHub integration is checks and PR decoration only —
+      # nothing on their side uploads SARIF, which is the only thing the
+      # code-scanning tools page lists (#543). Push-only: a pull request keeps
+      # Sonar's decoration, and the branch alert set is main's. The script
+      # waits on this run's compute task and excludes ACCEPTED/FALSE_POSITIVE,
+      # so a dashboard disposition closes its GitHub alert on the next push.
+      - name: Export the analysis' open findings as SARIF
+        if: github.event_name == 'push'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: bash scripts/sonar/issues-to-sarif.sh rubentalstra_Veredictum sonar-findings.sarif
+      - name: Upload the findings to code scanning
+        if: github.event_name == 'push'
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: sonar-findings.sarif
+          category: sonarqube-cloud
