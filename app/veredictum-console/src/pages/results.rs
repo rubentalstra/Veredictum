@@ -8,8 +8,8 @@
 //! finding is shareable.
 
 use leptos::prelude::{
-    AddAnyAttr, ClassAttribute, CollectView, ElementChild, Get, IntoAny, IntoView, Memo, Resource,
-    Suspend, Suspense, With, component, view,
+    AddAnyAttr, AnyView, ClassAttribute, CollectView, ElementChild, Get, IntoAny, IntoView, Memo,
+    Resource, Suspend, Suspense, With, component, view,
 };
 use leptos_meta::Title;
 use leptos_router::components::A;
@@ -22,6 +22,8 @@ use crate::components::format_view::{Pane, inline_error};
 use crate::components::page_header::{Crumb, PageHeader};
 use crate::components::stat_card::StatCard;
 use crate::components::surface::{CARD_PAD, CARD_TITLE, WELL};
+use crate::evidence_api::EvidenceOffer;
+use crate::evidence_api::fns::fetch_evidence_offer;
 use crate::pages::run::steps;
 use crate::record_api::fns::{fetch_result_detail, fetch_results};
 use crate::record_api::{ExchangeView, ResultDetail, ResultsScreen, TranscriptView};
@@ -58,6 +60,7 @@ pub fn Results() -> impl IntoView {
     let case = query_case();
     let format = query_format();
     let screen = Resource::new(|| (), |()| fetch_results());
+    let offer = Resource::new(|| (), |()| fetch_evidence_offer());
     let detail = Resource::new(
         move || (case.get(), format.get()),
         |(case, format)| async move {
@@ -98,6 +101,14 @@ pub fn Results() -> impl IntoView {
                         }
                             .into_any()
                     }
+                    Err(e) => inline_error(&e.to_string()).into_any(),
+                }
+            })}
+        </Suspense>
+        <Suspense fallback=|| ()>
+            {move || Suspend::new(async move {
+                match offer.await {
+                    Ok(offer) => evidence_view(offer).into_any(),
                     Err(e) => inline_error(&e.to_string()).into_any(),
                 }
             })}
@@ -181,6 +192,62 @@ fn results_view(results: &ResultsScreen) -> impl IntoView + use<> {
             </table>
         </div>
     }
+}
+
+/// The evidence offer: what a red run hands a triage, or why it cannot.
+///
+/// Every branch renders a view, so the server and the browser agree on the
+/// structure (rules §8).
+fn evidence_view(offer: EvidenceOffer) -> AnyView {
+    // Before a finished run the results surface renders its own empty state,
+    // so the section says nothing rather than framing an empty well.
+    if offer == EvidenceOffer::NoRun {
+        return ().into_any();
+    }
+    let body = match offer {
+        // A server-owned axum route, so the anchor is external: after
+        // hydration the client router would otherwise intercept it and 404 a
+        // route it does not own (rules §4).
+        EvidenceOffer::Available => {
+            view! {
+                <a
+                    href=crate::evidence_api::DOWNLOAD_PATH
+                    rel="external"
+                    class=format!("{BTN_SECONDARY} mt-2")
+                >
+                    "Download the red rows' exchanges"
+                </a>
+                <p class="mt-2 text-sm text-ink-muted">
+                    "One JSON document: every failed and errored case, its outcome row, and the requests and responses behind it. The "
+                    <span class="font-mono text-xs">"authorization"</span>
+                    " header's value is withheld; response bodies are the wire's own, so treat the file as clinical data."
+                </p>
+            }
+                .into_any()
+        }
+        EvidenceOffer::NoRedRows => {
+            view! { <p class="text-sm text-ink-muted">"No row went red, so there is nothing to attribute."</p> }
+                .into_any()
+        }
+        EvidenceOffer::NotRecorded => {
+            view! {
+                <p class="text-sm text-ink-muted">
+                    "This run was driven without recording its wire, so the exchanges are gone. Tick "
+                    <span class="font-mono text-xs">"record exchanges"</span>
+                    " at the Run step and grade again."
+                </p>
+            }
+                .into_any()
+        }
+        EvidenceOffer::NoRun => ().into_any(),
+    };
+    view! {
+        <div class=format!("{WELL} mt-4")>
+            <h3 class=CARD_TITLE>"Evidence for a triage"</h3>
+            {body}
+        </div>
+    }
+    .into_any()
 }
 
 /// One exchange as its request and response panes.

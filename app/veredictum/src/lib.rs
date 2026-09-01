@@ -26,6 +26,7 @@ pub mod artifacts;
 pub mod badges;
 pub mod bench;
 pub mod conf_assets;
+pub mod evidence;
 pub mod exec;
 pub mod ids;
 pub mod ixit;

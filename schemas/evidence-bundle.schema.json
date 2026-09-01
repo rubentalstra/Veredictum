@@ -1,0 +1,296 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:openehr:cnf:schema:evidence-bundle:0.1.0",
+  "title": "CNF 2.0 evidence bundle",
+  "description": "The recorded exchanges of a named set of a finished run's cases, carved out of its transcript.json by `veredictum evidence` for a red-run triage to read. Carries the selection it answers, every selected case the recording had nothing for, and the outcome row each exported case recorded. The `authorization` header's value is withheld; response bodies are the wire's own and can carry real patient data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "sut",
+    "schedule_release",
+    "selection",
+    "cases"
+  ],
+  "properties": {
+    "sut": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "schedule_release": {
+      "type": "string",
+      "minLength": 1
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "only",
+        "statuses"
+      ],
+      "description": "What the export was asked for. The three selectors union: a case is exported when any of them names it.",
+      "properties": {
+        "only": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^\\S+$"
+          }
+        },
+        "filter": {
+          "type": "string",
+          "minLength": 1
+        },
+        "statuses": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "passed",
+              "failed",
+              "errored",
+              "skipped",
+              "not_applicable"
+            ]
+          }
+        }
+      }
+    },
+    "without_exchanges": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\S+$"
+      },
+      "description": "Selected case ids the transcript carries no exchange for, sorted. A half-matched selection says so here rather than looking complete."
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "case",
+          "exchanges"
+        ],
+        "properties": {
+          "case": {
+            "type": "string",
+            "pattern": "^\\S+$"
+          },
+          "format": {
+            "enum": [
+              "canonical-json",
+              "canonical-xml",
+              "wt-flat",
+              "wt-structured",
+              "wt"
+            ]
+          },
+          "outcome": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "case",
+              "status",
+              "rows_driven",
+              "rows_total"
+            ],
+            "properties": {
+              "case": {
+                "type": "string",
+                "pattern": "^\\S+$"
+              },
+              "format": {
+                "enum": [
+                  "canonical-json",
+                  "canonical-xml",
+                  "wt-flat",
+                  "wt-structured",
+                  "wt"
+                ]
+              },
+              "status": {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "errored",
+                  "skipped",
+                  "not_applicable"
+                ]
+              },
+              "rows_driven": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "rows_total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "failing_step": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "reason": {
+                "type": "string"
+              },
+              "citation": {
+                "type": "string"
+              },
+              "failed_rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "row",
+                    "step",
+                    "reason"
+                  ],
+                  "properties": {
+                    "row": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "step": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "reason": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "enum": [
+                        "skipped",
+                        "not_applicable"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "case",
+                    "status",
+                    "rows_driven",
+                    "rows_total",
+                    "citation"
+                  ],
+                  "properties": {
+                    "citation": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "exchanges": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "seq",
+                "row",
+                "request",
+                "response"
+              ],
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "The exchange's ordinal within its case, in send order — provisioning exchanges included."
+                },
+                "row": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "request": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "method",
+                    "url",
+                    "headers"
+                  ],
+                  "properties": {
+                    "method": {
+                      "enum": [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "DELETE",
+                        "HEAD",
+                        "OPTIONS"
+                      ]
+                    },
+                    "url": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "headers": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "body": {}
+                  }
+                },
+                "response": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "status",
+                    "headers"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "integer",
+                      "minimum": 100,
+                      "maximum": 599
+                    },
+                    "headers": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
+                    },
+                    "body": {}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

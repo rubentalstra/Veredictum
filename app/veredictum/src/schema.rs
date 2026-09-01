@@ -863,9 +863,47 @@ pub fn statement_schema() -> Value {
     })
 }
 
+/// One case×format outcome record, as the results document and the evidence
+/// bundle both carry it.
+fn outcome_record_def() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["case", "status", "rows_driven", "rows_total"],
+        "properties": {
+            "case": { "type": "string", "pattern": CASE_ID_PATTERN },
+            "format": { "enum": tokens(FormatName::ALL) },
+            "status": { "enum": tokens(OutcomeStatus::ALL) },
+            "rows_driven": { "type": "integer", "minimum": 0 },
+            "rows_total": { "type": "integer", "minimum": 0 },
+            "failing_step": { "type": "integer", "minimum": 0 },
+            "reason": { "type": "string" },
+            "citation": { "type": "string" },
+            "failed_rows": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["row", "step", "reason"],
+                    "properties": {
+                        "row": { "type": "integer", "minimum": 0 },
+                        "step": { "type": "integer", "minimum": 0 },
+                        "reason": { "type": "string", "minLength": 1 }
+                    }
+                }
+            }
+        },
+        "allOf": [
+            { "if": { "properties": { "status": { "enum": ["skipped", "not_applicable"] } },
+                      "required": ["status"] },
+              "then": { "required": ["case", "status", "rows_driven", "rows_total", "citation"],
+                        "properties": { "citation": { "type": "string", "minLength": 1 } } } }
+        ]
+    })
+}
+
 /// `results.json` — the party results (the campaign outcomes).
 #[must_use]
-#[expect(clippy::too_many_lines, reason = "one literal JSON-Schema document")]
 pub fn results_schema() -> Value {
     json!({
         "$schema": DRAFT,
@@ -913,40 +951,7 @@ pub fn results_schema() -> Value {
             },
             "outcomes": {
                 "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "required": ["case", "status", "rows_driven", "rows_total"],
-                    "properties": {
-                        "case": { "type": "string", "pattern": CASE_ID_PATTERN },
-                        "format": { "enum": tokens(FormatName::ALL) },
-                        "status": { "enum": tokens(OutcomeStatus::ALL) },
-                        "rows_driven": { "type": "integer", "minimum": 0 },
-                        "rows_total": { "type": "integer", "minimum": 0 },
-                        "failing_step": { "type": "integer", "minimum": 0 },
-                        "reason": { "type": "string" },
-                        "citation": { "type": "string" },
-                        "failed_rows": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": false,
-                                "required": ["row", "step", "reason"],
-                                "properties": {
-                                    "row": { "type": "integer", "minimum": 0 },
-                                    "step": { "type": "integer", "minimum": 0 },
-                                    "reason": { "type": "string", "minLength": 1 }
-                                }
-                            }
-                        }
-                    },
-                    "allOf": [
-                        { "if": { "properties": { "status": { "enum": ["skipped", "not_applicable"] } },
-                                  "required": ["status"] },
-                          "then": { "required": ["case", "status", "rows_driven", "rows_total", "citation"],
-                                    "properties": { "citation": { "type": "string", "minLength": 1 } } } }
-                    ]
-                }
+                "items": outcome_record_def()
             },
             "measurements": {
                 "type": "array",
@@ -1717,6 +1722,45 @@ pub fn transcript_schema() -> Value {
     })
 }
 
+/// One recorded wire exchange, as the run transcript and the evidence bundle
+/// both carry it.
+fn recorded_exchange_def() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["seq", "row", "request", "response"],
+        "properties": {
+            "seq": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "The exchange's ordinal within its case, in send order — provisioning exchanges included."
+            },
+            "row": { "type": "integer", "minimum": 0 },
+            "request": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["method", "url", "headers"],
+                "properties": {
+                    "method": { "enum": tokens(HttpMethod::ALL) },
+                    "url": { "type": "string", "minLength": 1 },
+                    "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "body": {}
+                }
+            },
+            "response": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["status", "headers"],
+                "properties": {
+                    "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+                    "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "body": {}
+                }
+            }
+        }
+    })
+}
+
 /// The run wire transcript (`transcript.json` beside a run's `results.json`).
 ///
 /// A different family from [`transcript_schema`], which is the verification
@@ -1757,40 +1801,80 @@ pub fn run_transcript_schema() -> Value {
                         "exchanges": {
                             "type": "array",
                             "minItems": 1,
-                            "items": {
-                                "type": "object",
-                                "additionalProperties": false,
-                                "required": ["seq", "row", "request", "response"],
-                                "properties": {
-                                    "seq": {
-                                        "type": "integer",
-                                        "minimum": 1,
-                                        "description": "The exchange's ordinal within its case, in send order — provisioning exchanges included."
-                                    },
-                                    "row": { "type": "integer", "minimum": 0 },
-                                    "request": {
-                                        "type": "object",
-                                        "additionalProperties": false,
-                                        "required": ["method", "url", "headers"],
-                                        "properties": {
-                                            "method": { "enum": tokens(HttpMethod::ALL) },
-                                            "url": { "type": "string", "minLength": 1 },
-                                            "headers": { "type": "object", "additionalProperties": { "type": "string" } },
-                                            "body": {}
-                                        }
-                                    },
-                                    "response": {
-                                        "type": "object",
-                                        "additionalProperties": false,
-                                        "required": ["status", "headers"],
-                                        "properties": {
-                                            "status": { "type": "integer", "minimum": 100, "maximum": 599 },
-                                            "headers": { "type": "object", "additionalProperties": { "type": "string" } },
-                                            "body": {}
-                                        }
-                                    }
-                                }
-                            }
+                            "items": recorded_exchange_def()
+                        }
+                    }
+                }
+            }
+        }
+    })
+}
+
+/// The evidence bundle (`evidence.json`, written by `veredictum evidence`).
+///
+/// A SELECTION out of a run transcript, carrying the question it answers and
+/// the outcome row each selected case recorded. It is never empty: the export
+/// refuses rather than write a document of the right shape with no content in
+/// it, so `cases` has a floor of one and every entry has at least one
+/// exchange.
+#[must_use]
+pub fn evidence_bundle_schema() -> Value {
+    json!({
+        "$schema": DRAFT,
+        "$id": urn("evidence-bundle"),
+        "title": "CNF 2.0 evidence bundle",
+        "description": "The recorded exchanges of a named set of a finished run's cases, carved out of its transcript.json by `veredictum evidence` for a red-run triage to read. Carries the selection it answers, every selected case the recording had nothing for, and the outcome row each exported case recorded. The `authorization` header's value is withheld; response bodies are the wire's own and can carry real patient data.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["sut", "schedule_release", "selection", "cases"],
+        "properties": {
+            "sut": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "version"],
+                "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "version": { "type": "string", "minLength": 1 }
+                }
+            },
+            "schedule_release": { "type": "string", "minLength": 1 },
+            "selection": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["only", "statuses"],
+                "description": "What the export was asked for. The three selectors union: a case is exported when any of them names it.",
+                "properties": {
+                    "only": {
+                        "type": "array",
+                        "items": { "type": "string", "pattern": CASE_ID_PATTERN }
+                    },
+                    "filter": { "type": "string", "minLength": 1 },
+                    "statuses": {
+                        "type": "array",
+                        "items": { "enum": tokens(OutcomeStatus::ALL) }
+                    }
+                }
+            },
+            "without_exchanges": {
+                "type": "array",
+                "items": { "type": "string", "pattern": CASE_ID_PATTERN },
+                "description": "Selected case ids the transcript carries no exchange for, sorted. A half-matched selection says so here rather than looking complete."
+            },
+            "cases": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["case", "exchanges"],
+                    "properties": {
+                        "case": { "type": "string", "pattern": CASE_ID_PATTERN },
+                        "format": { "enum": tokens(FormatName::ALL) },
+                        "outcome": outcome_record_def(),
+                        "exchanges": {
+                            "type": "array",
+                            "minItems": 1,
+                            "items": recorded_exchange_def()
                         }
                     }
                 }
@@ -2807,6 +2891,7 @@ pub fn emit_all() -> Vec<(&'static str, Value)> {
         ("aql-probe.schema.json", aql_probe_schema()),
         ("transcript.schema.json", transcript_schema()),
         ("run-transcript.schema.json", run_transcript_schema()),
+        ("evidence-bundle.schema.json", evidence_bundle_schema()),
         ("bench-result.schema.json", bench_result_schema()),
         ("bench-packs.schema.json", bench_packs_schema()),
         ("registry-entry.schema.json", registry_entry_schema()),

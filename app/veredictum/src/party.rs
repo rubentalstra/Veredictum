@@ -307,7 +307,7 @@ impl OutcomeStatus {
 /// One failing row of a table-driven case: the row index (0-based, the
 /// content-table order), the failing step (0 = a postcondition/aggregate),
 /// and the reason.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FailedRow {
     /// The 0-based row index in the case's parameter table.
     pub row: usize,
@@ -319,7 +319,7 @@ pub struct FailedRow {
 
 /// One case×format outcome record — the executor's [`CaseRecord`] rolled up
 /// into a single verdict for the results document.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OutcomeRecord {
     /// The case id.
     pub case: CaseId,

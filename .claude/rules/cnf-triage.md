@@ -43,10 +43,44 @@ a test suite that presumes its own correctness and questions the server.
 | **Runner machinery** | the SUT behaved correctly but `app/veredictum/src/**` misdrove the case or misjudged the response (driver, provisioning, resolver, outcome classification, comparator, verdicts) | fix the runner module; the affected rows were inconclusive, not SUT failures |
 | **Catalogue artifact** | the hand-authored schedule is wrong versus the spec (case core, operation binding, corpus, vocabulary) | edit the artifact WITH a new spec-cited source for the corrected expectation |
 
+## Getting the evidence out of a run (do this first)
+
+A triage with no exchanges cannot attribute anything, and hand-carving them
+out of a 74 MB transcript is how the first live triage ended up reading
+130,761 empty objects (#463). One command turns a finished run's red rows into
+the triage input:
+
+```bash
+veredictum evidence --transcript <RUN>/transcript.json \
+    --results <RUN>/results.json --failing --out <RUN>/evidence.json
+```
+
+Every `failed` and every `errored` case, each with the outcome row the run
+recorded and the requests and responses behind it, in one document. `--only
+<CASE>` (repeatable) and `--filter <SUBSTRING>` name a set directly when the
+question is narrower. No statement is read: a claim is what a party publishes,
+and the exchanges a run recorded are readable without one.
+
+The export **refuses** rather than write a bundle that would carry nothing, so
+a document of the right shape with no content in it cannot reach a triage. A
+selection that half-matched still exports and names every case it could not
+carry in `without_exchanges` — read that field before concluding anything about
+a case that is missing from `cases`.
+
+Two preconditions. The run must have been driven with `run
+--record-exchanges`; without it the exchanges were classified and dropped, and
+the honest answer is that the rows are inconclusive with no evidence. And the
+bundle carries response bodies verbatim, so it is operator-controlled output
+and belongs where the run's own record is stored, never in a shared log.
+
+In the console, a red run's results screen offers the same document under
+**Evidence for a triage**.
+
 ## The protocol (per red row)
 
-1. Read the observed wire exchange (`results.json` / transcript): what was
-   actually sent, what came back, how it was classified.
+1. Read the observed wire exchange (the `evidence` bundle above, or
+   `results.json` and the transcript directly): what was actually sent, what
+   came back, how it was classified.
 2. Read the case core and the operation binding it realized through (what the
    catalogue expects, and its cited spec source). Note exactly what it claims
    to expect and why.

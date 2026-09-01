@@ -32,6 +32,13 @@
 //!                                       own transcript instead of a server,
 //!                                       and refuse a results.json whose rows
 //!                                       the recorded exchanges do not support
+//! veredictum evidence --transcript FILE --out FILE [--results FILE]
+//!                     [--failing] [--only ID]... [--filter S]
+//!                                       export a finished run's recorded
+//!                                       exchanges for a named set of cases —
+//!                                       the triage input. Needs no statement,
+//!                                       and refuses a bundle that would carry
+//!                                       nothing
 //! veredictum verify-record --record DIR --key FILE
 //!                                       recompute every digest a sealed
 //!                                       bundle's manifest names and verify
@@ -131,6 +138,7 @@ use veredictum::pipeline::catalogue::{
     coverage_report_path, validate_tree_reviewing, write_coverage_report,
 };
 use veredictum::pipeline::conformance::{RunRequest, RunWarning, execute_run};
+use veredictum::pipeline::evidence::{EvidenceRequest, export_evidence};
 use veredictum::pipeline::judgement::{JudgementRequest, judge};
 use veredictum::pipeline::measured::{
     MeasuredEvent, MeasuredRequest, ProbeRequest, StressRequest, SustainedWindow, run_aql_probe,
@@ -537,6 +545,33 @@ enum Command {
         #[arg(long)]
         progress: bool,
     },
+    /// Export a finished run's recorded exchanges for a named set of cases:
+    /// the triage input, carved out of the run's own transcript. No statement
+    /// is read, and a bundle that would carry nothing is refused.
+    #[command(group(clap::ArgGroup::new("selection").required(true).multiple(true)))]
+    Evidence {
+        /// The run's `transcript.json` (written by `run --record-exchanges`).
+        #[arg(long)]
+        transcript: PathBuf,
+        /// The run's `results.json`. Required by `--failing`, and otherwise
+        /// optional: supplying it puts each exported case's outcome row
+        /// beside its exchanges.
+        #[arg(long)]
+        results: Option<PathBuf>,
+        /// Export the red rows the results record names — every `failed` and
+        /// every `errored` case. The one-command triage input.
+        #[arg(long, requires = "results", group = "selection")]
+        failing: bool,
+        /// Export this case, by id. Repeat the flag once per case.
+        #[arg(long = "only", group = "selection")]
+        only: Vec<String>,
+        /// Export cases whose id contains this substring.
+        #[arg(long, group = "selection")]
+        filter: Option<String>,
+        /// Where the bundle is written.
+        #[arg(long)]
+        out: PathBuf,
+    },
     /// Verify a sealed bundle: recompute every digest its record manifest
     /// names, and check the detached signature over that manifest.
     VerifyRecord {
@@ -659,6 +694,23 @@ fn main() -> ExitCode {
             out.as_deref(),
             against.as_deref(),
             progress,
+        ),
+        Command::Evidence {
+            transcript,
+            results,
+            failing,
+            only,
+            filter,
+            out,
+        } => evidence_command(
+            &EvidenceRequest {
+                transcript: &transcript,
+                results: results.as_deref(),
+                only: &only,
+                filter: filter.as_deref(),
+                failing,
+            },
+            &out,
         ),
         Command::Perf {
             root,
@@ -1297,6 +1349,43 @@ fn emit_documents(
         emitted.push((record_name(path)?, body));
     }
     Ok(emitted)
+}
+
+/// Exports a finished run's recorded exchanges for the selected cases.
+///
+/// The exit code carries the answer: `0` when a bundle was written, `2` when
+/// the export was refused — an unreadable document, a selector the run cannot
+/// satisfy, or a bundle that would have carried nothing.
+fn evidence_command(request: &EvidenceRequest<'_>, out: &Path) -> ExitCode {
+    let bundle = match export_evidence(request) {
+        Ok(bundle) => bundle,
+        Err(e) => return fail(&e),
+    };
+    let document = match to_json_document(&bundle, "evidence bundle") {
+        Ok(document) => document,
+        Err(e) => return fail(&e),
+    };
+    if let Err(code) = emit_one(out, &document) {
+        return code;
+    }
+    println!(
+        "wrote {}: {} case(s), {} exchange(s) against {} {}",
+        out.display(),
+        bundle.cases.len(),
+        bundle.exchange_count(),
+        bundle.sut.name,
+        bundle.sut.version
+    );
+    // A half-matched selection is stated on the console as well as in the
+    // document, so it is seen without opening the file.
+    if !bundle.without_exchanges.is_empty() {
+        eprintln!(
+            "{} selected case(s) carry no recorded exchange: {}",
+            bundle.without_exchanges.len(),
+            bundle.without_exchanges.join(", ")
+        );
+    }
+    ExitCode::SUCCESS
 }
 
 /// Reads a committed results document.

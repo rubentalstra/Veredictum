@@ -28,6 +28,7 @@ pub mod assets;
 pub mod bench;
 pub mod catalogue;
 pub mod conformance;
+pub mod evidence;
 pub mod judgement;
 pub mod measured;
 pub mod replay;
@@ -129,6 +130,10 @@ pub enum Error {
     /// prefix so the caller can print it unchanged.
     #[error("{0}")]
     Instrument(String),
+    /// The evidence export would have handed back a bundle with nothing in
+    /// it, which is the one thing that document may never be.
+    #[error("{0}")]
+    Evidence(#[from] crate::evidence::EvidenceError),
 }
 
 fn join_lines<T: std::fmt::Display>(items: &[T]) -> String {

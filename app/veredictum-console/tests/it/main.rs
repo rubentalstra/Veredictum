@@ -19,6 +19,8 @@ mod e2e_console;
 #[cfg(feature = "ssr")]
 mod engine_gate;
 #[cfg(feature = "ssr")]
+mod evidence_gate;
+#[cfg(feature = "ssr")]
 mod export_gate;
 #[cfg(feature = "ssr")]
 mod github_client;

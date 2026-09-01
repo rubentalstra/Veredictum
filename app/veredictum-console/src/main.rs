@@ -70,6 +70,12 @@ async fn main() -> anyhow::Result<()> {
             veredictum_console::export_api::DOWNLOAD_PATH,
             axum::routing::get(veredictum_console::export_api::route::record_zip),
         )
+        // The red rows' exchanges, carved by the engine on request: the
+        // triage input, downloaded rather than rendered.
+        .route(
+            veredictum_console::evidence_api::DOWNLOAD_PATH,
+            axum::routing::get(veredictum_console::evidence_api::route::evidence_json),
+        )
         .route(
             veredictum_console::verify_api::UPLOAD_PATH,
             axum::routing::post(veredictum_console::verify_api::route::upload),
