@@ -134,14 +134,14 @@ for i in "${!NAMES[@]}"; do
   rm -f /tmp/gate.$$.log
 done
 
-if [ ${#skipped[@]} -gt 0 ]; then
+if [[ ${#skipped[@]} -gt 0 ]]; then
   printf '\n\033[1mgates: %d skipped:\033[0m %s\n' "${#skipped[@]}" "$(printf '%s; ' "${skipped[@]}")"
 fi
-if [ ${#failed[@]} -gt 0 ]; then
+if [[ ${#failed[@]} -gt 0 ]]; then
   printf '\n\033[1mgates: %d failed:\033[0m %s\n' "${#failed[@]}" "$(printf '%s; ' "${failed[@]}")" >&2
   exit 1
 fi
-if [ ${#skipped[@]} -gt 0 ]; then
+if [[ ${#skipped[@]} -gt 0 ]]; then
   printf '\ngates: every gate RUN in [%s] passed; %d skipped above\n' "$WANT" "${#skipped[@]}"
   exit 0
 fi

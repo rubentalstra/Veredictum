@@ -73,6 +73,7 @@ case "$TOPOLOGY" in
     echo "::error::the topology id carries something outside [a-z0-9-]" >&2
     exit 2
     ;;
+  *) ;;
 esac
 
 DECLARATION="$ROOT/registry/topologies/$TOPOLOGY/topology.json"

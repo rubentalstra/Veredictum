@@ -1527,7 +1527,7 @@ exit 0
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
-        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))?;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))?;
     }
     Ok((binary, log))
 }
@@ -1584,7 +1584,7 @@ fn a_runtime_that_refuses_its_version_is_unavailable() -> Fallible {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
-        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o755))?;
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700))?;
     }
     let error = DockerCli::at(&binary)
         .probe()
