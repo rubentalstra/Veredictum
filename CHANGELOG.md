@@ -18,6 +18,13 @@ version on.
 
 ## [Unreleased]
 
+### Fixed
+
+- A finished run's elapsed time on the console's live screen kept growing on
+  every read, because the snapshot derived it from the wall clock instead of
+  the run's own completion instant. A terminal run (finished, cancelled,
+  expired, or failed) now reports the fixed duration it actually took (#464).
+
 ## [0.1.5] - 2026-09-01
 
 ### Added
