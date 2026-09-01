@@ -50,25 +50,25 @@ jobs:
           # /healthz sits outside the route tree, so it answers even when the
           # bundle or the app shell is broken. It claims only that the server
           # accepts connections, which is exactly the first question.
-          health="$(curl -sS -m 20 -o /dev/null -w '%{http_code}' "${HOSTED_BASE}/healthz" || echo 000)"
+          health="$(curl -sS --proto '=https' --tlsv1.2 -m 20 -o /dev/null -w '%{http_code}' "${HOSTED_BASE}/healthz" || echo 000)"
 
           # And the served version, from the footer the shell renders. A 200 is
           # not enough: an old deployment answers 200 too.
-          body="$(curl -sS -m 30 "${HOSTED_BASE}/" || true)"
+          body="$(curl -sS --proto '=https' --tlsv1.2 -m 30 "${HOSTED_BASE}/" || true)"
           served="$(printf '%s' "$body" | grep -oE 'engine [0-9][0-9A-Za-z.+-]*' | head -1 | cut -d' ' -f2 || true)"
 
           # What it SHOULD serve: the release pointer's own version label.
-          tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
-          idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+          tok=$(curl -fsS --proto '=https' --tlsv1.2 "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+          idx=$(curl -fsS --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
             -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
             "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/latest" || true)
           child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
           expected=""
           if [ -n "$child" ]; then
-            cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+            cfg=$(curl -fsS --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
               -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
               "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
-            expected=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
+            expected=$(curl -fsSL --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
               "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
               | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
           fi

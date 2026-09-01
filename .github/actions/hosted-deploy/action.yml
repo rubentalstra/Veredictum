@@ -105,9 +105,9 @@ runs:
         EXPECTED: ${{ inputs.expected-version }}
       run: |
         set -euo pipefail
-        tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+        tok=$(curl -fsS --proto '=https' --tlsv1.2 "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
         digest_of() {
-          curl -fsS -o /dev/null -w '%{header_json}' \
+          curl -fsS --proto '=https' --tlsv1.2 -o /dev/null -w '%{header_json}' \
             -H "Authorization: Bearer ${tok}" \
             -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
             "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/$1" \
@@ -133,15 +133,15 @@ runs:
         REF: ${{ inputs.expected-version || 'latest' }}
       run: |
         set -euo pipefail
-        tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
-        idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+        tok=$(curl -fsS --proto '=https' --tlsv1.2 "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+        idx=$(curl -fsS --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
           -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
           "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${REF}")
         child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
-        cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+        cfg=$(curl -fsS --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
           -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
           "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
-        carries=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
+        carries=$(curl -fsSL --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
           "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
           | jq -r '.config.Labels["eu.veredictum.image.carries-catalogue"] // empty')
         if [ "$carries" != "true" ]; then
@@ -171,15 +171,15 @@ runs:
         set -euo pipefail
         expected="${EXPECTED:-}"
         if [ -z "$expected" ]; then
-          tok=$(curl -fsS "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
-          idx=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+          tok=$(curl -fsS --proto '=https' --tlsv1.2 "https://ghcr.io/token?scope=repository:${IMAGE#ghcr.io/}:pull" | sed -nE 's/.*"token":"([^"]+)".*/\1/p')
+          idx=$(curl -fsS --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
             -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json" \
             "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/latest")
           child=$(printf '%s' "$idx" | jq -r '[.manifests[] | select(.platform.os == "linux")][0].digest // empty')
-          cfg=$(curl -fsS -H "Authorization: Bearer ${tok}" \
+          cfg=$(curl -fsS --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
             -H "Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
             "https://ghcr.io/v2/${IMAGE#ghcr.io/}/manifests/${child}" | jq -r '.config.digest // empty')
-          expected=$(curl -fsSL -H "Authorization: Bearer ${tok}" \
+          expected=$(curl -fsSL --proto '=https' --tlsv1.2 -H "Authorization: Bearer ${tok}" \
             "https://ghcr.io/v2/${IMAGE#ghcr.io/}/blobs/${cfg}" \
             | jq -r '.config.Labels["org.opencontainers.image.version"] // empty')
           if [ -z "$expected" ]; then

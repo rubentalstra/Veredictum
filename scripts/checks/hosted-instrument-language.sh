@@ -43,8 +43,8 @@ allowed() {
   # A CSP directive name, in the policy comment every landing page carries.
   case "$hit" in
     *frame-ancestors*) return 0 ;;
+    *) return 1 ;;
   esac
-  return 1
 }
 
 scan() {
