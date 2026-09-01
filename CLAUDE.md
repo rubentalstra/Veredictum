@@ -377,7 +377,11 @@ pipeline is a `needs` edge, so no leg guesses whether an earlier one finished.
    PR moves it, the version in the tree at tag time is what publishes, and the
    console's `veredictum = "=X"` moves in the same commit. The console's
    `ENGINE_PIN` follows on its own: `app/veredictum-console/build.rs` reads
-   that dependency line and substitutes the value.
+   that dependency line and substitutes the value. The committed example
+   results document embeds this version, so whichever PR moves the version
+   also runs `cargo run --example make_example_results` and commits the
+   result — the PR-level path filter does not catch the drift, and the push
+   run to main does (#521).
 3. `CITATION.cff`: `version` and `date-released`.
 4. `bash scripts/render/zenodo-json.sh` — `.zenodo.json` is GENERATED, because
    Zenodo ignores `CITATION.cff` completely whenever a `.zenodo.json` exists
