@@ -29,6 +29,11 @@ version on.
 
 ### Fixed
 
+- The console's body limit reached only the five server-owned routes, so every
+  `#[server]` endpoint kept axum's 2 MiB default and a paste past it was cut
+  off by the transport before the page that judges it ever saw it. Each
+  endpoint now carries the cap its own code enforces, and a caller past a cap
+  reads that endpoint's sentence (#496).
 - A finished run's elapsed time on the console's live screen kept growing on
   every read, because the snapshot derived it from the wall clock instead of
   the run's own completion instant. A terminal run (finished, cancelled,

@@ -54,6 +54,8 @@ pub mod posture;
 pub mod rate_limit;
 pub mod record_api;
 pub mod redirect;
+#[cfg(feature = "ssr")]
+pub mod router;
 pub mod run_api;
 pub mod run_job;
 pub mod site_bundle;
@@ -66,18 +68,6 @@ pub mod target_safety;
 pub mod theme;
 pub mod verify_api;
 
-/// The body cap the server installs on the upload routes: the larger of the
-/// two upload caps, as this host's `usize`.
-///
-/// # Errors
-/// When the cap does not fit `usize` — a host too small to hold the limits
-/// the pages enforce. The server refuses to start on it, because the one
-/// value a body cap must never fall back to is "unlimited".
-#[cfg(feature = "ssr")]
-pub fn upload_body_cap() -> Result<usize, std::num::TryFromIntError> {
-    usize::try_from(verify_api::unpack::MAX_UPLOAD_BYTES.max(bench_api::upload::MAX_BATCH_BYTES))
-}
-
 /// The browser entry point: installs the panic hook so a client-side panic
 /// reports a real stack trace, then hydrates the server-rendered body.
 #[cfg(feature = "hydrate")]
@@ -85,24 +75,4 @@ pub fn upload_body_cap() -> Result<usize, std::num::TryFromIntError> {
 pub fn hydrate() {
     console_error_panic_hook::set_once();
     leptos::mount::hydrate_body(app::App);
-}
-
-#[cfg(all(test, feature = "ssr"))]
-mod cap_tests {
-    //! The router body cap: the value main installs is the caps' own maximum,
-    //! and the conversion succeeds on every host this ships to.
-
-    #[test]
-    fn the_upload_body_cap_is_the_larger_of_the_two_upload_caps() {
-        let cap = super::upload_body_cap();
-        assert_eq!(
-            cap,
-            usize::try_from(
-                super::verify_api::unpack::MAX_UPLOAD_BYTES
-                    .max(super::bench_api::upload::MAX_BATCH_BYTES)
-            ),
-            "the installed cap is derived from the caps the pages enforce"
-        );
-        assert_eq!(cap, Ok(33_554_432), "32 MiB, the bench batch cap");
-    }
 }

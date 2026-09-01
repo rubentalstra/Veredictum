@@ -654,7 +654,10 @@ pub mod read {
     use crate::submitter::Submitter;
 
     /// The pasted-claim size cap: far above any real ICS, far below abuse.
-    const STATEMENT_CAP_BYTES: usize = 1_048_576;
+    ///
+    /// The router sizes the server functions' transport cap from this number,
+    /// so a paste past it reads this module's own sentence.
+    pub const STATEMENT_CAP_BYTES: u64 = 1_048_576;
 
     /// The refusal every step past Connect gives when no draft exists.
     const NO_DRAFT: &str = "no connection draft: complete the Connect step first";
@@ -724,7 +727,7 @@ pub mod read {
         let summary = statement_json
             .as_deref()
             .map(|body| {
-                if body.len() > STATEMENT_CAP_BYTES {
+                if count(body.len()) > STATEMENT_CAP_BYTES {
                     return Err(format!(
                         "the statement is {} bytes; the cap is {STATEMENT_CAP_BYTES}",
                         body.len()

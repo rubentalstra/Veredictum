@@ -179,10 +179,6 @@ pub mod route {
     /// Outside the Leptos route tree because it answers with bytes rather
     /// than a view, so every anchor pointing at it carries `rel="external"`
     /// and the client router does not intercept it.
-    #[expect(
-        clippy::unused_async,
-        reason = "an axum handler is async by contract; this one only spawns the engine and reads the filesystem"
-    )]
     pub async fn evidence_json(
         axum::Extension(state): axum::Extension<crate::state::ConsoleState>,
         connect: Option<axum::Extension<axum::extract::ConnectInfo<std::net::SocketAddr>>>,

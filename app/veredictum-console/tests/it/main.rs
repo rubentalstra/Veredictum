@@ -11,6 +11,8 @@
 #[cfg(feature = "ssr")]
 mod bench_surfaces;
 #[cfg(feature = "ssr")]
+mod body_limits;
+#[cfg(feature = "ssr")]
 mod bundle_names;
 #[cfg(feature = "ssr")]
 mod captures;
