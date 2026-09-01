@@ -341,19 +341,21 @@ conditions in public.
 |---|---|
 | Provider | Hetzner Cloud |
 | Location | Nuremberg, Germany, network zone `eu-central` |
-| Machine | CPX12: 1 vCPU, 2 GB RAM, 40 GB local disk |
-| Price | €13.90 per month, from the account's own record on 2026-08-31 |
+| Machine | CX33: 4 vCPU, 8 GB RAM, 40 GB local disk |
+| Price | €10.27 per month, from the account's own record on 2026-09-01 |
 | Paid by | The maintainer, out of pocket. No vendor funds the instrument that grades them |
-| Concurrent runs | One |
+| Concurrent runs | Two |
 
-The cap comes from the machine. An engine process loads the whole catalogue, and
-it shares 2 GB with the console, the proxy and the operating system. A second
-concurrent run would be the OOM killer ending a conformance run halfway
-through, which looks exactly like a defect in the instrument. The
-number lives in one place, `VEREDICTUM_MAX_CONCURRENT_RUNS` in the box's
-environment file, beside the container's memory limit. Raising it is an
-environment edit and a redeploy, never a release, so a bigger machine changes
-what the instrument admits without changing a line of code.
+The cap comes from the machine. An engine process loads the whole catalogue,
+and every concurrent run shares the box's 8 GB with the console, the proxy and
+the operating system. A cap above what the memory holds would be the OOM
+killer ending a conformance run halfway through, which looks exactly like a
+defect in the instrument, so the value is the one #388 reasoned for an 8 GB
+machine and it moves only with a measurement. The number lives in one place,
+`VEREDICTUM_MAX_CONCURRENT_RUNS` in the box's environment file, beside the
+container's memory limit. Raising it is an environment edit and a redeploy,
+never a release, so a bigger machine changes what the instrument admits
+without changing a line of code.
 
 **The host holds no signing key, in any form, at any step.** A record produced
 there is signed only after this repository's CI has re-derived its verdicts from
