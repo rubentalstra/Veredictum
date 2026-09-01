@@ -126,6 +126,16 @@ pub fn replay_run(
         None => None,
         Some(path) => Some(read_json(path, "statement")?),
     };
+    if let (Some(declared), Some((_, register))) = (statement.as_ref(), &set.register) {
+        let gaps = crate::verdict::option_family_gaps(
+            declared,
+            set.cases.iter().map(|(_, case)| case),
+            register,
+        );
+        if !gaps.is_empty() {
+            warn(RunWarning::OptionFamilySelection { gaps: &gaps });
+        }
+    }
     let transcript: RunTranscript = read_json(request.transcript, "transcript")?;
     let report = crate::run::replay(&set, &ixit, statement.as_ref(), &transcript, progress)
         .map_err(|e| Error::Instrument(format!("replay defect: {e}")))?;

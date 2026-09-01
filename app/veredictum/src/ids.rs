@@ -143,6 +143,18 @@ string_id!(
 );
 
 string_id!(
+    /// The name of one option FAMILY of an `option_select` ambiguity.
+    ///
+    /// A family is one independent choice, and its mutually exclusive arms
+    /// are its option tags: `ehr-xml-write` has the arms
+    /// `ehr-xml-write-accepted` and `ehr-xml-write-refused`.
+    OptionFamilyName,
+    "option family name",
+    "non-empty [a-z0-9_-]",
+    |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+);
+
+string_id!(
     /// A named projection over a corpus data set (referenced as
     /// `${ds:<key>#<view>}`).
     ViewName,

@@ -118,6 +118,14 @@ pub enum CheckId {
     /// believes it concludes the case is held back while it drives and gates.
     /// Applicability is decided by the typed fields alone.
     GuardCondition,
+    /// Option-family selection — the second half of the static conformance
+    /// review over a SUPPLIED declaration: every option family the claim
+    /// reaches is answered with exactly one arm. The arms of a family are
+    /// mutually exclusive, so a declaration that answers none of them
+    /// deselects every row of that family and publishes a narrower claim as a
+    /// complete one, and one that answers several selects rows whose
+    /// expectations contradict each other.
+    OptionFamilySelection,
     /// A supplied declaration's `served_extensions` families each resolve in
     /// the catalogue's outward wire-surface axis and are declared once. A
     /// declaration publishes the route families its own supplier declares,
@@ -190,6 +198,7 @@ impl CheckId {
             Self::ClaimCompleteness => "claim-completeness",
             Self::GuardScope => "guard-scope",
             Self::GuardCondition => "guard-condition",
+            Self::OptionFamilySelection => "option-family-selection",
             Self::ServedExtensionDeclaration => "served-extension-declaration",
             Self::CapabilityDepth => "capability-depth",
             Self::WorkloadCoverage => "workload-coverage",
@@ -305,6 +314,7 @@ pub fn validate(ctx: &Context<'_>) -> Vec<Finding> {
     check_signing_posture_declared(ctx.set, &mut findings);
     check_guard_scope(ctx.set, &mut findings);
     check_guard_phrasing(ctx.set, &mut findings);
+    check_option_family_selection(ctx.set, &mut findings);
     check_served_extension_declarations(ctx.set, &mut findings);
     check_capability_depth(ctx.set, &mut findings);
     check_workload_coverage(ctx.set, &mut findings);
@@ -919,6 +929,34 @@ fn check_served_extension_declarations(set: &ArtifactSet, findings: &mut Vec<Fin
                     ),
                 );
             }
+        }
+    }
+}
+
+/// Every option family a supplied declaration REACHES is answered with
+/// exactly one arm.
+///
+/// Which arm of an `option_select` register branch a deployment serves is an
+/// ICS declaration and nothing on the wire discloses it, so a family the
+/// declaration leaves unanswered removes every one of its rows from the run
+/// while the record still reads as the full claim. ISO/IEC 9646-7 assigns the
+/// support column of an ICS proforma to the supplier of the implementation,
+/// and an unanswered column is an incomplete proforma rather than a
+/// deselection the catalogue may make on the supplier's behalf.
+fn check_option_family_selection(set: &ArtifactSet, findings: &mut Vec<Finding>) {
+    let Some((_, register)) = &set.register else {
+        return;
+    };
+    for (party_path, statement) in &set.parties {
+        let who = party_path.display().to_string();
+        let cases = set.cases.iter().map(|(_, case)| case);
+        for gap in crate::verdict::option_family_gaps(statement, cases, register) {
+            push(
+                findings,
+                CheckId::OptionFamilySelection,
+                &who,
+                gap.message(),
+            );
         }
     }
 }

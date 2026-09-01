@@ -1061,7 +1061,9 @@ report is the GitHub issue it points at (label `upstream-report`).
 Each entry carries a machine-readable **`disposition`** the pipeline
 branches on (closed enum): `loose_assert` (assert only what the spec pins) ·
 `fixed_handling` (handling encoded directly in bindings/cases) ·
-`option_select` (sibling cases + ICS options) · `report_only` (verdicts
+`option_select` (sibling cases grouped into named option FAMILIES, one per
+independent choice, each answered by exactly one arm of the ICS `options`
+declaration) · `report_only` (verdicts
 reported, never gating — reserved for genuinely open-upstream behaviour) ·
 `statement_declared` · `editorial` (the schedule/spec text is itself defective;
 the catalogue encodes the spec-derivable reading with a citation).

@@ -69,6 +69,8 @@ defects! {
         ("register-bad-disposition.yaml", "registers/ambiguities.yaml", "load"),
     register_option_select_without_options =>
         ("register-option-select-without-options.yaml", "registers/ambiguities.yaml", "load"),
+    register_option_family_one_arm =>
+        ("register-option-family-one-arm.yaml", "registers/ambiguities.yaml", "load"),
     corpus_missing_provenance =>
         ("corpus-missing-provenance.yaml", "corpus/MANIFEST.yaml", "load"),
     corpus_invalid_without_defect =>
