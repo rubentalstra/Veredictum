@@ -18,6 +18,15 @@ version on.
 
 ## [Unreleased]
 
+### Changed
+
+- The hosted instrument's box grew from a Hetzner CPX12 (1 vCPU, 2 GB) to a
+  CX33 (4 vCPU, 8 GB), and its concurrency cap moved with it: the official
+  instrument at console.veredictum.eu now drives two runs at once, with the
+  queue covering everything past the cap as before (#523). The README's
+  stated conditions and the committed deploy posture describe the new
+  machine.
+
 ### Fixed
 
 - A finished run's elapsed time on the console's live screen kept growing on

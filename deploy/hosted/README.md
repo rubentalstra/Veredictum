@@ -28,22 +28,24 @@ rotation and the answer to "is it up" are all things this directory states.
 
 ## The machine
 
-A Hetzner **CPX12** — 1 vCPU x86, 2 GB RAM, 40 GB SSD — `veredictum-console`,
-in Nuremberg (`eu-central`), dual-stack. The Cost-Optimized line, which would
-have been cheaper for more machine, had limited availability at ordering time.
+A Hetzner **CX33** — 4 vCPU x86, 8 GB RAM, 40 GB SSD — `veredictum-console`,
+in Nuremberg (`eu-central`), dual-stack. The box started as a CPX12 (1 vCPU,
+2 GB) because the Cost-Optimized line had limited availability at ordering
+time; it was resized to the CX33 on 2026-09-01 (#523).
 
 **So the caps are the box's, not the aspiration's.** #388 reasoned two
 concurrent runs on an 8 GB machine and said plainly that those were starting
-values to re-derive by measuring on the chosen host. This host drives **one**,
-and the queue covers the difference with a position and an estimate rather than
-a refusal.
+values to re-derive by measuring on the chosen host. This host is that 8 GB
+machine, so it drives **two**, and the queue covers everything past the cap
+with a position and an estimate rather than a refusal. The values stay
+starting points until a measured run on this host confirms them.
 
 Two numbers say so, and neither is a code change:
 
 | Where | Value | Why |
 |---|---|---|
-| `VEREDICTUM_MAX_CONCURRENT_RUNS` in `.env` | `1` | What the host can hold. A value that is not a positive integer refuses to start, rather than falling back to something larger |
-| `memory:` in `docker-compose.yml` | `1200m` | Leaves roughly 700 MB for Caddy and the operating system. A limit above what the host has is not a limit |
+| `VEREDICTUM_MAX_CONCURRENT_RUNS` in `.env` | `2` | What the host can hold. A value that is not a positive integer refuses to start, rather than falling back to something larger |
+| `memory:` in `docker-compose.yml` | `6g` | Leaves roughly 2 GB for Caddy and the operating system. A limit above what the host has is not a limit |
 
 **On a resize, move both together** — and nothing else. That is the whole point
 of the cap being an environment value: a bigger box is an `.env` edit and a
