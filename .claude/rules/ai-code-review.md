@@ -60,6 +60,17 @@ decoration measure the same window the changelog section describes. Do not
 switch the definition to a day count or a reference branch without
 re-adjudicating that alignment.
 
+## The findings mirror into GitHub code scanning (#543)
+
+Sonar's own GitHub integration is checks and PR decoration only, so a push to
+`main` also exports the project's OPEN and CONFIRMED findings as SARIF
+(`scripts/sonar/issues-to-sarif.sh`) and uploads them under the
+`sonarqube-cloud` category. The dashboard stays canonical: the query excludes
+ACCEPTED and FALSE_POSITIVE, so a disposition recorded there closes its GitHub
+alert on the next push, and the mirror can never disagree with the dashboard
+for longer than one analysis. Pull requests are not uploaded — Sonar's own
+decoration covers them — and the mirror gates nothing.
+
 ## It does not gate a merge, and it never writes
 
 No quality gate blocks a merge. A finding worth acting on is written by hand in
