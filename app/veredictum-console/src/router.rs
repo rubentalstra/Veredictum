@@ -53,7 +53,9 @@ pub struct BodyCapTooLarge {
 /// The transport body caps the router installs, one per reach.
 ///
 /// Each is derived from the number the endpoint's own code enforces and sits
-/// above it, so a caller past a cap reads that endpoint's sentence.
+/// above it, so every payload an endpoint accepts reaches the code that judges
+/// it, and a size refusal within the transport cap is that endpoint's own
+/// sentence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BodyCaps {
     /// The verify upload route's cap.
@@ -73,7 +75,7 @@ impl BodyCaps {
         Ok(Self {
             verify_upload: fits(
                 "verify upload",
-                crate::verify_api::unpack::MAX_TOTAL_BYTES + FRAMING_SLACK_BYTES,
+                crate::verify_api::unpack::MAX_UPLOAD_BYTES + FRAMING_SLACK_BYTES,
             )?,
             bench_upload: fits(
                 "bench upload",
@@ -132,9 +134,8 @@ pub fn router(
             axum::routing::get(crate::evidence_api::route::evidence_json),
         )
         // A plain multipart form post, which uploads with zero JavaScript and
-        // before WASM loads. The cap sits above every size this endpoint's own
-        // code judges (the upload cap, the per-entry cap, the expansion
-        // total), so each of those refusals is a sentence the uploader reads.
+        // before WASM loads. The cap sits above the largest BODY the reader
+        // accepts, so its size refusal is the reader's own sentence.
         .route(
             crate::verify_api::UPLOAD_PATH,
             axum::routing::post(crate::verify_api::route::upload)
@@ -235,8 +236,8 @@ mod tests {
         let caps = BodyCaps::derived()?;
         assert_eq!(
             u64::try_from(caps.verify_upload),
-            Ok(crate::verify_api::unpack::MAX_TOTAL_BYTES + FRAMING_SLACK_BYTES),
-            "the verify cap is the expansion total its reader judges, plus the framing"
+            Ok(crate::verify_api::unpack::MAX_UPLOAD_BYTES + FRAMING_SLACK_BYTES),
+            "the verify cap is the largest body its reader accepts, plus the framing"
         );
         assert_eq!(
             u64::try_from(caps.bench_upload),
@@ -254,7 +255,7 @@ mod tests {
     #[test]
     fn the_caps_are_the_numbers_this_host_installs() -> Result<(), BodyCapTooLarge> {
         let caps = BodyCaps::derived()?;
-        assert_eq!(caps.verify_upload, 68_157_440, "65 MiB");
+        assert_eq!(caps.verify_upload, 17_825_792, "17 MiB");
         assert_eq!(caps.bench_upload, 34_603_008, "33 MiB");
         assert_eq!(caps.server_fn, 4_194_304, "4 MiB");
         Ok(())
@@ -279,6 +280,18 @@ mod tests {
             "a statement at the page's own cap must reach the handler"
         );
         Ok(())
+    }
+
+    #[test]
+    fn the_statement_cap_is_the_largest_input_any_server_function_judges() {
+        let largest = crate::run_api::SERVER_FN_INPUT_CAPS.iter().copied().max();
+        assert_eq!(
+            largest,
+            Some(crate::run_api::read::STATEMENT_CAP_BYTES),
+            "one transport cap covers every `#[server]` fn and it is derived from the \
+             statement cap alone; an endpoint now judging a larger input needs that \
+             derivation re-decided, or its callers meet the generic transport refusal"
+        );
     }
 
     #[test]

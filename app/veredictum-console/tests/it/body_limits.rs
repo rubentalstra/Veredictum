@@ -25,8 +25,8 @@ struct Bound {
 async fn bind() -> Result<Bound, Box<dyn std::error::Error>> {
     let scratch = assert_fs::TempDir::new()?;
     let state = veredictum_console::state::ConsoleState {
-        root: std::path::PathBuf::from("artifacts"),
-        specs: std::path::PathBuf::from("specs/openehr"),
+        root: crate::engine_gate::repo_root().join("artifacts"),
+        specs: crate::engine_gate::repo_root().join("specs/openehr"),
         out: scratch.path().to_path_buf(),
         sign_key: None,
         verify_key: None,

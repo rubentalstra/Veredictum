@@ -282,6 +282,36 @@ impl DeclaredPostures {
     }
 }
 
+/// A system identifier is a configured name, not a document.
+#[cfg(feature = "ssr")]
+const SYSTEM_ID_CAP_BYTES: u64 = 256;
+
+/// A path on the SUT's own file system, capped well past any real one.
+#[cfg(feature = "ssr")]
+const DUMP_LOCATION_CAP_BYTES: u64 = 4_096;
+
+/// A self-describing signature prefix (`sha256:`), never a payload.
+#[cfg(feature = "ssr")]
+const DIGEST_PREFIX_CAP_BYTES: u64 = 64;
+
+/// An armored public key, capped far above any real one.
+#[cfg(feature = "ssr")]
+const PGP_KEY_CAP_BYTES: u64 = 65_536;
+
+/// Every input cap a `#[server]` function in this crate enforces.
+///
+/// The router sizes ONE transport cap for all of them, from the largest, so
+/// an endpoint that starts judging a larger input belongs in this list and
+/// wants that cap re-derived with it.
+#[cfg(feature = "ssr")]
+pub const SERVER_FN_INPUT_CAPS: &[u64] = &[
+    read::STATEMENT_CAP_BYTES,
+    SYSTEM_ID_CAP_BYTES,
+    DUMP_LOCATION_CAP_BYTES,
+    DIGEST_PREFIX_CAP_BYTES,
+    PGP_KEY_CAP_BYTES,
+];
+
 /// The postures the flat form declares, or the refusal naming the one field
 /// that cannot be used.
 ///
@@ -295,20 +325,12 @@ impl DeclaredPostures {
 /// past its cap — each naming the field.
 #[cfg(feature = "ssr")]
 pub fn declared_postures(form: &PostureForm) -> Result<DeclaredPostures, String> {
-    /// A system identifier is a configured name, not a document.
-    const SYSTEM_ID_CAP_BYTES: usize = 256;
-    /// A path on the SUT's own file system, capped well past any real one.
-    const DUMP_LOCATION_CAP_BYTES: usize = 4_096;
-    /// A self-describing signature prefix (`sha256:`), never a payload.
-    const DIGEST_PREFIX_CAP_BYTES: usize = 64;
-    /// An armored public key, capped far above any real one.
-    const PGP_KEY_CAP_BYTES: usize = 65_536;
     /// What the engine's own openPGP reader needs to see first.
     const PGP_ARMOR_HEADER: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----";
 
-    fn capped(field: &str, value: &str, cap: usize) -> Result<Option<String>, String> {
+    fn capped(field: &str, value: &str, cap: u64) -> Result<Option<String>, String> {
         let value = value.trim();
-        if value.len() > cap {
+        if u64::try_from(value.len()).unwrap_or(u64::MAX) > cap {
             return Err(format!(
                 "{field} is {} bytes; the cap is {cap}",
                 value.len()
