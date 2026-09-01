@@ -71,6 +71,7 @@ jobs:
       contents: read
       packages: read # pull the published image
       issues: write # file or update the one tracking issue below
+      security-events: write # the per-architecture SARIF uploads below (#545)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -159,6 +160,33 @@ jobs:
           path: "veredictum.*.json"
           if-no-files-found: warn
           retention-days: 30
+
+      # The findings also land in GitHub code scanning (#545), one category per
+      # architecture, so a CVE in the published image is an alert that closes
+      # when a later scan of a re-released image stops reporting it. `trivy
+      # convert` re-reads the JSON reports the scan already wrote, so the
+      # registry is not consulted twice. The no-published-image path skips
+      # this exactly as it skips the artifact above, and nothing here gates a
+      # merge — the lane's colour rule is unchanged.
+      - name: Convert the reports to SARIF
+        if: steps.scan.outputs.published == 'true'
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            trivy convert --format sarif --output "veredictum.${arch}.sarif" "veredictum.${arch}.json"
+          done
+      - name: Upload the amd64 findings to code scanning
+        if: steps.scan.outputs.published == 'true'
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: veredictum.amd64.sarif
+          category: trivy-image/amd64
+      - name: Upload the arm64 findings to code scanning
+        if: steps.scan.outputs.published == 'true'
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: veredictum.arm64.sarif
+          category: trivy-image/arm64
 
       # An issue with no failing check can be closed without the finding being
       # addressed, so the issue says what the remedy is.
