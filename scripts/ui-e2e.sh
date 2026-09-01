@@ -23,9 +23,11 @@
 #                         alternative described above instead of the container.
 #   UI_E2E_DOCS_SHOTS     when set, the journeys also write the book's
 #                         screenshots into website/book/src/console/img, and
-#                         the console is served in capture mode: the facts one
-#                         run stamps (its clock, the record digest, the signing
-#                         time) render as fixed stand-ins, so a pass over an
+#                         the console is served in capture mode: every fact a
+#                         pass measures or mints (the run clock, the probe's
+#                         round trip, the record digest, the signing time, the
+#                         run's id and the address the fixture SUT bound)
+#                         renders as a fixed stand-in, so a pass over an
 #                         unchanged console rewrites no committed image. The
 #                         run's own record, manifest and signature are real.
 #   UI_E2E_NO_BUILD       skip the builds and reuse the binaries the last
@@ -64,9 +66,10 @@ FILTER="${1:-}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Digest-pinned, and the digest is the multi-architecture INDEX, so amd64 CI
-# and an arm64 workstation resolve the same release: Selenium standalone on
-# Ubuntu 24.04 carrying Chromium 151.0.7922.108 and its matching driver.
+# Digest-pinned to the multi-architecture INDEX of one release: Selenium
+# standalone on Ubuntu 24.04 carrying Chromium 151.0.7922.108 and its matching
+# driver. The index alone pins the release and not the browser build, so the
+# `docker run` below names the platform too (#480).
 readonly SELENIUM_IMAGE="selenium/standalone-chromium@sha256:1d3d834a2ce93f26cc0d0ae3c61abd189755b32649f5c356c6c5cf9502aa397e"
 readonly SELENIUM_NAME="veredictum-ui-e2e"
 
@@ -311,7 +314,12 @@ else
   # from inside the container on a Linux engine (Docker Desktop already
   # provides the name, and re-declaring it there is a no-op).
   UPLOAD_DIR_REMOTE="/uploads"
+  # --platform: the digest names a multi-arch manifest LIST, so without it an
+  # arm64 host runs arm64 Chromium and CI runs amd64 Chromium — two browser
+  # builds, each rendering text its own stable way, which rewrote the whole
+  # committed capture set on every host that was not CI (#480).
   docker run -d --rm --name "$SELENIUM_NAME" \
+    --platform linux/amd64 \
     --shm-size=2g \
     --add-host=host.docker.internal:host-gateway \
     -p "127.0.0.1:$DRIVER_PORT:4444" \

@@ -296,15 +296,25 @@ is the precedent to imitate, not a path in this tree.
 - **The capture pass is the visual feedback loop.** With
   `UI_E2E_DOCS_SHOTS=1` the journeys photograph every surface in one fixed
   1440×900 window, light and dark, into `website/book/src/console/img/`,
-  which the book's console chapter embeds. The same flag serves the console
-  in capture mode (`VEREDICTUM_CAPTURE_MODE`, `src/capture.rs`), where the
-  facts one run stamps — its clock, the record digest, the signing time —
-  answer as fixed stand-ins, so a pass over an unchanged console rewrites no
-  image; the pinning happens where a value is sent to a browser, never in
-  what is written, sealed or signed. The `ui-screenshot-guard` CI job
-  holds the two together: a pull request touching the console's `src/` or
-  `style/` either commits refreshed captures or carries the
-  `no-ui-visual-change` label.
+  which the book's console chapter embeds. The browser is the digest-pinned
+  `selenium/standalone-chromium` container run at `--platform linux/amd64`:
+  the digest names a multi-arch manifest list, and the two architectures ship
+  two Chromium builds whose text rendering differs, so the platform is part
+  of the pin (#480). The same flag serves the console in capture mode
+  (`VEREDICTUM_CAPTURE_MODE`, `src/capture.rs`), so a pass over an unchanged
+  console rewrites no image. What is pinned there is everything a pass
+  MEASURES OR MINTS: the run clock and its estimate, the connect probe's
+  round trip, the record digest and the per-file digests, the signing time,
+  the run's own id, and the address the fixture SUT bound — plus the output
+  directory that id names, rewritten inside the engine's output tail and
+  every results path a screen prints. What a run RECORDED is never pinned:
+  the case counter, the case driving, the engine's own words and the
+  finished tally stay verbatim, because a screenshot that redacted them
+  would document a run nobody drove. The pinning happens where a value is
+  sent to a browser, never in what is written, sealed or signed. The
+  `ui-screenshot-guard` CI job holds the two together: a pull request
+  touching the console's `src/` or `style/` either commits refreshed
+  captures or carries the `no-ui-visual-change` label.
 - Gates for every console change: `/ui-gates` — clippy on native
   (`--features ssr`) **and** wasm32 (`hydrate`, lib), `cargo nextest run`,
   `leptosfmt` + `cargo fmt`, `cargo leptos build` when the build surface
