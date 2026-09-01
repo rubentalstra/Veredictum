@@ -310,7 +310,8 @@ pub struct JobView {
     /// The case currently driving, verbatim from the stream.
     pub current_case: Option<String>,
     /// Elapsed milliseconds: since the run started driving, or — while it is
-    /// queued — since it was accepted.
+    /// queued — since it was accepted. A terminal run reports the fixed
+    /// duration it actually took, identical on every read.
     pub elapsed_ms: u64,
     /// The moving-median estimate of what remains for a driving run, and the
     /// estimated wait until a slot frees for a queued one. Always labelled an
@@ -602,7 +603,11 @@ fn finish_status(
 /// the runs currently driving, which is why this reads the whole map.
 #[cfg(feature = "ssr")]
 fn snapshot(jobs: &Jobs, job: &JobState) -> JobView {
-    let elapsed = u64::try_from(job.started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    // A finished run's duration is a fact about the run, not about when
+    // somebody looked: every terminal transition stamps `finished_at`, and
+    // the view reads to that instant instead of the wall clock.
+    let end = job.finished_at.unwrap_or_else(Instant::now);
+    let elapsed = u64::try_from(end.duration_since(job.started).as_millis()).unwrap_or(u64::MAX);
     let remaining = job.total.saturating_sub(job.completed);
     let eta = match job.status {
         JobStatus::Running => eta_ms(&job.durations_ms, remaining),
@@ -1215,7 +1220,7 @@ mod map_tests {
 
     use super::{
         FinishedView, JobState, JobStatus, Jobs, Limits, RunId, evict, in_flight_of, next_queued,
-        renumber, running_count,
+        renumber, running_count, snapshot,
     };
     use crate::submitter::Submitter;
     use std::net::{IpAddr, Ipv4Addr};
@@ -1255,6 +1260,62 @@ mod map_tests {
             },
         );
         id
+    }
+
+    /// A terminal run's elapsed time is the duration it actually took, so
+    /// two reads with wall-clock time between them return the identical
+    /// value — for every terminal state, not only `Finished`.
+    #[test]
+    fn a_terminal_run_reports_a_fixed_elapsed_time() {
+        for status in [
+            JobStatus::Finished,
+            JobStatus::Cancelled,
+            JobStatus::Expired,
+            JobStatus::Failed(String::from("boom")),
+        ] {
+            let mut jobs = Jobs::new();
+            let id = park(&mut jobs, 0, who(1), status.clone());
+            let now = Instant::now();
+            if let Some(job) = jobs.get_mut(&id) {
+                job.started = now
+                    .checked_sub(std::time::Duration::from_secs(5))
+                    .expect("five seconds ago is representable");
+                job.finished_at = Some(
+                    now.checked_sub(std::time::Duration::from_secs(2))
+                        .expect("two seconds ago is representable"),
+                );
+            }
+            let job = jobs.get(&id).expect("the run was just parked");
+            let first = snapshot(&jobs, job);
+            std::thread::sleep(std::time::Duration::from_millis(15));
+            let second = snapshot(&jobs, job);
+            assert_eq!(first.elapsed_ms, 3_000, "{status:?}");
+            assert_eq!(first.elapsed_ms, second.elapsed_ms, "{status:?}");
+            assert_eq!(
+                first.eta_ms, None,
+                "{status:?}: a stopped run estimates nothing"
+            );
+        }
+    }
+
+    /// A driving run still reports a live duration: the freeze applies to
+    /// terminal states only, never to what the live screen exists to show.
+    #[test]
+    fn a_running_job_still_reports_a_live_elapsed_time() {
+        let mut jobs = Jobs::new();
+        let id = park(&mut jobs, 0, who(1), JobStatus::Running);
+        if let Some(job) = jobs.get_mut(&id) {
+            job.started = Instant::now()
+                .checked_sub(std::time::Duration::from_secs(5))
+                .expect("five seconds ago is representable");
+        }
+        let job = jobs.get(&id).expect("the run was just parked");
+        let view = snapshot(&jobs, job);
+        assert!(
+            view.elapsed_ms >= 5_000,
+            "a running job's elapsed time reads to now, got {}",
+            view.elapsed_ms
+        );
     }
 
     /// The concurrency cap: with the ceiling reached, the next start is
