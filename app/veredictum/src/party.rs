@@ -523,6 +523,17 @@ pub struct Results {
     pub tech_profile: TechProfile,
     /// The digest of the ixit topology the run drove (provenance).
     pub ixit_digest: String,
+    /// The digest of the party statement that selected this campaign
+    /// (provenance), so a reader holding that statement recomputes the
+    /// recorded value with `sha256sum statement.json | cut -c1-16`.
+    ///
+    /// Absent for a campaign no statement selected, and absent in a document
+    /// written before the member existed (v0.1.4 and earlier). Those two are
+    /// told apart by `selection_basis`: `statement_blind` names the first, and
+    /// anything else leaves the identity unknown, which a reader never reads
+    /// as a match.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub statement_digest: Option<String>,
     /// What selection had to select this campaign with: the party's ICS, or
     /// nothing.
     ///
@@ -738,6 +749,49 @@ mod tests {
                 serde_json::Value::String(basis.token().to_owned())
             );
         }
+    }
+
+    /// A reader of the results document ALONE names the statement the
+    /// campaign was selected under, and a document that carries no digest
+    /// reads as unknown rather than as any particular claim.
+    #[test]
+    fn the_recorded_statement_digest_survives_the_document() {
+        let document = |extra: &str| -> Results {
+            serde_json::from_str(&format!(
+                r#"{{
+                    "sut": {{ "name": "s", "version": "1" }},
+                    "runner": {{ "name": "veredictum", "version": "0",
+                                 "verification_pack_status": "passed" }},
+                    "schedule_release": "CNF-2.0",
+                    "tech_profile": {{ "its": "its-rest", "formats": ["canonical-json"] }},
+                    "ixit_digest": "d"{extra}
+                }}"#
+            ))
+            .unwrap()
+        };
+        assert_eq!(
+            document(r#", "statement_digest": "aedf8eec255f7847""#)
+                .statement_digest
+                .as_deref(),
+            Some("aedf8eec255f7847")
+        );
+        assert_eq!(
+            document("").statement_digest,
+            None,
+            "absence is unknown, never a claim"
+        );
+
+        let named = document(r#", "statement_digest": "aedf8eec255f7847""#);
+        let text = serde_json::to_string(&named).unwrap();
+        assert!(
+            text.contains(r#""statement_digest":"aedf8eec255f7847""#),
+            "{text}"
+        );
+        let blind = serde_json::to_string(&document("")).unwrap();
+        assert!(
+            !blind.contains("statement_digest"),
+            "an unnamed statement writes no member at all: {blind}"
+        );
     }
 
     #[test]

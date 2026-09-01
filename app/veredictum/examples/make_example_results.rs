@@ -26,7 +26,7 @@ use veredictum::party::{
     VerificationPackStatus,
 };
 use veredictum::perf::{Measurement, OperationMeasurement, PerfClass, class_verdict};
-use veredictum::pipeline::conformance::ixit_digest;
+use veredictum::pipeline::conformance::{ixit_digest, statement_digest};
 use veredictum::pipeline::load_clean_root;
 use veredictum::pipeline::measured::performance_case_of_class;
 use veredictum::vocab::{FormatName, ItsName};
@@ -96,6 +96,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             formats: vec![FormatName::CanonicalJson],
         },
         ixit_digest: ixit_digest("{\"example\":true}"),
+        statement_digest: Some(statement_digest("{\"example\":\"statement\"}")),
         selection_basis: Some(SelectionBasis::Statement),
         restapi_specs_version: Some("1.1.0".to_owned()),
         outcomes: vec![

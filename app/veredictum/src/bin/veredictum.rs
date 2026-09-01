@@ -1490,7 +1490,7 @@ fn replay_command(
         );
         return ExitCode::from(2);
     }
-    if matches!(agreement, SelectionAgreement::Unidentified) {
+    if agreement != SelectionAgreement::Same {
         eprintln!("warning: {agreement}");
     }
     let found = divergences(&submitted, &outcome.results);

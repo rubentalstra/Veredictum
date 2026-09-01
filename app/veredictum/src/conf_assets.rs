@@ -1202,6 +1202,7 @@ mod tests {
                 formats: Vec::new(),
             },
             ixit_digest: "test".to_owned(),
+            statement_digest: None,
             selection_basis: Some(crate::party::SelectionBasis::Statement),
             restapi_specs_version: None,
             outcomes: outcomes

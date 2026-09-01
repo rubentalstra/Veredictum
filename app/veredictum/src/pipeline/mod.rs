@@ -226,6 +226,27 @@ pub fn load_ixit(path: &Path) -> Result<(crate::ixit::Ixit, String), Error> {
     Ok((ixit, text))
 }
 
+/// Reads one party statement document, with its own text.
+///
+/// The raw text travels with it because the campaign's statement digest is
+/// taken over exactly these bytes, which is what lets a reader holding the
+/// declaration a record was selected under re-derive the recorded value.
+///
+/// # Errors
+/// [`Error::Read`] when the file cannot be read, [`Error::Parse`] when it does
+/// not parse as a statement.
+pub fn load_statement(path: &Path) -> Result<(crate::party::Statement, String), Error> {
+    let text = std::fs::read_to_string(path).map_err(|source| Error::Read {
+        path: path.to_owned(),
+        source,
+    })?;
+    let statement = serde_json::from_str(&text).map_err(|e| Error::Parse {
+        context: "statement".to_owned(),
+        message: e.to_string(),
+    })?;
+    Ok((statement, text))
+}
+
 /// Reads and typed-parses one JSON document, naming it as `context` in any
 /// diagnostic.
 ///

@@ -64,7 +64,7 @@ veredictum run --root <ROOT> --ixit <IXIT> --out <OUT> \
 | `--sut-name <NAME>` | Display name for the system under test. Default `ferroehr` |
 | `--sut-version <VERSION>` | Version label for the system under test. Default `dev` |
 | `--filter <SUBSTRING>` | Only run cases whose identifier contains this substring |
-| `--statement <STATEMENT>` | The party statement (ICS), the list ISO/IEC 9646 test selection selects from. Supplied, an option-gated case whose arm the statement does not declare is recorded not-applicable at drive time instead of driven. Absent, no arm of a mutually exclusive branch is selected at all, so every option-gated case and every extension route is recorded not-applicable with its citation, `results.json` records `selection_basis: statement_blind`, and the run prints one advisory naming what it could not select |
+| `--statement <STATEMENT>` | The party statement (ICS), the list ISO/IEC 9646 test selection selects from. Supplied, an option-gated case whose arm the statement does not declare is recorded not-applicable at drive time instead of driven, and `results.json` names the declaration itself as `statement_digest`, the leading 8 bytes of the SHA-256 over its bytes (`sha256sum statement.json \| cut -c1-16`). Absent, no arm of a mutually exclusive branch is selected at all, so every option-gated case and every extension route is recorded not-applicable with its citation, `results.json` records `selection_basis: statement_blind` and no digest, and the run prints one advisory naming what it could not select |
 | `--sign-key <KEY>` | An armored OpenPGP secret key. Seals the emitted documents with `record-manifest.json` and its detached signature |
 | `--sign-passphrase <PASSPHRASE>` | The passphrase unlocking `--sign-key`, read from `VEREDICTUM_SIGN_PASSPHRASE` |
 | `--record-exchanges` | Persist the wire exchanges beside `results.json` as `transcript.json`. Off by default. The artifact records a SUT's response bodies verbatim, so it can carry real patient data: it is operator-controlled output, never a log, and belongs wherever the record itself is stored. The `authorization` request header's value is withheld. With `--sign-key` the sealed manifest covers the transcript too |
@@ -133,11 +133,15 @@ identical judgements can carry different words.
 Omitting `--statement` re-derives a sweep of the whole catalogue. The replay
 says so on stderr, in the words a live run uses, and stamps
 `selection_basis: statement_blind` on the document it writes. With `--against`
-the two selection facts a `results.json` records are compared before any row
-is: a record an ICS selected, re-judged blind or under a statement declaring
-different its-rest formats, exits `2` rather than reporting agreement, because
-a re-derivation under another claim re-derives another campaign. A record
-written before `selection_basis` existed identifies nothing about what
+the selection facts a `results.json` records are compared before any row is: a
+record an ICS selected, re-judged blind, under a statement the record does not
+name, or under one declaring different its-rest formats, exits `2` rather than
+reporting agreement, because a re-derivation under another claim re-derives
+another campaign. The statement is named by `statement_digest`, the leading 8
+bytes of the SHA-256 over the declaration's own bytes, so the refusal prints
+the recorded value and the applied one and a reader checks either with
+`sha256sum statement.json | cut -c1-16`. A record written before
+`selection_basis` or `statement_digest` existed identifies nothing about what
 selected it, and the replay reports that instead of refusing.
 
 What this establishes is that the judgement follows from the evidence. It does
