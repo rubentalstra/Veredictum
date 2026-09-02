@@ -34,7 +34,7 @@ veredictum = { version = "=0.1.5", optional = true }
 # The pasted claim is held to the PUBLISHED statement schema, not only to
 # serde's leniency: the same validator crate the engine uses, over the
 # schema document the engine's own `schema` module emits (#101).
-jsonschema = { version = "0.49.3", optional = true, default-features = false }
+jsonschema = { version = "0.51.0", optional = true, default-features = false }
 
 leptos = "0.8"
 leptos_meta = "0.8"
