@@ -72,7 +72,7 @@ reqwest = { version = "0.13.4", default-features = false, features = ["rustls", 
 serde-saphyr = "1.0.0-rc.1"
 # The published artifact schemas are the norm; every loaded artifact validates
 # against them before typed parsing.
-jsonschema = "0.49.3"
+jsonschema = "0.51.0"
 # `applies` spec-version ranges use the Cargo/semver requirement grammar.
 semver = "1.0.28"
 regex = "1"
