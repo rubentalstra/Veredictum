@@ -253,7 +253,7 @@ jobs:
       # supplier, component name, version, other unique identifiers (purl),
       # dependency relationships, SBOM author and timestamp
       # (https://www.cisa.gov/sbom).
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: syft@1.50.0
       - name: Generate the repository SPDX SBOM
@@ -300,7 +300,7 @@ jobs:
       # the release page already says which project it belongs to, so a name
       # that repeats it is noise in every list a consumer reads.
       - name: Create the GitHub release as a draft
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           draft: true
           tag_name: ${{ needs.plan.outputs.tag }}
@@ -465,7 +465,7 @@ jobs:
       # No cache in a publishing lane: nothing a prior run could have poisoned
       # may influence the bytes that get pushed and attested.
       - name: Install cargo-auditable
-        uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-auditable@0.7.5
 

@@ -87,7 +87,7 @@ jobs:
       # page's SBOM never travelled with it
       # (https://github.com/rust-secure-code/cargo-auditable).
       - name: Install cargo-auditable
-        uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-auditable@0.7.5
       - name: Build the instrument
@@ -131,7 +131,7 @@ jobs:
       # 8). Generated from the release commit's own `Cargo.lock`, so it
       # describes the graph that was actually built.
       - name: Install cargo-cyclonedx
-        uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+        uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-cyclonedx
       - name: Generate the dependency SBOM
@@ -226,7 +226,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Upload to release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           # The release is still a DRAFT here and must stay one: the caller's
           # finalize job publishes it once every architecture has attached its
