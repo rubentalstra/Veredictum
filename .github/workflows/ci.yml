@@ -379,7 +379,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: zizmor@1.29.0
 
@@ -474,7 +474,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
+      - uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: docker/Dockerfile
           config: .hadolint.yaml
@@ -698,7 +698,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-nextest
       # The published record's interop claim is checked against GnuPG itself
@@ -811,7 +811,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-hack
       # --workspace: without it cargo-hack checks the root package alone, and
@@ -837,7 +837,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           cache: false
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-deny
       - run: cargo deny check
@@ -870,7 +870,7 @@ jobs:
           cache-workspaces: fuzz
           cache-key: fuzz-build
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-fuzz@0.13.2
       # The seeder is part of the lane and breaks the same way a harness does:
@@ -898,7 +898,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-machete
       - run: cargo machete
@@ -930,7 +930,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-nextest
       - name: Every submission is valid, additive, and on the board
@@ -991,7 +991,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0
         with:
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-nextest
       - name: Every entry is valid, additive, and on a board
@@ -1045,7 +1045,7 @@ jobs:
         with:
           target: wasm32-unknown-unknown
           cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-      - uses: taiki-e/install-action@6cd13508893c0e7eab5f273c2575d3859bd7229a # v2.86.6
+      - uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
         with:
           tool: cargo-nextest
 
